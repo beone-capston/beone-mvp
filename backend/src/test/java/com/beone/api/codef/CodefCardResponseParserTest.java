@@ -256,6 +256,31 @@ class CodefCardResponseParserTest {
 	}
 
 	@Nested
+	class UnclassifiedOfficialCodes {
+
+		@ParameterizedTest
+		@ValueSource(strings = { "CF-12401", "CF-12834" })
+		void classificationStaysIndependentOfData(String code) {
+			// 공식 목록 270·315행 코드는 미분류이며(#47), data 해석은 결과 코드와 관계없이 같은 규칙을 따른다.
+			CodefResponse<CodefApproval> single = CodefCardResponseParser.parseApprovals(body(code, APPROVAL));
+			CodefResponse<CodefApproval> empty = CodefCardResponseParser.parseApprovals(body(code, "[]"));
+			CodefResponse<CodefApproval> blank = CodefCardResponseParser
+				.parseApprovals(body(code, "{\"resUsedAmount\":\"\",\"resCancelAmount\":\"\"}"));
+
+			assertThat(single.result()).isEqualTo(new CodefResult(Optional.of(code), Optional.of("SYN-TX-1"),
+					CodefResultCategory.UNCLASSIFIED));
+			assertThat(single.data()).isEqualTo(new CodefList.Items<>(CodefList.Shape.SINGLE_OBJECT, List.of(approval())));
+			assertThat(empty.data()).isEqualTo(new CodefList.Items<CodefApproval>(CodefList.Shape.ARRAY, List.of()));
+			CodefApproval blankItem = items(blank).items().get(0);
+			assertThat(blankItem.usedAmount()).isEqualTo(new CodefAmount.Absent());
+			assertThat(blankItem.cancelAmount()).isEqualTo(new CodefAmount.Absent());
+			assertThat(CodefCardResponseParser.parseApprovals(body(code, "null")).data())
+				.isInstanceOf(CodefList.Malformed.class);
+		}
+
+	}
+
+	@Nested
 	class SuccessCode {
 
 		private static final CodefResult SUCCESS = new CodefResult(Optional.of("CF-00000"), Optional.of("SYN-TX-1"),
