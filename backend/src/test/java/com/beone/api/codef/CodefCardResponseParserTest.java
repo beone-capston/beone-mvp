@@ -256,6 +256,87 @@ class CodefCardResponseParserTest {
 	}
 
 	@Nested
+	class SuccessCode {
+
+		private static final CodefResult SUCCESS = new CodefResult(Optional.of("CF-00000"), Optional.of("SYN-TX-1"),
+				CodefResultCategory.SUCCESS);
+
+		@ParameterizedTest
+		@ValueSource(strings = { "null", "1", "\"text\"", "true", "\"\"", "[1]", "[{}, \"text\"]" })
+		void successDoesNotRepairMalformedData(String data) {
+			CodefResponse<CodefApproval> response = CodefCardResponseParser.parseApprovals(body("CF-00000", data));
+
+			assertThat(response.result()).isEqualTo(SUCCESS);
+			assertThat(response.data()).isInstanceOf(CodefList.Malformed.class);
+		}
+
+		@Test
+		void successWithoutDataIsStillMissing() {
+			CodefResponse<CodefApproval> response = CodefCardResponseParser
+				.parseApprovals("{\"result\":{\"code\":\"CF-00000\",\"transactionId\":\"SYN-TX-1\"}}");
+
+			assertThat(response.result()).isEqualTo(SUCCESS);
+			assertThat(response.data()).isEqualTo(new CodefList.Missing<CodefApproval>());
+		}
+
+		@Test
+		void successWithEmptyArrayIsZeroItems() {
+			CodefResponse<CodefApproval> response = CodefCardResponseParser.parseApprovals(body("CF-00000", "[]"));
+
+			assertThat(response.result()).isEqualTo(SUCCESS);
+			assertThat(response.data()).isEqualTo(new CodefList.Items<CodefApproval>(CodefList.Shape.ARRAY, List.of()));
+		}
+
+		@Test
+		void successDoesNotFillUnknownValues() {
+			CodefApproval approval = items(CodefCardResponseParser.parseApprovals(body("CF-00000", """
+					{"resUsedDate":"","resUsedAmount":"","resKRWAmt":"1,000","resPaymentType":"9","resCancelYN":"Y"}
+					"""))).items().get(0);
+
+			assertThat(approval.usedDate()).isEmpty();
+			assertThat(approval.usedAmount()).isEqualTo(new CodefAmount.Absent());
+			assertThat(approval.krwAmount()).isEqualTo(new CodefAmount.Unparsed());
+			assertThat(approval.cancelAmount()).isEqualTo(new CodefAmount.Absent());
+			assertThat(approval.paymentType()).isEqualTo(PaymentType.UNKNOWN);
+			assertThat(approval.cancelStatus()).isEqualTo(CancelStatus.UNKNOWN);
+		}
+
+		@Test
+		void successWithSingleAndManyItemsIsReadNormally() {
+			CodefResponse<CodefApproval> single = CodefCardResponseParser.parseApprovals(body("CF-00000", APPROVAL));
+			CodefResponse<CodefApproval> many = CodefCardResponseParser
+				.parseApprovals(body("CF-00000", "[" + APPROVAL + "," + APPROVAL + "]"));
+
+			assertThat(single.result()).isEqualTo(SUCCESS);
+			assertThat(single.data())
+				.isEqualTo(new CodefList.Items<>(CodefList.Shape.SINGLE_OBJECT, List.of(approval())));
+			assertThat(many.result()).isEqualTo(SUCCESS);
+			assertThat(many.data()).isEqualTo(new CodefList.Items<>(CodefList.Shape.ARRAY, List.of(approval(), approval())));
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = { "\" CF-00000\"", "\"CF-00000 \"", "\"cf-00000\"", "\"CF-0000\"", "\"CF-000000\"",
+				"\"\"", "null", "0" })
+		void nearSuccessCodesInTheBodyAreUnclassified(String code) {
+			String body = "{\"result\":{\"code\":" + code + ",\"message\":\"성공\"},\"data\":" + APPROVAL + "}";
+
+			CodefResponse<CodefApproval> response = CodefCardResponseParser.parseApprovals(body);
+
+			assertThat(response.result().category()).isEqualTo(CodefResultCategory.UNCLASSIFIED);
+			assertThat(items(response).items()).containsExactly(approval());
+		}
+
+		@Test
+		void successMessageWithoutCodeIsUnclassified() {
+			String body = "{\"result\":{\"message\":\"성공\"},\"data\":" + APPROVAL + "}";
+
+			assertThat(CodefCardResponseParser.parseApprovals(body).result())
+				.isEqualTo(new CodefResult(Optional.empty(), Optional.empty(), CodefResultCategory.UNCLASSIFIED));
+		}
+
+	}
+
+	@Nested
 	class HeldCards {
 
 		@Test
@@ -395,6 +476,26 @@ class CodefCardResponseParserTest {
 
 			assertNoSecret(CodefCardResponseParser.parseHeldCards(held));
 			assertNoSecret(CodefCardResponseParser.parseCardPerformances(performance));
+		}
+
+		@Test
+		void successResultDoesNotCarrySensitiveFields() {
+			String body = """
+					{"result":{"code":"CF-00000","message":"SYN-SECRET-MESSAGE","extraMessage":"SYN-SECRET-MESSAGE",
+					"transactionId":"SYN-TX-1"},
+					"data":{"resCardNo":"SYN-SECRET-CARD","resCardNo1":"SYN-SECRET-CARD1",
+					"resMemberStoreCorpNo":"SYN-SECRET-CORP","resMemberStoreTelNo":"SYN-SECRET-TEL",
+					"resMemberStoreAddr":"SYN-SECRET-ADDR","commSession":"SYN-SECRET-SESSION","resUsedAmount":"1000"}}
+					""";
+
+			CodefResponse<CodefApproval> response = CodefCardResponseParser.parseApprovals(body);
+
+			assertThat(response.result().category()).isEqualTo(CodefResultCategory.SUCCESS);
+			assertNoSecret(response);
+			String held = body("CF-00000", "{\"resCardNo\":\"SYN-SECRET-CARD\",\"resValidPeriod\":\"SYN-SECRET-VALID\"}");
+			assertNoSecret(CodefCardResponseParser.parseHeldCards(held));
+			assertNoSecret(CodefCardResponseParser
+				.parseCardPerformances(body("CF-00000", "{\"resCardNo\":\"SYN-SECRET-CARD\"}")));
 		}
 
 		@Test
