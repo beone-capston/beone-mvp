@@ -99,33 +99,41 @@
    - 대상: `CLAUDE.md`, `docs/development/autonomous-workflow.md`, `docs/development/backend-start.md`, `docs/development/android-start.md`, `docs/decisions.md`
    - 기준은 1단계에서 기록한 `origin/develop` SHA로 고정합니다. 비교 중에 다시 fetch하거나 기준을 바꾸지 않습니다.
    - 파일마다 기준 커밋의 내용(`git show "<기준 SHA>:<파일>"`)과 worktree의 실제 파일을 `cmp`로 바이트 단위 비교합니다. tracked·untracked 여부와 관계없이 같은 방식으로 비교하고, 마지막 줄바꿈 등 내용을 정규화하지 않습니다.
-   - 고른 worktree의 최상위에서 `PUT_SHA_HERE`를 기록한 SHA로 바꿔 bash로 실행합니다. 괄호는 하위 셸이라 `exit`가 현재 셸을 닫지 않습니다. 종료 코드 `0`은 5개 모두 일치, `1`은 누락·차이·조회·읽기 오류, `2`는 기준 SHA나 임시 디렉터리 오류입니다.
+   - 비교 결과를 남길 증거 폴더를 저장소 밖의 지정 위치에 새 이름의 절대 경로로 정합니다. 마지막 폴더는 `mkdir`로 새로 만들어, 이미 있거나 동시에 만들어진 폴더는 덮어쓰지 않고 거부합니다. worktree 안의 경로도 거부합니다.
+   - 고른 worktree의 최상위에서 `PUT_SHA_HERE`를 기록한 SHA로, `PUT_EVIDENCE_DIR_HERE`를 증거 폴더 경로로 바꿔 bash로 실행합니다. 괄호는 하위 셸이라 `exit`가 현재 셸을 닫지 않습니다. 종료 코드 `0`은 5개 모두 일치, `1`은 누락·차이·조회·읽기 오류, `2`는 기준 SHA나 증거 폴더 오류입니다.
 
      ```bash
      (
        base=PUT_SHA_HERE
+       out="PUT_EVIDENCE_DIR_HERE"
        git rev-parse --verify --quiet "$base^{commit}" >/dev/null || { echo "기준 조회 오류: $base"; exit 2; }
-       tmp=$(mktemp -d) || { echo "임시 디렉터리 생성 오류"; exit 2; }
+       case "$out" in /*) ;; *) echo "증거 폴더는 절대 경로여야 함: $out"; exit 2 ;; esac
+       top=$(git rev-parse --show-toplevel) && toplink=$(cd "$top" && pwd -P) || { echo "worktree 확인 오류"; exit 2; }
+       case "$out/" in "$top"/*|"$toplink"/*) echo "증거 폴더가 worktree 안에 있음: $out"; exit 2 ;; esac
+       mkdir -p "$(dirname "$out")" && mkdir "$out" && mkdir "$out/base" || { echo "증거 폴더가 이미 있거나 생성 오류: $out"; exit 2; }
+       log() { echo "$1" | tee -a "$out/result.txt"; }
+       log "base $base / head $(git rev-parse HEAD) / branch $(git rev-parse --abbrev-ref HEAD)"
        result=0
        for f in CLAUDE.md docs/development/autonomous-workflow.md docs/development/backend-start.md docs/development/android-start.md docs/decisions.md; do
-         if ! git cat-file -e "$base:$f" 2>/dev/null; then echo "기준에 없음: $f"; result=1
-         elif [ ! -f "$f" ]; then echo "worktree에 없음: $f"; result=1
-         elif ! git show "$base:$f" > "$tmp/base"; then echo "기준 조회 오류: $f"; result=1
+         saved="$out/base/$(echo "$f" | tr '/' '_')"
+         if ! git cat-file -e "$base:$f" 2>/dev/null; then log "기준에 없음: $f"; result=1
+         elif [ ! -f "$f" ]; then log "worktree에 없음: $f"; result=1
+         elif ! git show "$base:$f" > "$saved"; then log "기준 조회 오류: $f"; result=1
          else
-           cmp -s "$tmp/base" "$f"
+           cmp -s "$saved" "$f"
            case $? in
-             0) echo "일치: $f" ;;
-             1) echo "내용 차이: $f"; result=1 ;;
-             *) echo "읽기 오류: $f"; result=1 ;;
+             0) log "일치: $f" ;;
+             1) log "내용 차이: $f"; result=1 ;;
+             *) log "읽기 오류: $f"; result=1 ;;
            esac
          fi
        done
-       rm -rf "$tmp"
+       log "exit=$result"
        exit "$result"
      )
      ```
 
-   - 기준 내용은 파이프로 넘기지 않고 전용 임시 디렉터리의 파일에 저장합니다. 그래야 `git show` 실패를 `cmp` 결과와 구분할 수 있고, 명령 치환처럼 마지막 줄바꿈이 사라지지 않습니다. 임시 디렉터리는 비교 뒤 지우며, 저장소 파일·index·브랜치는 바꾸지 않습니다.
+   - 기준 내용은 파이프로 넘기지 않고 증거 폴더의 파일에 저장합니다. 그래야 `git show` 실패를 `cmp` 결과와 구분할 수 있고, 명령 치환처럼 마지막 줄바꿈이 사라지지 않습니다. 증거 폴더의 기준 사본과 `result.txt`는 지우지 않고 보존하며, 저장소 파일·index·브랜치는 바꾸지 않습니다. 증거 폴더를 worktree 안에 두지 않습니다.
    - `git diff --name-status <기준 SHA> -- <위 5개 파일>`은 tracked 파일의 차이를 보는 보조 진단으로만 씁니다. untracked 파일은 비교하지 않으므로 통과 판단에 쓰지 않습니다.
    - 최신 SHA 확인이나 존재 확인만으로 내용 비교를 대신하지 않습니다.
    - 기준 조회 오류, 파일 누락, 읽기 오류, 내용 차이 중 하나라도 있으면 모드를 시작·재개하지 않습니다. 차이 난 파일, 원인, 필요한 다음 행동을 사용자에게 보고합니다. 파일 덮어쓰기·reset·자동 동기화로 우회하지 않으며, 이 점검이 merge 권한을 넓히지 않습니다.

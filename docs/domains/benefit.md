@@ -4,7 +4,7 @@
 
 `benefit`은 카드 혜택 계산과 추천에 필요한 식별자, 금액, 상태, 입력, 약관 규칙, 결과를 정의합니다. 값만 담는 것이 아니라 잘못된 조합을 생성 시점에 차단하고, 모르는 정보는 확인 필요 상태로 유지합니다.
 
-현재는 도메인 모델과 규칙 선택·보조 검증 로직, 서비스 한 건의 산식·조건을 따로따로 판정하는 기본 함수(`primitive`), 그리고 이 함수들로 한도 없는 비선택형 서비스 하나의 후보(`ServiceCandidate`)를 만드는 판정기(`ServiceCandidateEvaluator`, #31), 규칙 선택 결과의 서비스들을 후보·확인 필요·지원 범위 밖으로 나눠 모으는 취합기(`CardServiceCandidateCollector`, #33), 취합 결과로 카드 한 장·주문 한 건의 서비스별 채택·기여액과 카드 금액을 정하는 결정기(`OrderBenefitDecider`, #35)가 구현되어 있습니다. 결정기는 한도 없는 비선택형 서비스만 판정하며, 한도·선택형 서비스가 있으면 카드 금액은 `확인 필요`입니다. 카드 간 비교(`CardBenefit`·`Recommendation` 연결), 한도 차감, 중복 허용 서비스의 합산, 월간 최적화, 추천 API, CODEF 호출은 아직 구현되지 않았습니다.
+현재는 도메인 모델과 규칙 선택·보조 검증 로직, 서비스 한 건의 산식·조건을 따로따로 판정하는 기본 함수(`primitive`), 그리고 이 함수들로 한도 없는 비선택형 서비스 하나의 후보(`ServiceCandidate`)를 만드는 판정기(`ServiceCandidateEvaluator`, #31), 규칙 선택 결과의 서비스들을 후보·확인 필요·지원 범위 밖으로 나눠 모으는 취합기(`CardServiceCandidateCollector`, #33), 취합 결과로 카드 한 장·주문 한 건의 서비스별 채택·기여액과 카드 금액을 정하는 결정기(`OrderBenefitDecider`, #35), 호출자가 정한 판정일로 규칙 선택부터 결정까지 잇는 진입점(`OrderBenefitResolver`, #38)이 구현되어 있습니다. 결정기는 한도 없는 비선택형 서비스만 판정하며, 한도·선택형 서비스가 있으면 카드 금액은 `확인 필요`입니다. 카드 간 비교(`CardBenefit`·`Recommendation` 연결), 한도 차감, 중복 허용 서비스의 합산, 월간 최적화, 추천 API, CODEF 호출은 아직 구현되지 않았습니다.
 
 ## 핵심 용어
 
@@ -24,7 +24,7 @@ benefit/
 ├── state/   값의 출처·기준 기간·갱신 시각
 ├── input/   계산에 필요한 주문·카드·거래·선택 설정
 ├── rule/      약관 규칙과 검증 규칙 선택
-├── primitive/ 서비스 한 건의 산식·개별 조건 판정, 단일 서비스 후보 판정, 카드 한 장의 서비스 후보 취합·주문 혜택 결정
+├── primitive/ 서비스 한 건의 산식·개별 조건 판정, 단일 서비스 후보 판정, 카드 한 장의 서비스 후보 취합·주문 혜택 결정과 규칙 선택 연결
 └── result/    서비스 후보·취합 결과, 단일 주문 혜택 결정 결과, 카드별 혜택과 최종 추천 결과
 ```
 
@@ -256,12 +256,27 @@ ServiceCandidate candidate = new ServiceCandidate(ServiceId.of("SYN-SVC"), Benef
 new OrderServiceBenefit(candidate, Adoption.NOT_ADOPTED, BenefitAmount.confirmed(0));
 ```
 
+#### OrderBenefitResolver: 규칙 선택부터 주문 혜택 결정까지(#38)
+
+[OrderBenefitResolver](../../backend/src/main/java/com/beone/api/benefit/primitive/OrderBenefitResolver.java)의 `resolve(catalog, cardId, decisionDate, order, state, evidence)`는 `RuleCatalog.select(cardId, decisionDate)`의 결과를 그대로 `OrderBenefitDecider.decide`에 넘깁니다. 결과는 같은 입력으로 두 단계를 직접 호출한 것과 같으며, 규칙 선택 순서와 결정 정책에 판단을 더하지 않습니다.
+
+- 판정일(`decisionDate`)은 규칙 버전을 고르는 날짜이며 **호출자가 정합니다.** 주문의 날짜(`Order.date`)로 대신하지 않습니다. 카드마다 거래 기준일(승인·이용·이용내역서 기재·매입, D-03)이 다르고 개별 거래의 적용 규칙 버전은 확정되지 않았으므로, 주문일·결제일에서 판정일을 정하는 규칙은 아직 없습니다.
+- 규칙 없음·판정일 포함 버전 없음·`VERIFIED` 없음은 `OrderBenefit.Unavailable`(`NO_VERIFIED_RULE`·`RULE_EXPIRED`)이며 카드 금액은 `확인 필요`입니다.
+- 입력 검증: null을 거부합니다. 월간 상태·근거의 카드가 판정할 카드와 다르면 규칙 사용 가능 여부와 관계없이 취합기·결정기의 기존 검증이 `IllegalArgumentException`으로 거부합니다.
+
+```java
+// 합성 예시: 판정일은 호출자가 정한다
+OrderBenefit result = OrderBenefitResolver.resolve(catalog, cardId, decisionDate, order, state, evidence);
+```
+
+여러 카드를 비교하거나 `CardBenefit`·`Recommendation`을 만들지 않습니다.
+
 결과 모델은 실제로 카드를 비교·선택하는 알고리즘이 아닙니다. 조건부 추천 여부를 판단하는 것도 후속 계산 로직의 책임입니다.
 
 ## 데이터·처리 흐름
 
 1. Order, HeldCard, Ledger, CardMonthlyState 등을 RecommendationInput으로 묶습니다.
-2. RuleCatalog가 판단 날짜에 적용 가능한 검증 규칙을 선택합니다.
+2. RuleCatalog가 판단 날짜에 적용 가능한 검증 규칙을 선택합니다. 카드 한 장·주문 한 건은 `OrderBenefitResolver`가 이 선택과 아래 결정을 잇습니다(판정일은 호출자 입력).
 3. 미확정 약관과 입력 상태를 고려해 혜택을 계산하고 월간 후보를 비교합니다. 서비스 한 건의 산식·개별 조건 판정과 한도 없는 비선택형 서비스의 단일 후보 판정, 규칙 선택 결과의 서비스 후보 취합(`CardServiceCandidateCollector`), 한도 없는 비선택형 서비스에 대한 카드 한 장·주문 한 건의 채택·카드 금액 결정(`OrderBenefitDecider`)은 `primitive`에 있지만, 카드 간 비교·월간 최적화로 추천을 내는 **엔진은 후속 구현입니다.**
 4. 계산 로직이 ServiceBenefit(또는 후보·채택·기여액을 나눈 ServiceCandidate·OrderServiceBenefit·OrderBenefit), CardBenefit, Recommendation을 구성합니다. 현재 `OrderBenefit`까지는 결정기가 만들고, `CardBenefit`·`Recommendation`은 결과를 담는 모델과 일관성 검사만 있습니다.
 
@@ -293,7 +308,7 @@ RuleTerm<FractionalWonPolicy> rounding = RuleTerm.unresolved("공식 근거 확�
 
 ## 현재 구현 범위와 관련 문서
 
-구현된 범위는 위 모델, 생성 시 일관성 검사, 규칙 선택, 일부 기간·취소 증거 보조 로직, 서비스 한 건의 산식·개별 조건 판정, 한도 없는 비선택형 서비스의 단일 후보 판정, 카드 한 장의 서비스 후보 취합, 한도 없는 비선택형 서비스에 대한 카드 한 장·주문 한 건의 혜택 결정(#35), 서비스 후보·취합·채택·기여액·주문 혜택 결과 타입입니다. 카드 간 비교·추천, 한도·선택형 판정, 중복 합산, 최적화 엔진과 외부 연동은 별도 구현이 필요합니다. `primitive` 테스트는 가상 업종·서비스의 합성 값이며 실제 카드 약관 검증이나 평가 통과를 뜻하지 않습니다.
+구현된 범위는 위 모델, 생성 시 일관성 검사, 규칙 선택, 일부 기간·취소 증거 보조 로직, 서비스 한 건의 산식·개별 조건 판정, 한도 없는 비선택형 서비스의 단일 후보 판정, 카드 한 장의 서비스 후보 취합, 한도 없는 비선택형 서비스에 대한 카드 한 장·주문 한 건의 혜택 결정(#35)과 규칙 선택부터 결정까지의 연결(#38, 판정일은 호출자 입력), 서비스 후보·취합·채택·기여액·주문 혜택 결과 타입입니다. 카드 간 비교·추천, 한도·선택형 판정, 중복 합산, 최적화 엔진과 외부 연동은 별도 구현이 필요합니다. `primitive` 테스트는 가상 업종·서비스의 합성 값이며 실제 카드 약관 검증이나 평가 통과를 뜻하지 않습니다.
 
 테스트는 [benefit 테스트 디렉터리](../../backend/src/test/java/com/beone/api/benefit/)에서 확인합니다. fixture 매핑 테스트를 계산 결과 검증으로 혼동하지 않습니다. 이 문서 작성 과정에서는 테스트를 실행하지 않았습니다.
 
