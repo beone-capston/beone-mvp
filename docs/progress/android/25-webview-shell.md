@@ -34,8 +34,15 @@
 - 다음: 실기기 확인 절차 정리, 모듈 전체 검증, PR 본문 갱신
 
 ### 2026-10-31 18:20 · 실기기 확인 절차·release 정적 점검·PR 갱신 · 완료(실기기 미실행)
-- 한 일: W1~W5를 사용자가 바로 시험할 수 있게 설치·APK 대조 절차와 항목별 증거를 [기술 설명](../../android/webview-shell.md#실기기-확인-절차-2026-10-31-준비-미실행)에 정리했습니다. release APK의 Manifest·네트워크 보안 설정·dex를 점검했고, `about:blank`·`blob:` 차단 테스트를 더했습니다. PR 본문 검증 칸을 최신 head 기준으로 갱신했습니다.
+- 한 일: W1~W5를 사용자가 바로 시험할 수 있게 설치·APK 대조 절차와 항목별 증거를 [기술 설명](../../android/webview-shell.md#debug-실기기-관측-절차-2026-11-01-준비-사용자-관측-대기)에 정리했습니다. release APK의 Manifest·네트워크 보안 설정·dex를 점검했고, `about:blank`·`blob:` 차단 테스트를 더했습니다. PR 본문 검증 칸을 최신 head 기준으로 갱신했습니다.
 - 서비스에서 달라진 점: 없음(문서·테스트만).
 - 검증: `assembleDebug testDebugUnitTest lintDebug assembleRelease lintRelease --rerun-tasks` 실제 실행, 통과(단위 테스트 16건 XML 집계, lint 오류 0·경고 7). release에 `debuggable`·평문 허용·개발 서버 주소·앱 로그 호출이 없음을 확인했습니다. debug·release APK는 `844841e` 때와 같은 바이트입니다.
 - 남은 제한: 실기기·실제 React 화면·계측 테스트 미실행. W2 판정 기준, W3 계열 실행 방식, release 시험용 서명은 사용자 결정 대기. 독립 리뷰는 과금 여부가 불명확해 요청하지 않음(리뷰 대기)
 - 다음: 결정·기기 승인 뒤 실기기 확인, release 로딩 방식 결정 뒤 구현
+
+### 2026-11-01 17:00 · debug 실기기 관측 준비 · 완료(사용자 관측 대기)
+- 한 일: 최신 `develop`(`d9ae633`)을 merge했습니다(충돌 없음, `android/` 변경 없음). debug·release를 다시 빌드·검증하고, 사용자가 W1·W2·W5(debug)를 직접 관측할 수 있게 [관측 절차](../../android/webview-shell.md#debug-실기기-관측-절차-2026-11-01-준비-사용자-관측-대기)를 고쳐 썼습니다. 설치 전 확인 명령, 기기 인증 앱을 덮어쓰는 영향과 되돌리는 방법, 설치본 sha256 대조, 관측표·회신 양식이 들어 있습니다. 2026-10-31 절차는 이 절차로 바꿨고, 위 기록의 링크도 새 절차를 가리키게 고쳤습니다.
+- 서비스에서 달라진 점: 없음(문서만).
+- 검증: `assembleDebug testDebugUnitTest lintDebug`, `assembleRelease lintRelease`를 `--rerun-tasks`로 실제 실행, 통과(단위 테스트 16건 XML 집계, lint 오류 0·경고 7). 기준은 merge 커밋 `16f5a7e`이며 문서 변경은 그 뒤입니다. debug APK sha256 `0af9497b…`는 이전과 같습니다.
+- 남은 제한: 기기 설치·관측은 사용자 대기입니다. W2는 판정 기준이 미결이라 관측값만 기록하고, W3·W3a·W3b·W4·W5(release)는 미실행입니다.
+- 다음: 사용자 관측 결과 기록
