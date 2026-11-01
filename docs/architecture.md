@@ -25,6 +25,10 @@
   - 하위 패키지: `card`, `money`, `state`, `input`, `rule`, `primitive`, `result`
   - 책임: 안전한 데이터 표현, 입력·결과 일관성 검사, 날짜에 맞는 검증 규칙 선택, 서비스 한 건의 산식·개별 조건 판정(`primitive`), 서비스 후보·채택·기여액 결과 표현(`result`).
   - 범위 밖: 판정을 묶어 카드별 혜택을 내는 계산·최적화 엔진, HTTP 추천 API, CODEF 통신 구현.
+- [codef: CODEF 카드 응답 해석 경계](domains/codef.md)
+  - 위치: `backend/src/main/java/com/beone/api/codef/`
+  - 책임: 승인내역·보유카드·실적조회 응답 본문에서 결과 코드 분류와 비민감 필드만 해석. 빈 값·형식 오류를 0원이나 0건으로 바꾸지 않고, 민감 필드를 옮기지 않습니다.
+  - 범위 밖: HTTP 호출·OAuth·요청 DTO·추가 인증 요청, DB 저장, BeONE 상태값으로의 변환. `benefit`·`common.web`에 의존하지 않습니다.
 
 도메인이 아닌 공통 웹 기반 코드:
 
