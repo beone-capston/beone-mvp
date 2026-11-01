@@ -18,7 +18,10 @@ android {
     buildTypes {
         debug {
             // 개발 서버 주소. 기기에서는 `adb reverse tcp:5173 tcp:5173`으로 연결한다.
-            val devServerUrl = providers.gradleProperty("beone.devServerUrl").getOrElse("http://localhost:5173/")
+            val devServerOverride = providers.gradleProperty("beone.devServerUrl")
+            val devServerUrl = devServerOverride.getOrElse("http://localhost:5173/")
+            // 주소를 바꾼 빌드인지 테스트가 구분할 수 있게 둔다.
+            buildConfigField("boolean", "DEV_SERVER_OVERRIDDEN", devServerOverride.isPresent.toString())
             val escapedUrl = devServerUrl.replace("\\", "\\\\").replace("\"", "\\\"")
             buildConfigField("String", "WEB_START_URL", "\"$escapedUrl\"")
         }

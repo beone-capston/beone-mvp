@@ -5,6 +5,8 @@
 - 기술 설명: [Android WebView 셸](../../android/webview-shell.md)
 - 진행 기록 README는 #22 PR(#24)에 있습니다. 같은 파일을 두 PR이 새로 만들면 충돌하므로, #24가 병합된 뒤 이 작업의 줄을 반영합니다.
 
+## 단계 기록
+
 ### 2026-10-28 20:05 · 신뢰 origin 판정 · 완료
 - 한 일: 주소의 스킴·호스트·포트를 비교해 WebView 안에서 열어도 되는지 판정하는 기능을 만들었습니다.
 - 서비스에서 달라진 점: 설정된 시작 주소와 같은 origin만 열 수 있고, 설정이 없으면 아무 주소도 열지 않습니다(화면 연결 전).
@@ -46,3 +48,10 @@
 - 검증: `assembleDebug testDebugUnitTest lintDebug`, `assembleRelease lintRelease`를 `--rerun-tasks`로 실제 실행, 통과(단위 테스트 16건 XML 집계, lint 오류 0·경고 7). 기준은 merge 커밋 `16f5a7e`이며 문서 변경은 그 뒤입니다. debug APK sha256 `0af9497b…`는 이전과 같습니다.
 - 남은 제한: 기기 설치·관측은 사용자 대기입니다. W2는 판정 기준이 미결이라 관측값만 기록하고, W3·W3a·W3b·W4·W5(release)는 미실행입니다.
 - 다음: 사용자 관측 결과 기록
+
+### 2026-11-01 22:20 · CodeRabbit 리뷰 대응 · 완료(결정 2건 대기)
+- 한 일: 리뷰 지적 5건을 현재 코드와 대조했습니다. 개발 서버 주소를 바꾼 빌드에서 `DebugWebConfigTest`가 실패하던 문제를 고쳤고(기본 빌드에서만 `localhost:5173` 검사, 바꾼 빌드는 유효한 origin인지만 검사), README에 평문 HTTP 허용 주소를 적었고, 이 파일의 제목 단계를 맞췄습니다.
+- 서비스에서 달라진 점: 없음. debug `BuildConfig`에 테스트용 상수가 생겨 debug APK sha256이 `5ff441df…`로 바뀌었고, 관측 절차의 sha256도 고쳤습니다.
+- 검증: 기본 주소로 `testDebugUnitTest lintDebug assembleDebug assembleRelease lintRelease`, 주소를 바꾼 `testDebugUnitTest`(`http://10.0.2.2:5173`)를 실제 실행, 통과(단위 16건, lint 오류 0·경고 7). 잘못된 주소에서는 테스트가 실패하는 것도 확인했습니다. `testReleaseUnitTest`는 이 프로젝트에 없는 태스크라 실행하지 못했습니다.
+- 남은 제한: 차단 안내 표시 방식, iframe 안 이동 허용 여부는 결정이 필요해 바꾸지 않았습니다.
+- 다음: 결정 뒤 반영, 사용자 실기기 관측

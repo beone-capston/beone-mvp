@@ -83,8 +83,9 @@ release 로딩 방식이 정해지면 아래 중 하나로 `WEB_START_URL`과 �
 **시험 APK**
 
 - 빌드 변형: debug(기본 개발 서버 주소 `http://localhost:5173/`, dex에서 확인)
-- sha256: `0af9497b23e0ccaadf16c8230ce95134f37e551bb61f973022430e6dcc3389a7`
-- 이 APK는 `844841e`부터 지금까지 `android/` 트리가 같아 같은 바이트로 다시 만들어집니다. 최신 `develop` merge 뒤 head에서 2026-11-01에 다시 빌드해 확인했습니다. 빌드 위치는 `android/app/build/outputs/apk/debug/app-debug.apk`입니다.
+- sha256: `5ff441df2baa8536570a8661826623a400080bac919f98cc82206933d422f7a3`(2026-11-01 리뷰 반영 뒤 빌드)
+- 리뷰 반영으로 debug `BuildConfig`에 테스트용 상수 `DEV_SERVER_OVERRIDDEN`이 추가돼, 이전 APK `0af9497b…`와 바이트가 달라졌습니다. 앱 코드는 이 상수를 쓰지 않으므로 화면 동작은 같습니다. 관측에는 위 sha256의 APK를 씁니다.
+- 빌드 위치는 `android/app/build/outputs/apk/debug/app-debug.apk`입니다(기본 주소로 `./gradlew assembleDebug`).
 
 **1. 설치 전 확인 (사용자 실행, 기기 상태는 바꾸지 않음)**
 
