@@ -2,7 +2,7 @@
 
 ## 목적과 범위
 
-`codef`는 CODEF 카드 API 응답 본문을 BeONE이 쓸 수 있는 비민감 값으로 해석하는 **응답 해석 경계**입니다(#41). CODEF(금융기관 데이터를 대신 조회해 주는 외부 API)의 요청 전송, OAuth 토큰(접근 권한을 토큰으로 위임하는 인증 방식의 발급값), 암호화, 계정 연결(connectedId: CODEF가 연결된 금융기관 계정을 가리키는 식별값)과는 분리되어 있으며, 이 패키지는 응답 문자열을 받아 결과 코드 분류와 `data` 항목만 돌려줍니다.
+`codef`는 CODEF 카드 API 응답 본문을 BeONE이 쓸 수 있는 비민감 값으로 해석하는 **응답 해석 경계**입니다(#41). CODEF(금융기관 데이터를 대신 조회해 주는 외부 API)의 요청 전송, OAuth 토큰(접근 권한을 토큰으로 위임하는 인증 방식의 발급값), 암호화, 계정 연결(connectedId: CODEF가 연결된 금융기관 계정을 가리키는 식별값)과는 분리되어 있으며, 이 패키지는 응답 문자열을 받아 결과 코드 분류와 `data` 항목만 돌려줍니다. 그 앞단의 전송 단계 해석(#43)은 HTTP 상태 코드와 응답 본문을 받아 상태를 구분하고 본문을 URL 디코딩합니다. 실제 HTTP 호출은 하지 않습니다.
 
 구현된 범위는 승인내역·보유카드·실적조회 응답의 해석, 공통 결과 코드의 분류, 빈 값·금액·코드 값의 보수적 해석입니다. HTTP 호출, 요청 DTO(요청 값을 담아 계층 사이로 옮기는 객체), 토큰 발급·갱신, 추가 인증 2차 요청, DB 저장, 엔드포인트, BeONE 상태값(`StateValue`: 값과 출처·기준 기간을 함께 담는 `benefit` 도메인 타입)으로의 변환은 구현하지 않았습니다. 이 패키지의 테스트는 합성 응답만 쓰며 실제 응답 검증이 아닙니다.
 
@@ -14,7 +14,8 @@ CODEF 결과를 쓸 수 없는 경우(오류 분류, 미분류, 형식 오류, �
 - 대상 문서와 표시 갱신일: 승인내역(`/products/card/common/p/approval`, 2026-10-21), 보유카드(`/products/card/common/p/account`, 2026-10-19), 실적조회(`/products/card/common/p/result-check`, 2026-10-19), 공통 result/data 구조(`/common-guide/rest-api`), 오류코드 검색 결과 "만료"·"통신"·"토큰"(`/common-guide/error-code`).
 - 성공 코드 출처: Aside의 브라우저로 공식 오류코드 페이지(https://developer.codef.io/common-guide/error-code)에서 CF-00000을 검색해 확인한 행(관찰 2026-11-01T07:10:00Z). 행 내용은 `CF-00000` 설명 "성공"입니다. 위 사본과 별개의 별첨이며, 사본에 성공 코드가 없던 것은 검색 범위("만료"·"통신"·"토큰")에 따른 수집 누락이었습니다. 공식 문서에 성공 코드가 없었다는 뜻이 아닙니다.
 - 사본의 JSON 구조도는 공식 예시 하나에서 값만 뺀 것입니다. 완전한 스키마나 실제 응답 검증이 아닙니다.
-- 미확인: HTTP method·헤더·인코딩, OAuth 발급·갱신 계약, 기관별 필수조건 시트 본문, 승인 취소·부분취소 상세 탭, 오류 전체 목록(587건 중 검색 결과만 수집)과 상세 설명, 별도 명세 릴리스 버전.
+- 전송 단계 근거: 공식 SDK `codef-io/easycodef-java-v2`(MIT) 커밋 `721f5661a52da3bcee8f24c86c04557e1e073e9a`의 `ResponseHandler`·`EasyCodefConnector`·`CodefResponseCode`. 공식 SDK 구현에서 확인한 동작이며, 공식 명세 문서가 아닙니다. SDK 동작이 서버 계약 전체를 보장하지는 않습니다(아래 "전송 단계" 절).
+- 미확인: HTTP 헤더 중 Content-Type, 시간 초과·재시도 정책, 서버 쪽 인코딩 계약(SDK의 디코딩 동작만 확인), OAuth 발급·갱신의 서버 계약, 기관별 필수조건 시트 본문, 승인 취소·부분취소 상세 탭, 오류 전체 목록(587건 중 검색 결과만 수집)과 상세 설명, 별도 명세 릴리스 버전.
 
 ## 핵심 용어
 
@@ -27,6 +28,8 @@ CODEF 결과를 쓸 수 없는 경우(오류 분류, 미분류, 형식 오류, �
 
 ```text
 codef/
+├── CodefProductResponseReader HTTP 상태·본문 → CodefProductResponse (전송 단계, #43)
+├── CodefProductResponse     전송 결과: 본문 해석·401 인증 오류·그 밖의 HTTP 실패
 ├── CodefCardResponseParser  응답 본문 → CodefResponse (승인내역·보유카드·실적조회)
 ├── CodefResponse·CodefResult 공통 결과와 data 해석 결과
 ├── CodefResultCategory      결과 코드 분류 표
@@ -54,6 +57,28 @@ codef/
 - 금액([CodefAmount](../../backend/src/main/java/com/beone/api/codef/CodefAmount.java)): 값 없음은 `Absent`, 부호 있는 정수만 `Parsed`, 쉼표·소수점·통화 기호·범위 초과는 `Unparsed`(원문 미보관). 음수는 문서상 KB 취소전표매입에서 나올 수 있어 허용하지만, 부호로 취소 여부를 해석하지 않습니다.
 - 코드 값: 문서에 값 목록이 있는 필드만 열거형으로 바꾸고, 목록 밖 값·빈 값은 `UNKNOWN`입니다. 대소문자·공백을 고치지 않습니다.
 - 날짜·시각: 승인내역·보유카드의 날짜 형식은 문서에 없어 문자열 그대로 둡니다. 실적조회의 반영기간은 문서상 yyyyMMdd이지만 기간 의미를 확정하지 않으므로 문자열로 둡니다.
+
+## 전송 단계
+
+[CodefProductResponseReader](../../backend/src/main/java/com/beone/api/codef/CodefProductResponseReader.java)의 `readApprovals`·`readHeldCards`·`readCardPerformances`는 HTTP 상태 코드와 응답 본문 문자열을 받아 [CodefProductResponse](../../backend/src/main/java/com/beone/api/codef/CodefProductResponse.java)를 돌려줍니다(#43). 실제 HTTP 클라이언트가 받은 값을 넘겨받는 자리이며, 이 단계는 호출하지 않습니다.
+
+| HTTP 상태 | 결과 | 본문 |
+| --- | --- | --- |
+| 200 | `Interpreted`: UTF-8 URL 디코딩 뒤 `CodefCardResponseParser` 결과 | 해석함 |
+| 401 | `Unauthorized`: 인증 오류 | 해석·보관하지 않음 |
+| 그 밖(100~599) | `HttpFailure(status)`: 서버·전송 오류 | 해석·보관하지 않음 |
+
+- HTTP 상태 구분은 결과 코드 분류(`CodefResultCategory`)와 섞지 않습니다. 200일 때만 본문의 결과 코드를 분류하며, 성공 코드여도 `data` 형식 오류는 그대로입니다.
+- 디코딩은 `URLDecoder.decode(본문, UTF-8)`이며 SDK와 같습니다. 따라서 `+`는 공백, `%2B`는 `+`, `%EC%B9%B4…` 같은 UTF-8 바이트열은 한글이 되고, UTF-8로 읽을 수 없는 바이트(`%FF`)는 대체 문자(U+FFFD)가 됩니다. 디코딩이 먼저라 본문의 `"+100"`은 `" 100"`이 되고, 금액 규칙(앞뒤 공백 제거 뒤 정수)으로 100이 됩니다.
+- 잘못된 퍼센트 인코딩(`%`, `%7`, `%G1` 등)은 결과 미분류, `data` 형식 오류(`response body is not valid URL encoding`)입니다. SDK에서는 이 경우 처리되지 않은 예외가 나며, 여기서는 디코더 예외 문구에 본문 일부가 들어갈 수 있어 전달하지 않습니다.
+- 100~599 밖의 상태 코드와 null 본문은 호출 오류로 거부합니다. 상태가 200이 아니면 본문은 읽지 않습니다.
+
+SDK에서 확인한 것과 하지 않은 것:
+
+- 확인(SDK 구현): 상품 요청은 POST, `Authorization: Bearer <access token>`, 본문은 UTF-8 JSON 문자열입니다. 토큰은 `https://oauth.codef.io/oauth/token?grant_type=client_credentials&scope=read`에 `Authorization: Basic …`으로 POST하며, 토큰 응답은 URL 디코딩하지 않습니다. 상품 응답은 상태와 관계없이 먼저 디코딩한 뒤 200이면 해석하고, 401은 인증 오류, 그 밖은 서버 오류로 나눕니다. `data`는 객체를 먼저 시도하고 아니면 배열로 읽습니다.
+- SDK와 다르게 둔 것: SDK는 401·그 밖의 상태에서 디코딩한 본문을 예외에 싣지만, 여기서는 본문을 읽지도 보관하지도 않습니다. SDK는 `result`가 없으면 파싱 오류로 보지만, 여기서는 기존 파서 규칙(결과 미분류, `data`는 별도 해석)을 따릅니다.
+- 미확인: Content-Type(SDK가 `StringEntity(본문, UTF-8)`만 쓰고 명시하지 않음), 연결·응답 시간 초과와 재시도(SDK는 기본 클라이언트 설정만 사용), `CF-12872`의 의미(SDK 상수 이름 `isAddAuthExceedResponse`만 있고 공식 설명 행이 없어 분류하지 않음), 기관별 필수조건, 취소 상세, 오류 전체 목록.
+- 만들지 않은 것: HTTP 클라이언트, 토큰 발급·캐시·갱신, 요청 본문·요청 DTO, RSA 암호화, connectedId, 추가 인증 2차 요청, 설정 키·비밀값·DB. 요청 쪽에는 수집 금지 입력(카드번호·비밀번호·인증서)이 섞여 있고, 키 없이는 실제로 검증할 수 없습니다.
 
 ## 결과 코드 분류
 
@@ -114,3 +139,4 @@ if (response.data() instanceof CodefList.Items<CodefApproval> items) {
 
 - [전체 구조](../architecture.md)
 - [benefit 안내](benefit.md)
+- 공식 SDK 저장소: https://github.com/codef-io/easycodef-java-v2 (근거 커밋 `721f566`)
