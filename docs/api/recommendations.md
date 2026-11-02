@@ -190,7 +190,7 @@ X-BeONE-Demo-User: MY_CARDS
 - `monthlyTotalBenefit` · 1차에서는 현재 주문 기준이라 `currentOrderBenefit`과 같은 값이다. 예정 소비는 넣지 않는다(D-18 K4). 이번 달 상태는 잔여 한도와 실적 판정에 쓰고 합계에 더하지 않는다
 - `services[].applicationStatus` · `APPLIED` / `APPLIED_CAP_REMAINING` / `LIMIT_EXHAUSTED` / `NOT_APPLICABLE_EXCLUDED` / `NOT_APPLICABLE_CATEGORY` / `NOT_APPLICABLE_PERFORMANCE` / `NOT_APPLICABLE_MIN_AMOUNT` / `NOT_APPLICABLE_PAYMENT_METHOD` / `NOT_APPLICABLE_SELECTION`(제안, 코드에 없음) / `RULE_EXPIRED` / `NO_VERIFIED_RULE` / `NEEDS_CONFIRMATION`
 - `services[].candidateWon` · Integer|null · 서비스 단독 후보 금액. 기여액과 다를 수 있다. 미확정이면 `null`
-- `services[].adoption` · `ADOPTED` / `NOT_ADOPTED` / `UNDETERMINED`(코드 `Adoption`)
+- `services[].adoption` · `ADOPTED` / `NOT_ADOPTED` / `UNDETERMINED`(코드 `Adoption`). 중복 합산 예외(D-13 #35 8번)에서는 합산한 서비스가 모두 `ADOPTED`이고 카드 금액은 기여액의 합이다. 각 서비스를 할인 전 금액으로 계산해 서비스별로 절사하고(D-03) 자기 체인의 남은 한도로 줄인다. 합계가 결제 금액을 넘으면 `NEEDS_CONFIRMATION`이다
 - `services[].contribution` · 실제 기여액. 미확정이면 `amountWon=null`, `status=NEEDS_CONFIRMATION`
 - `services[].limits[]` · Array · 서비스가 속한 한도 버킷과 그 상위 버킷(체인)마다 한 항목. 한도·입력 사용액(출처 포함)·주문 뒤 남은 한도를 담는다. 한도가 없으면 `[]`다. 남은 한도는 체인 내 버킷별 (한도 − 입력 사용액)의 최솟값으로 판정한다(D-18 K1)
   - 정률 혜택: 남은 한도로 줄였으면 `APPLIED_CAP_REMAINING`
@@ -205,14 +205,14 @@ X-BeONE-Demo-User: MY_CARDS
   - 대상 업종 불일치: `NOT_APPLICABLE_CATEGORY`
   - 다른 서비스를 선택했거나 `serviceSelectionStatus=NONE`: `NOT_APPLICABLE_SELECTION`(제안)
   - 그 밖의 경우(`UNKNOWN`, 업종 미확정, 적용일 없음, 선택 서비스가 그 거래에 적용됨): `NEEDS_CONFIRMATION`
-- `excludedCards[].reason` · 카드 사유 우선순위(D-18 K3): `RULE_UNAVAILABLE` > `MAPPING_UNCONFIRMED` > `NEEDS_CONFIRMATION` > `UNSUPPORTED`. 사용자가 4종이 아니라고 지정한 카드는 `NO_SUPPORTED_RULE`, 사용자가 추천에서 뺀 카드는 `USER_EXCLUDED`
+- `excludedCards[].reason` · 카드 사유 우선순위(D-18 K3): `RULE_UNAVAILABLE` > `MAPPING_UNCONFIRMED` > `NEEDS_CONFIRMATION` > `UNSUPPORTED`. 사용자가 4종이 아니라고 지정한 카드는 `NO_SUPPORTED_RULE`, 사용자가 추천에서 뺀 카드는 `USER_EXCLUDED`. 이 값은 K3 순서에 넣지 않고 "사용자 제외"로 따로 표시한다(D-19)
 - `excludedCards[].candidateCardProductId` · `MAPPING_UNCONFIRMED`일 때 확인할 수 있는 후보(D-15)
 - `comparedCards[].noBenefitReason` · String|null · 금액이 확정 0원인 비교 카드의 사유. `CONFIRMED_NOT_MET`(K3 순서의 마지막)이며, 적용 서비스가 있으면 `null`
-- `comparedCards[].policyNotes[]` · 약관 근거 없는 사용자 결정을 적용했을 때의 표시. 예: 음수 전월 실적 판정의 "약관 근거 없음, 사용자 결정"(D-17), 원 미만이 생긴 경우의 D-03 절사(사용자 결정, 규칙 데이터 PR에서 기록)
+- `comparedCards[].policyNotes[]` · 약관 근거 없는 사용자 결정을 적용했을 때의 표시. 예: 음수 전월 실적 판정의 "약관 근거 없음, 사용자 결정"(D-17), 원 미만을 절사한 경우의 "약관 근거 없음, 사용자 결정"(D-03)
 - `fixedCardComparison` · Object|null · 대표 카드 고정일 때 월간 최적 카드와의 비교(PRD §4.1). `representativeUserCardId`, `optimalUserCardId`, `differenceWon`. 비교할 수 없으면 `optimalUserCardId`·`differenceWon`이 `null`이다. 자동 추천이면 객체 자체가 `null`
 - `inputSnapshot` · 계산에 쓴 주문·대표 카드·월간 상태 스냅샷 시각. 같은 입력·규칙 버전의 재현을 확인하는 기록이다
 - `conditional=false`여도 비교 카드가 1장이면 "최적"이라고 표시하지 않는다
-- `pendingReasons[]` · 카드 금액을 확정하지 못한 사유(`NEEDS_CONFIRMATION`·`UNSUPPORTED`·`PERFORMANCE_POLICY`·`STACKING_UNRESOLVED`·`STACKING_CONFIRMED`(코드 `PendingReason.Kind`))
+- `pendingReasons[]` · 카드 금액을 확정하지 못한 사유(`NEEDS_CONFIRMATION`·`UNSUPPORTED`·`PERFORMANCE_POLICY`·`STACKING_UNRESOLVED`·`STACKING_CONFIRMED`(코드 `PendingReason.Kind`)). `STACKING_CONFIRMED`는 중복 허용이 확정됐지만 합산 예외(D-13 #35 8번) 조건을 만족하지 않는 쌍에만 남는다
 
 비교 가능한 카드가 0장인 응답(2026-11-03 기준 규칙 데이터가 없어 실제로는 모두 이 형태입니다):
 

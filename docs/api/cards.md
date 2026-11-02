@@ -212,7 +212,7 @@ X-BeONE-Demo-User: MY_CARDS
 - `recommendationEligibility.reason` · String|null · `MAPPING_UNCONFIRMED`(UNMAPPED·CANDIDATE) / `NO_SUPPORTED_RULE`(NOT_SUPPORTED) / `USER_EXCLUDED`(사용자가 뺀 카드)
 - 가상 포트폴리오 사용자의 카드는 규칙 카드 자체라 매핑 대상이 아니다(D-15). `holdingSource=SYNTHETIC`이고 `mapping`은 `null`이며 `cardProductId`를 카드 항목에 직접 담는다
 - `mapping.candidateCardProductId` · String|null · `CANDIDATE`일 때 사용자가 확인할 수 있는 후보 상품(D-15). `CANDIDATE`의 `cardProductId`는 `null`이다
-- `excludedFromRecommendation` · Boolean · 사용자가 직접 추천에서 뺀 카드(PRD §4.1). 켜면 `recommendationEligibility.reason=USER_EXCLUDED`
+- `excludedFromRecommendation` · Boolean · 사용자가 직접 추천에서 뺀 카드(PRD §4.1). 켜면 `recommendationEligibility.reason=USER_EXCLUDED`. 이 값은 D-18 K3 순서에 넣지 않고 "사용자 제외"로 따로 표시한다(D-19)
 - 카드번호·끝 4자리·유효기간은 응답에 없다(D-14 ⑨)
 
 ### 실패 응답
@@ -478,7 +478,6 @@ X-BeONE-Demo-User: MY_CARDS
 ### 명세 단계 미정
 
 - 사용자가 뺀 카드만 있을 때 조건부 표시: 사용자가 고른 제외이므로 `conditional`을 켜지 않는 안을 제안합니다.
-- 제외 이유 값 `USER_EXCLUDED`는 D-18 K3 순서에 없는 값입니다. K3 순서의 맨 앞에 두는 안을 제안합니다.
 
 ### 근거
 

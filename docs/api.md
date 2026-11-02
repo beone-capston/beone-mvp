@@ -174,7 +174,7 @@ D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 모�
 | 월간 상태(2차) | `SOURCE_CONFLICT_CHANGED` 409, `SOURCE_CONFLICT_NOT_FOUND` 409 |
 | CODEF(2차 초안) | `CODEF_NOT_CONNECTED` 409, `CODEF_RECONNECT_REQUIRED` 409, `CODEF_LOGIN_FAILED` 400, `CODEF_CARD_VERIFICATION_NOT_SUPPORTED` 409, `CODEF_UNAVAILABLE` 502 |
 
-`PORTFOLIO_READ_ONLY`는 가상 포트폴리오의 보유 카드·월간 상태·CODEF 쓰기 요청에 씁니다. 주문·설정·예정 소비·모의 결제는 가상 포트폴리오에서도 동작합니다.
+`PORTFOLIO_READ_ONLY`는 가상 포트폴리오의 보유 카드·CODEF 쓰기 요청에 씁니다(D-19). 월간 상태·택1 선택·주문·설정·예정 소비·모의 결제는 가상 포트폴리오에서도 동작합니다.
 
 ### 공통 실패 응답
 

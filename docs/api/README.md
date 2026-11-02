@@ -50,7 +50,7 @@ D-14가 명세 단계로 넘긴 값 목록입니다. 2026-11-03 사용자 지시
 | --- | --- | --- |
 | 매핑 상태 | `UNMAPPED`·`CANDIDATE`·`USER_CONFIRMED`·`NOT_SUPPORTED`. 가상 포트폴리오 카드는 매핑 대상이 아니므로 `mapping=null` | D-15 |
 | 상태값 사유 | `NOT_ENTERED`·`PERIOD_MISMATCH`·`SOURCE_CONFLICT`·`NEGATIVE_UNCONFIRMED_ATTRIBUTION` | D-16·D-17 |
-| 추천 제외 사유 | `RULE_UNAVAILABLE` > `MAPPING_UNCONFIRMED` > `NEEDS_CONFIRMATION` > `UNSUPPORTED`, `NO_SUPPORTED_RULE`, `USER_EXCLUDED`(제안) | D-15, D-18 K3 |
+| 추천 제외 사유 | `RULE_UNAVAILABLE` > `MAPPING_UNCONFIRMED` > `NEEDS_CONFIRMATION` > `UNSUPPORTED`, `NO_SUPPORTED_RULE`. `USER_EXCLUDED`는 K3 순서 밖이며 "사용자 제외"로 따로 표시 | D-15, D-18 K3, D-19 |
 | 비교 카드 0원 사유 | `CONFIRMED_NOT_MET`(K3 순서의 마지막) | D-18 K3 |
 | 서비스 지원 범위 | `SUPPORTED`·`SUPPORTED_SINGLE_MONTHLY_LIMIT`(통합 한도와 매입 순서 명시 카드 포함)·`UNSUPPORTED_LIMIT_PERIOD`·`UNSUPPORTED_SELECTION_RULE` | D-18 K1 |
 | 한도 표시 | `usageBasis`: `USER_ENTERED`, `mayDifferFromActual`: `true`(제안) | D-18 K1 |
@@ -63,10 +63,7 @@ D-14가 명세 단계로 넘긴 값 목록입니다. 2026-11-03 사용자 지시
 
 ## 명세 단계 미정
 
-- **가상 포트폴리오 쓰기:** 이 명세는 보유 카드·월간 상태를 읽기 전용으로 제안했지만 PRD §3.2는 가상 거래·수동 상태값을 바꾸면 다시 계산하도록 요구합니다. 사용자 확인이 필요합니다.
-- **`NONE` 입력 경로:** 가상 포트폴리오 쓰기가 미정이라, 그 카드의 `NONE`을 어떻게 넣을지도 미정입니다. 쓰기를 막으면 시드 값으로만 들어갑니다.
-- **대표 카드 고정의 승인:** 혜택이 `확인 필요`인 대표 카드를 승인할지(제안: 승인하고 `확인 필요`로 기록). 결정 기록에 없습니다.
-- **추천 제외:** `USER_EXCLUDED`와 추천 제외 API는 제안이며 결정 기록에 없습니다.
+- **가상 포트폴리오의 표시 이름·추천 제외 변경:** D-19는 보유 카드 추가·삭제만 시드로 고정했습니다. 이 변경은 결정 기록에 없고, 현재 명세는 `PORTFOLIO_READ_ONLY`로 둡니다.
 - **모의 승인 실패:** PRD FR-07의 내부 테스트 실패(`FAILED`)를 일으키는 조건.
 - **판정일:** `decisionDate`를 주문일로 쓸지([진행 기록](../progress/backend/README.md) 사용자 확인 7번).
 - **같은 상품 두 장 보유:** 현재 제안은 중복 거부입니다.

@@ -188,6 +188,7 @@ X-BeONE-Demo-User: MY_CARDS
 ```
 
 - 본문 전체가 이 카드·이 달의 수동 입력을 **교체**한다. 생략한 항목이나 `null`은 `UNKNOWN`으로 저장한다.
+- 가상 포트폴리오도 이 API로 월간 상태와 택1 선택(`NONE` 포함)을 바꿀 수 있고 그 값으로 다시 계산한다(D-19, PRD §3.2). 입력값의 출처는 `MANUAL`이고 시드 값 `SYNTHETIC`과 구분한다. 생략한 항목은 `UNKNOWN`이 아니라 시드 값으로 돌아간다(제안).
 - 값을 보낸 항목은 `period`(`from`·`to`, YYYY-MM-DD)가 필수다.
 
 #### 선택 필드
@@ -301,15 +302,12 @@ registeredOn
 - **404 `USER_CARD_NOT_FOUND`**: 없거나 다른 사용자의 카드
 
 - **409 `USER_CARD_MAPPING_REQUIRED`**: 매핑이 확인되지 않은 카드
-  - `limitBucketUsages`·`selectedServices`·`noServiceSelection`을 보냈는데 `USER_CONFIRMED`가 아닌 경우. 어떤 규칙의 버킷·서비스인지 알 수 없다. 전월 실적만 보내면 매핑 없이 저장한다(D-16)
-
-- **409 `PORTFOLIO_READ_ONLY`**: 가상 포트폴리오 사용자가 요청한 경우
+  - `limitBucketUsages`·`selectedServices`·`noServiceSelection`을 보냈는데 `USER_CONFIRMED`가 아닌 경우. 어떤 규칙의 버킷·서비스인지 알 수 없다. 전월 실적만 보내면 매핑 없이 저장한다(D-16). 가상 포트폴리오 카드는 규칙 카드 자체라 이 오류가 없다(D-15)
 
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
 ### 명세 단계 미정
 
-- 가상 포트폴리오의 수동 상태값 변경: 이 명세는 읽기 전용으로 제안했지만 PRD §3.2는 "가상 거래 또는 명시적인 수동 상태값을 바꾸면 다시 계산"을 요구합니다. 사용자 확인이 필요합니다.
 - 화면에서 묻는 순서와 필수·선택 구분(D-16).
 
 ### 구현 시 주의
@@ -320,7 +318,7 @@ registeredOn
 
 ### 근거
 
-- 결정 기록 D-16·D-17, D-18 K1
+- 결정 기록 D-16·D-17, D-18 K1, D-19
 - benefit 도메인 안내(CardMonthlyState, ServiceSelection)
 
 ## PUT /api/v1/me/cards/{userCardId}/monthly-states/{month}/source-selections — 출처 충돌 계산 기준 선택
