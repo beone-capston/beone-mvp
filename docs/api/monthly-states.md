@@ -72,6 +72,8 @@ X-BeONE-Demo-User: MY_CARDS
       "reason": "NOT_ENTERED"
     },
     "selectedServices": [],
+    "serviceSelectionStatus": "UNKNOWN",
+    "noServiceSelection": null,
     "registeredOn": {
       "value": null,
       "source": "UNKNOWN",
@@ -97,7 +99,9 @@ X-BeONE-Demo-User: MY_CARDS
 - `value` · `null`은 모름이고 `0`은 사용자가 0을 직접 입력한 값이다. 둘을 같게 다루지 않는다
 - `previousMonthPerformanceWon.value` · Integer · 음수가 올 수 있다(D-17). 0으로 바꾸지 않는다
 - 해당 달의 상태를 입력한 적이 없어도 404가 아니라 모든 값이 `UNKNOWN`인 응답을 준다. 404는 카드가 없거나 다른 사용자의 카드일 때만이다
-- `otherBucketsUsedWon` · `limitBucketUsages`에 없는 한도 묶음의 사용액(코드 `otherBucketsUsed`)
+- `otherBucketsUsedWon` · `limitBucketUsages`에 없는 한도 묶음의 사용액(코드 `otherBucketsUsed`). 체인 버킷의 사용액을 대신하지 않는다
+- `serviceSelectionStatus` · String · 택1 선택 입력 상태: `UNKNOWN`(미입력, `확인 필요`) / `SELECTED`(서비스 선택) / `NONE`(선택 없음, 사용자 명시 입력). 서버가 정하며 요청으로 받지 않는다
+- `noServiceSelection` · Object|null · `NONE`일 때 `effectiveFrom`, `source`, `updatedAt`, `usable`, `reason`
 - `registeredOn` · 카드 사용 등록일(코드 `HeldCard.registeredAt`). 카드 단위 값이라 달이 달라도 같은 값이다
 - `usable` / `reason` · 계산에 쓸 수 있는지와 이유: `NOT_ENTERED` / `PERIOD_MISMATCH` / `SOURCE_CONFLICT` / `NEGATIVE_UNCONFIRMED_ATTRIBUTION`
 - `referencedCodef` · Object|null · 2차에서 사용자가 CODEF 참고값을 보고 입력했을 때 참고한 조회월·조회 시각
@@ -172,6 +176,7 @@ X-BeONE-Demo-User: MY_CARDS
       "effectiveFrom": "2026-10-15"
     }
   ],
+  "noServiceSelection": null,
   "registeredOn": null
 }
 ```
@@ -192,14 +197,20 @@ previousMonthPerformanceWon
 limitBucketUsages
 otherBucketsUsedWon
 selectedServices
+noServiceSelection
 registeredOn
 ```
 
 - 금액 항목의 `value`는 정수이며 소수·문자열은 400이다. `previousMonthPerformanceWon.value`는 **음수를 받는다**(D-17). 0으로 바꾸지 않는다.
 - `source`·`updatedAt`은 서버가 정한다. 요청으로 받지 않는다. 이 입력은 CODEF 조회값을 덮어쓰지 않는다.
 - `limitBucketUsages[].value`는 0 이상 정수다. `0`은 "사용한 혜택 없음"을 직접 입력한 값이다.
-- 카드 규칙에 없는 버킷 ID는 400이다. 버킷을 나눠 입력할 수 없는 나머지 사용액은 `otherBucketsUsedWon`에 넣는다.
+- 한도가 체인으로 묶인 서비스는 체인 안 버킷마다 사용액을 입력한다. 하나라도 `UNKNOWN`이면 그 서비스는 `확인 필요`다(D-16, D-18 K1).
+- 입력 사용액이 한도보다 커도 저장은 한다. 한도는 실적 구간에 따라 달라 추천 때 판정한다. 추천에서 그 서비스는 `확인 필요`(제안 사유 `USAGE_EXCEEDS_LIMIT`)이고, 사용액이 한도와 같으면 남은 한도 0이다(D-18 K1).
+- 카드 규칙에 없는 버킷 ID는 400이다. 버킷을 나눠 입력할 수 없는 나머지 사용액은 `otherBucketsUsedWon`에 넣는다. 이 값으로 체인 버킷의 사용액을 대신하지 않는다.
 - `selectedServices[].effectiveFrom`(적용일)이 없으면 그 서비스는 `확인 필요`다.
+- 택1 선택은 세 상태다(D-18 K1). 둘 다 비우면 미입력(`UNKNOWN`), `selectedServices`에 항목을 보내면 서비스 선택(`SELECTED`), `noServiceSelection`에 `{"effectiveFrom":"2026-11-01"}`을 보내면 선택 없음(`NONE`)이다.
+- `NONE`이면 택1 서비스는 그 거래에 적용되지 않음으로 보고 기본 서비스를 판정한다. `effectiveFrom`이 없거나 거래일보다 늦으면 `확인 필요`다.
+- 실물 카드에 선택 없음 상태가 있는지는 상품설명서로 확인되지 않는다. `NONE`은 사용자 입력값이며 가상 포트폴리오·평가 사례용이다. 내 카드 모드 화면에서는 실제 선택을 입력받도록 안내한다.
 - `registeredOn`은 `{"value":"2026-09-01","period":{"from":"2026-09-01","to":"2026-09-01"}}` 형식이다. 기준 기간은 등록일 하루로 둔다(제안).
 - `period`가 카드의 실적·한도 기간(D-03)과 다르면 저장은 하되 `usable=false`, `reason=PERIOD_MISMATCH`로 둔다. 오류가 아니다.
 
@@ -259,6 +270,8 @@ registeredOn
         "reason": null
       }
     ],
+    "serviceSelectionStatus": "SELECTED",
+    "noServiceSelection": null,
     "registeredOn": {
       "value": null,
       "source": "UNKNOWN",
@@ -282,11 +295,13 @@ registeredOn
   - `month`·`period` 날짜 형식 오류, `from`이 `to`보다 늦음
   - 카드 규칙에 없는 `limitBucketId`·`serviceId`
   - `usedBenefitWon` 음수
+  - `selectedServices` 항목과 `noServiceSelection`을 함께 보냄(제안)
+  - 선택형 서비스가 없는 카드에 `noServiceSelection`을 보냄(제안)
 
 - **404 `USER_CARD_NOT_FOUND`**: 없거나 다른 사용자의 카드
 
 - **409 `USER_CARD_MAPPING_REQUIRED`**: 매핑이 확인되지 않은 카드
-  - `limitBucketUsages`·`selectedServices`를 보냈는데 `USER_CONFIRMED`가 아닌 경우. 어떤 규칙의 버킷·서비스인지 알 수 없다. 전월 실적만 보내면 매핑 없이 저장한다(D-16)
+  - `limitBucketUsages`·`selectedServices`·`noServiceSelection`을 보냈는데 `USER_CONFIRMED`가 아닌 경우. 어떤 규칙의 버킷·서비스인지 알 수 없다. 전월 실적만 보내면 매핑 없이 저장한다(D-16)
 
 - **409 `PORTFOLIO_READ_ONLY`**: 가상 포트폴리오 사용자가 요청한 경우
 
@@ -300,10 +315,12 @@ registeredOn
 ### 구현 시 주의
 
 - D-17의 음수 전월 실적 판정은 구현 전이며, 현재 판정기는 음수를 거부합니다. 판정기 변경이 이 API 구현의 선행 작업입니다.
+- 코드 `CardMonthlyState`에는 선택 없음을 담을 곳이 없습니다(`ServiceSelection`은 서비스가 필수). 구현 때 입력 모델에 추가해야 합니다.
+- 모의 승인은 스냅샷 뒤 사용액으로 체인 안 모든 버킷에 더합니다. 모의 원장 기준이며 실제 카드사 차감 시점이 아닙니다.
 
 ### 근거
 
-- 결정 기록 D-16·D-17
+- 결정 기록 D-16·D-17, D-18 K1
 - benefit 도메인 안내(CardMonthlyState, ServiceSelection)
 
 ## PUT /api/v1/me/cards/{userCardId}/monthly-states/{month}/source-selections — 출처 충돌 계산 기준 선택

@@ -15,7 +15,7 @@
 ```text
 보유 카드 중 매핑 USER_CONFIRMED 카드 선별 (나머지는 excludedCards)
 → 카드별 VERIFIED 규칙 선택(판정일)
-→ 서비스별 후보·채택·기여액 결정, D-18 K1 범위의 단일 월 한도는 남은 한도로 줄임
+→ 서비스별 후보·채택·기여액 결정, D-18 K1 범위의 월 한도는 입력 사용액 기준 남은 한도(체인 내 버킷별 최솟값)로 판정
 → 금액 확정 카드끼리 D-12 순서(월간 합계 → 현재 주문 혜택 → 대표 카드 → 카드 ID)로 선택
 → 확정 안 된 카드는 excludedCards + 이유(D-18 K3 순서)
 ```
@@ -95,15 +95,22 @@ X-BeONE-Demo-User: MY_CARDS
               "status": "CONFIRMED"
             },
             "adoption": "ADOPTED",
-            "limit": {
-              "limitBucketId": "LB-GREAT",
-              "limitWon": 10000,
-              "usedBeforeWon": {
-                "value": 7900,
-                "source": "MANUAL"
-              },
-              "remainingAfterWon": 0
-            }
+            "limits": [
+              {
+                "limitBucketId": "LB-GREAT",
+                "parentLimitBucketId": null,
+                "limitWon": 10000,
+                "usedBeforeWon": {
+                  "value": 7900,
+                  "source": "MANUAL"
+                },
+                "remainingAfterWon": 0
+              }
+            ],
+            "limitReason": null,
+            "usageBasis": "USER_ENTERED",
+            "mayDifferFromActual": true,
+            "usageNote": "입력한 사용액 기준, 미매입 전표에 따라 달라질 수 있음"
           },
           {
             "serviceId": "SVC-ENJOY",
@@ -114,7 +121,11 @@ X-BeONE-Demo-User: MY_CARDS
               "status": "CONFIRMED"
             },
             "adoption": "NOT_ADOPTED",
-            "limit": null
+            "limits": [],
+            "limitReason": null,
+            "usageBasis": null,
+            "mayDifferFromActual": false,
+            "usageNote": null
           }
         ],
         "noBenefitReason": null,
@@ -177,15 +188,27 @@ X-BeONE-Demo-User: MY_CARDS
 - `comparedCards[].appliedRule` · 규칙 버전·검증 상태·공식 근거(D-14 원칙 5)
 - `currentOrderBenefit` · `OrderBenefit` 값을 그대로 쓴다(D-18 K3)
 - `monthlyTotalBenefit` · 1차에서는 현재 주문 기준이라 `currentOrderBenefit`과 같은 값이다. 예정 소비는 넣지 않는다(D-18 K4). 이번 달 상태는 잔여 한도와 실적 판정에 쓰고 합계에 더하지 않는다
-- `services[].applicationStatus` · `APPLIED` / `APPLIED_CAP_REMAINING` / `LIMIT_EXHAUSTED` / `NOT_APPLICABLE_EXCLUDED` / `NOT_APPLICABLE_CATEGORY` / `NOT_APPLICABLE_PERFORMANCE` / `NOT_APPLICABLE_MIN_AMOUNT` / `NOT_APPLICABLE_PAYMENT_METHOD` / `RULE_EXPIRED` / `NO_VERIFIED_RULE` / `NEEDS_CONFIRMATION`
+- `services[].applicationStatus` · `APPLIED` / `APPLIED_CAP_REMAINING` / `LIMIT_EXHAUSTED` / `NOT_APPLICABLE_EXCLUDED` / `NOT_APPLICABLE_CATEGORY` / `NOT_APPLICABLE_PERFORMANCE` / `NOT_APPLICABLE_MIN_AMOUNT` / `NOT_APPLICABLE_PAYMENT_METHOD` / `NOT_APPLICABLE_SELECTION`(제안, 코드에 없음) / `RULE_EXPIRED` / `NO_VERIFIED_RULE` / `NEEDS_CONFIRMATION`
 - `services[].candidateWon` · Integer|null · 서비스 단독 후보 금액. 기여액과 다를 수 있다. 미확정이면 `null`
 - `services[].adoption` · `ADOPTED` / `NOT_ADOPTED` / `UNDETERMINED`(코드 `Adoption`)
 - `services[].contribution` · 실제 기여액. 미확정이면 `amountWon=null`, `status=NEEDS_CONFIRMATION`
-- `services[].limit` · D-18 K1 지원 한도일 때 한도·사용액(출처 포함)·주문 뒤 남은 한도. 혜택을 줄였으면 `APPLIED_CAP_REMAINING`. 사용액이 `UNKNOWN`이면 `remainingAfterWon=null`이고 그 서비스는 `확인 필요`다
+- `services[].limits[]` · Array · 서비스가 속한 한도 버킷과 그 상위 버킷(체인)마다 한 항목. 한도·입력 사용액(출처 포함)·주문 뒤 남은 한도를 담는다. 한도가 없으면 `[]`다. 남은 한도는 체인 내 버킷별 (한도 − 입력 사용액)의 최솟값으로 판정한다(D-18 K1)
+  - 정률 혜택: 남은 한도로 줄였으면 `APPLIED_CAP_REMAINING`
+  - 정액 혜택: 남은 한도가 0이면 확정 0원(`LIMIT_EXHAUSTED`), 0보다 크고 정액보다 적으면 `NEEDS_CONFIRMATION`
+  - 체인 안 버킷 중 하나라도 사용액이 `UNKNOWN`이면 그 서비스는 `NEEDS_CONFIRMATION`이고 `remainingAfterWon=null`이다. 확정 0원은 체인 안 모든 버킷의 사용액이 입력되어 있을 때만이다
+  - 사용액이 한도와 같으면 남은 한도 0으로 판정한다
+- `services[].limitReason` · String|null · `USAGE_EXCEEDS_LIMIT`(제안). 체인 안 어느 버킷이든 입력 사용액이 한도보다 크면 입력이 규칙과 모순되므로 그 서비스는 `NEEDS_CONFIRMATION`이고 `amountWon=null`, `remainingAfterWon=null`이다. 0원 확정이나 음수 혜택으로 만들지 않는다. 같은 사유를 `pendingReasons[]`에 `NEEDS_CONFIRMATION`으로 담는다
+- `services[].usageBasis` · String|null · 제안. 한도가 있으면 `USER_ENTERED`, 없으면 `null`
+- `services[].mayDifferFromActual` · Boolean · 제안. 한도가 있는 모든 서비스 결과(0원 결과 포함)에서 `true`다. 실제 카드사 차감과 다를 수 있다는 표시다
+- `services[].usageNote` · String|null · 한도가 있으면 "입력한 사용액 기준, 미매입 전표에 따라 달라질 수 있음"을 그대로 표시한다
+- 택1 선택형 서비스(D-18 K1 U2 ① 예외): 선택형은 계속 범위 밖이다. 거래 업종이 확정되고 그 거래에 적용되지 않음이 확정되면 카드 금액을 막는 사유에서 뺀다
+  - 대상 업종 불일치: `NOT_APPLICABLE_CATEGORY`
+  - 다른 서비스를 선택했거나 `serviceSelectionStatus=NONE`: `NOT_APPLICABLE_SELECTION`(제안)
+  - 그 밖의 경우(`UNKNOWN`, 업종 미확정, 적용일 없음, 선택 서비스가 그 거래에 적용됨): `NEEDS_CONFIRMATION`
 - `excludedCards[].reason` · 카드 사유 우선순위(D-18 K3): `RULE_UNAVAILABLE` > `MAPPING_UNCONFIRMED` > `NEEDS_CONFIRMATION` > `UNSUPPORTED`. 사용자가 4종이 아니라고 지정한 카드는 `NO_SUPPORTED_RULE`, 사용자가 추천에서 뺀 카드는 `USER_EXCLUDED`
 - `excludedCards[].candidateCardProductId` · `MAPPING_UNCONFIRMED`일 때 확인할 수 있는 후보(D-15)
 - `comparedCards[].noBenefitReason` · String|null · 금액이 확정 0원인 비교 카드의 사유. `CONFIRMED_NOT_MET`(K3 순서의 마지막)이며, 적용 서비스가 있으면 `null`
-- `comparedCards[].policyNotes[]` · 약관 근거 없는 사용자 결정을 적용했을 때의 표시. 예: 음수 전월 실적 판정의 "약관 근거 없음, 사용자 결정"(D-17)
+- `comparedCards[].policyNotes[]` · 약관 근거 없는 사용자 결정을 적용했을 때의 표시. 예: 음수 전월 실적 판정의 "약관 근거 없음, 사용자 결정"(D-17), 원 미만이 생긴 경우의 D-03 절사(사용자 결정, 규칙 데이터 PR에서 기록)
 - `fixedCardComparison` · Object|null · 대표 카드 고정일 때 월간 최적 카드와의 비교(PRD §4.1). `representativeUserCardId`, `optimalUserCardId`, `differenceWon`. 비교할 수 없으면 `optimalUserCardId`·`differenceWon`이 `null`이다. 자동 추천이면 객체 자체가 `null`
 - `inputSnapshot` · 계산에 쓴 주문·대표 카드·월간 상태 스냅샷 시각. 같은 입력·규칙 버전의 재현을 확인하는 기록이다
 - `conditional=false`여도 비교 카드가 1장이면 "최적"이라고 표시하지 않는다
@@ -328,15 +351,22 @@ X-BeONE-Demo-User: MY_CARDS
               "status": "CONFIRMED"
             },
             "adoption": "ADOPTED",
-            "limit": {
-              "limitBucketId": "LB-GREAT",
-              "limitWon": 10000,
-              "usedBeforeWon": {
-                "value": 7900,
-                "source": "MANUAL"
-              },
-              "remainingAfterWon": 0
-            }
+            "limits": [
+              {
+                "limitBucketId": "LB-GREAT",
+                "parentLimitBucketId": null,
+                "limitWon": 10000,
+                "usedBeforeWon": {
+                  "value": 7900,
+                  "source": "MANUAL"
+                },
+                "remainingAfterWon": 0
+              }
+            ],
+            "limitReason": null,
+            "usageBasis": "USER_ENTERED",
+            "mayDifferFromActual": true,
+            "usageNote": "입력한 사용액 기준, 미매입 전표에 따라 달라질 수 있음"
           },
           {
             "serviceId": "SVC-ENJOY",
@@ -347,7 +377,11 @@ X-BeONE-Demo-User: MY_CARDS
               "status": "CONFIRMED"
             },
             "adoption": "NOT_ADOPTED",
-            "limit": null
+            "limits": [],
+            "limitReason": null,
+            "usageBasis": null,
+            "mayDifferFromActual": false,
+            "usageNote": null
           }
         ],
         "noBenefitReason": null,

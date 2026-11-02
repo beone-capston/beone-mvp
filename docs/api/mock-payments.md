@@ -115,6 +115,7 @@ seenRecommendationId
 - `recalculation.differences[]` · `{"field":"selected.userCardId","before":"uc-1001","after":"uc-1003","reason":"MONTHLY_STATE_CHANGED"}` 형식
 - `status` · `APPROVED` / `FAILED`. `FAILED`는 서비스 내부 테스트 조건의 실패이고 카드사 거절이 아니다(PRD §4, FR-07)
 - `currentOrderBenefit` · 승인 시점 계산값. 미확정이면 `amountWon=null`. 카드사가 지급한 금액이 아니다
+- 승인된 혜택은 다음 계산의 사용액으로 서비스 체인 안 모든 한도 버킷에 반영한다(D-18 K1). 모의 원장 기준이며 실제 카드사 차감 시점이 아니다
 - `ledgerTransactionId` · 원장에 남긴 승인 행
 - `cancellableAmountWon` · 남은 취소 가능 금액
 
@@ -333,7 +334,7 @@ amountWon
 
 - 원장 행 기록, 결제 상태 변경, 영향 재계산은 한 트랜잭션으로 처리한다
 - `impact.confirmed[]` · 확정 규칙으로 바뀐 값과 근거. `target`은 `PERFORMANCE`·`LIMIT_USAGE`·`BENEFIT`
-- `impact.needsConfirmation[]` · `확인 필요`가 된 값과 이유. `target` 값은 위와 같다. 부분취소로 원 미만이 생기면 여기에 담는다(D-03 미확정)
+- `impact.needsConfirmation[]` · `확인 필요`가 된 값과 이유. `target` 값은 위와 같다. 부분취소 영향 계산의 원 미만은 D-03 절사(사용자 결정, 규칙 데이터 PR에서 기록)로 맞춘다. 혜택 되돌림 규칙 자체가 확정되지 않았으면 여기에 담는다
 - 취소일이 원 승인과 다른 달이고 귀속 규칙이 없는 카드는 두 달의 영향값을 모두 `needsConfirmation`에 담는다
 
 ### 실패 응답

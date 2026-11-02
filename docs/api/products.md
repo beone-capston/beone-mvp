@@ -90,7 +90,7 @@ BeONE이 계산을 지원하는 카드 상품(규칙 카드 4종)과 각 상품�
 
 카드 상품 하나의 규칙 버전과 서비스별 조건·한도, 그리고 BeONE이 그 서비스를 계산할 수 있는지를 조회하는 API.
 
-K1에 따라 한도 서비스는 "한도 버킷 하나에만 속하고, 다른 서비스와 공유하지 않으며, 한도 기간이 월 1일~말일로 확정된 경우"만 계산합니다. 그 밖의 서비스는 `supportStatus`로 범위 밖임을 보여 줍니다.
+K1(2026-11-03 R2 변경)에 따라 한도 서비스는 비선택형이고, 속한 한도 버킷과 그 상위 버킷(체인)의 기간이 모두 월 1일~말일로 확정된 경우 입력 사용액 기준으로 계산합니다. 통합 한도와 매입 순서를 명시한 카드를 포함합니다. 그 밖의 서비스는 `supportStatus`로 범위 밖임을 보여 줍니다.
 
 ### Request Header
 
@@ -151,7 +151,7 @@ K1에 따라 한도 서비스는 "한도 버킷 하나에만 속하고, 다른 �
         "serviceId": "SVC-SHARED",
         "name": "통합 한도 서비스",
         "benefitKind": "BILLING_DISCOUNT",
-        "supportStatus": "UNSUPPORTED_SHARED_LIMIT",
+        "supportStatus": "SUPPORTED_SINGLE_MONTHLY_LIMIT",
         "limitBucketIds": [
           "LB-TOTAL"
         ],
@@ -172,6 +172,20 @@ K1에 따라 한도 서비스는 "한도 버킷 하나에만 속하고, 다른 �
         "sharedByServiceIds": [
           "SVC-GREAT"
         ]
+      },
+      {
+        "limitBucketId": "LB-TOTAL",
+        "tiers": [
+          {
+            "minimumPerformanceWon": 300000,
+            "monthlyCapWon": 20000
+          }
+        ],
+        "parentLimitBucketId": null,
+        "period": "CALENDAR_MONTH",
+        "sharedByServiceIds": [
+          "SVC-SHARED"
+        ]
       }
     ]
   }
@@ -181,7 +195,8 @@ K1에 따라 한도 서비스는 "한도 버킷 하나에만 속하고, 다른 �
 #### 응답 필드
 
 - `rule` · Object|null · 판정일에 유효한 `VERIFIED` 규칙. 없으면 `null`이고 `ruleStatus`로 이유를 준다
-- `supportStatus` · String · `SUPPORTED`(한도 없는 비선택형) / `SUPPORTED_SINGLE_MONTHLY_LIMIT`(D-18 K1 지원 한도) / `UNSUPPORTED_SHARED_LIMIT`(공유·통합 한도) / `UNSUPPORTED_PURCHASE_ORDER`(매입 순서 차감) / `UNSUPPORTED_LIMIT_PERIOD`(기간 미확정) / `UNSUPPORTED_SELECTION_RULE`(선택형). 범위 밖 서비스는 계산하지 않고 `확인 필요`로 둔다
+- `supportStatus` · String · `SUPPORTED`(한도 없는 비선택형) / `SUPPORTED_SINGLE_MONTHLY_LIMIT`(D-18 K1 지원 한도. 이름과 달리 통합 한도와 매입 순서 명시 카드를 포함한다) / `UNSUPPORTED_LIMIT_PERIOD`(기간 미확정) / `UNSUPPORTED_SELECTION_RULE`(선택형). 범위 밖 서비스는 계산하지 않고 `확인 필요`로 둔다
+- `limitDeductionOrder` · String|null · 규칙에 기록한 차감 순서. 단일 주문 계산에는 쓰지 않는다. 순서 조항이 없거나 뜻이 모호하면 `null`이고 확인 필요다(D-18)
 - `cancellationAttribution` · String|null · 확정된 취소 귀속 모델(`RECEIPT_MONTH`). 미확정이면 `null`(D-17). 예시의 톡톡은 귀속월 미확정이다
 - `limitBuckets[].tiers[]` · 전월 실적 구간별 월 한도(코드 `LimitTier`). `parentLimitBucketId`는 통합 한도의 상위 묶음
 - 서비스·한도 ID와 금액은 예시입니다
