@@ -23,3 +23,6 @@
 ## 2026-11-01 · `develop` 동기화 · 완료(병합 대기)
 - `origin/develop` `2c1fe48`(#48·#44 반영)을 merge했습니다. 충돌은 문서 3개(`docs/architecture.md`, `docs/domains/codef.md`, 진행 기록 README)뿐이었고, #45 고유 코드·테스트는 바뀌지 않았습니다.
 - 문서 정정: `CF-12401`·`CF-12834`는 정정 후 상태(`UNCLASSIFIED`)로, `CF-12872`는 공식 목록 340행 설명이 있고 SDK 상수 이름만으로 의미를 정하지 않아 미분류라는 내용으로 맞췄습니다.
+
+## 2026-11-01 · `develop` 병합 · 완료
+- PR #46 병합, squash 커밋 `3bf359b`.
