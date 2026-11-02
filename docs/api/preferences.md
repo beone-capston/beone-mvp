@@ -38,6 +38,7 @@ X-BeONE-Demo-User: MY_CARDS
 
 - `selectionMode` · String · `AUTO_RECOMMEND` / `FIXED_REPRESENTATIVE`
 - `representativeUserCardId` · String|null · 대표 카드. 자동 추천 모드에서도 동률 처리 3단계(D-12)에 쓴다
+- `updatedAt` · DateTime|null · 마지막 설정 시각(ISO-8601). 설정한 적이 없으면 `null`
 - 설정한 적이 없으면 `AUTO_RECOMMEND`, 대표 카드 `null`을 반환한다(저장된 기본값이 아니라 미설정 표시)
 
 ### 실패 응답
@@ -93,7 +94,11 @@ representativeUserCardId
 ```
 
 - 대표 카드는 매핑이 `USER_CONFIRMED`인 카드만 고를 수 있다. 추천 비교에서 빠진 카드는 동률 처리의 대표 카드 후보도 될 수 없다(D-15). 주문마다 달라지는 혜택 `확인 필요`는 이 제한이 아니다(D-19).
-- `null`을 보내면 대표 카드를 지운다(`AUTO_RECOMMEND`일 때만).
+- `selectionMode`와 대표 카드의 조합
+  - `AUTO_RECOMMEND` + 대표 카드: 저장하고 동률 처리 3단계에만 쓴다(D-12)
+  - `AUTO_RECOMMEND` + `null`: 대표 카드를 지운다
+  - `FIXED_REPRESENTATIVE` + 대표 카드: 그 카드로 고정한다
+  - `FIXED_REPRESENTATIVE` + `null`·누락: 400 `INVALID_REQUEST`
 - 결제 중 카드를 다시 고르는 단계는 없다(PRD §4). 사용자 통제는 이 설정으로만 한다.
 
 ### Response Body
@@ -109,6 +114,10 @@ representativeUserCardId
   }
 }
 ```
+
+#### 응답 필드
+
+- 응답 형식은 「설정 조회」와 같다. `updatedAt`은 이번에 저장한 시각이다
 
 ### 실패 응답
 

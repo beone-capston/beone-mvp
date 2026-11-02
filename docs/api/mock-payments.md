@@ -301,16 +301,14 @@ amountWon
     "paymentStatus": "PARTIALLY_CANCELLED",
     "cancellableAmountWon": 6000,
     "impact": {
-      "confirmed": [
+      "confirmed": [],
+      "needsConfirmation": [
         {
           "target": "PERFORMANCE",
           "userCardId": "uc-1001",
           "month": "2026-11",
-          "deltaWon": -4000,
-          "basis": "RECEIPT_MONTH"
-        }
-      ],
-      "needsConfirmation": [
+          "reason": "취소 귀속월이 약관에서 확정되지 않았습니다."
+        },
         {
           "target": "BENEFIT",
           "userCardId": "uc-1001",
@@ -332,7 +330,7 @@ amountWon
 #### 응답 필드
 
 - 원장 행 기록, 결제 상태 변경, 영향 재계산은 한 트랜잭션으로 처리한다
-- `impact.confirmed[]` · 확정 규칙으로 바뀐 값과 근거. `target`은 `PERFORMANCE`·`LIMIT_USAGE`·`BENEFIT`
+- `impact.confirmed[]` · 확정 규칙으로 바뀐 값과 근거. 예시 카드(톡톡)는 귀속월이 미확정이라 비어 있다. 귀속 규칙이 확정된 카드는 `{"target":"PERFORMANCE","userCardId":"uc-1002","month":"2026-11","deltaWon":-4000,"basis":"RECEIPT_MONTH"}` 형식으로 담는다. `target`은 `PERFORMANCE`·`LIMIT_USAGE`·`BENEFIT`
 - `impact.needsConfirmation[]` · `확인 필요`가 된 값과 이유. `target` 값은 위와 같다. 부분취소 뒤 남은 금액으로 혜택을 다시 계산할 때 원 미만은 D-03 절사(사용자 결정, 약관 근거 없음)를 쓴다. 혜택 되돌림 규칙이 미확정인 카드는 여기에 담는다
 - 취소일이 원 승인과 다른 달이고 귀속 규칙이 없는 카드는 두 달의 영향값을 모두 `needsConfirmation`에 담는다
 

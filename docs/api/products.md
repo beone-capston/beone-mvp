@@ -1,6 +1,6 @@
 # 카드 상품
 
-규칙 카드 4종과 규칙 요약을 다룹니다. 규칙 데이터는 저장소의 JSON 리소스를 `RuleCatalog`로 읽습니다(DB 시드는 나중에 정합니다).
+규칙 카드 4종과 규칙 요약을 다룹니다. 규칙 데이터는 저장소의 JSON 리소스를 읽어 `RuleCatalog`에 넘길 계획입니다. JSON을 읽는 운영 코드는 아직 없습니다(DB 시드는 나중에 정합니다).
 
 공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 모든 API는 구현 전입니다.
 
@@ -119,6 +119,7 @@ K1(2026-11-03 R2 변경)에 따라 한도 서비스는 비선택형이고, 속�
     "cardProductId": "09174",
     "cardName": "청춘대로 톡톡카드",
     "asOf": "2026-11-03",
+    "ruleStatus": "VERIFIED",
     "rule": {
       "ruleVersion": "09174-v1",
       "verificationStatus": "VERIFIED",
@@ -194,6 +195,7 @@ K1(2026-11-03 R2 변경)에 따라 한도 서비스는 비선택형이고, 속�
 
 #### 응답 필드
 
+- `ruleStatus` · String · `VERIFIED` / `RULE_EXPIRED` / `NO_VERIFIED_RULE`
 - `rule` · Object|null · 판정일에 유효한 `VERIFIED` 규칙. 없으면 `null`이고 `ruleStatus`로 이유를 준다
 - `supportStatus` · String · `SUPPORTED`(한도 없는 비선택형) / `SUPPORTED_SINGLE_MONTHLY_LIMIT`(D-18 K1 지원 한도. 이름과 달리 통합 한도와 매입 순서 명시 카드를 포함한다) / `UNSUPPORTED_LIMIT_PERIOD`(기간 미확정) / `UNSUPPORTED_SELECTION_RULE`(선택형). 범위 밖 서비스는 계산하지 않고 `확인 필요`로 둔다
 - `limitDeductionOrder` · String|null · 규칙에 기록한 차감 순서. 단일 주문 계산에는 쓰지 않는다. 순서 조항이 없거나 뜻이 모호하면 `null`이고 확인 필요다(D-18)

@@ -189,7 +189,7 @@ X-BeONE-Demo-User: MY_CARDS
 
 - 본문 전체가 이 카드·이 달의 수동 입력을 **교체**한다. 생략한 항목이나 `null`은 `UNKNOWN`으로 저장한다.
 - 가상 포트폴리오도 이 API로 월간 상태와 택1 선택(`NONE` 포함)을 바꿀 수 있고 그 값으로 다시 계산한다(D-19, PRD §3.2). 입력값의 출처는 `MANUAL`이고 시드 값 `SYNTHETIC`과 구분한다. 생략한 항목은 `UNKNOWN`이 아니라 시드 값으로 돌아간다(제안).
-- 값을 보낸 항목은 `period`(`from`·`to`, YYYY-MM-DD)가 필수다.
+- 값을 보낸 금액 항목과 `registeredOn`은 `period`(`from`·`to`, YYYY-MM-DD)가 필수다. `selectedServices`·`noServiceSelection`은 `period` 대신 `effectiveFrom`을 쓴다.
 
 #### 선택 필드
 
@@ -295,7 +295,7 @@ registeredOn
 - **400 `INVALID_REQUEST`**: 요청값이 올바르지 않은 경우
   - `month`·`period` 날짜 형식 오류, `from`이 `to`보다 늦음
   - 카드 규칙에 없는 `limitBucketId`·`serviceId`
-  - `usedBenefitWon` 음수
+  - `limitBucketUsages[].value` 음수(`previousMonthPerformanceWon.value`는 음수를 받는다)
   - `selectedServices` 항목과 `noServiceSelection`을 함께 보냄(제안)
   - 선택형 서비스가 없는 카드에 `noServiceSelection`을 보냄(제안)
 
@@ -404,11 +404,19 @@ conflictVersion
       {
         "source": "MANUAL",
         "value": 523000,
+        "period": {
+          "from": "2026-10-01",
+          "to": "2026-10-31"
+        },
         "updatedAt": "2026-11-03T10:20:00+09:00"
       },
       {
         "source": "INFERRED",
         "value": 498000,
+        "period": {
+          "from": "2026-10-01",
+          "to": "2026-10-31"
+        },
         "updatedAt": "2026-11-04T09:02:00+09:00",
         "ruleVersion": "09174-v1"
       }

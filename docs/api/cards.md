@@ -60,7 +60,7 @@ MVP는 로그인이 없고 시드에 넣은 고정 사용자 2명만 있습니�
 
 - `demoUser` · String · `X-BeONE-Demo-User`에 넣을 값
 - `portfolioType` · String · `REAL`(실제 보유 카드, 수동·CODEF) / `SYNTHETIC`(시드 데이터)
-- `readOnly` · Boolean · 가상 포트폴리오는 시드 데이터라 보유 카드·월간 상태를 수정할 수 없다
+- `readOnly` · Boolean · 가상 포트폴리오는 시드 데이터라 보유 카드와 CODEF 쓰기를 할 수 없다. 월간 상태와 택1 선택은 바꿀 수 있다(D-19)
 
 ### 실패 응답
 
@@ -466,7 +466,7 @@ X-BeONE-Demo-User: MY_CARDS
 
 ### Response Body
 
-성공: **200 OK**. 응답 형식은 보유 카드 목록의 항목과 같다. 값이 바뀌면 `invalidatedRecommendationIds`를 함께 담는다.
+성공: **200 OK**. 응답 형식은 보유 카드 목록의 항목과 같다. `excludedFromRecommendation`이 실제로 바뀌면 `invalidatedRecommendationIds`를 함께 담는다. `displayName`만 바꾸면 추천을 무효화하지 않는다.
 
 ### 실패 응답
 

@@ -55,7 +55,7 @@ X-BeONE-Demo-User: MY_CARDS
         "decidedBy": "MONTHLY_TOTAL",
         "arbitraryTieBreak": false,
         "tiedUserCardIds": [],
-        "gapToRunnerUpWon": 1500
+        "gapToRunnerUpWon": null
       }
     },
     "comparedCards": [
@@ -311,7 +311,7 @@ X-BeONE-Demo-User: MY_CARDS
         "decidedBy": "MONTHLY_TOTAL",
         "arbitraryTieBreak": false,
         "tiedUserCardIds": [],
-        "gapToRunnerUpWon": 1500
+        "gapToRunnerUpWon": null
       }
     },
     "comparedCards": [

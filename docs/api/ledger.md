@@ -77,6 +77,7 @@ X-BeONE-Demo-User: MY_CARDS
     "coverage": [
       {
         "userCardId": "uc-1001",
+        "source": "SIMULATION",
         "period": {
           "from": "2026-11-01",
           "to": "2026-11-30"
@@ -95,6 +96,7 @@ X-BeONE-Demo-User: MY_CARDS
 - `transactionNature` · `ORDINARY` / `TAX` / `null`. 코드 `LedgerTransaction`의 선택 값이다. 1차 모의 거래는 받지 않아 `null`이다
 - `amountWon` · 승인은 양수, 취소는 음수. 음수라는 사실만으로 취소로 판단하지 않고 `entryType`을 본다
 - `attributionMonth.status` · `CONFIRMED` / `NEEDS_CONFIRMATION`. 2차 CODEF 취소 행은 접수일이 없어 `NEEDS_CONFIRMATION`(D-17)
+- `coverage[]` · 카드·출처별 완전성(제안). `source`를 생략하면 출처마다 한 항목씩 담고, 출처를 합쳐 계산하지 않는다. `source`를 지정하면 그 출처만 담는다
 - `coverage[].incompleteReasons[]` · 2차 CODEF: `PARTIAL_CANCELLATION_SUSPECTED` / `NO_MATCHING_APPROVAL` / `MULTIPLE_MATCHING_APPROVALS` / `UNDETERMINED_ROW` / `DUPLICATE_KEY_AMBIGUOUS`. 해당 카드·해당 기간에만 표시한다
 - 1차에서 원장 행으로 전월 실적·버킷 사용액을 자동 산출하지 않는다(D-16)
 

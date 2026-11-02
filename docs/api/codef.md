@@ -45,8 +45,6 @@ X-BeONE-Demo-User: MY_CARDS
 
 ### 실패 응답
 
-- **409 `PORTFOLIO_READ_ONLY`**: 가상 포트폴리오 사용자가 요청한 경우
-
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
 ### 근거
@@ -119,7 +117,7 @@ password
 
 ### Response Body
 
-성공: **201 Created**
+성공: 최초 연결은 **201 Created**, 재연결은 **200 OK**(제안). 본문 형식은 같다.
 
 ```json
 {
@@ -285,7 +283,8 @@ to
         "fetchedAt": "2026-11-04T09:01:00+09:00",
         "usedInCalculation": false
       }
-    ]
+    ],
+    "partialFailures": []
   }
 }
 ```
@@ -294,7 +293,7 @@ to
 
 - `performances[].usedInCalculation` · 항상 `false`. 사용자가 확인해 수동 입력해야 계산에 쓴다(D-16)
 - `incompleteRows[]` · 원장에 넣지 않은 행과 이유. 카드번호·승인번호 원문은 담지 않는다
-- 부분 동기화 실패와 전체 실패를 구분한다. 일부 항목만 실패하면 200과 `partialFailures[]`(공개 `code`·`message`)를 담고, 전부 실패하면 502를 준다(제안). timeout을 504로 나눌지는 전송 계약과 함께 정한다
+- 부분 동기화 실패와 전체 실패를 구분한다. 일부 항목만 실패하면 200과 `data.partialFailures[]`(항목: `target`=`HELD_CARDS`/`APPROVALS`/`PERFORMANCES`, 공개 `code`·`message`, 실패가 없으면 `[]`)를 담고, 전부 실패하면 502를 준다(제안). timeout을 504로 나눌지는 전송 계약과 함께 정한다
 - HTTP 200만으로 CODEF 성공으로 보지 않는다. URL 디코딩 뒤 결과 코드를 확인한다. 전체 카드번호가 오면 모델·저장·로그·브라우저로 넘기기 전에 제거한다. 카드 이용한도를 월 혜택 한도로 쓰지 않는다
 
 ### 실패 응답

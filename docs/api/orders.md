@@ -216,7 +216,8 @@ X-BeONE-Demo-User: MY_CARDS
         "amountWon": 30000,
         "merchantClass": "STARBUCKS_STORE",
         "paymentMethod": "DIRECT",
-        "merchantName": "스타벅스"
+        "merchantName": "스타벅스",
+        "plannedTime": null
       }
     ],
     "usedInRecommendation": false
@@ -276,6 +277,7 @@ items
 
 - `items`는 0~5건. 빈 배열이면 모두 지운다.
 - 각 항목의 `plannedDate`, `amountWon`(1 이상), `merchantClass`, `paymentMethod`가 필수다.
+- `plannedDate`는 이번 달이어야 한다. 조회 범위와 같으며, 벗어나면 400 `INVALID_REQUEST`다(제안).
 
 #### 선택 필드
 
@@ -284,7 +286,7 @@ items[].merchantName
 items[].plannedTime
 ```
 
-- `merchantName`은 최대 50자. `plannedTime`은 `HH:mm:ss`이고 없으면 `null`이다. 시각을 만들어 넣지 않는다.
+- `merchantName`은 최대 50자. `plannedTime`은 `HH:mm:ss`이고 없으면 응답에 `null`로 담는다. 시각을 만들어 넣지 않는다.
 
 ### Response Body
 
@@ -300,7 +302,8 @@ items[].plannedTime
         "amountWon": 30000,
         "merchantClass": "STARBUCKS_STORE",
         "paymentMethod": "DIRECT",
-        "merchantName": "스타벅스"
+        "merchantName": "스타벅스",
+        "plannedTime": null
       }
     ],
     "usedInRecommendation": false
