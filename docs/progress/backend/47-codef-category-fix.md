@@ -18,4 +18,4 @@
 - 검증: `./gradlew test`·`webTest`·`integrationTest`·`build`(각 `--rerun-tasks`) 결과는 PR에 기록합니다.
 
 ## 2026-11-01 · `develop` 병합 · 완료
-- PR #48 병합, 병합 커밋 `cb9416f`.
+- PR #48 병합, squash 커밋 `cb9416f`.
