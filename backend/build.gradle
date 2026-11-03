@@ -52,6 +52,9 @@ tasks.named('test', Test) {
 	// EvaluationFixtureMappingTest가 읽는 파일. fixture가 바뀌면 테스트를 다시 실행하도록 입력으로 선언한다.
 	inputs.file(layout.projectDirectory.file('../fixtures/evaluation-cases.json'))
 		.withPathSensitivity(PathSensitivity.NONE)
+	// RuleDataConsistencyTest가 읽는 근거 표. 표가 바뀌면 테스트를 다시 실행하도록 입력으로 선언한다.
+	inputs.dir(layout.projectDirectory.dir('../docs/rules'))
+		.withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Integration tests: @IntegrationTest (Testcontainers MySQL). Requires Docker.

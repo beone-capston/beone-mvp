@@ -127,6 +127,18 @@
           "CGV_THEATER"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "매점 이용분",
+        "인터넷 예매는 영화관 직영 홈페이지·스마트폰 앱 결제만"
+      ],
       "minimumAmount": 10000,
       "maximumTargetAmount": 20000,
       "tiers": [
@@ -136,7 +148,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 3500
-            }
+            },
+            "evidence": "E3"
           }
         }
       ],
@@ -167,6 +180,17 @@
           "VIPS"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "백화점·대형할인점 입점 점포"
+      ],
       "minimumAmount": 30000,
       "maximumTargetAmount": 50000,
       "tiers": [
@@ -176,7 +200,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 2000
-            }
+            },
+            "evidence": "E4"
           }
         }
       ],
@@ -206,6 +231,17 @@
           "STARBUCKS_STORE"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "백화점, 대형마트 등에 입점된 일부 매장은 할인 적용에서 제외"
+      ],
       "minimumAmount": 10000,
       "maximumTargetAmount": 20000,
       "tiers": [
@@ -215,7 +251,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 2000
-            }
+            },
+            "evidence": "E5"
           }
         }
       ],
@@ -252,6 +289,13 @@
           "THEME_PARK_LOTTEWORLD"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [],
       "minimumAmount": 30000,
       "maximumTargetAmount": 50000,
       "tiers": [
@@ -261,7 +305,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 5000
-            }
+            },
+            "evidence": "E6"
           }
         }
       ],
@@ -291,6 +336,13 @@
           "GS25_STORE"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [],
       "minimumAmount": 10000,
       "maximumTargetAmount": 20000,
       "tiers": [
@@ -300,7 +352,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 500
-            }
+            },
+            "evidence": "E7"
           }
         }
       ],
@@ -331,6 +384,16 @@
           "KYOBO_ONLINE"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [
+        "핫트랙스",
+        "인터넷 결제는 교보문고 직영 홈페이지만(상품 페이지: 홈페이지·앱)"
+      ],
       "minimumAmount": 20000,
       "maximumTargetAmount": 50000,
       "tiers": [
@@ -340,7 +403,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 500
-            }
+            },
+            "evidence": "E8"
           }
         }
       ],
@@ -371,6 +435,13 @@
           "TRANSIT_INTERCITY_BUS"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [],
       "minimumAmount": 0,
       "maximumTargetAmount": null,
       "tiers": [
@@ -380,7 +451,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 1000
-            }
+            },
+            "evidence": "E1"
           }
         }
       ],
@@ -421,6 +493,10 @@
       "paymentMethods": [
         "AUTOPAY"
       ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [
+        "유무선 통신요금 통합청구금액 자동이체"
+      ],
       "minimumAmount": 50000,
       "maximumTargetAmount": null,
       "tiers": [
@@ -430,7 +506,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 2500
-            }
+            },
+            "evidence": "E2"
           }
         }
       ],

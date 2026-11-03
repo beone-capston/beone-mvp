@@ -23,7 +23,7 @@
 - [benefit: 카드 혜택 규칙과 계산 입출력](domains/benefit.md)
   - 위치: `backend/src/main/java/com/beone/api/benefit/`
   - 하위 패키지: `card`, `money`, `state`, `input`, `rule`, `primitive`, `result`
-  - 책임: 안전한 데이터 표현, 입력·결과 일관성 검사, 날짜에 맞는 검증 규칙 선택, 서비스 한 건의 산식·개별 조건 판정(`primitive`), 서비스 후보·채택·기여액 결과 표현(`result`).
+  - 책임: 안전한 데이터 표현, 입력·결과 일관성 검사, 규칙 JSON 로드(`rule.loading`, 잘못되면 서버 시작 실패), 날짜에 맞는 검증 규칙 선택, 서비스 한 건의 산식·개별 조건 판정(`primitive`), 서비스 후보·채택·기여액 결과 표현(`result`).
   - 범위 밖: 판정을 묶어 카드별 혜택을 내는 계산·최적화 엔진, HTTP 추천 API, CODEF 통신 구현.
 - [codef: CODEF 카드 응답 해석 경계](domains/codef.md)
   - 위치: `backend/src/main/java/com/beone/api/codef/`
@@ -64,7 +64,7 @@
 
 1. [benefit 안내](domains/benefit.md)에서 용어와 패키지 책임을 확인합니다.
 2. `RecommendationInput`으로 계산에 필요한 입력을 살펴봅니다.
-3. `CardRuleVersion`과 `RuleCatalog`로 규칙 표현과 선택을 살펴봅니다.
+3. `CardRuleVersion`과 `RuleCatalog`로 규칙 표현과 선택을 살펴보고, [규칙 데이터 안내](rules/README.md)에서 로더가 읽는 JSON을 확인합니다.
 4. `Recommendation`과 `BenefitAmount`로 결과와 불확실성 표현을 확인합니다.
 5. `backend/src/test/java/com/beone/api/benefit/`에서 모델 검증과 fixture 매핑 테스트를 읽습니다. 매핑 성공은 계산 엔진 정확성이나 공식 약관 검증 완료를 뜻하지 않습니다.
 
