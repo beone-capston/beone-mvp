@@ -1,0 +1,714 @@
+{
+  "cardId": "01914",
+  "ruleVersion": "01914-B-20200608-9162-00529-07",
+  "status": "VERIFIED",
+  "evaluationOnly": false,
+  "validity": {
+    "from": "2026-08-18",
+    "to": null
+  },
+  "sources": [
+    {
+      "uri": "https://img2.kbcard.com/obj/card/download/01914__prdctOpmn_20260818.pdf",
+      "locator": "상품설명서 문서번호 B-20200608-9162-00529-07, 전체 3쪽"
+    },
+    {
+      "uri": "https://card.kbcard.com/CXPRICAC0076.cms?categoryCode=L0086&cooperationcode=01914&mainCC=a",
+      "locator": "KB 상품 페이지(보조 근거), 심의필 260522-01722-HPP(2026.05.22), 2026-11-03 조회. 내용이 바뀔 수 있음"
+    }
+  ],
+  "policy": {
+    "performanceWindow": {
+      "value": "PREVIOUS_CALENDAR_MONTH",
+      "evidence": "E12"
+    },
+    "performanceDateBasis": {
+      "value": "APPROVAL",
+      "evidence": "E12"
+    },
+    "cancellationAttribution": {
+      "value": "RECEIPT_MONTH",
+      "evidence": "E12"
+    },
+    "performanceExcludedNatures": [],
+    "performanceExcludedClasses": [
+      "CANCELLED_AMOUNT",
+      "FEES_AND_INTEREST",
+      "GIFT_CARD_PREPAID",
+      "GOVERNMENT_SUBSIDY",
+      "LATE_FEE",
+      "LOCAL_TAX",
+      "NON_APPROVAL_SLIP",
+      "POINTREE_CHARGE",
+      "POSTPAID_TRANSIT",
+      "UNIVERSITY_TUITION"
+    ],
+    "performanceExcludedClassesEvidence": "E13",
+    "excludesBenefitedSales": {
+      "unresolved": "할인받은 매출을 실적에서 빼는 표기 없음. false로 단정하지 않고 확인 필요"
+    },
+    "limitPeriod": {
+      "value": "CALENDAR_MONTH",
+      "evidence": "E14"
+    },
+    "limitDeductionOrder": {
+      "value": "PURCHASE_ORDER",
+      "evidence": "E15"
+    },
+    "newCardGrace": {
+      "value": {
+        "span": "UNTIL_END_OF_NEXT_MONTH",
+        "days": null,
+        "deemedPerformance": 300000,
+        "services": [
+          "CU",
+          "STARBUCKS",
+          "CGV",
+          "TENBYTEN",
+          "SIMPLE_PAY",
+          "BEAUTY",
+          "BOOKSTORE",
+          "CULTURE",
+          "TRANSIT"
+        ]
+      },
+      "evidence": "E16"
+    },
+    "inclusionUnconfirmed": [
+      {
+        "merchantClass": "TAX",
+        "relatedClass": "LOCAL_TAX"
+      },
+      {
+        "merchantClass": "ELECTRICITY_WATER",
+        "relatedClass": "LOCAL_TAX"
+      },
+      {
+        "merchantClass": "ANNUAL_FEE",
+        "relatedClass": "FEES_AND_INTEREST"
+      },
+      {
+        "merchantClass": "TRANSIT_BUS_SUBWAY",
+        "relatedClass": "POSTPAID_TRANSIT"
+      }
+    ]
+  },
+  "limitBuckets": [
+    {
+      "id": "COMMON",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 10000
+        },
+        {
+          "minimumPerformance": 600000,
+          "monthlyCap": 20000
+        }
+      ],
+      "parent": null,
+      "evidence": "E11"
+    },
+    {
+      "id": "CU",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 2000
+        },
+        {
+          "minimumPerformance": 600000,
+          "monthlyCap": 4000
+        }
+      ],
+      "parent": "COMMON",
+      "evidence": "E10"
+    },
+    {
+      "id": "STARBUCKS",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 2000
+        },
+        {
+          "minimumPerformance": 600000,
+          "monthlyCap": 4000
+        }
+      ],
+      "parent": "COMMON",
+      "evidence": "E10"
+    },
+    {
+      "id": "CGV",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 2000
+        },
+        {
+          "minimumPerformance": 600000,
+          "monthlyCap": 4000
+        }
+      ],
+      "parent": "COMMON",
+      "evidence": "E10"
+    },
+    {
+      "id": "TENBYTEN",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 2000
+        },
+        {
+          "minimumPerformance": 600000,
+          "monthlyCap": 4000
+        }
+      ],
+      "parent": "COMMON",
+      "evidence": "E10"
+    },
+    {
+      "id": "SIMPLE_PAY",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 2000
+        },
+        {
+          "minimumPerformance": 600000,
+          "monthlyCap": 4000
+        }
+      ],
+      "parent": "COMMON",
+      "evidence": "E10"
+    },
+    {
+      "id": "BEAUTY",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 2000
+        },
+        {
+          "minimumPerformance": 600000,
+          "monthlyCap": 4000
+        }
+      ],
+      "parent": "COMMON",
+      "evidence": "E10"
+    },
+    {
+      "id": "BOOKSTORE",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 2000
+        },
+        {
+          "minimumPerformance": 600000,
+          "monthlyCap": 4000
+        }
+      ],
+      "parent": "COMMON",
+      "evidence": "E10"
+    },
+    {
+      "id": "CULTURE",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 2000
+        },
+        {
+          "minimumPerformance": 600000,
+          "monthlyCap": 4000
+        }
+      ],
+      "parent": "COMMON",
+      "evidence": "E10"
+    },
+    {
+      "id": "TRANSIT",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 2000
+        },
+        {
+          "minimumPerformance": 600000,
+          "monthlyCap": 4000
+        }
+      ],
+      "parent": "COMMON",
+      "evidence": "E10"
+    }
+  ],
+  "services": [
+    {
+      "id": "CU",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "CU_STORE"
+        ]
+      },
+      "minimumAmount": 10000,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 1000
+            }
+          }
+        },
+        {
+          "minimumPerformance": 600000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 2000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "CU"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "카드 내 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E1",
+        "E10",
+        "E11"
+      ]
+    },
+    {
+      "id": "STARBUCKS",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "STARBUCKS_STORE"
+        ]
+      },
+      "minimumAmount": 10000,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 1000
+            }
+          }
+        },
+        {
+          "minimumPerformance": 600000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 2000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "STARBUCKS"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "카드 내 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "COFFEE_BEVERAGE",
+          "relatedClass": "STARBUCKS_STORE"
+        }
+      ],
+      "evidence": [
+        "E2",
+        "E10",
+        "E11"
+      ]
+    },
+    {
+      "id": "CGV",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "CGV_THEATER"
+        ]
+      },
+      "minimumAmount": 10000,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 1000
+            }
+          }
+        },
+        {
+          "minimumPerformance": 600000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 2000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "CGV"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "카드 내 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E3",
+        "E10",
+        "E11"
+      ]
+    },
+    {
+      "id": "TENBYTEN",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "TENBYTEN"
+        ]
+      },
+      "minimumAmount": 10000,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 1000
+            }
+          }
+        },
+        {
+          "minimumPerformance": 600000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 2000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "TENBYTEN"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "카드 내 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E4",
+        "E10",
+        "E11"
+      ]
+    },
+    {
+      "id": "SIMPLE_PAY",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "SIMPLE_PAY_NAVER_ONLINE",
+          "SIMPLE_PAY_KAKAO_ONLINE",
+          "SIMPLE_PAY_SSG_ONLINE"
+        ]
+      },
+      "minimumAmount": 20000,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 1000
+            }
+          }
+        },
+        {
+          "minimumPerformance": 600000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 2000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "SIMPLE_PAY"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "카드 내 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E5",
+        "E10",
+        "E11"
+      ]
+    },
+    {
+      "id": "BEAUTY",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "OLIVEYOUNG",
+          "OPTICAL_STORE"
+        ]
+      },
+      "minimumAmount": 20000,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 1000
+            }
+          }
+        },
+        {
+          "minimumPerformance": 600000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 2000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "BEAUTY"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "카드 내 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E6",
+        "E10",
+        "E11"
+      ]
+    },
+    {
+      "id": "BOOKSTORE",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "YES24_ONLINE",
+          "KYOBO_ONLINE"
+        ]
+      },
+      "minimumAmount": 20000,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 1000
+            }
+          }
+        },
+        {
+          "minimumPerformance": 600000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 2000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "BOOKSTORE"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "카드 내 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "KYOBO_BOOKSTORE",
+          "relatedClass": "KYOBO_ONLINE"
+        }
+      ],
+      "evidence": [
+        "E7",
+        "E10",
+        "E11"
+      ]
+    },
+    {
+      "id": "CULTURE",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "INTERPARK_TICKET_SHOW"
+        ]
+      },
+      "minimumAmount": 20000,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 1000
+            }
+          }
+        },
+        {
+          "minimumPerformance": 600000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 2000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "CULTURE"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "카드 내 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E8",
+        "E10",
+        "E11"
+      ]
+    },
+    {
+      "id": "TRANSIT",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "TRANSIT_BUS_SUBWAY",
+          "TRANSIT_INTERCITY_BUS"
+        ]
+      },
+      "minimumAmount": 30000,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 1000
+            }
+          }
+        },
+        {
+          "minimumPerformance": 600000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 2000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "TRANSIT"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "카드 내 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "POSTPAID_TRANSIT",
+          "relatedClass": "TRANSIT_BUS_SUBWAY"
+        }
+      ],
+      "evidence": [
+        "E9",
+        "E10",
+        "E11"
+      ]
+    }
+  ]
+}
