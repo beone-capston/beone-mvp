@@ -139,6 +139,29 @@
       "target": {
         "type": "ALL_MERCHANTS"
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "ANNUAL_FEE",
+        "APARTMENT_FEE",
+        "CANCELLED_AMOUNT",
+        "CARD_LOAN",
+        "CASH_ADVANCE",
+        "ELECTRICITY_WATER",
+        "FEES_AND_INTEREST",
+        "GIFT_CARD_PREPAID",
+        "GOVERNMENT_SUBSIDY",
+        "LATE_FEE",
+        "SCHOOL_PAYMENT",
+        "TAX",
+        "UNIVERSITY_TUITION"
+      ],
+      "unevaluatedExclusions": [
+        "무이자할부"
+      ],
       "minimumAmount": 0,
       "maximumTargetAmount": null,
       "tiers": [
@@ -148,7 +171,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 100
-            }
+            },
+            "evidence": "E1"
           }
         }
       ],
@@ -162,6 +186,12 @@
         "basis": "USER_DECISION",
         "decision": "D-03"
       },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "LOCAL_TAX",
+          "relatedClass": "TAX"
+        }
+      ],
       "evidence": [
         "E1",
         "E2",
@@ -178,6 +208,17 @@
           "FUEL_STATION"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "무이자할부"
+      ],
       "minimumAmount": 0,
       "maximumTargetAmount": null,
       "tiers": [
@@ -221,6 +262,21 @@
           "PHARMACY"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "대형마트: 온라인쇼핑몰",
+        "대형마트: SSM(이마트에브리데이, 홈플러스 익스프레스, 롯데슈퍼)",
+        "대형마트: 해당 마트와 상이한 별도의 가맹점으로 승인 처리되는 마트 내 입점 매장",
+        "무이자할부",
+        "편의점, 커피전문점, 약국: 백화점, 대형마트, 호텔/콘도 등 대형시설 입점 점포로서 해당 대형시설의 가맹점번호를 사용하는 매장은 제외될 수 있음"
+      ],
       "minimumAmount": 0,
       "maximumTargetAmount": null,
       "tiers": [
@@ -230,7 +286,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 500
-            }
+            },
+            "evidence": "E9"
           }
         }
       ],

@@ -255,6 +255,17 @@
           "CU_STORE"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "PG(결제대행) 업체 또는 할인서비스로 제공하지 않는 타 간편결제를 통한 결제 및 호텔, 백화점, 대형마트, 철도역사 등에 입점한 가맹점이나 상품권 구매 시 할인대상에서 제외될 수 있음"
+      ],
       "minimumAmount": 10000,
       "maximumTargetAmount": null,
       "tiers": [
@@ -264,7 +275,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 1000
-            }
+            },
+            "evidence": "E10"
           }
         },
         {
@@ -273,7 +285,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 2000
-            }
+            },
+            "evidence": "E10"
           }
         }
       ],
@@ -304,6 +317,18 @@
           "STARBUCKS_STORE"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "백화점/대형마트 등 일부 매장 제외",
+        "PG(결제대행) 업체 또는 할인서비스로 제공하지 않는 타 간편결제를 통한 결제 및 호텔, 백화점, 대형마트, 철도역사 등에 입점한 가맹점이나 상품권 구매 시 할인대상에서 제외될 수 있음"
+      ],
       "minimumAmount": 10000,
       "maximumTargetAmount": null,
       "tiers": [
@@ -313,7 +338,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 1000
-            }
+            },
+            "evidence": "E10"
           }
         },
         {
@@ -322,7 +348,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 2000
-            }
+            },
+            "evidence": "E10"
           }
         }
       ],
@@ -359,6 +386,19 @@
           "CGV_THEATER"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "매점 이용분",
+        "PG(결제대행) 업체 또는 할인서비스로 제공하지 않는 타 간편결제를 통한 결제 및 호텔, 백화점, 대형마트, 철도역사 등에 입점한 가맹점이나 상품권 구매 시 할인대상에서 제외될 수 있음",
+        "인터넷 예매 시 직영 홈페이지/App 이용분만"
+      ],
       "minimumAmount": 10000,
       "maximumTargetAmount": null,
       "tiers": [
@@ -368,7 +408,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 1000
-            }
+            },
+            "evidence": "E10"
           }
         },
         {
@@ -377,7 +418,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 2000
-            }
+            },
+            "evidence": "E10"
           }
         }
       ],
@@ -408,6 +450,16 @@
           "TENBYTEN"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [
+        "PG(결제대행) 업체 또는 할인서비스로 제공하지 않는 타 간편결제를 통한 결제 및 호텔, 백화점, 대형마트, 철도역사 등에 입점한 가맹점이나 상품권 구매 시 할인대상에서 제외될 수 있음",
+        "직영 온라인몰/매장 이용분만"
+      ],
       "minimumAmount": 10000,
       "maximumTargetAmount": null,
       "tiers": [
@@ -417,7 +469,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 1000
-            }
+            },
+            "evidence": "E10"
           }
         },
         {
@@ -426,7 +479,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 2000
-            }
+            },
+            "evidence": "E10"
           }
         }
       ],
@@ -459,6 +513,19 @@
           "SIMPLE_PAY_SSG_ONLINE"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [
+        "QR/바코드 결제",
+        "카카오T",
+        "택시 등",
+        "PG(결제대행) 업체 또는 할인서비스로 제공하지 않는 타 간편결제를 통한 결제 및 호텔, 백화점, 대형마트, 철도역사 등에 입점한 가맹점이나 상품권 구매 시 할인대상에서 제외될 수 있음",
+        "온라인 가맹점 이용분만"
+      ],
       "minimumAmount": 20000,
       "maximumTargetAmount": null,
       "tiers": [
@@ -468,7 +535,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 1000
-            }
+            },
+            "evidence": "E10"
           }
         },
         {
@@ -477,7 +545,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 2000
-            }
+            },
+            "evidence": "E10"
           }
         }
       ],
@@ -509,6 +578,18 @@
           "OPTICAL_STORE"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "백화점/대형마트 등 일부 매장 제외",
+        "PG(결제대행) 업체 또는 할인서비스로 제공하지 않는 타 간편결제를 통한 결제 및 호텔, 백화점, 대형마트, 철도역사 등에 입점한 가맹점이나 상품권 구매 시 할인대상에서 제외될 수 있음"
+      ],
       "minimumAmount": 20000,
       "maximumTargetAmount": null,
       "tiers": [
@@ -518,7 +599,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 1000
-            }
+            },
+            "evidence": "E10"
           }
         },
         {
@@ -527,7 +609,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 2000
-            }
+            },
+            "evidence": "E10"
           }
         }
       ],
@@ -559,6 +642,16 @@
           "KYOBO_ONLINE"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [
+        "PG(결제대행) 업체 또는 할인서비스로 제공하지 않는 타 간편결제를 통한 결제 및 호텔, 백화점, 대형마트, 철도역사 등에 입점한 가맹점이나 상품권 구매 시 할인대상에서 제외될 수 있음",
+        "직영 홈페이지/App 이용분만"
+      ],
       "minimumAmount": 20000,
       "maximumTargetAmount": null,
       "tiers": [
@@ -568,7 +661,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 1000
-            }
+            },
+            "evidence": "E10"
           }
         },
         {
@@ -577,7 +671,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 2000
-            }
+            },
+            "evidence": "E10"
           }
         }
       ],
@@ -614,6 +709,16 @@
           "INTERPARK_TICKET_SHOW"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [
+        "PG(결제대행) 업체 또는 할인서비스로 제공하지 않는 타 간편결제를 통한 결제 및 호텔, 백화점, 대형마트, 철도역사 등에 입점한 가맹점이나 상품권 구매 시 할인대상에서 제외될 수 있음",
+        "공연 예매 이용분만"
+      ],
       "minimumAmount": 20000,
       "maximumTargetAmount": null,
       "tiers": [
@@ -623,7 +728,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 1000
-            }
+            },
+            "evidence": "E10"
           }
         },
         {
@@ -632,7 +738,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 2000
-            }
+            },
+            "evidence": "E10"
           }
         }
       ],
@@ -664,6 +771,15 @@
           "TRANSIT_INTERCITY_BUS"
         ]
       },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [
+        "PG(결제대행) 업체 또는 할인서비스로 제공하지 않는 타 간편결제를 통한 결제 및 호텔, 백화점, 대형마트, 철도역사 등에 입점한 가맹점이나 상품권 구매 시 할인대상에서 제외될 수 있음"
+      ],
       "minimumAmount": 30000,
       "maximumTargetAmount": null,
       "tiers": [
@@ -673,7 +789,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 1000
-            }
+            },
+            "evidence": "E10"
           }
         },
         {
@@ -682,7 +799,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 2000
-            }
+            },
+            "evidence": "E10"
           }
         }
       ],
