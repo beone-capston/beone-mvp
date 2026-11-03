@@ -93,6 +93,11 @@ class AuthRequestGateTest {
     }
 
     @Test
+    fun defaultTimeoutsAreTheProposedValues() {
+        assertEquals(AuthResponseTimeouts(authenticatingMillis = 120_000L, drainingMillis = 10_000L), AuthResponseTimeouts())
+    }
+
+    @Test
     fun timeoutsMustBePositive() {
         assertThrows(IllegalArgumentException::class.java) { AuthResponseTimeouts(authenticatingMillis = 0L, drainingMillis = 5_000L) }
         assertThrows(IllegalArgumentException::class.java) { AuthResponseTimeouts(authenticatingMillis = 30_000L, drainingMillis = -1L) }

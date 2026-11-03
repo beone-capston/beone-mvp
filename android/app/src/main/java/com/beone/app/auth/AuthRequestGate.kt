@@ -146,10 +146,11 @@ sealed interface AuthRequestPhase {
     data class Stalled(val requestId: Long, val cancelRequested: Boolean) : AuthRequestPhase
 }
 
-// 응답 대기 시간. 운영 값은 정해지지 않았으며 이 클래스는 주입받은 값만 쓴다.
+// 응답 대기 시간. 기본값 120초·10초는 근거 없는 제안이며 실기기 관측으로 조정한다.
+// 정상 PIN 입력 시간과 창 미표시를 구분할 근거는 없다.
 data class AuthResponseTimeouts(
-    val authenticatingMillis: Long,
-    val drainingMillis: Long,
+    val authenticatingMillis: Long = 120_000L,
+    val drainingMillis: Long = 10_000L,
 ) {
     init {
         require(authenticatingMillis > 0L && drainingMillis > 0L) { "응답 대기 시간은 0보다 커야 한다." }

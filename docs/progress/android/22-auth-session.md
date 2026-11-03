@@ -89,3 +89,9 @@
 - 검증: merge 뒤 `assembleDebug testDebugUnitTest lintDebug assembleRelease lintRelease --rerun-tasks` 실제 실행, 통과(기준 `e9c7746`, 단위 테스트 83건, lint 오류 0·경고 7). debug APK sha256이 구간 B APK(`d9977fd7…`)와 같아 그 APK가 이 `android/` 트리로 만들어졌음을 확인했습니다. 테스트 추가 뒤 `testDebugUnitTest --rerun-tasks` 실제 실행, 84건 통과(XML 집계, 기준 `e9c7746` + 미커밋 테스트 변경)
 - 남은 제한: 가짜 authenticator 기반 상태 기계 검증이며 실기기 동작을 대신하지 않습니다. 운영 응답 대기 시간·정지 뒤 복구·RESUMED 조건은 계속 결정 대기입니다.
 - 다음: 실기기 확인 절차 정리, PR 본문 갱신
+
+### 2026-11-04 · 사용자 결정 반영 · 완료
+- 한 일: 최신 `develop`을 merge했습니다. `AuthResponseTimeouts` 기본값을 인증 중 120초, 정리 중 10초로 두고(근거 없는 제안), debug 점검 화면도 이 값을 쓰게 했습니다. 정지 안내를 "앱을 완전히 종료한 뒤 다시 열어 주세요"로 바꿨습니다. 문서의 낡은 "커밋 전" 문구를 고쳤습니다.
+- 서비스에서 달라진 점: debug 점검 화면의 대기 시간과 안내 문구. 웹 연결은 아직 없습니다.
+- 검증: `assembleDebug testDebugUnitTest lintDebug` 실행. 실기기 확인은 사용자가 2026-11-05~06에 합니다.
+- 남은 제한: 대기 시간 값과 앱 재실행 복구는 관측 전입니다.

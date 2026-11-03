@@ -56,8 +56,8 @@ class DeviceAuthCheckActivity : AppCompatActivity() {
         authenticateButton.setOnClickListener { requestAuthentication() }
         findViewById<TextView>(R.id.check_timeout_notice).text = getString(
             R.string.check_timeout_notice,
-            EXPERIMENT_TIMEOUTS.authenticatingMillis / 1000,
-            EXPERIMENT_TIMEOUTS.drainingMillis / 1000,
+            RESPONSE_TIMEOUTS.authenticatingMillis / 1000,
+            RESPONSE_TIMEOUTS.drainingMillis / 1000,
         )
 
         // PRD §4.3-1: 화면을 처음 열면 인증을 요청한다.
@@ -138,15 +138,14 @@ class DeviceAuthCheckActivity : AppCompatActivity() {
     private object ExperimentViewModelFactory : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             @Suppress("UNCHECKED_CAST")
-            return VirtualCardActivationViewModel(SystemClock::elapsedRealtime, EXPERIMENT_TIMEOUTS, DebugAuthTrace.tracer) as T
+            return VirtualCardActivationViewModel(SystemClock::elapsedRealtime, RESPONSE_TIMEOUTS, DebugAuthTrace.tracer) as T
         }
     }
 
     private companion object {
         const val TICK_MILLIS = 250L
 
-        // 실험용 설정이며 운영 정책이 아니다. 실기기 점검에서 정지 전환을 관찰하려고 정한 값이다.
-        // 정상 PIN 입력 시간과 창 미표시를 구분할 근거는 없다.
-        val EXPERIMENT_TIMEOUTS = AuthResponseTimeouts(authenticatingMillis = 30_000L, drainingMillis = 5_000L)
+        // 제안 기본값을 그대로 쓴다. 점검에서 이 값을 관측해 조정한다.
+        val RESPONSE_TIMEOUTS = AuthResponseTimeouts()
     }
 }
