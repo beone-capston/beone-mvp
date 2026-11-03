@@ -116,7 +116,7 @@ adb shell dumpsys package com.beone.app | grep -E 'versionName|versionCode|lastU
 
 **#22 debug로 되돌리기 (필요할 때)**
 
-- #22 브랜치(`feat/22-android-auth-session`)에서 `./gradlew assembleDebug`로 만든 APK(커밋 `26dc432` 기준 sha256 `9332b236ed34745ddd2eec5956ce6d1992feaf988ac2707ae4e92008922d4f17`)를 `adb install -r`로 설치합니다.
+- #22 브랜치(`feat/22-android-auth-session`)에서 `./gradlew assembleDebug`로 만든 APK(커밋 `26dc432`에서 `./gradlew clean assembleDebug` 기준 sha256 `f59b96a52921b2e174a0011a27df293ee39a502f791a4e5f962e38031d168737`)를 `adb install -r`로 설치합니다.
 - 위 3번과 같은 방법으로 설치본 sha256을 대조합니다. WebView 셸 앱의 상태도 남지 않습니다.
 
 **4. 개발 서버 준비 (사용자 실행, 이 작업선은 실행하지 않음)**
