@@ -89,7 +89,7 @@ SDK에서 확인한 것과 하지 않은 것:
 
 - [CodefClient](../../backend/src/main/java/com/beone/api/codef/transport/CodefClient.java): 진입점. 토큰 캐시를 공유하고 관측을 엽니다.
 - [CodefObservation](../../backend/src/main/java/com/beone/api/codef/transport/CodefObservation.java): 관측 1회. 객체 하나가 호출 상한의 집계 범위이고, 토큰과 상품 API마다 3회까지 보냅니다. 어떤 조회를 관측 1회로 볼지는 호출자가 정하며, 프로세스를 넘어선 누적은 세지 않습니다. 로그인 입력(`id`, `password`, `cardNo`, `cardPassword`)은 거부합니다.
-- [CodefCallResult](../../backend/src/main/java/com/beone/api/codef/transport/CodefCallResult.java): `Answered`(HTTP 응답을 받음. 401·서버 오류 포함) 또는 `Failed`(단계와 이유만).
+- [CodefCallResult](../../backend/src/main/java/com/beone/api/codef/transport/CodefCallResult.java): `Answered`(HTTP 응답을 받음. 401·서버 오류 포함) 또는 `Failed`(단계, 이유, `httpStatus`). `httpStatus`(`OptionalInt`)는 토큰 단계에서 응답을 받은 실패(`TOKEN_REJECTED`, `TOKEN_UNREADABLE`)에만 채워집니다.
 - [CodefTokenCache](../../backend/src/main/java/com/beone/api/codef/transport/CodefTokenCache.java): 토큰을 서버 메모리에만 둡니다. 발급 시각 + 7일이 지나면 재발급하고, 동시 요청은 한 번만 발급합니다.
 - [CodefHttp](../../backend/src/main/java/com/beone/api/codef/transport/CodefHttp.java): 요청 한 번을 보냅니다. JDK HTTP 클라이언트를 쓰고 TLS 1.2 이상만 허용합니다.
 - [CodefApiKeys](../../backend/src/main/java/com/beone/api/codef/transport/CodefApiKeys.java): 키를 프로세스 환경 변수에서만 읽습니다. 없으면 "설정 안 됨"이고 서버는 뜹니다.

@@ -81,6 +81,10 @@ public final class CodefObservation {
 		if (outcome instanceof CodefTokenCache.Outcome.Failure failure) {
 			return failed(api, Stage.TOKEN, failure.reason(), failure.httpStatus());
 		}
+		// 토큰을 기다리는 동안 취소된 호출은 보내지 않는다. isInterrupted는 인터럽트 상태를 지우지 않는다.
+		if (Thread.currentThread().isInterrupted()) {
+			return failed(api, Stage.PRODUCT, Reason.INTERRUPTED, OptionalInt.empty());
+		}
 		String token = ((CodefTokenCache.Outcome.Token) outcome).value();
 		if (!acquireProductCall(api)) {
 			return failed(api, Stage.PRODUCT, Reason.CALL_LIMIT_REACHED, OptionalInt.empty());

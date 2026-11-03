@@ -61,8 +61,9 @@ public record CodefTransportSettings(URI tokenUri, URI productHost, Duration con
 
 	private static void requirePositive(Duration duration, String name) {
 		Objects.requireNonNull(duration, name);
-		if (duration.isNegative() || duration.isZero()) {
-			throw new IllegalArgumentException(name + " must be positive");
+		// 대기는 밀리초 단위이므로 1ms 미만은 대기 없이 시간 초과가 된다.
+		if (duration.compareTo(Duration.ofMillis(1)) < 0) {
+			throw new IllegalArgumentException(name + " must be at least 1ms");
 		}
 	}
 

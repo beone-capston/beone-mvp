@@ -17,9 +17,13 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -273,6 +277,62 @@ class CodefClientTest {
 	}
 
 	@Test
+	void threadInterruptedWhileWaitingForTokenSendsNoProductRequestAndKeepsCallLimit() throws Exception {
+		CountDownLatch releaseToken = new CountDownLatch(1);
+		stub.respondWith(CodefStubServer.TOKEN_PATH, exchange -> {
+			awaitQuietly(releaseToken);
+			CodefStubServer.reply(exchange, 200, TOKEN_JSON);
+		});
+		Thread issuer = new Thread(() -> client.startObservation().heldCards(PARAMETERS));
+		issuer.start();
+		awaitUntil(() -> stub.requestsTo(CodefStubServer.TOKEN_PATH).size() == 1);
+
+		CodefObservation waiting = client.startObservation();
+		AtomicReference<CodefCallResult<CodefHeldCard>> result = new AtomicReference<>();
+		AtomicBoolean interruptKept = new AtomicBoolean();
+		AtomicReference<List<CodefCallResult<CodefHeldCard>>> later = new AtomicReference<>();
+		Thread waiter = new Thread(() -> {
+			result.set(waiting.heldCards(PARAMETERS));
+			interruptKept.set(Thread.interrupted());
+			// 거부된 호출이 상한을 쓰지 않았으면 3회를 그대로 보낼 수 있다.
+			later.set(List.of(waiting.heldCards(PARAMETERS), waiting.heldCards(PARAMETERS), waiting.heldCards(PARAMETERS)));
+		});
+		waiter.start();
+		awaitUntil(() -> waiter.getState() == Thread.State.WAITING);
+		waiter.interrupt();
+		releaseToken.countDown();
+		issuer.join(5_000);
+		awaitUntil(() -> result.get() != null);
+
+		assertFailed(result.get(), Stage.PRODUCT, Reason.INTERRUPTED);
+		assertThat(interruptKept).isTrue();
+		assertThat(stub.requestsTo(CodefStubServer.TOKEN_PATH)).hasSize(1);
+		waiter.join(5_000);
+		assertThat(later.get()).allSatisfy(call -> assertThat(call).isInstanceOf(CodefCallResult.Answered.class));
+		assertThat(stub.requestsTo(CARDS)).hasSize(4);
+	}
+
+	@Test
+	void interruptDuringOwnTokenRequestSendsNoProductRequest() throws Exception {
+		stub.neverRespond(CodefStubServer.TOKEN_PATH);
+		AtomicReference<CodefCallResult<CodefHeldCard>> result = new AtomicReference<>();
+		AtomicBoolean interruptKept = new AtomicBoolean();
+		Thread caller = new Thread(() -> {
+			result.set(client.startObservation().heldCards(PARAMETERS));
+			interruptKept.set(Thread.currentThread().isInterrupted());
+		});
+		caller.start();
+		awaitUntil(() -> stub.requestsTo(CodefStubServer.TOKEN_PATH).size() == 1);
+
+		caller.interrupt();
+		caller.join(5_000);
+
+		assertFailed(result.get(), Stage.TOKEN, Reason.INTERRUPTED);
+		assertThat(interruptKept).isTrue();
+		assertThat(stub.requestsTo(CARDS)).isEmpty();
+	}
+
+	@Test
 	void fourthCallPerApiIsRejectedBeforeSending() {
 		stub.respond(CodefApi.APPROVALS.path(), 200, SUCCESS);
 		CodefObservation observation = client.startObservation();
@@ -332,6 +392,23 @@ class CodefClientTest {
 		assertThat(http.version()).isEqualTo(HttpClient.Version.HTTP_1_1);
 		assertThat(http.connectTimeout()).contains(Duration.ofSeconds(2));
 		assertThat(http.sslParameters().getProtocols()).containsExactlyInAnyOrder("TLSv1.3", "TLSv1.2");
+	}
+
+	private static void awaitUntil(BooleanSupplier condition) throws InterruptedException {
+		long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+		while (!condition.getAsBoolean()) {
+			assertThat(System.nanoTime()).as("condition reached in time").isLessThan(deadline);
+			Thread.sleep(5);
+		}
+	}
+
+	private static void awaitQuietly(CountDownLatch latch) {
+		try {
+			latch.await();
+		}
+		catch (InterruptedException exception) {
+			Thread.currentThread().interrupt();
+		}
 	}
 
 	private CodefClient clientWith(Duration responseTimeout) {

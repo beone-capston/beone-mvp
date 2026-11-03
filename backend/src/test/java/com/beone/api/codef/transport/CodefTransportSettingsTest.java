@@ -47,6 +47,27 @@ class CodefTransportSettingsTest {
 			.isInstanceOf(IllegalArgumentException.class);
 	}
 
+	@Test
+	void rejectsPositiveTimeoutsBelowOneMillisecond() {
+		for (Duration tooShort : new Duration[] { Duration.ofNanos(1), Duration.ofNanos(999_999) }) {
+			assertThatThrownBy(() -> settingsWithTimeouts(tooShort, ONE, ONE)).isInstanceOf(IllegalArgumentException.class);
+			assertThatThrownBy(() -> settingsWithTimeouts(ONE, tooShort, ONE)).isInstanceOf(IllegalArgumentException.class);
+			assertThatThrownBy(() -> settingsWithTimeouts(ONE, ONE, tooShort)).isInstanceOf(IllegalArgumentException.class);
+		}
+		Duration shortest = Duration.ofMillis(1);
+		assertThat(settingsWithTimeouts(shortest, shortest, shortest).connectTimeout()).isEqualTo(shortest);
+	}
+
+	@Test
+	void rejectsNullTimeouts() {
+		assertThatThrownBy(() -> settingsWithTimeouts(null, ONE, ONE)).isInstanceOf(NullPointerException.class);
+	}
+
+	private static CodefTransportSettings settingsWithTimeouts(Duration connect, Duration token, Duration product) {
+		return new CodefTransportSettings(CodefTransportSettings.DEFAULT_TOKEN_URI, CodefTransportSettings.SANDBOX_HOST, connect,
+				token, product);
+	}
+
 	private static CodefTransportSettings settingsWithHost(String host) {
 		return new CodefTransportSettings(CodefTransportSettings.DEFAULT_TOKEN_URI, URI.create(host), ONE, ONE, ONE);
 	}
