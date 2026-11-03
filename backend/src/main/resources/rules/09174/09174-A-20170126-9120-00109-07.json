@@ -69,7 +69,29 @@
         ]
       },
       "evidence": "E2"
-    }
+    },
+    "inclusionUnconfirmed": [
+      {
+        "merchantClass": "LOCAL_TAX",
+        "relatedClass": "TAX"
+      },
+      {
+        "merchantClass": "ELECTRICITY_WATER",
+        "relatedClass": "TAX"
+      },
+      {
+        "merchantClass": "POINTREE_CHARGE",
+        "relatedClass": "GIFT_CARD_PREPAID"
+      },
+      {
+        "merchantClass": "TRANSIT_BUS_SUBWAY",
+        "relatedClass": "NON_APPROVAL_SLIP"
+      },
+      {
+        "merchantClass": "POSTPAID_TRANSIT",
+        "relatedClass": "NON_APPROVAL_SLIP"
+      }
+    ]
   },
   "limitBuckets": [
     {
@@ -159,6 +181,12 @@
         "value": "PRE_DISCOUNT_EACH_BUCKET",
         "evidence": "E11"
       },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "COFFEE_BEVERAGE",
+          "relatedClass": "STARBUCKS_STORE"
+        }
+      ],
       "evidence": [
         "E1",
         "E3",
@@ -309,6 +337,12 @@
         "value": "PRE_DISCOUNT_EACH_BUCKET",
         "evidence": "E11"
       },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "POSTPAID_TRANSIT",
+          "relatedClass": "TRANSIT_BUS_SUBWAY"
+        }
+      ],
       "evidence": [
         "E1",
         "E9",

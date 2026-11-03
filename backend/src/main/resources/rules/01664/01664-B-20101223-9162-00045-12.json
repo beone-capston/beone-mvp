@@ -62,7 +62,13 @@
         ]
       },
       "evidence": "E13"
-    }
+    },
+    "inclusionUnconfirmed": [
+      {
+        "merchantClass": "TRANSIT_BUS_SUBWAY",
+        "relatedClass": "POSTPAID_TRANSIT"
+      }
+    ]
   },
   "limitBuckets": [
     {
@@ -225,6 +231,12 @@
         "basis": "USER_DECISION",
         "decision": "D-03"
       },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "COFFEE_BEVERAGE",
+          "relatedClass": "STARBUCKS_STORE"
+        }
+      ],
       "evidence": [
         "E5",
         "E10"
@@ -384,6 +396,12 @@
         "basis": "USER_DECISION",
         "decision": "D-03"
       },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "POSTPAID_TRANSIT",
+          "relatedClass": "TRANSIT_BUS_SUBWAY"
+        }
+      ],
       "evidence": [
         "E1",
         "E10"

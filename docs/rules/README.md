@@ -33,7 +33,21 @@
 | `fractionalWon.basis`, `fractionalWon.decision` | 절사가 문서 대조가 아닌 사용자 결정임을 표시 | [D-03](../decisions.md#d-03d-04-확정-정책) |
 | `stackingBasis` | 중복 합산의 계산 기준. 없으면 합산하지 않음 | [D-13 #35 8번](../decisions.md#d-13-확정-정책) |
 | `performanceExcludedClassesEvidence` | 실적 제외 업종의 근거 ID | 근거 표 |
+| `inclusionUnconfirmed` | 포함 관계가 확인되지 않은 코드 쌍 | 아래 "포함 관계 확인 필요" |
 | `newCardGrace.value.deemedPerformance.unresolved` | 간주 실적 금액 미확정(09174). 모델은 양수 금액만 받음 | 09174 근거 표 |
+
+## 포함 관계 확인 필요
+
+서비스와 `policy`의 `inclusionUnconfirmed`는 포함 관계가 확인되지 않은 코드 쌍입니다. 코드가 서로 달라도 불일치로 단정하지 않습니다.
+
+```json
+{"merchantClass": "STARBUCKS_STORE", "relatedClass": "COFFEE_BEVERAGE"}
+```
+
+- **뜻:** 주문이나 거래의 코드가 `merchantClass`이면, `relatedClass`에 드는지 모릅니다.
+- **서비스에 있을 때:** 그 서비스는 그 주문에서 `확인 필요`입니다. [D-18 U2 ① 예외](../decisions.md#d-18-확정-정책)의 대상 업종 불일치로 보지 않습니다.
+- **`policy`에 있을 때:** 그 거래가 전월 실적에서 제외되는지 `확인 필요`입니다. 제외나 포함으로 단정하지 않습니다.
+- 값은 2026-11-03 사용자 결정으로 표시했습니다. 코드에는 아직 없고, 쌍별 근거는 각 근거 표에 있습니다.
 
 ## 키가 없을 때
 
@@ -44,4 +58,4 @@
 
 ## 코드 값
 
-`merchantClass`의 코드는 제안입니다. 약관에 코드가 없고, KB 업종 분류와의 일치를 확인하지 않았습니다. 코드와 원문의 대응은 각 근거 표의 "제안 코드"를 봅니다.
+`merchantClass` 코드 49개는 2026-11-03 사용자가 승인했습니다. 약관에 코드가 없고, KB 업종 분류와의 일치는 확인하지 않았습니다. 코드와 원문의 대응은 각 근거 표의 "코드 표"를 봅니다.

@@ -73,7 +73,25 @@
         ]
       },
       "evidence": "E16"
-    }
+    },
+    "inclusionUnconfirmed": [
+      {
+        "merchantClass": "TAX",
+        "relatedClass": "LOCAL_TAX"
+      },
+      {
+        "merchantClass": "ELECTRICITY_WATER",
+        "relatedClass": "LOCAL_TAX"
+      },
+      {
+        "merchantClass": "ANNUAL_FEE",
+        "relatedClass": "FEES_AND_INTEREST"
+      },
+      {
+        "merchantClass": "TRANSIT_BUS_SUBWAY",
+        "relatedClass": "POSTPAID_TRANSIT"
+      }
+    ]
   },
   "limitBuckets": [
     {
@@ -320,6 +338,12 @@
         "basis": "USER_DECISION",
         "decision": "D-03"
       },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "COFFEE_BEVERAGE",
+          "relatedClass": "STARBUCKS_STORE"
+        }
+      ],
       "evidence": [
         "E2",
         "E10",
@@ -569,6 +593,12 @@
         "basis": "USER_DECISION",
         "decision": "D-03"
       },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "KYOBO_BOOKSTORE",
+          "relatedClass": "KYOBO_ONLINE"
+        }
+      ],
       "evidence": [
         "E7",
         "E10",
@@ -668,6 +698,12 @@
         "basis": "USER_DECISION",
         "decision": "D-03"
       },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "POSTPAID_TRANSIT",
+          "relatedClass": "TRANSIT_BUS_SUBWAY"
+        }
+      ],
       "evidence": [
         "E9",
         "E10",
