@@ -24,6 +24,7 @@ benefit/
 ├── state/   값의 출처·기준 기간·갱신 시각
 ├── input/   계산에 필요한 주문·카드·거래·선택 설정
 ├── rule/      약관 규칙과 검증 규칙 선택
+│   └── loading/ 규칙 JSON을 읽어 RuleCatalog를 만드는 로더
 ├── primitive/ 서비스 한 건의 산식·개별 조건 판정, 단일 서비스 후보 판정, 카드 한 장의 서비스 후보 취합·주문 혜택 결정과 규칙 선택 연결
 └── result/    서비스 후보·취합 결과, 단일 주문 혜택 결정 결과, 카드별 혜택과 최종 추천 결과
 ```
@@ -82,6 +83,10 @@ CODEF·수동 입력·추론 값에는 갱신 시각이 필요합니다. 추론 
 - [VerificationStatus](../../backend/src/main/java/com/beone/api/benefit/rule/VerificationStatus.java): VERIFIED·AI_DRAFT·CANDIDATE·SYNTHETIC_TEST_SNAPSHOT 구분.
 - [OfficialSource](../../backend/src/main/java/com/beone/api/benefit/rule/OfficialSource.java): 공식 자료 주소와 페이지·절 위치.
 - [BenefitService](../../backend/src/main/java/com/beone/api/benefit/rule/BenefitService.java): 대상·제외 업종, 결제 방식, 금액 조건, 실적 구간, 한도, 선택 여부, 중복 혜택과 원 미만 처리 조건.
+- [ServiceDetails](../../backend/src/main/java/com/beone/api/benefit/rule/ServiceDetails.java): 서비스의 화면 이름, 중복 합산 기준, 원 미만 처리 근거, 포함 관계 표시, 미판정 제외 조건. 로더가 담기만 하고 판정 코드는 아직 쓰지 않습니다.
+- [InclusionUnconfirmed](../../backend/src/main/java/com/beone/api/benefit/rule/InclusionUnconfirmed.java): 포함 관계가 확인되지 않은 업종 코드 쌍. 서비스의 쌍은 대상·제외 코드와, 정책의 쌍은 실적 제외 코드와 연결되는지 생성 시 검사합니다.
+- [StackingBasis](../../backend/src/main/java/com/beone/api/benefit/rule/StackingBasis.java): 중복 합산의 계산 기준. 값이 없는 서비스는 합산하지 않습니다.
+- [TermBasis](../../backend/src/main/java/com/beone/api/benefit/rule/TermBasis.java): 값이 문서 대조가 아닌 사용자 결정임을 결정 번호와 함께 표시합니다.
 - [BenefitKind](../../backend/src/main/java/com/beone/api/benefit/rule/BenefitKind.java): 포인트 적립/청구 할인 구분.
 - [BenefitCalculation](../../backend/src/main/java/com/beone/api/benefit/rule/BenefitCalculation.java): Rate 비율형과 FixedAmount 정액형 계산 방식의 표현. 금액을 직접 계산하는 엔진은 아닙니다.
 - [ServiceTier](../../backend/src/main/java/com/beone/api/benefit/rule/ServiceTier.java): 최소 실적과 해당 구간의 계산 방식.
@@ -104,6 +109,15 @@ CODEF·수동 입력·추론 값에는 갱신 시각이 필요합니다. 추론 
 - [TriggerEvidence](../../backend/src/main/java/com/beone/api/benefit/rule/TriggerEvidence.java): PRESENT 발생, CONFIRMED_ABSENT 부재 확인, UNDETERMINED 판단 불가.
 
 RuleCatalog.select()는 규칙 없음 → NO_VERIFIED_RULE, 날짜 불일치 → RULE_EXPIRED, 유효하지만 미검증 → NO_VERIFIED_RULE, 유효한 VERIFIED 존재 → Selected 순서로 판단합니다. 계산 가능 서비스라는 표현은 규칙 자체의 차단 조건이 없다는 의미이며 현재 주문의 실적·업종·한도 조건 충족까지 보장하지 않습니다.
+
+### rule.loading: 규칙 로더
+
+규칙 데이터(`backend/src/main/resources/rules/<cardId>/<ruleVersion>.json`)를 읽어 모델을 만듭니다. 형식은 [규칙 데이터 안내](../rules/README.md)를 봅니다.
+
+- [RuleCatalogConfiguration](../../backend/src/main/java/com/beone/api/benefit/rule/loading/RuleCatalogConfiguration.java): 서버 시작 때 `RuleCatalog` 빈을 만듭니다. 규칙 데이터가 잘못되면 서버가 뜨지 않습니다. 이 빈을 주입받는 업무 코드는 아직 없습니다.
+- [RuleCatalogLoader](../../backend/src/main/java/com/beone/api/benefit/rule/loading/RuleCatalogLoader.java): 클래스패스의 규칙 파일과 허용 목록을 읽습니다. 폴더·파일 이름이 `cardId`·`ruleVersion`과 다르면 거부합니다.
+- [RuleJsonReader](../../backend/src/main/java/com/beone/api/benefit/rule/loading/RuleJsonReader.java): JSON 한 개를 `CardRuleVersion`으로 바꿉니다. 모르는 키, 빠진 필수 키, 중복 키, 잘못된 타입, 허용 목록 밖의 코드를 거부하고 기본값을 채우지 않습니다.
+- [MerchantClassAllowlist](../../backend/src/main/java/com/beone/api/benefit/rule/loading/MerchantClassAllowlist.java): 허용 업종 코드 파일을 읽습니다. 오타가 "대상 불일치"로 조용히 처리되는 것을 막습니다.
 
 ### primitive: 산식·개별 조건 판정과 단일 서비스 후보 판정
 
@@ -276,7 +290,7 @@ OrderBenefit result = OrderBenefitResolver.resolve(catalog, cardId, decisionDate
 ## 데이터·처리 흐름
 
 1. Order, HeldCard, Ledger, CardMonthlyState 등을 RecommendationInput으로 묶습니다.
-2. RuleCatalog가 판단 날짜에 적용 가능한 검증 규칙을 선택합니다. 카드 한 장·주문 한 건은 `OrderBenefitResolver`가 이 선택과 아래 결정을 잇습니다(판정일은 호출자 입력).
+2. 서버 시작 때 로더가 규칙 JSON으로 RuleCatalog를 만들고, RuleCatalog가 판단 날짜에 적용 가능한 검증 규칙을 선택합니다. 카드 한 장·주문 한 건은 `OrderBenefitResolver`가 이 선택과 아래 결정을 잇습니다(판정일은 호출자 입력).
 3. 미확정 약관과 입력 상태를 고려해 혜택을 계산하고 월간 후보를 비교합니다. 서비스 한 건의 산식·개별 조건 판정과 한도 없는 비선택형 서비스의 단일 후보 판정, 규칙 선택 결과의 서비스 후보 취합(`CardServiceCandidateCollector`), 한도 없는 비선택형 서비스에 대한 카드 한 장·주문 한 건의 채택·카드 금액 결정(`OrderBenefitDecider`)은 `primitive`에 있지만, 카드 간 비교·월간 최적화로 추천을 내는 **엔진은 후속 구현입니다.**
 4. 계산 로직이 ServiceBenefit(또는 후보·채택·기여액을 나눈 ServiceCandidate·OrderServiceBenefit·OrderBenefit), CardBenefit, Recommendation을 구성합니다. 현재 `OrderBenefit`까지는 결정기가 만들고, `CardBenefit`·`Recommendation`은 결과를 담는 모델과 일관성 검사만 있습니다.
 
@@ -305,10 +319,12 @@ RuleTerm<FractionalWonPolicy> rounding = RuleTerm.unresolved("공식 근거 확�
 - 미확정 조건은 관련 상황의 부재가 확인된 경우에만 무시합니다. 증거 없음은 부재가 아니라 UNDETERMINED입니다.
 - 날짜는 Asia/Seoul의 달력 날짜라는 입력 계약입니다. LocalDate 자체가 시간대를 변환하는 것은 아닙니다.
 - 모델 검증과 규칙 선택 성공은 실제 공식 약관의 정확성 또는 추천 엔진 정확성을 자동으로 입증하지 않습니다.
+- MVP 주문 입력은 일시불·일반 매장 결제를 가정합니다. 입력에 없는 제외 조건(`unevaluatedExclusions`)은 판정하지 않으므로, 그런 조건이 있는 서비스의 확정 금액은 실제보다 클 수 있습니다([D-20](../decisions.md#d-20-확정-정책)). 결과에 표시하는 필드는 아직 없습니다.
+- 로더는 `inclusionUnconfirmed`를 담고 검증만 합니다. 판정 코드는 이 쌍을 읽지 않아, 코드가 다르면 아직 불일치로 처리합니다.
 
 ## 현재 구현 범위와 관련 문서
 
-구현된 범위는 위 모델, 생성 시 일관성 검사, 규칙 선택, 일부 기간·취소 증거 보조 로직, 서비스 한 건의 산식·개별 조건 판정, 한도 없는 비선택형 서비스의 단일 후보 판정, 카드 한 장의 서비스 후보 취합, 한도 없는 비선택형 서비스에 대한 카드 한 장·주문 한 건의 혜택 결정(#35)과 규칙 선택부터 결정까지의 연결(#38, 판정일은 호출자 입력), 서비스 후보·취합·채택·기여액·주문 혜택 결과 타입입니다. 카드 간 비교·추천, 한도·선택형 판정, 중복 합산, 최적화 엔진과 외부 연동은 별도 구현이 필요합니다. `primitive` 테스트는 가상 업종·서비스의 합성 값이며 실제 카드 약관 검증이나 평가 통과를 뜻하지 않습니다.
+구현된 범위는 위 모델, 규칙 JSON 로더, 생성 시 일관성 검사, 규칙 선택, 일부 기간·취소 증거 보조 로직, 서비스 한 건의 산식·개별 조건 판정, 한도 없는 비선택형 서비스의 단일 후보 판정, 카드 한 장의 서비스 후보 취합, 한도 없는 비선택형 서비스에 대한 카드 한 장·주문 한 건의 혜택 결정(#35)과 규칙 선택부터 결정까지의 연결(#38, 판정일은 호출자 입력), 서비스 후보·취합·채택·기여액·주문 혜택 결과 타입입니다. 카드 간 비교·추천, 한도·선택형 판정, 중복 합산, 최적화 엔진과 외부 연동은 별도 구현이 필요합니다. `primitive` 테스트는 가상 업종·서비스의 합성 값이며 실제 카드 약관 검증이나 평가 통과를 뜻하지 않습니다.
 
 테스트는 [benefit 테스트 디렉터리](../../backend/src/test/java/com/beone/api/benefit/)에서 확인합니다. fixture 매핑 테스트를 계산 결과 검증으로 혼동하지 않습니다. 이 문서 작성 과정에서는 테스트를 실행하지 않았습니다.
 
