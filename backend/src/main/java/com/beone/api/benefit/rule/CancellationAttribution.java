@@ -6,7 +6,7 @@ package com.beone.api.benefit.rule;
  */
 public enum CancellationAttribution {
 
-	/** 취소전표 접수월에 차감(09271, 01664). */
+	/** 취소전표 접수월에 차감(09271, 01664, 01914). */
 	RECEIPT_MONTH
 
 }

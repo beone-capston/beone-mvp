@@ -2,7 +2,7 @@ package com.beone.api.benefit.rule;
 
 /**
  * 계산된 혜택의 원 미만 금액 처리 방식.
- * 아직 어느 카드도 확인되지 않았으므로 공식 근거가 나올 때까지 미확정 조건으로 둔다(카드 조사 문서, D-03).
+ * 약관에 근거가 있는 카드는 아직 없다. 4종의 절사는 D-03 사용자 결정이며, 이 사실은 {@link TermBasis}로 표시한다.
  */
 public enum FractionalWonPolicy {
 

@@ -31,7 +31,7 @@ import com.beone.api.benefit.money.Won;
 public record BenefitService(ServiceId id, BenefitKind kind, MerchantTarget target, Set<MerchantClass> excludedClasses,
 		Set<PaymentMethod> paymentMethods, Won minimumAmount, Optional<Won> maximumTargetAmount,
 		List<ServiceTier> tiers, List<LimitBucketId> limitBuckets, boolean requiresSelection,
-		RuleTerm<Set<ServiceId>> stackableWith, RuleTerm<FractionalWonPolicy> fractionalWon) {
+		RuleTerm<Set<ServiceId>> stackableWith, RuleTerm<FractionalWonPolicy> fractionalWon, ServiceDetails details) {
 
 	public BenefitService {
 		Objects.requireNonNull(id, "id");
@@ -63,6 +63,43 @@ public record BenefitService(ServiceId id, BenefitKind kind, MerchantTarget targ
 			throw new IllegalArgumentException("service " + id + " cannot stack with itself");
 		}
 		Objects.requireNonNull(fractionalWon, "fractionalWon");
+		Objects.requireNonNull(details, "details");
+		if (details.fractionalWonBasis().isPresent() && !fractionalWon.isResolved()) {
+			throw new IllegalArgumentException("service " + id + " has a basis for an unresolved fractional won term");
+		}
+		for (InclusionUnconfirmed pair : details.inclusionUnconfirmed()) {
+			requireConsistent(id, pair, target, excludedClasses);
+		}
+	}
+
+	/**
+	 * 추가 값 없이 계산 조건만 있는 서비스.
+	 */
+	public BenefitService(ServiceId id, BenefitKind kind, MerchantTarget target, Set<MerchantClass> excludedClasses,
+			Set<PaymentMethod> paymentMethods, Won minimumAmount, Optional<Won> maximumTargetAmount,
+			List<ServiceTier> tiers, List<LimitBucketId> limitBuckets, boolean requiresSelection,
+			RuleTerm<Set<ServiceId>> stackableWith, RuleTerm<FractionalWonPolicy> fractionalWon) {
+		this(id, kind, target, excludedClasses, paymentMethods, minimumAmount, maximumTargetAmount, tiers, limitBuckets,
+				requiresSelection, stackableWith, fractionalWon, ServiceDetails.none());
+	}
+
+	// 쌍의 관련 코드는 이 서비스의 대상이나 제외 코드여야 하고, 주문 코드는 그 목록에 이미 있으면 안 된다.
+	private static void requireConsistent(ServiceId id, InclusionUnconfirmed pair, MerchantTarget target,
+			Set<MerchantClass> excludedClasses) {
+		boolean relatedToTarget = target instanceof MerchantTarget.SpecificClasses specific
+				&& specific.classes().contains(pair.relatedClass());
+		boolean relatedToExclusion = excludedClasses.contains(pair.relatedClass());
+		if (!relatedToTarget && !relatedToExclusion) {
+			throw new IllegalArgumentException("service " + id + " inclusion pair refers to unrelated class "
+					+ pair.relatedClass());
+		}
+		boolean alreadyListed = excludedClasses.contains(pair.merchantClass())
+				|| (target instanceof MerchantTarget.SpecificClasses specific
+						&& specific.classes().contains(pair.merchantClass()));
+		if (alreadyListed) {
+			throw new IllegalArgumentException("service " + id + " inclusion pair lists a known class "
+					+ pair.merchantClass());
+		}
 	}
 
 	/**
