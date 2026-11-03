@@ -154,6 +154,16 @@ class RuleJsonReaderTest {
 	}
 
 	@Test
+	void rejectsResolvedTermsWithoutEvidence() {
+		assertRejected(root -> ((ObjectNode) service(root).get("tiers").get(0).get("calculation")).remove("evidence"),
+				"missing key 'evidence'");
+		assertRejected(root -> ((ObjectNode) service(root).get("stackableWith")).remove("evidence"), "missing key 'evidence'");
+		assertRejected(root -> ((ObjectNode) policy(root).get("performanceWindow")).remove("evidence"), "missing key 'evidence'");
+		assertRejected(root -> ((ObjectNode) policy(root).get("excludesBenefitedSales")).remove("evidence"), "missing key 'evidence'");
+		assertRejected(root -> ((ObjectNode) policy(root).get("newCardGrace")).remove("evidence"), "missing key 'evidence'");
+	}
+
+	@Test
 	void rejectsResolvedFractionalWonWithoutBasis() {
 		assertRejected(root -> ((ObjectNode) service(root).get("fractionalWon")).remove("basis"), "missing key 'basis'");
 		assertRejected(root -> ((ObjectNode) service(root).get("fractionalWon")).remove("decision"), "missing key 'decision'");

@@ -148,7 +148,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 3500
-            }
+            },
+            "evidence": "E3"
           }
         }
       ],
@@ -199,7 +200,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 2000
-            }
+            },
+            "evidence": "E4"
           }
         }
       ],
@@ -249,7 +251,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 2000
-            }
+            },
+            "evidence": "E5"
           }
         }
       ],
@@ -302,7 +305,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 5000
-            }
+            },
+            "evidence": "E6"
           }
         }
       ],
@@ -348,7 +352,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 500
-            }
+            },
+            "evidence": "E7"
           }
         }
       ],
@@ -398,7 +403,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 500
-            }
+            },
+            "evidence": "E8"
           }
         }
       ],
@@ -445,7 +451,8 @@
             "value": {
               "type": "RATE",
               "basisPoints": 1000
-            }
+            },
+            "evidence": "E1"
           }
         }
       ],
@@ -499,7 +506,8 @@
             "value": {
               "type": "FIXED_AMOUNT",
               "won": 2500
-            }
+            },
+            "evidence": "E2"
           }
         }
       ],

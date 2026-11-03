@@ -301,7 +301,11 @@ public final class RuleJsonReader {
 		List<String> allowed = new ArrayList<>(List.of("value", "evidence"));
 		allowed.addAll(List.of(extraKeys));
 		onlyKeys(node, where, allowed.toArray(String[]::new));
-		if (node.has("evidence")) {
+		// 확정 값은 근거 ID가 필수다. basis·decision으로 근거를 대는 항목만 예외이고, 그 검사는 호출한 쪽에서 한다.
+		if (extraKeys.length == 0) {
+			evidenceId(required(node, "evidence", where), where + ".evidence");
+		}
+		else if (node.has("evidence")) {
 			evidenceId(node.get("evidence"), where + ".evidence");
 		}
 		return RuleTerm.resolved(reader.read(required(node, "value", where), where + ".value"));

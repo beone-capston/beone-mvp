@@ -19,7 +19,7 @@
 
 필드 이름은 `com.beone.api.benefit.rule`의 모델을 따릅니다. 메모는 넣지 않고 근거 ID(`evidence`)로 근거 표와 연결합니다.
 
-- **확정 값:** `{"value": ..., "evidence": "E1"}`
+- **확정 값:** `{"value": ..., "evidence": "E1"}`. `evidence`는 필수이며, `fractionalWon`만 `basis`·`decision`으로 대신합니다.
 - **미확정 값:** `{"unresolved": "이유"}`. 코드의 `RuleTerm.Unresolved`이고 `확인 필요`를 뜻합니다. 0원이나 기본값으로 바꾸지 않습니다.
 - **대상 가맹점:** `{"type": "ALL_MERCHANTS"}` 또는 `{"type": "SPECIFIC_CLASSES", "classes": [...]}`
 - **계산 방식:** `{"type": "RATE", "basisPoints": 100}` 또는 `{"type": "FIXED_AMOUNT", "won": 2500}`
