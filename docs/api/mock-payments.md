@@ -12,7 +12,8 @@
 
 ```text
 POST simulated-payments (Idempotency-Key)
-→ 같은 키·같은 본문의 이전 요청이 있으면 그 결과를 그대로 반환
+→ 주문 소유 확인. 없거나 다른 사용자의 주문이면 404
+→ 같은 사용자·같은 키·같은 본문의 이전 요청이 있으면 그 결과를 그대로 반환
 → 추천 재계산
 → AUTO_RECOMMEND: 재계산의 선택 카드 / FIXED_REPRESENTATIVE: 대표 카드
 → seenRecommendationId 결과와 비교해 differences 작성
