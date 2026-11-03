@@ -55,3 +55,9 @@
 - 검증: 기본 주소로 `testDebugUnitTest lintDebug assembleDebug assembleRelease lintRelease`, 주소를 바꾼 `testDebugUnitTest`(`http://10.0.2.2:5173`)를 실제 실행, 통과(단위 16건, lint 오류 0·경고 7). 잘못된 주소에서는 테스트가 실패하는 것도 확인했습니다. `testReleaseUnitTest`는 이 프로젝트에 없는 태스크라 실행하지 못했습니다.
 - 남은 제한: 차단 안내 표시 방식, iframe 안 이동 허용 여부는 결정이 필요해 바꾸지 않았습니다.
 - 다음: 결정 뒤 반영, 사용자 실기기 관측
+
+### 2026-11-04 · 사용자 결정 반영 · 완료
+- 한 일: 최신 `develop`을 merge했습니다. `webview-shell.md`를 D-21에 맞췄습니다. 하위 프레임 이동 차단을 코드대로 적고, `adb reverse tcp:8080`, release 앱 에셋 결정, W2 판정 기준을 반영했습니다.
+- 서비스에서 달라진 점: 없음. 문서만 변경했습니다.
+- 검증: `assembleDebug testDebugUnitTest lintDebug` 실행. 실기기 확인은 사용자가 2026-11-05~06에 합니다.
+- 남은 제한: release 에셋과 브리지는 미구현입니다. 차단 안내 구분은 React에 외부 링크가 생길 때 구현합니다.
