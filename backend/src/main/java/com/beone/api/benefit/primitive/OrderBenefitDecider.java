@@ -1,8 +1,10 @@
 package com.beone.api.benefit.primitive;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,6 +20,10 @@ import com.beone.api.benefit.input.PolicyTermEvidence;
 import com.beone.api.benefit.money.BenefitAmount;
 import com.beone.api.benefit.result.Adoption;
 import com.beone.api.benefit.result.ApplicationStatus;
+import com.beone.api.benefit.state.StateValue;
+import com.beone.api.benefit.rule.LimitBucket;
+import com.beone.api.benefit.result.ServiceResultNotes;
+import com.beone.api.benefit.result.LimitReason;
 import com.beone.api.benefit.result.CardServiceCandidates;
 import com.beone.api.benefit.result.OrderBenefit;
 import com.beone.api.benefit.result.OrderServiceBenefit;
@@ -38,13 +44,13 @@ import com.beone.api.benefit.rule.TriggerEvidence;
  * <p>
  * {@link CardServiceCandidateCollector}로 후보를 취합한 뒤 아래 순서로 판단한다. 규칙 선택({@code RuleCatalog.select})은 호출하지 않는다.
  * <ol>
- * <li>실적과 무관한 미충족(제외 업종·업종·결제 방식·최소 금액)이 있는 후보: {@code NOT_ADOPTED}·확정 0원.</li>
- * <li>나머지 후보는 실적 정책 영향을 본다. 서비스에 실적 조건이 있고, 원본 {@code unresolvedConditionalTerms}에 취소 귀속·할인 매출
+ * <li>실적과 무관한 미충족(제외 업종·업종·결제 방식·최소 금액·택1 선택)이 있는 후보: {@code NOT_ADOPTED}·확정 0원.</li>
+ * <li>나머지 후보는 실적 정책 영향을 본다. 서비스나 그 한도 체인에 실적 조건이 있고, 원본 {@code unresolvedConditionalTerms}에 취소 귀속·할인 매출
  * 실적 제외 조건이 있으며, 그 근거가 {@code CONFIRMED_ABSENT}가 아니면 영향이 있다고 본다.</li>
- * <li>실적 미충족만 있는 후보와 미충족 사유 없는 확정 0원 후보: 영향이 있으면 재확인 대상, 없으면 {@code NOT_ADOPTED}·확정 0원.</li>
+ * <li>실적 미충족·한도 소진만 있는 후보와 미충족 사유 없는 확정 0원 후보: 영향이 있으면 재확인 대상, 없으면 {@code NOT_ADOPTED}·확정 0원.</li>
  * <li>양수 후보: 영향이 있으면 실적 정책 사유를 남긴다.</li>
  * <li>막는 사유를 모두 모은다: 확인 필요·지원 범위 밖 서비스, 실적 정책 영향, 양수 후보 쌍의 중복 관계 미확정·중복 허용 확정.</li>
- * <li>사유가 없으면 양수 후보 중 금액이 가장 크고 같으면 서비스 ID가 가장 앞선 하나만 채택한다. 사유가 있으면 양수 후보는 모두
+ * <li>사유가 없으면 양수 후보 중 한도 적용 후 금액이 가장 크고 같으면 서비스 ID가 가장 앞선 하나만 채택한다. 사유가 있으면 양수 후보는 모두
  * {@code UNDETERMINED}이고 기여액과 카드 금액은 {@code 확인 필요}다.</li>
  * </ol>
  * 결과는 입력·컬렉션 순서와 무관하게 서비스 ID 순으로 정렬한다. 원본 취합 결과와 그 조건부 조건은 바꾸지 않고 보존한다.
@@ -54,7 +60,8 @@ public final class OrderBenefitDecider {
 	/** 실적 미충족 외의 미충족. 하나라도 있으면 실적이 바뀌어도 확정 0원이다. */
 	private static final Set<ApplicationStatus> PERFORMANCE_INDEPENDENT_UNMET = EnumSet.of(
 			ApplicationStatus.NOT_APPLICABLE_EXCLUDED, ApplicationStatus.NOT_APPLICABLE_CATEGORY,
-			ApplicationStatus.NOT_APPLICABLE_MIN_AMOUNT, ApplicationStatus.NOT_APPLICABLE_PAYMENT_METHOD);
+			ApplicationStatus.NOT_APPLICABLE_MIN_AMOUNT, ApplicationStatus.NOT_APPLICABLE_PAYMENT_METHOD,
+			ApplicationStatus.NOT_APPLICABLE_SELECTION);
 
 	private OrderBenefitDecider() {
 	}
@@ -65,14 +72,14 @@ public final class OrderBenefitDecider {
 	 * @param selection 카드 한 장의 규칙 선택 결과
 	 * @param order 현재 주문
 	 * @param state 같은 카드의 월간 상태
+	 * @param registeredAt 같은 카드의 등록일. 신규 유예 판정에 쓴다
 	 * @param evidence 같은 카드의 취소 귀속·할인 매출 근거. 실적 기간 적합성은 호출자 책임이다
 	 * @return 규칙을 쓸 수 없으면 {@link OrderBenefit.Unavailable}, 아니면 {@link OrderBenefit.Decided}
 	 * @throws NullPointerException 입력이 null인 경우
 	 * @throws IllegalArgumentException 근거의 카드가 규칙 선택 결과의 카드와 다르거나, 후보 취합기가 거부하는 입력인 경우
-	 * @throws IllegalStateException 지원 범위 서비스에서 나올 수 없는 한도 소진 후보를 받은 경우
 	 */
 	public static OrderBenefit decide(RuleSelection selection, Order order, CardMonthlyState state,
-			PolicyTermEvidence evidence) {
+			StateValue<LocalDate> registeredAt, PolicyTermEvidence evidence) {
 		Objects.requireNonNull(selection, "selection");
 		Objects.requireNonNull(order, "order");
 		Objects.requireNonNull(state, "state");
@@ -81,7 +88,7 @@ public final class OrderBenefitDecider {
 			throw new IllegalArgumentException(
 					"policy evidence card " + evidence.cardId() + " does not match rule selection card " + selection.cardId());
 		}
-		return switch (CardServiceCandidateCollector.collect(selection, order, state)) {
+		return switch (CardServiceCandidateCollector.collect(selection, order, state, registeredAt)) {
 			case CardServiceCandidates.Unavailable unavailable -> new OrderBenefit.Unavailable(unavailable.cardId(),
 					unavailable.status(), unavailable.reason());
 			case CardServiceCandidates.Collected collected -> decided((RuleSelection.Selected) selection, collected,
@@ -100,14 +107,13 @@ public final class OrderBenefitDecider {
 	 * {@code UNDETERMINED}이고 기여액과 카드 금액은 같은 {@code 확인 필요} 값이다.
 	 *
 	 * <p>
-	 * 확정 후보 금액을 바꾸거나 한도·선택형·중복 합산을 계산하지 않는다. 결과의 대응·정렬·채택 불변식은 {@link OrderBenefit.Decided} 생성자가
+	 * 확정 후보 금액을 바꾸거나 선택형·중복 합산을 계산하지 않는다. 채택된 후보의 기여액만 남은 한도로 줄인다. 결과의 대응·정렬·채택 불변식은 {@link OrderBenefit.Decided} 생성자가
 	 * 다시 확인한다.
 	 *
 	 * @param selection 취합에 쓴 규칙 선택 결과. 서비스 ID로 실적 조건·중복 관계를 찾는다
 	 * @param source 취합 결과. 그대로 결과에 보존한다
 	 * @param evidence 같은 카드의 취소 귀속·할인 매출 근거
 	 * @return 서비스 ID 순으로 정렬한 결정 결과
-	 * @throws IllegalStateException 지원 범위 서비스에서 나올 수 없는 한도 소진 후보를 받은 경우
 	 */
 	private static OrderBenefit.Decided decided(RuleSelection.Selected selection,
 			CardServiceCandidates.Collected source, PolicyTermEvidence evidence) {
@@ -127,18 +133,15 @@ public final class OrderBenefitDecider {
 		List<PendingReason> reasons = new ArrayList<>();
 		for (ServiceCandidate candidate : candidates) {
 			Set<ApplicationStatus> unmet = candidate.unmetConditions();
-			if (unmet.contains(ApplicationStatus.LIMIT_EXHAUSTED)) {
-				throw new IllegalStateException("service " + candidate.serviceId()
-						+ " is LIMIT_EXHAUSTED, which supported services cannot produce");
-			}
 			// 1) 실적과 무관한 미충족은 실적 정책과 관계없이 확정 0원이다.
 			if (unmet.stream().anyMatch(PERFORMANCE_INDEPENDENT_UNMET::contains)) {
 				settled.add(notAdopted(candidate));
 				continue;
 			}
 			// 2) 실적 정책 조건이 이 서비스의 실적 충족·구간·금액을 바꿀 수 있는지
-			boolean affected = servicesById.get(candidate.serviceId()).hasPerformanceRequirement()
-					&& !policyTerms.isEmpty();
+			BenefitService service = servicesById.get(candidate.serviceId());
+			boolean affected = !policyTerms.isEmpty() && (service.hasPerformanceRequirement()
+					|| selection.rule().limitChain(service).stream().anyMatch(LimitBucket::dependsOnPerformance));
 			if (affected) {
 				reasons.add(new PendingReason(PendingReason.Kind.PERFORMANCE_POLICY, List.of(candidate.serviceId()),
 						"service " + candidate.serviceId() + " depends on prior performance affected by "
@@ -171,17 +174,17 @@ public final class OrderBenefitDecider {
 		List<OrderServiceBenefit> services = new ArrayList<>(settled);
 		BenefitAmount orderBenefit;
 		if (reasons.isEmpty()) {
-			// 4) 막는 사유가 없으면 양수 후보끼리 모두 중복 불가로 확정된 상태다. 최댓값, 같으면 서비스 ID가 앞선 하나만 채택한다.
+			// 4) 막는 사유가 없으면 양수 후보끼리 모두 중복 불가로 확정된 상태다. 한도 적용 후 최댓값, 같으면 서비스 ID가 앞선 하나만 채택한다.
 			Optional<ServiceCandidate> best = positives.stream()
-				.min(Comparator.comparing((ServiceCandidate candidate) -> candidate.standaloneAmount().confirmedWon())
+				.min(Comparator.comparing((ServiceCandidate candidate) -> candidate.amountAfterLimit().confirmedWon())
 					.reversed()
 					.thenComparing(ServiceCandidate::serviceId, PendingReason.SERVICE_ORDER));
 			for (ServiceCandidate candidate : positives) {
 				services.add(candidate.equals(best.get())
-						? new OrderServiceBenefit(candidate, Adoption.ADOPTED, candidate.standaloneAmount())
+						? new OrderServiceBenefit(candidate, Adoption.ADOPTED, candidate.amountAfterLimit())
 						: notAdopted(candidate));
 			}
-			orderBenefit = best.map(ServiceCandidate::standaloneAmount).orElse(BenefitAmount.confirmed(0));
+			orderBenefit = best.map(ServiceCandidate::amountAfterLimit).orElse(BenefitAmount.confirmed(0));
 		}
 		else {
 			BenefitAmount pending = BenefitAmount.needsConfirmation(pendingSummary(reasons));
@@ -191,7 +194,29 @@ public final class OrderBenefitDecider {
 			orderBenefit = pending;
 		}
 		services.sort(Comparator.comparing(service -> service.candidate().serviceId(), PendingReason.SERVICE_ORDER));
-		return new OrderBenefit.Decided(source, services, rechecks, reasons, orderBenefit);
+		return new OrderBenefit.Decided(source, services, rechecks, reasons, orderBenefit,
+				serviceNotes(selection.rule().services(), source));
+	}
+
+	/**
+	 * 규칙의 모든 서비스에 표시 값을 만든다. 서비스 ID 순이다.
+	 */
+	private static List<ServiceResultNotes> serviceNotes(List<BenefitService> services,
+			CardServiceCandidates.Collected source) {
+		Map<ServiceId, LimitReason> limitReasons = new HashMap<>();
+		for (ServiceNeedingConfirmation pending : source.needingConfirmation()) {
+			pending.limitReason().ifPresent(reason -> limitReasons.put(pending.serviceId(), reason));
+		}
+		Set<ServiceId> truncated = source.candidates()
+			.stream()
+			.filter(ServiceCandidate::fractionalWonTruncated)
+			.map(ServiceCandidate::serviceId)
+			.collect(Collectors.toSet());
+		return services.stream()
+			.map(service -> ServiceResultNotes.of(service, Optional.ofNullable(limitReasons.get(service.id())),
+					truncated.contains(service.id())))
+			.sorted(Comparator.comparing(ServiceResultNotes::serviceId, PendingReason.SERVICE_ORDER))
+			.toList();
 	}
 
 	/**

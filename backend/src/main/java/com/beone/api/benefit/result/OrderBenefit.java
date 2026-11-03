@@ -79,7 +79,7 @@ public sealed interface OrderBenefit {
 	 * 중복 관계→양수 후보).</li>
 	 * <li>카드 금액이 확정이면 사유가 없고, {@code 확인 필요}이면 사유가 있다.</li>
 	 * <li>확정 0원 후보는 {@code NOT_ADOPTED}다.</li>
-	 * <li>확정일 때: {@code UNDETERMINED}가 없고, 양수 후보가 있으면 후보 금액 최댓값 중 서비스 ID가 가장 앞선 하나만 후보 금액 그대로
+	 * <li>확정일 때: {@code UNDETERMINED}가 없고, 양수 후보가 있으면 한도 적용 후 금액 최댓값 중 서비스 ID가 가장 앞선 하나만 그 금액으로
 	 * {@code ADOPTED}이며, 카드 금액은 기여액 합이다.</li>
 	 * <li>미확정일 때: {@code ADOPTED}가 없고 양수 후보는 모두 {@code UNDETERMINED}·기여액 {@code 확인 필요}다.</li>
 	 * <li>{@code services}·{@code rechecks}는 서비스 ID 오름차순, {@code reasons}는 {@link PendingReason#ORDER} 순서이며 중복이 없다.
@@ -92,10 +92,11 @@ public sealed interface OrderBenefit {
 	 * @param rechecks 실적 정책 조건 때문에 최종 결과를 정하지 못한 후보. 원본 0원은 최종 기여액이 아니다
 	 * @param reasons 카드 금액을 확정하지 못한 사유
 	 * @param orderBenefit 카드의 이번 주문 혜택
+	 * @param serviceNotes 규칙의 서비스별 표시 값(한도 사용액 기준, 절사, 미판정 제외 조건). 금액 판단에 쓰지 않는다
 	 */
 	record Decided(CardServiceCandidates.Collected source, List<OrderServiceBenefit> services,
-			List<PerformanceRecheck> rechecks, List<PendingReason> reasons, BenefitAmount orderBenefit)
-			implements OrderBenefit {
+			List<PerformanceRecheck> rechecks, List<PendingReason> reasons, BenefitAmount orderBenefit,
+			List<ServiceResultNotes> serviceNotes) implements OrderBenefit {
 
 		/**
 		 * 위 조합을 확인하고 목록을 불변 복사본으로 보관한다.
@@ -108,6 +109,7 @@ public sealed interface OrderBenefit {
 			rechecks = List.copyOf(rechecks);
 			reasons = List.copyOf(reasons);
 			Objects.requireNonNull(orderBenefit, "orderBenefit");
+			serviceNotes = List.copyOf(serviceNotes);
 			requireSourceCoverage(source, services, rechecks);
 			requireAscending(services.stream().map(service -> service.candidate().serviceId()).toList(), "services");
 			requireAscending(rechecks.stream().map(recheck -> recheck.candidate().serviceId()).toList(), "rechecks");
@@ -265,7 +267,7 @@ public sealed interface OrderBenefit {
 
 		/**
 		 * 카드 금액이 확정일 때의 채택을 확인한다(U3). {@code UNDETERMINED}·미확정 기여액이 없고, 카드 금액이 기여액 합이며, 양수 후보 중
-		 * 금액이 가장 크고 같으면 서비스 ID가 앞선 하나만 후보 금액 그대로 {@code ADOPTED}다. 양수 후보가 없으면 {@code ADOPTED}가 없어야 한다.
+		 * 한도 적용 후 금액이 가장 크고 같으면 서비스 ID가 앞선 하나만 그 금액으로 {@code ADOPTED}다. 양수 후보가 없으면 {@code ADOPTED}가 없어야 한다.
 		 *
 		 * <p>
 		 * 채택된 후보 외의 후보가 막는 사유 없이 중복 불가로 확정됐는지는 규칙이 있어야 알 수 있으므로 확인하지 않는다.
@@ -290,9 +292,9 @@ public sealed interface OrderBenefit {
 			List<OrderServiceBenefit> adopted = services.stream()
 				.filter(service -> service.adoption() == Adoption.ADOPTED)
 				.toList();
-			// 후보 금액 내림차순, 같으면 서비스 ID 오름차순의 첫 후보가 채택 대상이다(U3).
+			// 한도 적용 후 금액 내림차순, 같으면 서비스 ID 오름차순의 첫 후보가 채택 대상이다(U3, D-18 K3).
 			Comparator<OrderServiceBenefit> preferred = Comparator
-				.comparing((OrderServiceBenefit service) -> service.candidate().standaloneAmount().confirmedWon())
+				.comparing((OrderServiceBenefit service) -> service.candidate().amountAfterLimit().confirmedWon())
 				.reversed()
 				.thenComparing(service -> service.candidate().serviceId(), PendingReason.SERVICE_ORDER);
 			List<OrderServiceBenefit> expected = services.stream()
@@ -305,9 +307,9 @@ public sealed interface OrderBenefit {
 						+ ids(expected) + " with the first service id");
 			}
 			for (OrderServiceBenefit service : adopted) {
-				if (!service.contribution().equals(service.candidate().standaloneAmount())) {
+				if (!service.contribution().equals(service.candidate().amountAfterLimit())) {
 					throw new IllegalArgumentException("adopted service " + service.candidate().serviceId()
-							+ " must contribute its candidate amount " + service.candidate().standaloneAmount());
+							+ " must contribute its amount after limit " + service.candidate().amountAfterLimit());
 				}
 			}
 		}

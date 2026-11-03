@@ -69,7 +69,8 @@
         "services": [
           "FUEL",
           "STORE"
-        ]
+        ],
+        "partialPerformance": "NEEDS_CONFIRMATION"
       },
       "evidence": "E5"
     },

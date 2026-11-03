@@ -71,7 +71,7 @@ class OrderServiceBenefitTest {
 		assertThat(allowed).containsExactlyInAnyOrder(ApplicationStatus.NOT_APPLICABLE_EXCLUDED,
 				ApplicationStatus.NOT_APPLICABLE_CATEGORY, ApplicationStatus.NOT_APPLICABLE_PERFORMANCE,
 				ApplicationStatus.NOT_APPLICABLE_MIN_AMOUNT, ApplicationStatus.NOT_APPLICABLE_PAYMENT_METHOD,
-				ApplicationStatus.LIMIT_EXHAUSTED);
+				ApplicationStatus.NOT_APPLICABLE_SELECTION, ApplicationStatus.LIMIT_EXHAUSTED);
 		assertThat(new ServiceCandidate(SERVICE, ZERO, Set.of(ApplicationStatus.LIMIT_EXHAUSTED)).hasUnmetConditions())
 			.isTrue();
 		assertThatThrownBy(() -> new ServiceCandidate(SERVICE, ZERO, Set.of(ApplicationStatus.APPLIED)))

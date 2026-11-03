@@ -112,12 +112,12 @@ class CardRuleVersionTest {
 		Set<ServiceId> services = Set.of(ServiceId.of("Great"));
 
 		assertThatThrownBy(() -> new NewCardGrace(GraceSpan.DAYS_FROM_REGISTRATION, Optional.empty(), Won.of(200_000),
-				services))
+				services, GracePartialPerformance.DEEMED_TIER))
 			.hasMessageContaining("number of days");
 		assertThatThrownBy(() -> new NewCardGrace(GraceSpan.UNTIL_END_OF_NEXT_MONTH, Optional.of(60), Won.of(300_000),
-				services))
+				services, GracePartialPerformance.DEEMED_TIER))
 			.hasMessageContaining("only to a day-based");
-		assertThat(new NewCardGrace(GraceSpan.DAYS_FROM_REGISTRATION, Optional.of(60), Won.of(200_000), services).days())
+		assertThat(new NewCardGrace(GraceSpan.DAYS_FROM_REGISTRATION, Optional.of(60), Won.of(200_000), services, GracePartialPerformance.DEEMED_TIER).days())
 			.contains(60);
 	}
 
