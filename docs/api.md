@@ -121,7 +121,7 @@ class CardExceptionHandler {
 
 ## 업무 API 공통 원칙
 
-업무 API의 범위와 공통 원칙은 [D-09·D-14](decisions.md#d-09d-14-확정-정책)로 확정했습니다(2026-11-01). 개별 API 명세는 아직 없으며, 아래 원칙을 모든 업무 API 명세에 적용합니다.
+업무 API의 범위와 공통 원칙은 [D-09·D-14](decisions.md#d-09d-14-확정-정책)로 확정했습니다(2026-11-01). 개별 API 명세는 [`docs/api/`](api/README.md)에 있으며(2026-11-03, 구현 전), 아래 원칙을 모든 업무 API에 적용합니다.
 
 - 경로는 `/api/v1` 아래에 두고, 사용자 기준 자원은 `/api/v1/me/...`로 씁니다. 사용자 ID를 경로·본문에 넣지 않고 현재 사용자는 서버 한 곳에서 정합니다(D-09).
 - 성공·실패 형식은 이 문서의 응답 계약을 따릅니다. 계산 상태는 `data` 안에 담습니다.
@@ -134,7 +134,56 @@ class CardExceptionHandler {
 
 ### 예약한 오류 코드 자리
 
-인증 필요(401)와 권한 없음(403) 자리를 예약합니다(D-09). MVP는 로그인이 없어 이 응답을 보내지 않으며, 공개 `code` 값은 업무 API 명세에서 정합니다. 아직 `CommonApiErrorCode`에 추가하지 않았습니다.
+인증 필요(401)는 `UNAUTHENTICATED`, 권한 없음(403)은 `FORBIDDEN`으로 자리를 예약합니다(D-09, 값은 2026-11-03 사용자 지시). MVP는 로그인이 없어 이 응답을 보내지 않습니다. 아직 `CommonApiErrorCode`에 추가하지 않았습니다.
+
+## 업무 API 공통 규약
+
+D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 모두 구현 전입니다. 개별 API는 [`docs/api/`](api/README.md)에 있습니다.
+
+### 시연 사용자
+
+- `/api/v1/me/...` 요청은 `X-BeONE-Demo-User` 헤더를 보냅니다. 값은 `MY_CARDS`·`VIRTUAL_PORTFOLIO`입니다.
+- 헤더는 `local`·`demo` 프로필에서만 동작합니다. 없거나 값이 잘못되면 400 `INVALID_REQUEST`입니다.
+- 현재 사용자는 서버의 `CurrentUserResolver` 한 곳에서 이 헤더로 정합니다(D-09). 상품 조회(`/api/v1/card-products`)와 `/api/v1/demo-users`는 사용자 자원이 아니므로 헤더가 필요 없습니다.
+- 세션 로그인을 붙이면 `CurrentUserResolver` 구현만 바꾸고 경로·본문은 그대로 둡니다.
+
+### 값 형식
+
+- 날짜 `YYYY-MM-DD`, 월 `YYYY-MM`, 시각 없는 시간 값 `HH:mm:ss`, 시점은 `+09:00`이 붙은 ISO-8601(Asia/Seoul)입니다.
+- 기간은 `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`입니다(코드 `BasisPeriod`).
+- 혜택 금액은 `{"amountWon": 2100, "status": "CONFIRMED"}` 또는 `{"amountWon": null, "status": "NEEDS_CONFIRMATION"}`입니다. `null`을 0으로 바꾸지 않습니다.
+- 상태값은 `{"value", "source", "period", "updatedAt", "usable", "reason"}`입니다. `source`가 `INFERRED`이면 `ruleVersion`을 함께 담습니다. 이 객체의 `value`는 금액이어도 이름을 바꾸지 않고, 객체를 담는 필드 이름에 `...Won`을 붙입니다.
+- 카드 상품 ID는 선행 0을 보존하는 문자열입니다.
+
+### 중복 방지
+
+- 모의 승인·취소는 `Idempotency-Key` 헤더가 필수입니다. 없으면 400입니다.
+- 키는 24시간 보존하고 현재 사용자(시연 사용자)별로 저장합니다. 다른 사용자의 같은 키는 별개입니다. 키에 연결하는 요청 지문은 사용자, HTTP 메서드, 경로(자원 ID 포함), 본문으로 구성합니다. 같은 키와 같은 지문은 같은 결과를 돌려주고, 같은 키와 다른 지문은 409 `IDEMPOTENCY_KEY_REUSED`입니다.
+
+### 업무 오류 코드
+
+공통 코드 외에 다음을 기능별 `ApiErrorCode`로 추가합니다. 계산 상태(`확인 필요`, 미충족, 한도 소진, 조건부 추천)는 오류가 아니라 `data` 안에 담습니다.
+
+| 영역 | 코드 |
+| --- | --- |
+| 상품 | `CARD_PRODUCT_NOT_FOUND` 404 |
+| 보유 카드 | `USER_CARD_NOT_FOUND` 404, `USER_CARD_DUPLICATED` 409, `USER_CARD_MAPPING_REQUIRED` 409, `PORTFOLIO_READ_ONLY` 409 |
+| 결제 전 설정 | `REPRESENTATIVE_CARD_IN_USE` 409, `REPRESENTATIVE_CARD_NOT_ELIGIBLE` 409 |
+| 주문·추천 | `ORDER_NOT_FOUND` 404, `ORDER_ALREADY_PAID` 409, `RECOMMENDATION_NOT_FOUND` 404, `RECOMMENDATION_NOT_DETERMINED` 409 |
+| 모의 결제 | `SIMULATED_PAYMENT_NOT_FOUND` 404, `CANCELLATION_AMOUNT_EXCEEDED` 409, `PAYMENT_ALREADY_CANCELLED` 409, `IDEMPOTENCY_KEY_REUSED` 409 |
+| 월간 상태(2차) | `SOURCE_CONFLICT_CHANGED` 409, `SOURCE_CONFLICT_NOT_FOUND` 409 |
+| CODEF(2차 초안) | `CODEF_NOT_CONNECTED` 409, `CODEF_RECONNECT_REQUIRED` 409, `CODEF_LOGIN_FAILED` 400, `CODEF_CARD_VERIFICATION_NOT_SUPPORTED` 409, `CODEF_UNAVAILABLE` 502 |
+
+`PORTFOLIO_READ_ONLY`는 가상 포트폴리오의 보유 카드·CODEF 쓰기 요청에 씁니다(D-19). 월간 상태·택1 선택·주문·설정·예정 소비·모의 결제는 가상 포트폴리오에서도 동작합니다.
+
+### 공통 실패 응답
+
+개별 문서에서 반복하지 않습니다.
+
+- 필드 오류가 없으면 `errors`는 `[]`입니다. 필드 오류 예시: `{"code":"INVALID_REQUEST","message":"요청 값을 확인해 주세요.","errors":[{"field":"amountWon","message":"필수 값입니다."}]}`
+- `/api/v1/me`와 모든 `/api/v1/me/...`는 시연 사용자 헤더 오류에 400 `INVALID_REQUEST`를 줍니다.
+- 모든 API는 서버 오류에 500 `INTERNAL_SERVER_ERROR`를 줍니다.
+- 다른 사용자의 자원은 존재를 드러내지 않고 404로 처리합니다. 프런트는 `message`가 아니라 HTTP 상태와 `code`로 분기합니다.
 
 ## 계산 결과 상태와 API 오류의 구분
 
@@ -193,8 +242,8 @@ class CardExceptionHandler {
 
 미구현·범위 밖:
 
-- 실제 업무 API와 DTO, 개별 API의 `data` 구조와 nullable 정책(범위·공통 원칙만 D-14로 확정)
+- 실제 업무 API와 DTO. 명세는 [`docs/api/`](api/README.md)에 있고 코드는 없음
 - 기능별 오류 코드 enum과 기능별 처리기(각 기능 구현 시 추가)
-- 인증·인가 오류(401·403)의 공개 `code`와 Spring Security 연동(자리만 예약, D-09)
+- 인증·인가 오류(`UNAUTHENTICATED`·`FORBIDDEN`)의 코드 추가와 Spring Security 연동(자리만 예약, D-09)
 - DB·CODEF·AI 등 외부 연동 예외의 세부 분류(현재는 예상하지 못한 예외로 500 처리)
 - 서블릿 필터 단계 예외의 공통 응답
