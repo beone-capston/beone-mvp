@@ -42,12 +42,16 @@ public enum CodefResultCategory {
 	ACCESS_CONFIGURATION_ERROR,
 
 	/**
-	 * 카드번호·카드 비밀번호 입력이 필요한 카드 확인 경로: {@code CF-12108}(KB 카드소지확인), {@code CF-12401}·{@code CF-12834}(현대카드
-	 * 카드 비밀번호 인증). BeONE은 이 입력을 수집하지 않으므로 지원 보류다(카드 API 3개 문서의 입력부 특이사항).
+	 * 카드소지확인 경로: {@code CF-12108}(공식 오류 목록 249행 "조회에 실패했습니다. 대상기관 사이트에서 카드소지확인이 필요합니다."). 카드소지확인에는
+	 * 카드번호·카드 비밀번호 입력이 필요하고 BeONE은 이 입력을 수집하지 않으므로 지원 보류다.
 	 */
 	CARD_VERIFICATION_NOT_SUPPORTED,
 
-	/** 사본에 없는 코드, 코드 누락, {@code continue2Way}가 {@code true}가 아닌 {@code CF-03002}. 의미를 추정하지 않고 확인 필요로 둔다. */
+	/**
+	 * 위 분류에 넣지 않은 모든 코드(공식 목록에 있지만 분류하지 않은 코드 포함, 예: 270행 {@code CF-12401} "로그인 파라미터가 누락되었습니다.", 315행
+	 * {@code CF-12834} "계정 잠김 해제가 필요합니다."), 코드 누락, {@code continue2Way}가 {@code true}가 아닌 {@code CF-03002}. 의미를 추정하지
+	 * 않고 확인 필요로 둔다.
+	 */
 	UNCLASSIFIED;
 
 	private static final Map<String, CodefResultCategory> BY_CODE = Map.ofEntries(Map.entry("CF-00000", SUCCESS),
@@ -65,8 +69,7 @@ public enum CodefResultCategory {
 			Map.entry("CF-00004", ACCESS_CONFIGURATION_ERROR), Map.entry("CF-00005", ACCESS_CONFIGURATION_ERROR),
 			Map.entry("CF-00013", ACCESS_CONFIGURATION_ERROR), Map.entry("CF-00017", ACCESS_CONFIGURATION_ERROR),
 			Map.entry("CF-04015", ACCESS_CONFIGURATION_ERROR), Map.entry("CF-04038", ACCESS_CONFIGURATION_ERROR),
-			Map.entry("CF-12108", CARD_VERIFICATION_NOT_SUPPORTED), Map.entry("CF-12401", CARD_VERIFICATION_NOT_SUPPORTED),
-			Map.entry("CF-12834", CARD_VERIFICATION_NOT_SUPPORTED));
+			Map.entry("CF-12108", CARD_VERIFICATION_NOT_SUPPORTED));
 
 	private static final String ADDITIONAL_AUTHENTICATION_CODE = "CF-03002";
 
@@ -75,7 +78,7 @@ public enum CodefResultCategory {
 	 *
 	 * @param code 결과 코드. 없으면 빈 값
 	 * @param continue2Way {@code data.continue2Way}가 불리언 {@code true}인지
-	 * @return 분류. 사본에 없는 코드는 {@link #UNCLASSIFIED}
+	 * @return 분류. 분류 표에 없는 코드는 {@link #UNCLASSIFIED}
 	 */
 	public static CodefResultCategory classify(Optional<String> code, boolean continue2Way) {
 		if (code.isEmpty()) {

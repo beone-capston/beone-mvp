@@ -8,7 +8,7 @@ public enum LimitDeductionOrder {
 	/** 승인 순서. */
 	APPROVAL_ORDER,
 
-	/** 전표 매입 순서(01914). */
+	/** 전표 매입 순서(01664, 01914). */
 	PURCHASE_ORDER
 
 }
