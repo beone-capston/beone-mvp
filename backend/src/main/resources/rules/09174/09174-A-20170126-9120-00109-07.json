@@ -1,0 +1,320 @@
+{
+  "cardId": "09174",
+  "ruleVersion": "09174-A-20170126-9120-00109-07",
+  "status": "VERIFIED",
+  "evaluationOnly": false,
+  "validity": {
+    "from": "2026-07-14",
+    "to": null
+  },
+  "sources": [
+    {
+      "uri": "https://img2.kbcard.com/obj/card/download/09174__prdctOpmn_20260714.pdf",
+      "locator": "문서번호 A-20170126-9120-00109-07, 전체 3쪽"
+    }
+  ],
+  "policy": {
+    "performanceWindow": {
+      "value": "PREVIOUS_CALENDAR_MONTH",
+      "evidence": "E12"
+    },
+    "performanceDateBasis": {
+      "value": "APPROVAL",
+      "evidence": "E12"
+    },
+    "cancellationAttribution": {
+      "unresolved": "취소금액이 실적 제외라는 표기만 있고 귀속월 표기 없음"
+    },
+    "performanceExcludedNatures": [
+      "TAX"
+    ],
+    "performanceExcludedClasses": [
+      "ANNUAL_FEE",
+      "APARTMENT_FEE",
+      "CANCELLED_AMOUNT",
+      "CARD_LOAN",
+      "CASH_ADVANCE",
+      "FEES_AND_INTEREST",
+      "GIFT_CARD_PREPAID",
+      "GOVERNMENT_SUBSIDY",
+      "LATE_FEE",
+      "NON_APPROVAL_SLIP",
+      "TAX",
+      "UNIVERSITY_TUITION"
+    ],
+    "performanceExcludedClassesEvidence": "E13",
+    "excludesBenefitedSales": {
+      "value": true,
+      "evidence": "E13"
+    },
+    "limitPeriod": {
+      "value": "CALENDAR_MONTH",
+      "evidence": "E14"
+    },
+    "limitDeductionOrder": {
+      "unresolved": "승인·매입 순서 표기 없음. 승인 순서로 대체하지 않음. 단일 주문 계산에 쓰지 않음"
+    },
+    "newCardGrace": {
+      "value": {
+        "span": "UNTIL_END_OF_NEXT_MONTH",
+        "days": null,
+        "deemedPerformance": {
+          "unresolved": "문서는 실적이 없어도 서비스를 제공한다고만 적음. 간주 금액 표기 없음"
+        },
+        "services": [
+          "GREAT",
+          "ENJOY",
+          "CHECK",
+          "BASIC"
+        ]
+      },
+      "evidence": "E2"
+    }
+  },
+  "limitBuckets": [
+    {
+      "id": "GREAT",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 10000
+        }
+      ],
+      "parent": null,
+      "evidence": "E3"
+    },
+    {
+      "id": "ENJOY",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 5000
+        }
+      ],
+      "parent": null,
+      "evidence": "E5"
+    },
+    {
+      "id": "CHECK",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 5000
+        }
+      ],
+      "parent": null,
+      "evidence": "E7"
+    },
+    {
+      "id": "BASIC",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 5000
+        }
+      ],
+      "parent": null,
+      "evidence": "E9"
+    }
+  ],
+  "services": [
+    {
+      "id": "GREAT",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "STARBUCKS_STORE"
+        ]
+      },
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 5000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "GREAT"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "value": [
+          "CHECK"
+        ],
+        "evidence": "E11"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "stackingBasis": {
+        "value": "PRE_DISCOUNT_EACH_BUCKET",
+        "evidence": "E11"
+      },
+      "evidence": [
+        "E1",
+        "E3",
+        "E4",
+        "E15"
+      ]
+    },
+    {
+      "id": "ENJOY",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "BURGER_FASTFOOD"
+        ]
+      },
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 2000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "ENJOY"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "value": [
+          "CHECK"
+        ],
+        "evidence": "E11"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "stackingBasis": {
+        "value": "PRE_DISCOUNT_EACH_BUCKET",
+        "evidence": "E11"
+      },
+      "evidence": [
+        "E1",
+        "E5",
+        "E6",
+        "E15"
+      ]
+    },
+    {
+      "id": "CHECK",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "ALL_MERCHANTS"
+      },
+      "paymentMethods": [
+        "ELIGIBLE_SIMPLE_PAY"
+      ],
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 1000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "CHECK"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "value": [
+          "GREAT",
+          "ENJOY",
+          "BASIC"
+        ],
+        "evidence": "E11"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "stackingBasis": {
+        "value": "PRE_DISCOUNT_EACH_BUCKET",
+        "evidence": "E11"
+      },
+      "evidence": [
+        "E1",
+        "E7",
+        "E8",
+        "E15"
+      ]
+    },
+    {
+      "id": "BASIC",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "TRANSIT_BUS_SUBWAY",
+          "TAXI",
+          "TELECOM_SKT",
+          "TELECOM_KT",
+          "TELECOM_LGU"
+        ]
+      },
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 1000
+            }
+          }
+        }
+      ],
+      "limitBuckets": [
+        "BASIC"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "value": [
+          "CHECK"
+        ],
+        "evidence": "E11"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "stackingBasis": {
+        "value": "PRE_DISCOUNT_EACH_BUCKET",
+        "evidence": "E11"
+      },
+      "evidence": [
+        "E1",
+        "E9",
+        "E10",
+        "E15"
+      ]
+    }
+  ]
+}
