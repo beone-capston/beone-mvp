@@ -43,7 +43,8 @@ tasks.withType(Test).configureEach {
 // Unit tests: no Spring context, no Docker.
 tasks.named('test', Test) {
 	useJUnitPlatform {
-		excludeTags 'integration', 'web'
+		// codef-sandbox는 외부를 호출하므로 반드시 뺀다.
+		excludeTags 'integration', 'web', 'codef-sandbox'
 	}
 	// Read by MySqlVersionAlignmentTest; declared so edits re-run the test.
 	inputs.file(layout.projectDirectory.file('../docker-compose.yml'))
@@ -51,6 +52,9 @@ tasks.named('test', Test) {
 	// EvaluationFixtureMappingTest가 읽는 파일. fixture가 바뀌면 테스트를 다시 실행하도록 입력으로 선언한다.
 	inputs.file(layout.projectDirectory.file('../fixtures/evaluation-cases.json'))
 		.withPathSensitivity(PathSensitivity.NONE)
+	// RuleDataConsistencyTest가 읽는 근거 표. 표가 바뀌면 테스트를 다시 실행하도록 입력으로 선언한다.
+	inputs.dir(layout.projectDirectory.dir('../docs/rules'))
+		.withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Integration tests: @IntegrationTest (Testcontainers MySQL). Requires Docker.
@@ -75,6 +79,31 @@ def webTest = tasks.register('webTest', Test) {
 		includeTags 'web'
 	}
 	shouldRunAfter tasks.named('test')
+}
+
+// CODEF 샌드박스 형식 확인: 외부를 호출한다. check·build에 넣지 않고 사용자가 직접 실행한다(docs/development/codef-sandbox-check.md).
+tasks.register('codefSandboxCheck', Test) {
+	description = 'Calls the CODEF sandbox once per API and prints only allowed fields.'
+	group = LifecycleBasePlugin.VERIFICATION_GROUP
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform {
+		includeTags 'codef-sandbox'
+	}
+	systemProperty 'beone.codef.sandbox.confirmed', 'true'
+	outputs.upToDateWhen { false }
+	testLogging {
+		showStandardStreams = true
+		showExceptions = false
+		showCauses = false
+		showStackTraces = false
+	}
+}
+
+// 일반 테스트에는 실제 키를 넘기지 않는다. 키가 설정된 셸에서 실행해도 CODEF를 호출할 수 없다.
+tasks.withType(Test).matching { it.name != 'codefSandboxCheck' }.configureEach {
+	environment.remove('CODEF_CLIENT_ID')
+	environment.remove('CODEF_CLIENT_SECRET')
 }
 
 tasks.named('check') {

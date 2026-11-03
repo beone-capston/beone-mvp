@@ -9,6 +9,7 @@ import com.beone.api.benefit.money.Won;
 
 /**
  * 신규 카드 유예. 유예 기간 동안 대상 서비스는 전월 실적을 최소 {@code deemedPerformance}로 본다(D-03).
+ * 09174의 값은 문서 결과와 같은 효과의 모델 표현이며 문서 문구가 아니다. 유예 중 실적이 일부 있는 경우의 판정은 A+C에서 정한다(D-20).
  */
 public record NewCardGrace(GraceSpan span, Optional<Integer> days, Won deemedPerformance, Set<ServiceId> services) {
 
