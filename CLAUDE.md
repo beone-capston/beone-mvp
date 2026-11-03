@@ -96,6 +96,7 @@ cd backend
 - `webTest`: Docker·DB가 필요 없는 `@WebSliceTest` MockMvc 웹 슬라이스 테스트. API 응답·예외 처리를 바꾸면 실행한다(`docs/api.md`)
 - `integrationTest`: Docker가 필요한 Testcontainers MySQL 통합 테스트
 - `build`: 단위·웹·통합 테스트를 포함하므로 Docker 필요
+- `codefSandboxCheck`: 외부 CODEF 샌드박스를 호출한다. 위 명령에 포함되지 않으며 사용자가 직접 실행한다(`docs/development/codef-sandbox-check.md`)
 
 로컬 API를 실행할 때는 먼저 프로젝트 루트에서 MySQL을 실행하고, README에 따라 루트 `.env`를 백엔드 프로세스에 전달한다.
 

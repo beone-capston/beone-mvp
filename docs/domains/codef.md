@@ -4,7 +4,7 @@
 
 `codef`는 CODEF 카드 API 응답 본문을 BeONE이 쓸 수 있는 비민감 값으로 해석하는 **응답 해석 경계**입니다(#41). CODEF(금융기관 데이터를 대신 조회해 주는 외부 API)의 요청 전송, OAuth 토큰(접근 권한을 토큰으로 위임하는 인증 방식의 발급값), 암호화, 계정 연결(connectedId: CODEF가 연결된 금융기관 계정을 가리키는 식별값)과는 분리되어 있으며, 이 패키지는 응답 문자열을 받아 결과 코드 분류와 `data` 항목만 돌려줍니다. 그 앞단의 전송 단계 해석(#43)은 HTTP 상태 코드와 응답 본문을 받아 상태를 구분하고 본문을 URL 디코딩합니다. 실제 HTTP 호출은 하지 않습니다.
 
-구현된 범위는 승인내역·보유카드·실적조회 응답의 해석, 공통 결과 코드의 분류, 빈 값·금액·코드 값의 보수적 해석입니다. HTTP 호출, 요청 DTO(요청 값을 담아 계층 사이로 옮기는 객체), 토큰 발급·갱신, 추가 인증 2차 요청, DB 저장, 엔드포인트, BeONE 상태값(`StateValue`: 값과 출처·기준 기간을 함께 담는 `benefit` 도메인 타입)으로의 변환은 구현하지 않았습니다. 이 패키지의 테스트는 합성 응답만 쓰며 실제 응답 검증이 아닙니다.
+구현된 범위는 승인내역·보유카드·실적조회 응답의 해석, 공통 결과 코드의 분류, 빈 값·금액·코드 값의 보수적 해석, 그리고 그 앞단의 [전송 계층](#전송-계층)(토큰 발급·캐시, 상품 요청, 시간 초과, 호출 상한)입니다. 계정 연결, RSA 암호화, 추가 인증 2차 요청, DB 저장, 엔드포인트, BeONE 상태값(`StateValue`: 값과 출처·기준 기간을 함께 담는 `benefit` 도메인 타입)으로의 변환은 구현하지 않았습니다. 이 패키지의 테스트는 합성 응답만 쓰며 실제 응답 검증이 아닙니다.
 
 CODEF 결과를 쓸 수 없는 경우(오류 분류, 미분류, 형식 오류, 값 없음)에도 수동 입력 경로는 유지해야 합니다(CLAUDE.md 제품 경계). 이 패키지는 그 판단 재료만 제공하며 수동 입력 API는 없습니다.
 
@@ -16,7 +16,7 @@ CODEF 결과를 쓸 수 없는 경우(오류 분류, 미분류, 형식 오류, �
 - 사본의 JSON 구조도는 공식 예시 하나에서 값만 뺀 것입니다. 완전한 스키마나 실제 응답 검증이 아닙니다.
 - 전송 단계 근거: 공식 SDK `codef-io/easycodef-java-v2`(MIT) 커밋 `721f5661a52da3bcee8f24c86c04557e1e073e9a`의 `ResponseHandler`·`EasyCodefConnector`·`CodefResponseCode`. 공식 SDK 구현에서 확인한 동작이며, 공식 명세 문서가 아닙니다. SDK 동작이 서버 계약 전체를 보장하지는 않습니다(아래 "전송 단계" 절).
 - KB 조건·취소 표현·오류 목록 대조 근거(#45): Aside가 공식 공개 페이지와 공식 연결 시트에서 수집한 자료(관찰 2026-11-01T08:16:27Z). 카드 개인 API 파라미터 상세 시트와 공식 오류코드 페이지 전체 다운로드(587행)이며, 실제 응답 관측은 없습니다. KB 상세는 [KB국민카드 조회 조건 근거](codef-kb.md)에 있습니다.
-- 미확인: HTTP 헤더 중 Content-Type, 시간 초과·재시도 정책, 서버 쪽 인코딩 계약(SDK의 디코딩 동작만 확인), OAuth 발급·갱신의 서버 계약, 기관별 필수조건 시트 본문, 승인 취소·부분취소 상세 탭, 오류 각 코드의 상세 조치(전체 목록 587행은 #45에서 확보해 분류 코드만 대조), 별도 명세 릴리스 버전.
+- 미확인(샌드박스 확인 전): 상품 요청 Content-Type을 서버가 받는지, 토큰 응답의 실제 인코딩과 만료 필드, 서버 쪽 인코딩 계약(SDK의 디코딩 동작만 확인), 실제 지연, 기관별 필수조건 시트 본문, 승인 취소·부분취소 상세 탭, 오류 각 코드의 상세 조치(전체 목록 587행은 #45에서 확보해 분류 코드만 대조), 별도 명세 릴리스 버전.
 
 ## 핵심 용어
 
@@ -78,10 +78,42 @@ codef/
 
 SDK에서 확인한 것과 하지 않은 것:
 
-- 확인(SDK 구현): 상품 요청은 POST, `Authorization: Bearer <access token>`, 본문은 UTF-8 JSON 문자열입니다. 토큰은 `https://oauth.codef.io/oauth/token?grant_type=client_credentials&scope=read`에 `Authorization: Basic …`으로 POST하며, 토큰 응답은 URL 디코딩하지 않습니다. 상품 응답은 상태와 관계없이 먼저 디코딩한 뒤 200이면 해석하고, 401은 인증 오류, 그 밖은 서버 오류로 나눕니다. `data`는 객체를 먼저 시도하고 아니면 배열로 읽습니다.
+- 확인(SDK 구현): 상품 요청은 POST, `Authorization: Bearer <access token>`, 본문은 UTF-8 JSON 문자열입니다. SDK는 토큰을 쿼리 문자열로 요청하고 토큰 응답을 디코딩하지 않습니다. 전송 계층은 공식 REST API 예제의 form 본문을 쓰고, 토큰 응답은 [전송 계층](#전송-계층)의 규칙으로 읽습니다. 상품 응답은 상태와 관계없이 먼저 디코딩한 뒤 200이면 해석하고, 401은 인증 오류, 그 밖은 서버 오류로 나눕니다. `data`는 객체를 먼저 시도하고 아니면 배열로 읽습니다.
 - SDK와 다르게 둔 것: SDK는 401·그 밖의 상태에서 디코딩한 본문을 예외에 싣지만, 여기서는 본문을 읽지도 보관하지도 않습니다. SDK는 `result`가 없으면 파싱 오류로 보지만, 여기서는 기존 파서 규칙(결과 미분류, `data`는 별도 해석)을 따릅니다.
-- 미확인: Content-Type(SDK가 `StringEntity(본문, UTF-8)`만 쓰고 명시하지 않음), 연결·응답 시간 초과와 재시도(SDK는 기본 클라이언트 설정만 사용), `CF-12872`의 구체적 의미(공식 오류 목록 340행 설명은 "인증 요청이 정상적으로 완료되지 않았습니다. 확인 후 거래하시기 바랍니다."뿐이고 추가 설명이 없으며, SDK 상수 이름 `isAddAuthExceedResponse`만으로 의미를 정하지 않아 미분류), 기관별 필수조건, 부분취소 상세, 오류 각 코드의 상세 조치.
-- 만들지 않은 것: HTTP 클라이언트, 토큰 발급·캐시·갱신, 요청 본문·요청 DTO, RSA 암호화, connectedId, 추가 인증 2차 요청, 설정 키·비밀값·DB. 요청 쪽에는 수집하지 않는 입력(카드번호·실물 카드 비밀번호), 별도 결정이 필요한 입력(인증서), 연결 요청에서만 받을 입력(카드사 홈페이지 아이디·비밀번호, [D-14 원칙 9](../decisions.md#d-09d-14-확정-정책))이 섞여 있고, 키 없이는 실제로 검증할 수 없습니다.
+- 미확인: Content-Type(SDK가 `StringEntity(본문, UTF-8)`만 쓰고 명시하지 않음. 전송 계층의 `application/json`은 제안), `CF-12872`의 구체적 의미(공식 오류 목록 340행 설명은 "인증 요청이 정상적으로 완료되지 않았습니다. 확인 후 거래하시기 바랍니다."뿐이고 추가 설명이 없으며, SDK 상수 이름 `isAddAuthExceedResponse`만으로 의미를 정하지 않아 미분류), 기관별 필수조건, 부분취소 상세, 오류 각 코드의 상세 조치.
+- 이 단계에서 만들지 않은 것: 요청 DTO, RSA 암호화, connectedId, 추가 인증 2차 요청, DB. 요청 쪽에는 수집하지 않는 입력(카드번호·실물 카드 비밀번호), 별도 결정이 필요한 입력(인증서), 연결 요청에서만 받을 입력(카드사 홈페이지 아이디·비밀번호, [D-14 원칙 9](../decisions.md#d-09d-14-확정-정책))이 섞여 있고, 키 없이는 실제로 검증할 수 없습니다.
+
+## 전송 계층
+
+`codef.transport` 패키지입니다(#62). 호출 결과를 위 전송 단계의 `CodefProductResponseReader`에 넘깁니다. **합성 응답과 로컬 스텁 서버로만 시험했습니다. 실제 CODEF 호출 결과가 아닙니다.** 샌드박스 확인 전에는 아래 "제안" 값과 토큰 응답 형식이 맞는지 모릅니다.
+
+- [CodefClient](../../backend/src/main/java/com/beone/api/codef/transport/CodefClient.java): 진입점. 토큰 캐시를 공유하고 관측을 엽니다.
+- [CodefObservation](../../backend/src/main/java/com/beone/api/codef/transport/CodefObservation.java): 관측 1회. 객체 하나가 호출 상한의 집계 범위이고, 토큰과 상품 API마다 3회까지 보냅니다. 어떤 조회를 관측 1회로 볼지는 호출자가 정하며, 프로세스를 넘어선 누적은 세지 않습니다. 로그인 입력(`id`, `password`, `cardNo`, `cardPassword`)은 거부합니다.
+- [CodefCallResult](../../backend/src/main/java/com/beone/api/codef/transport/CodefCallResult.java): `Answered`(HTTP 응답을 받음. 401·서버 오류 포함) 또는 `Failed`(단계, 이유, `httpStatus`). `httpStatus`(`OptionalInt`)는 토큰 단계에서 응답을 받은 실패(`TOKEN_REJECTED`, `TOKEN_UNREADABLE`)에만 채워집니다.
+- [CodefTokenCache](../../backend/src/main/java/com/beone/api/codef/transport/CodefTokenCache.java): 토큰을 서버 메모리에만 둡니다. 발급 시각 + 7일이 지나면 재발급하고, 동시 요청은 한 번만 발급합니다.
+- [CodefHttp](../../backend/src/main/java/com/beone/api/codef/transport/CodefHttp.java): 요청 한 번을 보냅니다. JDK HTTP 클라이언트를 쓰고 TLS 1.2 이상만 허용합니다.
+- [CodefApiKeys](../../backend/src/main/java/com/beone/api/codef/transport/CodefApiKeys.java): 키를 프로세스 환경 변수에서만 읽습니다. 없으면 "설정 안 됨"이고 서버는 뜹니다.
+- [CodefTransportSettings](../../backend/src/main/java/com/beone/api/codef/transport/CodefTransportSettings.java), [CodefTransportConfiguration](../../backend/src/main/java/com/beone/api/codef/transport/CodefTransportConfiguration.java): 호스트·시간 초과 설정과 조립.
+
+```java
+CodefObservation observation = codefClient.startObservation();
+CodefCallResult<CodefHeldCard> result = observation.heldCards(Map.of("organization", "0301"));
+```
+
+| 항목 | 동작 | 근거 |
+| --- | --- | --- |
+| 토큰 요청 | `POST https://oauth.codef.io/oauth/token`, form 본문 `grant_type=client_credentials&scope=read`, Basic 인증 | 공식 REST API 예제 |
+| 토큰 응답 | `{`로 시작하면 그대로, 아니면 URL 디코딩 뒤 JSON으로 읽음 | 사용자 결정. 샌드박스 확인 뒤 한쪽으로 고정 |
+| 상품 요청 | POST, Bearer, UTF-8 JSON. `Content-Type: application/json` | 본문은 SDK, Content-Type은 제안. 샌드박스에서 재확인 |
+| 시간 초과 | 상품 310초, 토큰 110초, 연결 5초. 본문 수신까지 포함 | 300초는 공식. 여유 10초, 110초, 5초는 제안 |
+| 재시도 | 없음. 리다이렉트도 따라가지 않음 | 사용자 결정 |
+| 401, `CF-00401` | 토큰을 버리고 결과를 돌려줌. 다시 보내지 않음 | 제안 |
+| 호출 상한 | 관측 1회에 API별 3회. 넘으면 보내기 전에 거부 | 사용자 결정 |
+| 로그 | API 이름, HTTP 상태, `result.code`(`CF-` 5자리 형식만, 그 밖은 `UNRECOGNIZED`) | CLAUDE.md |
+
+시간 초과나 연결 끊김은 상대가 처리했는지 알 수 없다는 뜻입니다. 사용자가 다시 실행합니다. JDK 클라이언트는 연결 수립 실패 때 내부에서 연결을 다시 시도할 수 있습니다. 이 단계는 요청이 서버에 닿기 전이고, 연결된 뒤 끊긴 요청을 다시 보내지 않는 것은 테스트로 확인했습니다.
+
+환경 변수와 샌드박스 확인 절차는 [CODEF 설정과 샌드박스 확인 절차](../development/codef-sandbox-check.md)를 봅니다. 310초 대기를 동기로 둘지 비동기로 둘지는 2차 API 명세에서 정합니다. 이 패키지를 호출하는 엔드포인트는 아직 없습니다.
 
 ## 결과 코드 분류
 
