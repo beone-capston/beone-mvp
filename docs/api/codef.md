@@ -293,7 +293,7 @@ to
 
 - `performances[].usedInCalculation` · 항상 `false`. 사용자가 확인해 수동 입력해야 계산에 쓴다(D-16)
 - `incompleteRows[]` · 원장에 넣지 않은 행과 이유. 카드번호·승인번호 원문은 담지 않는다
-- 부분 동기화 실패와 전체 실패를 구분한다. 일부 항목만 실패하면 200과 `data.partialFailures[]`(항목: `target`=`HELD_CARDS`/`APPROVALS`/`PERFORMANCES`, 공개 `code`·`message`, 실패가 없으면 `[]`)를 담고, 전부 실패하면 502를 준다(제안). timeout을 504로 나눌지는 전송 계약과 함께 정한다
+- 부분 동기화 실패와 전체 실패를 구분한다. 일부 항목만 실패하면 200과 `data.partialFailures[]`(항목: `target`=`HELD_CARDS`/`APPROVALS`/`PERFORMANCES`(제안, 샌드박스 확인 뒤 확정), 공개 `code`·`message`, 실패가 없으면 `[]`)를 담고, 전부 실패하면 502를 준다(제안). timeout을 504로 나눌지는 전송 계약과 함께 정한다
 - HTTP 200만으로 CODEF 성공으로 보지 않는다. URL 디코딩 뒤 결과 코드를 확인한다. 전체 카드번호가 오면 모델·저장·로그·브라우저로 넘기기 전에 제거한다. 카드 이용한도를 월 혜택 한도로 쓰지 않는다
 
 ### 실패 응답

@@ -68,10 +68,6 @@ MVP는 로그인이 없고 시드에 넣은 고정 사용자 2명만 있습니�
 
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
-### 명세 단계 미정
-
-- 헤더 이름 `X-BeONE-Demo-User`와 값 이름은 제안입니다. 프런트 연동 전에 확정합니다.
-
 ### 근거
 
 - 결정 기록 D-09
@@ -320,10 +316,6 @@ notSupported
 
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
-### 명세 단계 미정
-
-- 같은 상품의 카드를 두 장 보유하는 경우를 허용할지(현재 제안: 중복 거부). `UNMAPPED`·`NOT_SUPPORTED` 카드는 이 검사를 하지 않는다.
-
 ### 근거
 
 - 결정 기록 D-15
@@ -435,11 +427,14 @@ status
 
 - **409 `PORTFOLIO_READ_ONLY`**: 가상 포트폴리오 사용자가 요청한 경우
 
+- **409 `USER_CARD_DUPLICATED`**: 같은 상품으로 매핑을 확인하려는 경우
+  - 같은 사용자에게 같은 `cardProductId`의 `USER_CONFIRMED` 카드가 이미 있음(D-23). 등록 때 검사를 받지 않은 `UNMAPPED` 카드도 여기서 막는다
+
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
 ### 근거
 
-- 결정 기록 D-15
+- 결정 기록 D-15, D-23
 
 ## PATCH /api/v1/me/cards/{userCardId} — 보유 카드 표시 이름·추천 제외 변경
 
@@ -462,6 +457,7 @@ X-BeONE-Demo-User: MY_CARDS
 ```
 
 - 보낸 필드만 바꾼다. 빈 객체는 400이다.
+- 사용자가 뺀 카드만 있으면 추천의 `conditional`은 `false`다(D-22, D-23).
 - 매핑은 이 API로 바꾸지 않는다.
 
 ### Response Body
@@ -474,10 +470,6 @@ X-BeONE-Demo-User: MY_CARDS
 - **404 `USER_CARD_NOT_FOUND`**: 없거나 다른 사용자의 카드
 - **409 `REPRESENTATIVE_CARD_IN_USE`**: 대표 카드 고정 모드의 대표 카드를 추천에서 빼는 경우
 - **409 `PORTFOLIO_READ_ONLY`**: 가상 포트폴리오 사용자
-
-### 명세 단계 미정
-
-- 사용자가 뺀 카드만 있을 때 조건부 표시: 사용자가 고른 제외이므로 `conditional`을 켜지 않는 안을 제안합니다.
 
 ### 근거
 
@@ -520,10 +512,8 @@ X-BeONE-Demo-User: MY_CARDS
 
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
-### 명세 단계 미정
-
-- 이미 해제한 카드의 재요청: 현재 404. 기존 초안은 204(멱등)를 제안했다.
-- 자동 추천 모드에서 동률 기준으로만 쓰는 대표 카드를 해제하면 대표 카드를 비운다(제안).
+- 이미 해제한 카드 재요청은 404다(D-23).
+- 자동 추천 모드에서 동률 기준으로만 쓰는 대표 카드를 해제하면 대표 카드를 비운다(D-23).
 
 ### 근거
 
