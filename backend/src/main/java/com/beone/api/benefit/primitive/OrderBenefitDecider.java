@@ -179,10 +179,10 @@ public final class OrderBenefitDecider {
 		if (!stacked) {
 			reasons.addAll(stackingReasons(positives, servicesById));
 		}
-		else if (reasons.isEmpty() && contributionTotal(positives) > order.amount().value()) {
+		else if (reasons.isEmpty() && contributionsExceedPayment(positives, order.amount().value())) {
 			reasons.add(new PendingReason(PendingReason.Kind.STACKING_EXCEEDS_PAYMENT,
-					positives.stream().map(ServiceCandidate::serviceId).toList(), "stacked total "
-							+ contributionTotal(positives) + " exceeds payment amount " + order.amount().value()));
+					positives.stream().map(ServiceCandidate::serviceId).toList(),
+					"stacked contributions exceed payment amount " + order.amount().value()));
 		}
 		reasons.sort(PendingReason.ORDER);
 
@@ -302,7 +302,21 @@ public final class OrderBenefitDecider {
 	}
 
 	/**
-	 * 양수 후보의 한도 적용 후 금액 합계. 서비스별 절사·한도 적용이 끝난 값을 더하기만 한다.
+	 * 한도 적용 후 금액이 결제 금액을 넘는지 본다. 합계를 만들지 않고 결제 금액에서 차례로 빼므로 오버플로가 없다. 같으면 넘지 않는다.
+	 */
+	private static boolean contributionsExceedPayment(List<ServiceCandidate> positives, long payment) {
+		long remaining = payment;
+		for (ServiceCandidate candidate : positives) {
+			remaining -= candidate.amountAfterLimit().confirmedWon().value();
+			if (remaining < 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 양수 후보의 한도 적용 후 금액 합계. 결제 금액을 넘지 않음을 확인한 뒤에만 쓴다. 서비스별 절사·한도 적용이 끝난 값을 더하기만 한다.
 	 */
 	private static long contributionTotal(List<ServiceCandidate> positives) {
 		long total = 0;

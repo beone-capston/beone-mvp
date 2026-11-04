@@ -645,6 +645,32 @@ class OrderBenefitDeciderTest {
 		}
 
 		@Test
+		void threeServicesAboveThePaymentNameTheWholeStack() {
+			OrderBenefit.Decided result = decide(select(based("SYN-A", 4_000, "SYN-B", "SYN-C"),
+					based("SYN-B", 4_000, "SYN-A", "SYN-C"), based("SYN-C", 4_000, "SYN-A", "SYN-B")));
+
+			assertPending(result);
+			assertThat(result.reasons()).hasSize(1);
+			assertThat(result.reasons().get(0).kind()).isEqualTo(PendingReason.Kind.STACKING_EXCEEDS_PAYMENT);
+			assertThat(result.reasons().get(0).services()).containsExactly(ServiceId.of("SYN-A"), ServiceId.of("SYN-B"),
+					ServiceId.of("SYN-C"));
+		}
+
+		@Test
+		void paymentIsComparedWithTheTotalAfterLimits() {
+			// 한도 적용 전 합계 11,000원이면 초과로 잘못 판정된다. 적용 뒤 합계는 1,000 + 5,000 = 6,000원이다.
+			LimitBucket smallCap = new LimitBucket(BUCKET_X, List.of(new LimitTier(Won.ZERO, Won.of(1_000))), Optional.empty());
+			OrderBenefit.Decided result = withBuckets(List.of(smallCap, bucket(BUCKET_Y, Optional.empty())),
+					based("SYN-A", 6_000, List.of(BUCKET_X), "SYN-B"), based("SYN-B", 5_000, List.of(BUCKET_Y), "SYN-A"));
+
+			assertStacked(result, 6_000, "SYN-A", "SYN-B");
+			assertThat(result.services()).extracting(service -> service.candidate().standaloneAmount())
+				.containsExactly(BenefitAmount.confirmed(6_000), BenefitAmount.confirmed(5_000));
+			assertThat(result.services()).extracting(OrderServiceBenefit::contribution)
+				.containsExactly(BenefitAmount.confirmed(1_000), BenefitAmount.confirmed(5_000));
+		}
+
+		@Test
 		void anotherReasonBlocksStackingWithoutAStackingReason() {
 			OrderBenefit.Decided result = decide(select(based("SYN-A", 5_000, "SYN-B"), based("SYN-B", 5_001, "SYN-A"),
 					unresolvedCalculation("SYN-P")));

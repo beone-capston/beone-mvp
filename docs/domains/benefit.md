@@ -140,7 +140,7 @@ if (raw.hasFractionalWon()) {
 
 [ServiceLimits](../../backend/src/main/java/com/beone/api/benefit/primitive/ServiceLimits.java)는 서비스의 한도 체인과 입력 사용액으로 남은 한도(버킷별 한도 − 사용액의 최솟값)를 구합니다. [NewCardGraceJudge](../../backend/src/main/java/com/beone/api/benefit/primitive/NewCardGraceJudge.java)는 등록일·주문일·입력 실적으로 유예 적용과 구간을 고를 실적을 정합니다.
 
-모의 승인 뒤 사용액 반영, 중복 적용 금액 계산, 실적 기간 판정, 월 1회 제한은 이 패키지에 없습니다.
+모의 승인 뒤 사용액 반영, D-13 #35 8번 밖의 중복 적용 금액 계산, 실적 기간 판정, 월 1회 제한은 이 패키지에 없습니다.
 
 #### ServiceCandidateEvaluator: 단일 서비스 후보 판정(#31)
 
@@ -267,7 +267,7 @@ if (result instanceof OrderBenefit.Decided decided) {
 - [UnsupportedService](../../backend/src/main/java/com/beone/api/benefit/result/UnsupportedService.java)·[UnsupportedReason](../../backend/src/main/java/com/beone/api/benefit/result/UnsupportedReason.java): 취합기가 판정하지 않는 서비스와 이유(`HAS_LIMIT_BUCKETS`·`REQUIRES_SELECTION`), 규칙 선택 단계 사유 원문. 금액이 없으며 0원 후보가 아닙니다.
 - [OrderBenefit](../../backend/src/main/java/com/beone/api/benefit/result/OrderBenefit.java): 카드 한 장·주문 한 건의 혜택 결정 결과(#35). 규칙 사용 불가 `Unavailable(cardId, status, reason)`(카드 금액 `확인 필요`)과 결정 결과 `Decided(source, services, rechecks, reasons, orderBenefit, serviceNotes)`로 나뉩니다. 생성자가 확인하는 조합은 위 결정기 절에 적었습니다.
 - [PerformanceRecheck](../../backend/src/main/java/com/beone/api/benefit/result/PerformanceRecheck.java): 실적 정책 조건 때문에 최종 채택·기여액을 정하지 못한 원본 후보와 사유. 후보는 실적 미충족만 있는 확정 0원이거나 미충족 사유 없는 확정 0원이어야 하며, 그 0원은 최종 기여액이 아닙니다.
-- [PendingReason](../../backend/src/main/java/com/beone/api/benefit/result/PendingReason.java): 카드 금액을 확정하지 못한 사유 `(kind, services, detail)`. 종류는 `NEEDS_CONFIRMATION`·`UNSUPPORTED`·`PERFORMANCE_POLICY`(서비스 1개)와 `STACKING_UNRESOLVED`·`STACKING_CONFIRMED`(서비스 쌍)이며, 서비스 ID 오름차순·공백 없는 설명을 생성 시 확인합니다.
+- [PendingReason](../../backend/src/main/java/com/beone/api/benefit/result/PendingReason.java): 카드 금액을 확정하지 못한 사유 `(kind, services, detail)`. 종류는 `NEEDS_CONFIRMATION`·`UNSUPPORTED`·`PERFORMANCE_POLICY`(서비스 1개), `STACKING_UNRESOLVED`·`STACKING_CONFIRMED`(서비스 쌍), `STACKING_EXCEEDS_PAYMENT`(서비스 2개 이상)이며, 서비스 ID 오름차순·공백 없는 설명을 생성 시 확인합니다.
 
 `ServiceCandidate`·`OrderServiceBenefit`은 기존 `ServiceBenefit`과 별개입니다. `ServiceCandidate`는 `ServiceCandidateEvaluator`가 만들고 `CardServiceCandidateCollector`가 모을 수 있지만, 채택 여부와 기여액은 `OrderBenefitDecider`가 정해 `OrderBenefit`에 담습니다. 이 타입들 자체는 채택·기여액을 계산·추론하지 않고, 아직 `CardBenefit`에 연결되지 않았습니다. 미확정 금액을 0원으로 바꾸는 경로도 없습니다.
 
