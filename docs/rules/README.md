@@ -36,7 +36,7 @@
 | `unevaluatedExclusions` | 주문 입력에 없어 판정하지 못하는 제외 조건의 문서 표현 | #65. 서비스 결과에 그대로 담음. API 응답은 미구현 | [D-20](../decisions.md#d-20-확정-정책) |
 | `displayName` | 화면 이름. 내부 서비스를 나눠도 문서 이름을 유지(09174 `BASIC`) | 미구현(API) | [D-20](../decisions.md#d-20-확정-정책) |
 | `newCardGrace.value.deemedPerformance` | 유예 중 간주 실적. 09174의 30만원은 문서 결과와 같은 효과의 모델 표현이다 | #65 | [D-20](../decisions.md#d-20-확정-정책) |
-| `newCardGrace.value.partialPerformance` | 유예 중 전월 실적이 0원 초과 간주 실적 미만일 때의 처리. `NEEDS_CONFIRMATION`(문구 "실적이 없는 경우에도": 09174·01664·09271) 또는 `DEEMED_TIER`(문구 "1구간 서비스 제공": 01914). 근거는 `newCardGrace.evidence`이고 규칙 값을 바꾸지 않는 표시 필드다 | #65 | [D-20](../decisions.md#d-20-확정-정책) |
+| `newCardGrace.value.partialPerformance` | 유예 중 전월 실적이 0원 초과 간주 실적 미만일 때의 처리. `NEEDS_CONFIRMATION`(문구 "실적이 없는 경우에도": 09174·01664·09271) 또는 `DEEMED_TIER`(문구 "1구간 서비스 제공": 01914). 판정 결과를 바꾸는 값이다. `NEEDS_CONFIRMATION`이면 0원 초과 간주 실적 미만을 확인 필요로 두고, `DEEMED_TIER`면 간주 구간을 쓴다. 근거는 `newCardGrace.evidence`다 | #65 | [D-20](../decisions.md#d-20-확정-정책) |
 
 `evidence`와 `performanceExcludedClassesEvidence`는 근거 표와 연결하는 ID입니다. 로더는 형식만 확인하고 모델에 담지 않습니다. 근거 표에 ID가 있는지는 테스트(`RuleDataConsistencyTest`)가 확인합니다.
 

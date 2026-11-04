@@ -83,7 +83,7 @@ CODEF·수동 입력·추론 값에는 갱신 시각이 필요합니다. 추론 
 - [VerificationStatus](../../backend/src/main/java/com/beone/api/benefit/rule/VerificationStatus.java): VERIFIED·AI_DRAFT·CANDIDATE·SYNTHETIC_TEST_SNAPSHOT 구분.
 - [OfficialSource](../../backend/src/main/java/com/beone/api/benefit/rule/OfficialSource.java): 공식 자료 주소와 페이지·절 위치.
 - [BenefitService](../../backend/src/main/java/com/beone/api/benefit/rule/BenefitService.java): 대상·제외 업종, 결제 방식, 금액 조건, 실적 구간, 한도, 선택 여부, 중복 혜택과 원 미만 처리 조건.
-- [ServiceDetails](../../backend/src/main/java/com/beone/api/benefit/rule/ServiceDetails.java): 서비스의 화면 이름, 중복 합산 기준, 원 미만 처리 근거, 포함 관계 표시, 미판정 제외 조건. 로더가 담기만 하고 판정 코드는 아직 쓰지 않습니다.
+- [ServiceDetails](../../backend/src/main/java/com/beone/api/benefit/rule/ServiceDetails.java): 서비스의 화면 이름, 중복 합산 기준, 원 미만 처리 근거, 포함 관계 표시, 미판정 제외 조건. 포함 관계 표시는 판정에 쓰입니다. 주문 업종이 쌍의 코드이면 대상 불일치로 확정하지 않고 확인 필요로 처리합니다. 원 미만 처리 근거와 미판정 제외 조건은 결과 표시에 쓰고, 화면 이름과 중복 합산 기준은 아직 쓰지 않습니다.
 - [InclusionUnconfirmed](../../backend/src/main/java/com/beone/api/benefit/rule/InclusionUnconfirmed.java): 포함 관계가 확인되지 않은 업종 코드 쌍. 서비스의 쌍은 대상·제외 코드와, 정책의 쌍은 실적 제외 코드와 연결되는지 생성 시 검사합니다.
 - [StackingBasis](../../backend/src/main/java/com/beone/api/benefit/rule/StackingBasis.java): 중복 합산의 계산 기준. 값이 없는 서비스는 합산하지 않습니다.
 - [TermBasis](../../backend/src/main/java/com/beone/api/benefit/rule/TermBasis.java): 값이 문서 대조가 아닌 사용자 결정임을 결정 번호와 함께 표시합니다.
@@ -156,7 +156,7 @@ if (raw.hasFractionalWon()) {
 2. 실적이 가장 낮은 구간에도 못 미칠 때 실적 미충족(`NOT_APPLICABLE_PERFORMANCE`)은 신규 유예 근거가 `CONFIRMED_ABSENT`일 때만 확정합니다. 유예는 실적을 간주 실적 이상으로 올려 보므로, 근거가 `PRESENT`·`UNDETERMINED`이면 실적 부족은 확인 필요이고, 최상위가 아닌 구간에 도달한 경우도 더 높은 구간이 될 수 있어 확인 필요입니다. 이는 `ConditionalTerm`·`NewCardGrace`의 기존 계약을 적용한 것이며 새 금융 정책이 아닙니다. 최상위 구간에 도달했거나 실적 조건이 없는 서비스는 유예 근거와 관계없이 계산합니다.
 3. 미충족이 없으면 확인 필요 사유를 봅니다. 확인 필요 사유는 `unmetConditions`에 넣지 않고 `BenefitAmount.NeedsConfirmation`의 사유 문자열에 모읍니다.
    - 계산식 미확정(`BenefitService.unresolvedCalculationReasons()`가 비어 있지 않음): 다른 식으로 대체하지 않습니다.
-   - 체인 버킷 사용액이 `UNKNOWN`이거나 입력되지 않음: `otherBucketsUsed`로 대신하지 않습니다.
+   - 체인 버킷 사용액이 `UNKNOWN`이거나 입력되지 않음: `otherBucketsUsed`로 대신하지 않습니다. 취합기는 기준 기간이 주문 월이 아닌 사용액을 `UNKNOWN`으로 바꿔 넘깁니다(D-16).
    - 체인 버킷 사용액이 한도보다 큼: 입력이 규칙과 모순되므로 확인 필요이고 `limitReason=USAGE_EXCEEDS_LIMIT`입니다.
    - 남은 한도가 0이면 위 확인 필요 사유가 없을 때 `LIMIT_EXHAUSTED` 확정 0원입니다.
    - 정액이 0보다 큰 남은 한도보다 큼: 정액을 일부만 지급한다는 근거가 없어 확인 필요입니다.
@@ -207,7 +207,7 @@ ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service, order, 
 
 ```java
 // 합성 예시: 규칙 선택은 이미 끝났고, 월간 상태는 같은 카드의 것
-CardServiceCandidates result = CardServiceCandidateCollector.collect(selection, order, state);
+CardServiceCandidates result = CardServiceCandidateCollector.collect(selection, order, state, registeredAt);
 if (result instanceof CardServiceCandidates.Collected collected) {
 	collected.candidates();          // 확정 금액(0원 포함) 후보. 채택 여부는 아직 없음
 	collected.needingConfirmation(); // 단계와 사유가 있는 확인 필요
@@ -239,7 +239,7 @@ if (result instanceof CardServiceCandidates.Collected collected) {
 // 합성 예시: 규칙 선택은 이미 끝났고, 근거는 같은 카드의 실적 기간에 대한 것(호출자 책임)
 PolicyTermEvidence evidence = new PolicyTermEvidence(cardId, TriggerEvidence.UNDETERMINED,
 		TriggerEvidence.UNDETERMINED); // 근거가 없으면 UNDETERMINED
-OrderBenefit result = OrderBenefitDecider.decide(selection, order, state, evidence);
+OrderBenefit result = OrderBenefitDecider.decide(selection, order, state, registeredAt, evidence);
 if (result instanceof OrderBenefit.Decided decided) {
 	decided.services();     // 채택·기여액을 정한 후보(미정 표시 포함)
 	decided.rechecks();     // 실적 정책 때문에 재확인할 후보. 원본 0원은 최종 기여액이 아님
@@ -327,7 +327,7 @@ RuleTerm<FractionalWonPolicy> rounding = RuleTerm.unresolved("공식 근거 확�
 - 날짜는 Asia/Seoul의 달력 날짜라는 입력 계약입니다. LocalDate 자체가 시간대를 변환하는 것은 아닙니다.
 - 모델 검증과 규칙 선택 성공은 실제 공식 약관의 정확성 또는 추천 엔진 정확성을 자동으로 입증하지 않습니다.
 - MVP 주문 입력은 일시불·일반 매장 결제를 가정합니다. 입력에 없는 제외 조건(`unevaluatedExclusions`)은 판정하지 않으므로, 그런 조건이 있는 서비스의 확정 금액은 실제보다 클 수 있습니다([D-20](../decisions.md#d-20-확정-정책)). 결과에 표시하는 필드는 아직 없습니다.
-- 로더는 `inclusionUnconfirmed`를 담고 검증만 합니다. 판정 코드는 이 쌍을 읽지 않아, 코드가 다르면 아직 불일치로 처리합니다.
+- 로더는 `inclusionUnconfirmed`를 담고 검증합니다. 서비스 판정은 주문 업종이 이 쌍의 코드이면 대상 불일치로 확정하지 않고 확인 필요로 처리합니다.
 
 ## 현재 구현 범위와 관련 문서
 

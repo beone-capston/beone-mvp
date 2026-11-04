@@ -1,10 +1,10 @@
 package com.beone.api.benefit.primitive;
 
 import java.time.LocalDate;
-import com.beone.api.benefit.input.ServiceSelection;
-import com.beone.api.benefit.result.ApplicationStatus;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -12,11 +12,14 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+import com.beone.api.benefit.card.LimitBucketId;
 import com.beone.api.benefit.card.ServiceId;
 import com.beone.api.benefit.input.CardMonthlyState;
 import com.beone.api.benefit.input.Order;
+import com.beone.api.benefit.input.ServiceSelection;
 import com.beone.api.benefit.money.BenefitAmount;
 import com.beone.api.benefit.money.Won;
+import com.beone.api.benefit.result.ApplicationStatus;
 import com.beone.api.benefit.result.CardServiceCandidates;
 import com.beone.api.benefit.result.ConfirmationStage;
 import com.beone.api.benefit.result.ServiceCandidate;
@@ -27,6 +30,7 @@ import com.beone.api.benefit.rule.BenefitService;
 import com.beone.api.benefit.rule.CardRuleVersion;
 import com.beone.api.benefit.rule.RuleSelection;
 import com.beone.api.benefit.rule.TriggerEvidence;
+import com.beone.api.benefit.state.BasisPeriod;
 import com.beone.api.benefit.state.StateValue;
 
 /**
@@ -97,6 +101,7 @@ public final class CardServiceCandidateCollector {
 		List<ServiceCandidate> candidates = new ArrayList<>();
 		List<ServiceNeedingConfirmation> needingConfirmation = new ArrayList<>();
 		List<UnsupportedService> unsupported = new ArrayList<>();
+		Map<LimitBucketId, StateValue<Won>> usedThisMonth = usedInOrderMonth(state, order.date());
 		for (BenefitService service : rule.services()) {
 			// 1) 지원 범위 밖. 그 거래에 적용되지 않음이 확정되면 판정하지 않음 대신 확정 0원이다.
 			Set<UnsupportedReason> unsupportedReasons = unsupportedReasons(rule, service);
@@ -142,7 +147,7 @@ public final class CardServiceCandidateCollector {
 					: performance.get();
 			TriggerEvidence graceEvidence = grace instanceof NewCardGraceJudge.Judgement.DefinitionUnresolved
 					? TriggerEvidence.UNDETERMINED : TriggerEvidence.CONFIRMED_ABSENT;
-			ServiceLimits limits = new ServiceLimits(rule.limitChain(service), state.usedBenefits());
+			ServiceLimits limits = new ServiceLimits(rule.limitChain(service), usedThisMonth);
 			ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service, order, tierPerformance, graceEvidence,
 					limits);
 			if (candidate.standaloneAmount() instanceof BenefitAmount.NeedsConfirmation pending) {
@@ -155,6 +160,18 @@ public final class CardServiceCandidateCollector {
 		}
 		return new CardServiceCandidates.Collected(rule.ref(), candidates, needingConfirmation, unsupported,
 				selected.unresolvedConditionalTerms());
+	}
+
+	/**
+	 * 기준 기간이 주문 월이 아닌 사용액을 {@code UNKNOWN}으로 바꾼다(D-16). 모든 버킷에 같은 기준을 적용하므로 체인 어느 버킷이든 확인 필요가 된다.
+	 */
+	private static Map<LimitBucketId, StateValue<Won>> usedInOrderMonth(CardMonthlyState state, LocalDate orderDate) {
+		BasisPeriod orderMonth = BasisPeriod.month(YearMonth.from(orderDate));
+		Map<LimitBucketId, StateValue<Won>> used = new HashMap<>();
+		state.usedBenefits().forEach((bucket, value) -> used.put(bucket,
+				value.basisPeriod().filter(orderMonth::equals).isPresent() ? value
+						: StateValue.unknown(value.basisPeriod().orElse(null), value.refreshedAt().orElse(null))));
+		return used;
 	}
 
 	private static Optional<Won> knownPerformance(CardMonthlyState state) {

@@ -176,6 +176,34 @@ class LimitSelectionGraceTest {
 		}
 
 		@Test
+		void usageOfAnotherMonthNeedsConfirmationOnEveryChainBucket() {
+			// D-16: 전월 기준 사용액은 이번 달 남은 한도를 줄이지 않고 계산에 쓰지 않는다.
+			StateValue<Won> september = StateValue.synthetic(Won.of(2_000), SEPTEMBER);
+			Map<LimitBucketId, StateValue<Won>> childOld = used("COMMON", 0);
+			childOld.put(LimitBucketId.of("CU"), september);
+			Map<LimitBucketId, StateValue<Won>> parentOld = used("CU", 0);
+			parentOld.put(LimitBucketId.of("COMMON"), StateValue.synthetic(Won.of(10_000), SEPTEMBER));
+
+			for (Map<LimitBucketId, StateValue<Won>> used : List.of(childOld, parentOld)) {
+				OrderBenefit.Decided result = cu(used);
+
+				assertThat(pendingServices(result)).containsExactly("CU");
+				assertThat(result.orderBenefit()).isInstanceOf(BenefitAmount.NeedsConfirmation.class);
+			}
+		}
+
+		@Test
+		void confirmedUnmetWinsOverUsageOfAnotherMonth() {
+			Map<LimitBucketId, StateValue<Won>> old = used("COMMON", 0);
+			old.put(LimitBucketId.of("CU"), StateValue.synthetic(Won.of(2_000), SEPTEMBER));
+			Order small = order("CU_STORE", 9_999, PaymentMethod.DIRECT);
+
+			OrderBenefit.Decided result = decide(CHECKCHECK, small, state(CHECKCHECK, 300_000, old, List.of()), registered(OLD));
+
+			assertThat(service(result, "CU").candidate().unmetConditions()).containsExactly(ApplicationStatus.NOT_APPLICABLE_MIN_AMOUNT);
+		}
+
+		@Test
 		void missingChainBucketIsNotReplacedByOtherBucketsUsed() {
 			OrderBenefit.Decided result = cu(used("CU", 0));
 
