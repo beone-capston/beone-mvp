@@ -98,7 +98,10 @@ val factory = object : ViewModelProvider.Factory {
 // Activity.onCreate — 재생성마다 authenticator를 새로 만들어야 진행 중 결과를 이어 받습니다.
 viewModel = ViewModelProvider(this, factory)[VirtualCardActivationViewModel::class.java]
 authenticator = BiometricDeviceAuthenticator(this) { outcome -> viewModel.onAuthOutcome(outcome) }
-viewModel.requestAuthentication(authenticator) // true는 라이브러리에 전달했다는 뜻이며 창 표시 확인이 아님
+// 화면을 처음 열 때만 요청합니다. 회전으로 재생성될 때 다시 요청하지 않습니다.
+if (savedInstanceState == null) {
+    viewModel.requestAuthentication(authenticator) // true는 라이브러리에 전달했다는 뜻이며 창 표시 확인이 아님
+}
 
 // Activity.onStop
 viewModel.onScreenStopped(isChangingConfigurations, authenticator)
