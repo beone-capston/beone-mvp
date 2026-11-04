@@ -4,7 +4,7 @@
 
 `benefit`은 카드 혜택 계산과 추천에 필요한 식별자, 금액, 상태, 입력, 약관 규칙, 결과를 정의합니다. 값만 담는 것이 아니라 잘못된 조합을 생성 시점에 차단하고, 모르는 정보는 확인 필요 상태로 유지합니다.
 
-현재는 도메인 모델과 규칙 선택·보조 검증 로직, 서비스 한 건의 산식·조건을 따로따로 판정하는 기본 함수(`primitive`), 그리고 이 함수들로 한도 없는 비선택형 서비스 하나의 후보(`ServiceCandidate`)를 만드는 판정기(`ServiceCandidateEvaluator`, #31), 규칙 선택 결과의 서비스들을 후보·확인 필요·지원 범위 밖으로 나눠 모으는 취합기(`CardServiceCandidateCollector`, #33), 취합 결과로 카드 한 장·주문 한 건의 서비스별 채택·기여액과 카드 금액을 정하는 결정기(`OrderBenefitDecider`, #35), 호출자가 정한 판정일로 규칙 선택부터 결정까지 잇는 진입점(`OrderBenefitResolver`, #38)이 구현되어 있습니다. 결정기는 한도 없는 비선택형 서비스만 판정하며, 한도·선택형 서비스가 있으면 카드 금액은 `확인 필요`입니다. 카드 간 비교(`CardBenefit`·`Recommendation` 연결), 한도 차감, 중복 허용 서비스의 합산, 월간 최적화, 추천 API, CODEF 호출은 아직 구현되지 않았습니다.
+현재는 도메인 모델과 규칙 선택·보조 검증 로직, 서비스 한 건의 산식·조건을 따로따로 판정하는 기본 함수(`primitive`), 그리고 이 함수들로 비선택형 서비스 하나의 후보(`ServiceCandidate`)를 만드는 판정기(`ServiceCandidateEvaluator`, #31), 규칙 선택 결과의 서비스들을 후보·확인 필요·지원 범위 밖으로 나눠 모으는 취합기(`CardServiceCandidateCollector`, #33), 취합 결과로 카드 한 장·주문 한 건의 서비스별 채택·기여액과 카드 금액을 정하는 결정기(`OrderBenefitDecider`, #35), 호출자가 정한 판정일로 규칙 선택부터 결정까지 잇는 진입점(`OrderBenefitResolver`, #38)이 구현되어 있습니다. 한도 서비스는 입력 사용액으로 판정하고(D-18 K1), 신규 유예 기간도 등록일과 주문일로 판정합니다(D-20, #65). 선택형 서비스는 그 거래에 적용되지 않음이 확정될 때만 카드 금액을 막지 않습니다. 카드 간 비교(`CardBenefit`·`Recommendation` 연결), 모의 승인 뒤 사용액 반영, 선택 서비스 금액 계산, 중복 허용 서비스의 합산, 월간 최적화, 추천 API, CODEF 호출은 아직 구현되지 않았습니다.
 
 ## 핵심 용어
 
@@ -62,7 +62,7 @@ CODEF·수동 입력·추론 값에는 갱신 시각이 필요합니다. 추론 
 - [PlannedSpendings](../../backend/src/main/java/com/beone/api/benefit/input/PlannedSpendings.java): 예정 지출 목록. 최대 5건.
 - [HeldCard](../../backend/src/main/java/com/beone/api/benefit/input/HeldCard.java): 보유 카드와 보유 정보 출처, 등록일 상태.
 - [CardMonthlyState](../../backend/src/main/java/com/beone/api/benefit/input/CardMonthlyState.java): 전월 실적, 버킷별 사용 혜택, 기타 버킷 사용량, 선택형 서비스 상태. 전월 실적 Optional.empty는 원장에서 산출해야 함을 뜻합니다.
-- [ServiceSelection](../../backend/src/main/java/com/beone/api/benefit/input/ServiceSelection.java): 선택형 서비스와 적용 시작일.
+- [ServiceSelection](../../backend/src/main/java/com/beone/api/benefit/input/ServiceSelection.java): 택1 선택과 적용 시작일. 서비스가 비어 있으면 사용자가 명시 입력한 선택 없음(`NONE`)입니다. 입력 없음(`UNKNOWN`)은 `CardMonthlyState.serviceSelections`가 비었거나 값이 `UNKNOWN`인 경우입니다.
 - [LedgerTransaction](../../backend/src/main/java/com/beone/api/benefit/input/LedgerTransaction.java): 거래 한 건. 승인은 양수, 취소는 음수이며 취소 원거래 날짜 등을 검증합니다.
 - [Ledger](../../backend/src/main/java/com/beone/api/benefit/input/Ledger.java): 거래 목록과 완전하게 확보된 기간. isComplete()로 기간 전체 확보 여부, cancellationEvidence()로 취소 관련 증거를 판정합니다.
 - [LedgerCoverage](../../backend/src/main/java/com/beone/api/benefit/input/LedgerCoverage.java): 특정 카드·기간에 모든 거래가 확보되었다는 선언. 선언하지 않은 기간은 완전하다고 간주하지 않습니다.
@@ -83,7 +83,7 @@ CODEF·수동 입력·추론 값에는 갱신 시각이 필요합니다. 추론 
 - [VerificationStatus](../../backend/src/main/java/com/beone/api/benefit/rule/VerificationStatus.java): VERIFIED·AI_DRAFT·CANDIDATE·SYNTHETIC_TEST_SNAPSHOT 구분.
 - [OfficialSource](../../backend/src/main/java/com/beone/api/benefit/rule/OfficialSource.java): 공식 자료 주소와 페이지·절 위치.
 - [BenefitService](../../backend/src/main/java/com/beone/api/benefit/rule/BenefitService.java): 대상·제외 업종, 결제 방식, 금액 조건, 실적 구간, 한도, 선택 여부, 중복 혜택과 원 미만 처리 조건.
-- [ServiceDetails](../../backend/src/main/java/com/beone/api/benefit/rule/ServiceDetails.java): 서비스의 화면 이름, 중복 합산 기준, 원 미만 처리 근거, 포함 관계 표시, 미판정 제외 조건. 로더가 담기만 하고 판정 코드는 아직 쓰지 않습니다.
+- [ServiceDetails](../../backend/src/main/java/com/beone/api/benefit/rule/ServiceDetails.java): 서비스의 화면 이름, 중복 합산 기준, 원 미만 처리 근거, 포함 관계 표시, 미판정 제외 조건. 포함 관계 표시는 판정에 쓰입니다. 주문 업종이 쌍의 코드이면 대상 불일치로 확정하지 않고 확인 필요로 처리합니다. 원 미만 처리 근거와 미판정 제외 조건은 서비스 결과의 `ServiceResultNotes`에 담기고(API 응답은 미구현), 화면 이름과 중복 합산 기준은 아직 쓰지 않습니다.
 - [InclusionUnconfirmed](../../backend/src/main/java/com/beone/api/benefit/rule/InclusionUnconfirmed.java): 포함 관계가 확인되지 않은 업종 코드 쌍. 서비스의 쌍은 대상·제외 코드와, 정책의 쌍은 실적 제외 코드와 연결되는지 생성 시 검사합니다.
 - [StackingBasis](../../backend/src/main/java/com/beone/api/benefit/rule/StackingBasis.java): 중복 합산의 계산 기준. 값이 없는 서비스는 합산하지 않습니다.
 - [TermBasis](../../backend/src/main/java/com/beone/api/benefit/rule/TermBasis.java): 값이 문서 대조가 아닌 사용자 결정임을 결정 번호와 함께 표시합니다.
@@ -95,7 +95,8 @@ CODEF·수동 입력·추론 값에는 갱신 시각이 필요합니다. 추론 
 - [LimitTier](../../backend/src/main/java/com/beone/api/benefit/rule/LimitTier.java): 최소 실적과 월 한도.
 - [Tiers](../../backend/src/main/java/com/beone/api/benefit/rule/Tiers.java): 실적 구간이 비어 있지 않고 엄격한 오름차순인지 검사하는 내부 유틸리티.
 - [RulePolicy](../../backend/src/main/java/com/beone/api/benefit/rule/RulePolicy.java): 카드 전체 실적·취소·제외·한도·신규 카드 유예 정책.
-- [NewCardGrace](../../backend/src/main/java/com/beone/api/benefit/rule/NewCardGrace.java): 신규 카드 유예 기간, 간주 실적, 적용 서비스.
+- [NewCardGrace](../../backend/src/main/java/com/beone/api/benefit/rule/NewCardGrace.java): 신규 카드 유예 기간, 간주 실적, 적용 서비스, 일부 실적 처리(`partialPerformance`). `covers(등록일, 주문일)`로 기간 안인지 답합니다.
+- [GracePartialPerformance](../../backend/src/main/java/com/beone/api/benefit/rule/GracePartialPerformance.java): 유예 중 실적이 0원 초과 간주 실적 미만일 때의 처리. 약관 문구의 차이를 규칙 데이터로 옮긴 값입니다.
 - [GraceSpan](../../backend/src/main/java/com/beone/api/benefit/rule/GraceSpan.java): 다음 달 말까지 또는 등록일부터 일정 일수라는 유예 기간 방식.
 - [PerformanceWindow](../../backend/src/main/java/com/beone/api/benefit/rule/PerformanceWindow.java): 전월 실적 산정 기간.
 - [TransactionDateBasis](../../backend/src/main/java/com/beone/api/benefit/rule/TransactionDateBasis.java): 승인일·이용일·명세서 기재일·매입일 구분.
@@ -137,38 +138,44 @@ if (raw.hasFractionalWon()) {
 }
 ```
 
-한도 차감·잔여 한도, 중복 적용 금액 계산, 기간 판정, 월 1회 제한, 신규 유예의 간주 실적 적용은 이 패키지에 없습니다.
+[ServiceLimits](../../backend/src/main/java/com/beone/api/benefit/primitive/ServiceLimits.java)는 서비스의 한도 체인과 입력 사용액으로 남은 한도(버킷별 한도 − 사용액의 최솟값)를 구합니다. [NewCardGraceJudge](../../backend/src/main/java/com/beone/api/benefit/primitive/NewCardGraceJudge.java)는 등록일·주문일·입력 실적으로 유예 적용과 구간을 고를 실적을 정합니다.
+
+모의 승인 뒤 사용액 반영, 중복 적용 금액 계산, 실적 기간 판정, 월 1회 제한은 이 패키지에 없습니다.
 
 #### ServiceCandidateEvaluator: 단일 서비스 후보 판정(#31)
 
-[ServiceCandidateEvaluator](../../backend/src/main/java/com/beone/api/benefit/primitive/ServiceCandidateEvaluator.java)의 `evaluate(service, order, previousMonthPerformance, newCardGrace)`는 위 함수들을 묶어 "주문 한 건에서 이 서비스 하나만 고를 때의 후보"(`ServiceCandidate`)를 만듭니다. 서비스 간 채택·기여액(`Adoption`·`OrderServiceBenefit`)은 정하지 않습니다.
+[ServiceCandidateEvaluator](../../backend/src/main/java/com/beone/api/benefit/primitive/ServiceCandidateEvaluator.java)의 `evaluate(service, order, previousMonthPerformance, newCardGrace, limits)`는 위 함수들을 묶어 "주문 한 건에서 이 서비스 하나만 고를 때의 후보"(`ServiceCandidate`)를 만듭니다. 서비스 간 채택·기여액(`Adoption`·`OrderServiceBenefit`)은 정하지 않습니다.
 
-- 지원 범위: 한도 버킷(`limitBuckets`)이 비어 있는, 즉 약관상 한도가 없는 비선택형 서비스. 한도 버킷이 하나라도 있거나 선택형(`requiresSelection`)이면 범위 밖이므로 `IllegalArgumentException`으로 거부합니다. 범위 안에서 근거가 부족하면 거부하지 않고 확인 필요 금액을 돌려줍니다.
-- 호출자 전제 조건: 규칙 버전 선택은 끝난 상태입니다(예: `RuleCatalog`가 고른 계산 가능 서비스). 빈 `limitBuckets`는 약관상 한도 없음이 확인된 서비스에만 씁니다. 모델은 한도 정보 누락과 한도 없음을 구분하지 않으므로, 한도 정보가 확인되지 않은 서비스를 넘기지 않는 것은 호출자 책임입니다. 전월 실적은 호출자가 이 카드의 실적 기간에 맞는다고 보증한 값이며, 판정기는 원장에서 산출하거나 기간을 확인하지 않습니다. 신규 유예 근거(`TriggerEvidence`)는 호출자가 이 서비스에 대해 정합니다. 카드가 유예 기간이 아니거나 유예가 이 서비스에 적용되지 않음을 확인했을 때만 `CONFIRMED_ABSENT`입니다.
+- 지원 범위: 비선택형 서비스. 선택형(`requiresSelection`)이거나 `limitBuckets`와 넘겨받은 체인(`ServiceLimits`)이 맞지 않으면 `IllegalArgumentException`으로 거부합니다. 범위 안에서 근거가 부족하면 거부하지 않고 확인 필요 금액을 돌려줍니다.
+- 호출자 전제 조건: 규칙 버전 선택은 끝난 상태입니다(예: `RuleCatalog`가 고른 계산 가능 서비스). 빈 `limitBuckets`는 약관상 한도 없음이 확인된 서비스에만 씁니다. 모델은 한도 정보 누락과 한도 없음을 구분하지 않으므로, 한도 정보가 확인되지 않은 서비스를 넘기지 않는 것은 호출자 책임입니다. 전월 실적은 호출자가 이 카드의 실적 기간에 맞는다고 보증한 값이고 유예 중이면 호출자가 정한 간주 실적이며, 판정기는 원장에서 산출하거나 기간을 확인하지 않습니다. 신규 유예 근거(`TriggerEvidence`)는 호출자가 이 서비스에 대해 정합니다. 카드가 유예 기간이 아니거나 유예가 이 서비스에 적용되지 않음을 확인했을 때만 `CONFIRMED_ABSENT`입니다.
 - 입력 계약: null 입력과 음수 전월 실적은 거부합니다. 음수 실적은 다른 조건이 미충족이어도 거부합니다. 주문 금액이 0원 이하인 주문은 `Order`가 생성 시 거부합니다.
 
 판정 순서는 다음과 같습니다.
 
-1. 제외 업종·대상 업종·결제 방식·최소 금액·실적 구간을 각각 판정해 확인된 미충족 사유를 순서 없는 집합으로 모읍니다. 사유가 하나라도 있으면 다른 근거가 미확정이어도 후보 금액은 확정 0원입니다.
+1. 제외 업종·대상 업종·결제 방식·최소 금액·실적 구간(한도 체인 구간 포함)을 각각 판정해 확인된 미충족 사유를 순서 없는 집합으로 모읍니다. 사유가 하나라도 있으면 다른 근거(사용액 포함)가 미확정이어도 후보 금액은 확정 0원입니다(D-18 K1). 주문 업종이 `inclusionUnconfirmed` 쌍의 코드이면 대상 불일치로 보지 않고 확인 필요 사유로 둡니다.
 2. 실적이 가장 낮은 구간에도 못 미칠 때 실적 미충족(`NOT_APPLICABLE_PERFORMANCE`)은 신규 유예 근거가 `CONFIRMED_ABSENT`일 때만 확정합니다. 유예는 실적을 간주 실적 이상으로 올려 보므로, 근거가 `PRESENT`·`UNDETERMINED`이면 실적 부족은 확인 필요이고, 최상위가 아닌 구간에 도달한 경우도 더 높은 구간이 될 수 있어 확인 필요입니다. 이는 `ConditionalTerm`·`NewCardGrace`의 기존 계약을 적용한 것이며 새 금융 정책이 아닙니다. 최상위 구간에 도달했거나 실적 조건이 없는 서비스는 유예 근거와 관계없이 계산합니다.
 3. 미충족이 없으면 확인 필요 사유를 봅니다. 확인 필요 사유는 `unmetConditions`에 넣지 않고 `BenefitAmount.NeedsConfirmation`의 사유 문자열에 모읍니다.
    - 계산식 미확정(`BenefitService.unresolvedCalculationReasons()`가 비어 있지 않음): 다른 식으로 대체하지 않습니다.
+   - 체인 버킷 사용액이 `UNKNOWN`이거나 입력되지 않음: `otherBucketsUsed`로 대신하지 않습니다. 취합기는 기준 기간이 주문 월이 아닌 사용액을 `UNKNOWN`으로 바꿔 넘깁니다(D-16).
+   - 체인 버킷 사용액이 한도보다 큼: 입력이 규칙과 모순되므로 확인 필요이고 `limitReason=USAGE_EXCEEDS_LIMIT`입니다.
+   - 남은 한도가 0이면 위 확인 필요 사유가 없을 때 `LIMIT_EXHAUSTED` 확정 0원입니다.
+   - 정액이 0보다 큰 남은 한도보다 큼: 정액을 일부만 지급한다는 근거가 없어 확인 필요입니다.
    - 정액이 주문 결제 금액보다 큼: 결제 금액으로 줄이거나 0원·초과 금액으로 확정하지 않습니다. 같으면 확정입니다.
    - 원 미만: 계산 결과에 실제로 원 미만이 생겼을 때만 `fractionalWon`을 봅니다. 확정이면 그 방식으로 처리하고, 미확정이면 확인 필요입니다. 원 미만이 없으면 처리 방식 미확정만으로 막지 않습니다(`ConditionalTerm.mayBeDisregarded`).
-4. 위에 걸리지 않으면 (상한을 적용한 대상 금액으로) 계산한 금액을 확정합니다.
+4. 위에 걸리지 않으면 (상한을 적용한 대상 금액으로) 계산한 금액을 확정합니다. 이 금액은 한도 적용 전 후보이고, 남은 한도(`remainingLimit`)를 함께 담아 기여액에서 줄입니다. 원 미만을 버렸으면 `fractionalWonTruncated`가 참입니다.
 
 중복 적용 조건(`stackableWith`)은 서비스 하나만 고를 때의 후보에는 영향을 주지 않으므로 판정하지 않습니다. 중복·채택은 후속 단계의 책임입니다.
 
 ```java
 // 합성 예시: 한도 없는 비선택형 서비스, 0원 구간 1%, 원 미만 처리 미확정
 ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service, order, Won.of(300_000),
-		TriggerEvidence.CONFIRMED_ABSENT);
+		TriggerEvidence.CONFIRMED_ABSENT, ServiceLimits.NONE);
 // 10,000원 주문 → 확정 100원. 10,001원 주문(100.01원)이면 원 미만 처리 미확정으로 확인 필요
 ```
 
 #### CardServiceCandidateCollector: 카드 한 장의 서비스 후보 취합(#33)
 
-[CardServiceCandidateCollector](../../backend/src/main/java/com/beone/api/benefit/primitive/CardServiceCandidateCollector.java)의 `collect(selection, order, state)`는 이미 끝난 규칙 선택 결과(`RuleSelection`)와 주문 한 건, 같은 카드의 월간 상태(`CardMonthlyState`)를 받아 규칙의 서비스마다 후보를 모읍니다. 결과는 [CardServiceCandidates](../../backend/src/main/java/com/beone/api/benefit/result/CardServiceCandidates.java)입니다. 어떤 서비스를 채택할지, 카드 혜택 합계, 한도 차감은 정하지 않으며 `RuleCatalog.select`를 호출하지 않습니다.
+[CardServiceCandidateCollector](../../backend/src/main/java/com/beone/api/benefit/primitive/CardServiceCandidateCollector.java)의 `collect(selection, order, state, registeredAt)`는 이미 끝난 규칙 선택 결과(`RuleSelection`)와 주문 한 건, 같은 카드의 월간 상태(`CardMonthlyState`)와 등록일을 받아 규칙의 서비스마다 후보를 모읍니다. 결과는 [CardServiceCandidates](../../backend/src/main/java/com/beone/api/benefit/result/CardServiceCandidates.java)입니다. 어떤 서비스를 채택할지, 카드 혜택 합계는 정하지 않으며 `RuleCatalog.select`를 호출하지 않습니다.
 
 - 입력 검증: null은 거부합니다. 선택 결과의 카드 ID(`selection.cardId()`)와 월간 상태의 카드 ID가 다르면 거부합니다(`Order`에는 카드 ID가 없습니다). 전월 실적이 확인된 값이고 음수이면, 판정기를 거치지 않는 분류(지원 범위 밖·규칙 사용 불가 등)에서도 숨겨지지 않도록 먼저 거부합니다. `Selected`의 계산 가능 서비스와 확인 필요 서비스가 규칙의 서비스를 중복·누락 없이 나누지 않으면 거부합니다. 예외를 잡아 다른 분류로 바꾸지 않습니다.
 - 규칙 사용 불가(`RuleSelection.Unavailable`): `CardServiceCandidates.Unavailable(cardId, status, reason)`으로 그대로 옮깁니다. 규칙이 없으면 서비스 목록 자체를 모르므로 0원이나 빈 취합 결과로 만들지 않습니다.
@@ -176,7 +183,7 @@ ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service, order, 
 
 서비스마다 아래 순서에서 처음 해당하는 분류에 담습니다(2026-10-30 관리자 승인).
 
-1. 지원 범위 밖(`unsupported`, [UnsupportedService](../../backend/src/main/java/com/beone/api/benefit/result/UnsupportedService.java)): 한도 버킷이 있거나 선택형인 서비스. 판정기를 호출하지 않습니다. 금액이나 확정·미충족 의미가 없는 "이번 기능이 판정하지 않음" 분류이며 0원 후보가 아닙니다. 규칙 선택 단계에서 이미 확인 필요로 분리된 서비스라면 그 사유 원문을 `selectionReasons`에 보존합니다.
+1. 지원 범위 밖: 선택형이거나 한도 기간이 미확정인 서비스. 판정기를 호출하지 않습니다. 그 거래에 적용되지 않음이 확정되면(업종 불일치 `NOT_APPLICABLE_CATEGORY`, 다른 서비스 선택·`NONE` `NOT_APPLICABLE_SELECTION`) 그 사유의 확정 0원 후보로 둡니다(D-18 K1 U2 ① 예외). 선택은 주문일까지 적용된 가장 늦은 값을 보며, 입력이 없거나 `UNKNOWN`이 섞였거나 적용일이 주문일보다 늦거나 규칙의 선택형 서비스가 아니면 예외를 적용하지 않습니다. 그 밖에는 `unsupported`([UnsupportedService](../../backend/src/main/java/com/beone/api/benefit/result/UnsupportedService.java))이며, 금액이나 확정·미충족 의미가 없는 "이번 기능이 판정하지 않음" 분류이고 0원 후보가 아닙니다. 규칙 선택 단계에서 이미 확인 필요로 분리된 서비스라면 그 사유 원문을 `selectionReasons`에 보존합니다.
 2. 규칙 선택 단계 확인 필요(`ConfirmationStage.RULE_SELECTION`): `servicesNeedingConfirmation`의 사유를 그대로 담고 확정하지 않습니다.
 3. 전월 실적 미입력(`Optional.empty`)·`UNKNOWN`(`ConfirmationStage.PRIOR_PERFORMANCE`): 실적 값을 만들어 넣지 않으므로 실적 조건이 없는 서비스도 확인 필요입니다. 지원 범위 밖 서비스와 규칙 선택 단계 확인 필요 서비스는 이 사유로 덮어쓰지 않습니다.
 4. 판정기 결과: 확정 금액(확정 0원과 미충족 사유 포함)은 후보(`candidates`)에 그대로 둡니다. 확인 필요 금액은 후보 목록에 두지 않고 확인 필요(`ConfirmationStage.CANDIDATE_EVALUATION`)로 옮기며, 사유 문자열을 바꾸지 않습니다.
@@ -186,13 +193,13 @@ ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service, order, 
 판정기에 넘기는 근거는 다음과 같습니다.
 
 - 전월 실적: 확인된 값(`knownValue()`)을 넘깁니다. 출처·기준 기간이 이 카드의 실적 기간에 맞는지는 #31과 같이 호출자가 보증합니다.
-- 신규 유예(서비스별): 규칙의 유예 정의(`RulePolicy.newCardGrace`)가 확정이고 비어 있거나(유예 없음 확인), 확정 정의의 대상 서비스에 이 서비스가 없을 때만 `CONFIRMED_ABSENT`입니다. 정의가 미확정이거나 이 서비스가 대상이면 유예 기간을 판정하지 않고 `UNDETERMINED`로 넘깁니다. `PRESENT`는 만들지 않습니다.
+- 신규 유예(서비스별, `NewCardGraceJudge`, D-20): 유예 정의가 없거나 대상 서비스가 아니거나 기간이 지났으면 입력 실적과 `CONFIRMED_ABSENT`를 넘깁니다. 유예 중이면 간주 실적과 `CONFIRMED_ABSENT`를 넘깁니다. 정의가 미확정이면 입력 실적과 `UNDETERMINED`를 넘깁니다. 등록일이 `UNKNOWN`이거나 주문일보다 늦거나, 유예 중 실적이 `partialPerformance`상 확인 필요이거나 다음 구간 기준 이상이면 판정기를 부르지 않습니다. 이때 주문만으로 확인되는 미충족이 있으면 확정 0원, 없으면 `CANDIDATE_EVALUATION` 단계의 확인 필요입니다.
 
 `Selected.unresolvedConditionalTerms`는 결과의 `unresolvedConditionalTerms`에 원본 그대로 전달할 뿐 무시하거나 해소하지 않습니다(`ConditionalTerm.mayBeDisregarded`를 호출하지 않습니다). 조건별로 이번 기능이 분류를 바꾸지 않는 근거는 기존 결정입니다.
 
 - 취소 귀속·할인 매출 실적 제외: 전월 실적 산출 쪽 조건이며, 실적 값의 적합성은 호출자가 보증합니다(D-13 #31 범위 결정 2).
-- 한도 차감 순서: 한도 있는 서비스에만 해당하며 이번 범위 밖(후속 단계)입니다.
-- 신규 유예: 위 `UNDETERMINED` 전달로 판정기가 처리합니다.
+- 한도 차감 순서: 단일 주문 계산에 쓰지 않습니다(D-18 K1 해석 보충).
+- 신규 유예: 정의가 미확정일 때 위 `UNDETERMINED` 전달로 판정기가 처리합니다.
 - 중복 적용(`MULTIPLE_SERVICES_QUALIFY`): 서비스 하나만 고를 때의 후보에는 영향이 없고 채택 단계의 책임입니다(위 판정기 설명).
 - 원 미만 처리: 판정기가 서비스 규칙에서 직접 처리합니다.
 
@@ -200,31 +207,31 @@ ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service, order, 
 
 ```java
 // 합성 예시: 규칙 선택은 이미 끝났고, 월간 상태는 같은 카드의 것
-CardServiceCandidates result = CardServiceCandidateCollector.collect(selection, order, state);
+CardServiceCandidates result = CardServiceCandidateCollector.collect(selection, order, state, registeredAt);
 if (result instanceof CardServiceCandidates.Collected collected) {
 	collected.candidates();          // 확정 금액(0원 포함) 후보. 채택 여부는 아직 없음
 	collected.needingConfirmation(); // 단계와 사유가 있는 확인 필요
-	collected.unsupported();         // 한도·선택형: 이번 기능이 판정하지 않음
+	collected.unsupported();         // 선택형·한도 기간 미확정: 이번 기능이 판정하지 않음
 }
 ```
 
 #### OrderBenefitDecider: 카드 한 장·주문 한 건의 혜택 결정(#35)
 
-[OrderBenefitDecider](../../backend/src/main/java/com/beone/api/benefit/primitive/OrderBenefitDecider.java)의 `decide(selection, order, state, evidence)`는 취합기를 내부에서 호출한 뒤, 서비스별 최종 채택(`Adoption`)·기여액과 카드의 이번 주문 혜택을 [OrderBenefit](../../backend/src/main/java/com/beone/api/benefit/result/OrderBenefit.java)으로 돌려줍니다. 근거가 부족하면 금액을 확정하지 않고 `확인 필요`와 구조화된 사유([PendingReason](../../backend/src/main/java/com/beone/api/benefit/result/PendingReason.java))를 남깁니다. 정책은 2026-10-31 사용자 확정(D-13 #35 결정)을 따릅니다. `RuleCatalog.select`는 호출하지 않습니다.
+[OrderBenefitDecider](../../backend/src/main/java/com/beone/api/benefit/primitive/OrderBenefitDecider.java)의 `decide(selection, order, state, registeredAt, evidence)`는 취합기를 내부에서 호출한 뒤, 서비스별 최종 채택(`Adoption`)·기여액과 카드의 이번 주문 혜택을 [OrderBenefit](../../backend/src/main/java/com/beone/api/benefit/result/OrderBenefit.java)으로 돌려줍니다. 근거가 부족하면 금액을 확정하지 않고 `확인 필요`와 구조화된 사유([PendingReason](../../backend/src/main/java/com/beone/api/benefit/result/PendingReason.java))를 남깁니다. 정책은 2026-10-31 사용자 확정(D-13 #35 결정)을 따릅니다. `RuleCatalog.select`는 호출하지 않습니다.
 
 - 입력 검증: null을 거부하고, 근거(`PolicyTermEvidence`)의 카드가 규칙 선택 결과의 카드와 다르면 `IllegalArgumentException`으로 거부합니다. 월간 상태 카드 불일치·음수 실적 등 취합기의 검증은 그대로 적용됩니다.
 - 규칙 사용 불가: 취합 결과가 `Unavailable`이면 `OrderBenefit.Unavailable(cardId, status, reason)`을 돌려줍니다. 카드 금액은 `확인 필요`이며 0원이나 빈 결정 결과가 아닙니다.
 
 처리 순서는 다음과 같습니다(후보는 서비스 ID 순으로 처리).
 
-1. 실적과 무관한 미충족(제외 업종·업종·결제 방식·최소 금액)이 하나라도 있는 후보는 실적 미충족이 함께 있어도 `NOT_ADOPTED`·확정 0원입니다.
-2. 나머지 후보는 실적 정책(취소 귀속·할인 매출 실적 제외)의 영향을 봅니다. 서비스에 실적 조건이 있고(`BenefitService.hasPerformanceRequirement()`), 원본 `unresolvedConditionalTerms`에 두 조건 중 하나가 있으며, 그 근거가 `CONFIRMED_ABSENT`가 아니면(`ConditionalTerm.mayBeDisregarded`) 영향이 있다고 봅니다. 실적 조건이 없는 서비스는 실적 값이 바뀌어도 금액이 같으므로 영향이 없고, 규칙에서 조건이 확정이면 근거가 필요 없습니다.
-3. 실적 미충족만 있는 후보와 미충족 사유 없는 확정 0원 후보(예: 원 미만 절사로 0원): 영향이 있으면 재확인 대상(`rechecks`, [PerformanceRecheck](../../backend/src/main/java/com/beone/api/benefit/result/PerformanceRecheck.java))으로 분리하고, 없으면 `NOT_ADOPTED`·확정 0원입니다. 재확인 후보의 원본 0원은 최종 기여액이 아니므로 `services`에 넣지 않습니다.
+1. 실적과 무관한 미충족(제외 업종·업종·결제 방식·최소 금액·택1 선택)이 하나라도 있는 후보는 실적 미충족이 함께 있어도 `NOT_ADOPTED`·확정 0원입니다.
+2. 나머지 후보는 실적 정책(취소 귀속·할인 매출 실적 제외)의 영향을 봅니다. 서비스나 그 한도 체인에 실적 조건이 있고(`BenefitService.hasPerformanceRequirement()`, `LimitBucket.dependsOnPerformance()`), 원본 `unresolvedConditionalTerms`에 두 조건 중 하나가 있으며, 그 근거가 `CONFIRMED_ABSENT`가 아니면(`ConditionalTerm.mayBeDisregarded`) 영향이 있다고 봅니다. 실적 조건이 없는 서비스는 실적 값이 바뀌어도 금액이 같으므로 영향이 없고, 규칙에서 조건이 확정이면 근거가 필요 없습니다.
+3. 실적 미충족·한도 소진(`LIMIT_EXHAUSTED`)만 있는 후보와 미충족 사유 없는 확정 0원 후보(예: 원 미만 절사로 0원): 영향이 있으면 재확인 대상(`rechecks`, [PerformanceRecheck](../../backend/src/main/java/com/beone/api/benefit/result/PerformanceRecheck.java))으로 분리하고, 없으면 `NOT_ADOPTED`·확정 0원입니다. 재확인 후보의 원본 0원은 최종 기여액이 아니므로 `services`에 넣지 않습니다.
 4. 양수 후보: 영향이 있으면 실적 정책 사유를 남깁니다.
 5. 막는 사유를 멈추지 않고 모두 모읍니다. 확인 필요 서비스(`NEEDS_CONFIRMATION`)·지원 범위 밖 서비스(`UNSUPPORTED`)마다 하나, 실적 정책 영향 후보(`PERFORMANCE_POLICY`)마다 하나, 양수 후보 쌍마다 중복 관계를 봐서 미확정·한쪽에만 적힘(`STACKING_UNRESOLVED`)이나 서로 중복 허용 확정(`STACKING_CONFIRMED`, 중복 계산은 이번 범위 밖)이면 하나입니다. 양쪽 `stackableWith`가 확정이고 서로를 적지 않았을 때만 중복 불가로 확정합니다. 사유는 종류 선언 순서 → 서비스 ID 순으로 정렬합니다.
-6. 사유가 없으면 양수 후보 중 후보 금액이 가장 큰 하나를 후보 금액 그대로 `ADOPTED`로 두고 나머지는 `NOT_ADOPTED`·0원입니다. 같은 금액이면 서비스 ID의 `String.compareTo` 오름차순(대소문자 구분, UTF-16 코드 단위, 숫자·로캘 정렬 없음) 첫 서비스를 채택합니다. 카드 금액은 확정 기여액의 합입니다. 사유가 있으면 양수 후보는 모두 `UNDETERMINED`·기여액 `확인 필요`이고 카드 금액도 사유 요약이 담긴 `확인 필요`입니다.
+6. 사유가 없으면 양수 후보 중 한도 적용 후 금액(`amountAfterLimit`)이 가장 큰 하나를 그 금액으로 `ADOPTED`로 두고 나머지는 `NOT_ADOPTED`·0원입니다. 같은 금액이면 서비스 ID의 `String.compareTo` 오름차순(대소문자 구분, UTF-16 코드 단위, 숫자·로캘 정렬 없음) 첫 서비스를 채택합니다. 카드 금액은 확정 기여액의 합입니다. 사유가 있으면 양수 후보는 모두 `UNDETERMINED`·기여액 `확인 필요`이고 카드 금액도 사유 요약이 담긴 `확인 필요`입니다.
 
-`services`·`rechecks`는 서비스 ID 순이므로 규칙의 서비스 순서가 달라도 같은 결과입니다. 원본 취합 결과(`source`)와 그 `unresolvedConditionalTerms`는 바꾸지 않고 그대로 담습니다. 지원 범위 서비스에서 나올 수 없는 `LIMIT_EXHAUSTED` 후보를 만나면 0원으로 처리하지 않고 `IllegalStateException`으로 거부합니다.
+`services`·`rechecks`는 서비스 ID 순이므로 규칙의 서비스 순서가 달라도 같은 결과입니다. 원본 취합 결과(`source`)와 그 `unresolvedConditionalTerms`는 바꾸지 않고 그대로 담습니다. 서비스 결과의 표시 값은 `serviceNotes`([ServiceResultNotes](../../backend/src/main/java/com/beone/api/benefit/result/ServiceResultNotes.java))에 규칙의 모든 서비스마다 담습니다. 한도가 있으면 사용액 기준(`USER_ENTERED`), `mayDifferFromActual`, 정해진 안내 문장을 0원 결과에도 담고, 원 미만을 버린 서비스에만 절사 표시와 근거를 담고, 미판정 제외 조건을 그대로 담습니다. 금액 판단에는 쓰지 않습니다.
 
 `OrderBenefit.Decided` 생성자는 결과 조합만 확인합니다. 원본 후보와 `services`·`rechecks` 후보의 정확한 일대일 대응, 사유 연결(재확인·확인 필요·범위 밖 서비스마다 해당 종류 사유, 사유의 서비스가 종류에 맞는 분류에 있음), 카드 금액 확정 ⇔ 사유 없음, 확정 0원 후보는 `NOT_ADOPTED`, 확정이면 최댓값·ID 최소 하나만 후보 금액으로 채택·합계 일치, 미확정이면 `ADOPTED` 없음·양수 후보 모두 `UNDETERMINED`, 목록 정렬·불변 복사입니다. 실적 조건 여부, 중복 관계, 근거의 영향, 사유 없는 0원이 실적 정책 검토를 통과했는지처럼 규칙과 근거가 있어야 알 수 있는 판단은 생성자가 확인하지 않으며 결정기와 그 테스트가 맡습니다.
 
@@ -232,7 +239,7 @@ if (result instanceof CardServiceCandidates.Collected collected) {
 // 합성 예시: 규칙 선택은 이미 끝났고, 근거는 같은 카드의 실적 기간에 대한 것(호출자 책임)
 PolicyTermEvidence evidence = new PolicyTermEvidence(cardId, TriggerEvidence.UNDETERMINED,
 		TriggerEvidence.UNDETERMINED); // 근거가 없으면 UNDETERMINED
-OrderBenefit result = OrderBenefitDecider.decide(selection, order, state, evidence);
+OrderBenefit result = OrderBenefitDecider.decide(selection, order, state, registeredAt, evidence);
 if (result instanceof OrderBenefit.Decided decided) {
 	decided.services();     // 채택·기여액을 정한 후보(미정 표시 포함)
 	decided.rechecks();     // 실적 정책 때문에 재확인할 후보. 원본 0원은 최종 기여액이 아님
@@ -241,16 +248,16 @@ if (result instanceof OrderBenefit.Decided decided) {
 }
 ```
 
-현재 범위의 제약: 실제 카드 4종은 모두 한도 또는 선택형 서비스가 있어 이 결정기에서는 대부분 `확인 필요`가 됩니다. 테스트는 합성 규칙만 사용하며 실제 카드 검증이나 추천 완성을 뜻하지 않습니다. 사유가 있을 때 카드 단위 사유 우선순위, 중복 허용 서비스의 합산, 한도 차감, 카드 간 비교는 정하지 않았습니다.
+현재 범위의 제약: 평가 사례 25건(C01~C06, C08, C10~C13, C15~C19, M01~M03, M05~M10)의 금액과 서비스 상태를 테스트 전용 실행기([EvaluationCaseRunnerTest](../../backend/src/test/java/com/beone/api/benefit/evaluation/EvaluationCaseRunnerTest.java))로 확인합니다. C07·M04는 중복 합산, C09·C14는 원장, C20은 예정 소비 비교(D-18 K4)가 필요해 대상 밖입니다. 카드 상태(`applicationStatusByCard`, M08 포함)는 추천 연결 전까지 검증되지 않습니다. 선택된 서비스가 그 거래에 적용되는 경우는 계속 `확인 필요`입니다. 카드 단위 사유 우선순위, 중복 허용 서비스의 합산, 공유 한도 배분, 카드 간 비교는 정하지 않았습니다.
 
 ### result: 결과와 설명 근거
 
 - [ServiceBenefit](../../backend/src/main/java/com/beone/api/benefit/result/ServiceBenefit.java): 서비스별 상태와 현재 주문 혜택.
 - [CardBenefit](../../backend/src/main/java/com/beone/api/benefit/result/CardBenefit.java): 카드별 적용 규칙, 현재 주문 혜택, 예상 월 총혜택, 서비스 내역, 주문 이후 잔여 한도.
 - [ApplicationStatus](../../backend/src/main/java/com/beone/api/benefit/result/ApplicationStatus.java): 적용·한도 소진·업종/실적/금액/결제 방식 미충족·규칙 부재·확인 필요 등 결과 사유. 금액 형태와 상태의 일관성을 검사합니다.
-- [ServiceCandidate](../../backend/src/main/java/com/beone/api/benefit/result/ServiceCandidate.java): 서비스 하나만 고른다고 할 때의 후보 판정(D-13). 후보 금액 `standaloneAmount`와 확인된 미충족 사유 집합을 담습니다. 미충족 사유는 `NOT_APPLICABLE_*` 5종과 `LIMIT_EXHAUSTED`만 명시적으로 허용하고, 사유가 하나라도 있으면 후보 금액은 확정 0원이어야 합니다. 사유 순서는 계약이 아닙니다.
+- [ServiceCandidate](../../backend/src/main/java/com/beone/api/benefit/result/ServiceCandidate.java): 서비스 하나만 고른다고 할 때의 후보 판정(D-13). 후보 금액 `standaloneAmount`와 확인된 미충족 사유 집합을 담습니다. 한도 서비스는 양수 금액을 줄일 남은 한도(`remainingLimit`), 판정하지 못한 사유(`limitReason`), 절사 여부를 함께 담습니다. 미충족 사유는 `NOT_APPLICABLE_*` 6종과 `LIMIT_EXHAUSTED`만 명시적으로 허용하고, 사유가 하나라도 있으면 후보 금액은 확정 0원이어야 합니다. 사유 순서는 계약이 아닙니다.
 - [Adoption](../../backend/src/main/java/com/beone/api/benefit/result/Adoption.java): 후보를 카드의 최종 금액에 넣었는지. `ADOPTED`(채택)·`NOT_ADOPTED`(채택하지 않음)·`UNDETERMINED`(정할 수 없음).
-- [OrderServiceBenefit](../../backend/src/main/java/com/beone/api/benefit/result/OrderServiceBenefit.java): 단일 주문에서 서비스 하나의 후보·채택·실제 기여액 `contribution`을 나눠 담습니다. 미충족 후보는 `NOT_ADOPTED`만, `NOT_ADOPTED`와 확정 0원 후보의 기여액은 확정 0원만, 후보와 기여액이 모두 확정이면 기여액 ≤ 후보 금액만 허용합니다. `UNDETERMINED`는 미채택(0원)일 수도 있으므로 기여액은 확정 0원이나 확인 필요만 허용합니다. 이 조건들은 결과 표현의 논리적 일관성이며, 실제 채택·기여액을 정하는 근거는 후속 계산기의 책임입니다.
+- [OrderServiceBenefit](../../backend/src/main/java/com/beone/api/benefit/result/OrderServiceBenefit.java): 단일 주문에서 서비스 하나의 후보·채택·실제 기여액 `contribution`을 나눠 담습니다. 미충족 후보는 `NOT_ADOPTED`만, `NOT_ADOPTED`와 확정 0원 후보의 기여액은 확정 0원만, 후보와 기여액이 모두 확정이면 기여액 ≤ 후보 금액만 허용합니다. `UNDETERMINED`는 미채택(0원)일 수도 있으므로 기여액은 확정 0원이나 확인 필요만 허용합니다. `appliedStatus()`는 채택된 양수 기여액의 적용 상태(`APPLIED`, 남은 한도로 줄였으면 `APPLIED_CAP_REMAINING`)입니다. 이 조건들은 결과 표현의 논리적 일관성이며, 실제 채택·기여액을 정하는 근거는 계산기의 책임입니다.
 - [Recommendation](../../backend/src/main/java/com/beone/api/benefit/result/Recommendation.java): 카드별 결과와 최종 선택 결과. 중복 카드와 결과 없는 선택 등을 차단하고 선택 카드의 월 총혜택이 확정되었는지 검사합니다.
 - [RecommendationOutcome](../../backend/src/main/java/com/beone/api/benefit/result/RecommendationOutcome.java): Selected 선택 결과 또는 NotDetermined 추천 불가 사유. Selected는 선택 근거, 동률 카드, 차순위와의 차이, 조건부 여부를 담습니다.
 - [SelectionBasis](../../backend/src/main/java/com/beone/api/benefit/result/SelectionBasis.java): 월 총혜택 → 현재 주문 혜택 → 대표 카드 → 카드 ID 순서의 선택 근거를 표현합니다. 대표 카드·ID 선택은 혜택 우월성을 뜻하지 않는 임의 동률 규칙입니다.
@@ -272,15 +279,15 @@ new OrderServiceBenefit(candidate, Adoption.NOT_ADOPTED, BenefitAmount.confirmed
 
 #### OrderBenefitResolver: 규칙 선택부터 주문 혜택 결정까지(#38)
 
-[OrderBenefitResolver](../../backend/src/main/java/com/beone/api/benefit/primitive/OrderBenefitResolver.java)의 `resolve(catalog, cardId, decisionDate, order, state, evidence)`는 `RuleCatalog.select(cardId, decisionDate)`의 결과를 그대로 `OrderBenefitDecider.decide`에 넘깁니다. 결과는 같은 입력으로 두 단계를 직접 호출한 것과 같으며, 규칙 선택 순서와 결정 정책에 판단을 더하지 않습니다.
+[OrderBenefitResolver](../../backend/src/main/java/com/beone/api/benefit/primitive/OrderBenefitResolver.java)의 `resolve(catalog, cardId, decisionDate, order, state, registeredAt, evidence)`는 `RuleCatalog.select(cardId, decisionDate)`의 결과를 그대로 `OrderBenefitDecider.decide`에 넘깁니다. 결과는 같은 입력으로 두 단계를 직접 호출한 것과 같으며, 규칙 선택 순서와 결정 정책에 판단을 더하지 않습니다.
 
-- 판정일(`decisionDate`)은 규칙 버전을 고르는 날짜이며 **호출자가 정합니다.** 주문의 날짜(`Order.date`)로 대신하지 않습니다. 카드마다 거래 기준일(승인·이용·이용내역서 기재·매입, D-03)이 다르고 개별 거래의 적용 규칙 버전은 확정되지 않았으므로, 주문일·결제일에서 판정일을 정하는 규칙은 아직 없습니다.
+- 판정일(`decisionDate`)은 규칙 버전을 고르는 날짜이며 **호출자가 정합니다.** 주문의 날짜(`Order.date`)로 대신하지 않습니다. 카드마다 거래 기준일(승인·이용·이용내역서 기재·매입, D-03)이 다르고 개별 거래의 적용 규칙 버전은 확정되지 않았으므로, 주문일·결제일에서 판정일을 정하는 규칙은 아직 없습니다. 유예 기간과 택1 적용일은 주문일(`Order.date`)로 판정합니다.
 - 규칙 없음·판정일 포함 버전 없음·`VERIFIED` 없음은 `OrderBenefit.Unavailable`(`NO_VERIFIED_RULE`·`RULE_EXPIRED`)이며 카드 금액은 `확인 필요`입니다.
 - 입력 검증: null을 거부합니다. 월간 상태·근거의 카드가 판정할 카드와 다르면 규칙 사용 가능 여부와 관계없이 취합기·결정기의 기존 검증이 `IllegalArgumentException`으로 거부합니다.
 
 ```java
 // 합성 예시: 판정일은 호출자가 정한다
-OrderBenefit result = OrderBenefitResolver.resolve(catalog, cardId, decisionDate, order, state, evidence);
+OrderBenefit result = OrderBenefitResolver.resolve(catalog, cardId, decisionDate, order, state, registeredAt, evidence);
 ```
 
 여러 카드를 비교하거나 `CardBenefit`·`Recommendation`을 만들지 않습니다.
@@ -291,7 +298,7 @@ OrderBenefit result = OrderBenefitResolver.resolve(catalog, cardId, decisionDate
 
 1. Order, HeldCard, Ledger, CardMonthlyState 등을 RecommendationInput으로 묶습니다.
 2. 서버 시작 때 로더가 규칙 JSON으로 RuleCatalog를 만들고, RuleCatalog가 판단 날짜에 적용 가능한 검증 규칙을 선택합니다. 카드 한 장·주문 한 건은 `OrderBenefitResolver`가 이 선택과 아래 결정을 잇습니다(판정일은 호출자 입력).
-3. 미확정 약관과 입력 상태를 고려해 혜택을 계산하고 월간 후보를 비교합니다. 서비스 한 건의 산식·개별 조건 판정과 한도 없는 비선택형 서비스의 단일 후보 판정, 규칙 선택 결과의 서비스 후보 취합(`CardServiceCandidateCollector`), 한도 없는 비선택형 서비스에 대한 카드 한 장·주문 한 건의 채택·카드 금액 결정(`OrderBenefitDecider`)은 `primitive`에 있지만, 카드 간 비교·월간 최적화로 추천을 내는 **엔진은 후속 구현입니다.**
+3. 미확정 약관과 입력 상태를 고려해 혜택을 계산하고 월간 후보를 비교합니다. 서비스 한 건의 산식·개별 조건 판정과 비선택형 서비스의 단일 후보 판정, 규칙 선택 결과의 서비스 후보 취합(`CardServiceCandidateCollector`), 카드 한 장·주문 한 건의 채택·카드 금액 결정(`OrderBenefitDecider`)은 `primitive`에 있지만, 카드 간 비교·월간 최적화로 추천을 내는 **엔진은 후속 구현입니다.**
 4. 계산 로직이 ServiceBenefit(또는 후보·채택·기여액을 나눈 ServiceCandidate·OrderServiceBenefit·OrderBenefit), CardBenefit, Recommendation을 구성합니다. 현재 `OrderBenefit`까지는 결정기가 만들고, `CardBenefit`·`Recommendation`은 결과를 담는 모델과 일관성 검사만 있습니다.
 
 ## 짧은 코드 예시
@@ -319,14 +326,14 @@ RuleTerm<FractionalWonPolicy> rounding = RuleTerm.unresolved("공식 근거 확�
 - 미확정 조건은 관련 상황의 부재가 확인된 경우에만 무시합니다. 증거 없음은 부재가 아니라 UNDETERMINED입니다.
 - 날짜는 Asia/Seoul의 달력 날짜라는 입력 계약입니다. LocalDate 자체가 시간대를 변환하는 것은 아닙니다.
 - 모델 검증과 규칙 선택 성공은 실제 공식 약관의 정확성 또는 추천 엔진 정확성을 자동으로 입증하지 않습니다.
-- MVP 주문 입력은 일시불·일반 매장 결제를 가정합니다. 입력에 없는 제외 조건(`unevaluatedExclusions`)은 판정하지 않으므로, 그런 조건이 있는 서비스의 확정 금액은 실제보다 클 수 있습니다([D-20](../decisions.md#d-20-확정-정책)). 결과에 표시하는 필드는 아직 없습니다.
-- 로더는 `inclusionUnconfirmed`를 담고 검증만 합니다. 판정 코드는 이 쌍을 읽지 않아, 코드가 다르면 아직 불일치로 처리합니다.
+- MVP 주문 입력은 일시불·일반 매장 결제를 가정합니다. 입력에 없는 제외 조건(`unevaluatedExclusions`)은 판정하지 않으므로, 그런 조건이 있는 서비스의 확정 금액은 실제보다 클 수 있습니다([D-20](../decisions.md#d-20-확정-정책)). 서비스 결과의 `ServiceResultNotes.unevaluatedExclusions`에 담기며, API 응답은 아직 구현하지 않았습니다.
+- 로더는 `inclusionUnconfirmed`를 담고 검증합니다. 서비스 판정은 주문 업종이 이 쌍의 코드이면 대상 불일치로 확정하지 않고 확인 필요로 처리합니다.
 
 ## 현재 구현 범위와 관련 문서
 
-구현된 범위는 위 모델, 규칙 JSON 로더, 생성 시 일관성 검사, 규칙 선택, 일부 기간·취소 증거 보조 로직, 서비스 한 건의 산식·개별 조건 판정, 한도 없는 비선택형 서비스의 단일 후보 판정, 카드 한 장의 서비스 후보 취합, 한도 없는 비선택형 서비스에 대한 카드 한 장·주문 한 건의 혜택 결정(#35)과 규칙 선택부터 결정까지의 연결(#38, 판정일은 호출자 입력), 서비스 후보·취합·채택·기여액·주문 혜택 결과 타입입니다. 카드 간 비교·추천, 한도·선택형 판정, 중복 합산, 최적화 엔진과 외부 연동은 별도 구현이 필요합니다. `primitive` 테스트는 가상 업종·서비스의 합성 값이며 실제 카드 약관 검증이나 평가 통과를 뜻하지 않습니다.
+구현된 범위는 위 모델, 규칙 JSON 로더, 생성 시 일관성 검사, 규칙 선택, 일부 기간·취소 증거 보조 로직, 서비스 한 건의 산식·개별 조건 판정, 비선택형 서비스의 단일 후보 판정(한도 체인 포함), 신규 유예 판정, 카드 한 장의 서비스 후보 취합, 카드 한 장·주문 한 건의 혜택 결정(#35, #65)과 규칙 선택부터 결정까지의 연결(#38, 판정일은 호출자 입력), 서비스 후보·취합·채택·기여액·주문 혜택 결과 타입입니다. 카드 간 비교·추천, 선택 서비스 금액 계산, 중복 합산, 최적화 엔진과 외부 연동은 별도 구현이 필요합니다. `primitive` 테스트 일부는 가상 업종·서비스의 합성 값이고, `LimitSelectionGraceTest`와 평가 실행기는 규칙 JSON을 쓰지만 약관 전체 검증을 뜻하지 않습니다.
 
-테스트는 [benefit 테스트 디렉터리](../../backend/src/test/java/com/beone/api/benefit/)에서 확인합니다. fixture 매핑 테스트를 계산 결과 검증으로 혼동하지 않습니다. 이 문서 작성 과정에서는 테스트를 실행하지 않았습니다.
+테스트는 [benefit 테스트 디렉터리](../../backend/src/test/java/com/beone/api/benefit/)에서 확인합니다. fixture 매핑 테스트를 계산 결과 검증으로 혼동하지 않습니다. 계산 결과는 평가 실행기가 비교합니다.
 
 - [전체 구조](../architecture.md)
 - [PRD](../PRD.md)

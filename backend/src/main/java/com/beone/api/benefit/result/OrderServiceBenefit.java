@@ -1,6 +1,7 @@
 package com.beone.api.benefit.result;
 
 import java.util.Objects;
+import java.util.Optional;
 
 import com.beone.api.benefit.money.BenefitAmount;
 
@@ -45,6 +46,19 @@ public record OrderServiceBenefit(ServiceCandidate candidate, Adoption adoption,
 			throw new IllegalArgumentException("service " + candidate.serviceId()
 					+ " adoption is undetermined, so it cannot contribute confirmed " + contribution);
 		}
+	}
+
+	/**
+	 * 채택된 서비스의 적용 상태. 남은 한도로 줄였으면 {@code APPLIED_CAP_REMAINING}, 아니면 {@code APPLIED}다.
+	 *
+	 * @return 채택됐고 기여액이 양수이면 적용 상태, 아니면 비어 있다. 미충족 사유는 {@link ServiceCandidate#unmetConditions()}에 있다
+	 */
+	public Optional<ApplicationStatus> appliedStatus() {
+		if (adoption != Adoption.ADOPTED || !contribution.isConfirmed() || !contribution.confirmedWon().isPositive()) {
+			return Optional.empty();
+		}
+		boolean capped = contribution.confirmedWon().compareTo(candidate.standaloneAmount().confirmedWon()) < 0;
+		return Optional.of(capped ? ApplicationStatus.APPLIED_CAP_REMAINING : ApplicationStatus.APPLIED);
 	}
 
 }

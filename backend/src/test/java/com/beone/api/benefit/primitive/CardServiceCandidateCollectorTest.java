@@ -43,6 +43,7 @@ import com.beone.api.benefit.rule.BenefitService;
 import com.beone.api.benefit.rule.CancellationAttribution;
 import com.beone.api.benefit.rule.CardRuleVersion;
 import com.beone.api.benefit.rule.FractionalWonPolicy;
+import com.beone.api.benefit.rule.GracePartialPerformance;
 import com.beone.api.benefit.rule.GraceSpan;
 import com.beone.api.benefit.rule.LimitBucket;
 import com.beone.api.benefit.rule.LimitDeductionOrder;
@@ -143,6 +144,11 @@ class CardServiceCandidateCollectorTest {
 				RuleTerm.resolved(LimitDeductionOrder.APPROVAL_ORDER), grace);
 	}
 
+	/** 한도 기간이 미확정이라 한도 서비스가 지원 범위 밖으로 남는 정책(D-18 K1). */
+	private static RulePolicy limitPeriodUnresolved() {
+		return policy(RuleTerm.unresolved(LIMIT_PERIOD_REASON), RuleTerm.resolved(Optional.empty()));
+	}
+
 	private static RulePolicy resolvedPolicy() {
 		return policy(RuleTerm.resolved(LimitPeriod.CALENDAR_MONTH), RuleTerm.resolved(Optional.empty()));
 	}
@@ -180,7 +186,7 @@ class CardServiceCandidateCollectorTest {
 	private static final CardMonthlyState UNKNOWN = state(CARD, Optional.of(StateValue.unknown(null, null)));
 
 	private static CardServiceCandidates.Collected collect(RuleSelection selection, CardMonthlyState state) {
-		return (CardServiceCandidates.Collected) CardServiceCandidateCollector.collect(selection, ORDER, state);
+		return (CardServiceCandidates.Collected) CardServiceCandidateCollector.collect(selection, ORDER, state, PrimitiveTestData.REGISTERED);
 	}
 
 	private static CardServiceCandidates.Collected collect(RuleSelection selection) {
@@ -188,7 +194,7 @@ class CardServiceCandidateCollectorTest {
 	}
 
 	private static ServiceCandidate evaluate(BenefitService service, long performance, TriggerEvidence grace) {
-		return ServiceCandidateEvaluator.evaluate(service, ORDER, Won.of(performance), grace);
+		return ServiceCandidateEvaluator.evaluate(service, ORDER, Won.of(performance), grace, ServiceLimits.NONE);
 	}
 
 	private static String evaluationReason(BenefitService service, long performance, TriggerEvidence grace) {
@@ -243,7 +249,7 @@ class CardServiceCandidateCollectorTest {
 			BenefitService tooLarge = fixed("SYN-FIXED", 20_000);
 			BenefitService pendingRule = unresolvedCalculation("SYN-PENDING");
 			BenefitService limited = limited("SYN-LIMITED");
-			CardRuleVersion rule = rule(resolvedPolicy(), List.of(base, tooLarge, pendingRule, limited));
+			CardRuleVersion rule = rule(limitPeriodUnresolved(), List.of(base, tooLarge, pendingRule, limited));
 
 			CardServiceCandidates.Collected result = collect(select(rule));
 
@@ -255,7 +261,7 @@ class CardServiceCandidateCollectorTest {
 					new ServiceNeedingConfirmation(ServiceId.of("SYN-PENDING"), ConfirmationStage.RULE_SELECTION,
 							List.of(CALCULATION_REASON)));
 			assertThat(result.unsupported()).containsExactly(new UnsupportedService(ServiceId.of("SYN-LIMITED"),
-					Set.of(UnsupportedReason.HAS_LIMIT_BUCKETS), List.of()));
+					Set.of(UnsupportedReason.HAS_LIMIT_BUCKETS), List.of(LIMIT_PERIOD_REASON)));
 			assertClassifiesExactlyOnce(result, rule);
 		}
 
@@ -306,7 +312,7 @@ class CardServiceCandidateCollectorTest {
 		void allServicesOutOfScopeAreUnsupportedWithoutCallingTheEvaluator() {
 			BenefitService both = service("SYN-BOTH", MerchantTarget.allMerchants(),
 					List.of(tier(0, BenefitCalculation.rate(100))), List.of(BUCKET), true);
-			CardRuleVersion rule = rule(resolvedPolicy(), List.of(limited("SYN-LIMITED"), selectable("SYN-SELECT"), both));
+			CardRuleVersion rule = rule(limitPeriodUnresolved(), List.of(limited("SYN-LIMITED"), selectable("SYN-SELECT"), both));
 
 			CardServiceCandidates.Collected result = collect(select(rule));
 
@@ -314,12 +320,12 @@ class CardServiceCandidateCollectorTest {
 			assertThat(result.needingConfirmation()).isEmpty();
 			assertThat(result.unsupported()).containsExactly(
 					new UnsupportedService(ServiceId.of("SYN-LIMITED"), Set.of(UnsupportedReason.HAS_LIMIT_BUCKETS),
-							List.of()),
+							List.of(LIMIT_PERIOD_REASON)),
 					new UnsupportedService(ServiceId.of("SYN-SELECT"), Set.of(UnsupportedReason.REQUIRES_SELECTION),
 							List.of()),
 					new UnsupportedService(ServiceId.of("SYN-BOTH"),
 							Set.of(UnsupportedReason.HAS_LIMIT_BUCKETS, UnsupportedReason.REQUIRES_SELECTION),
-							List.of()));
+							List.of(LIMIT_PERIOD_REASON)));
 		}
 
 		@Test
@@ -343,7 +349,7 @@ class CardServiceCandidateCollectorTest {
 		@Test
 		void keepsValidSelectionReasonsVerbatimAndInOrder() {
 			BenefitService base = rate("SYN-BASE", 100);
-			CardRuleVersion rule = rule(resolvedPolicy(),
+			CardRuleVersion rule = rule(limitPeriodUnresolved(),
 					List.of(base, limited("SYN-LIMITED"), selectable("SYN-SELECT")));
 			List<String> limitedReasons = List.of("synthetic: b", "synthetic: a", "synthetic: c");
 			List<String> selectReasons = List.of("synthetic: only");
@@ -363,7 +369,7 @@ class CardServiceCandidateCollectorTest {
 		@Test
 		void keepsPaddedSelectionReasonsWithoutTrimming() {
 			BenefitService pendingRule = rate("SYN-PENDING", 100);
-			CardRuleVersion rule = rule(resolvedPolicy(), List.of(pendingRule, limited("SYN-LIMITED")));
+			CardRuleVersion rule = rule(limitPeriodUnresolved(), List.of(pendingRule, limited("SYN-LIMITED")));
 			String padded = "  synthetic: padded  ";
 
 			CardServiceCandidates.Collected result = collect(new RuleSelection.Selected(rule, List.of(),
@@ -409,7 +415,7 @@ class CardServiceCandidateCollectorTest {
 		private void assertMissingPerformance(CardMonthlyState state, String reason) {
 			BenefitService base = rate("SYN-BASE", 100);
 			BenefitService cinema = cinemaOnly("SYN-CINEMA");
-			CardRuleVersion rule = rule(resolvedPolicy(), List.of(base, cinema, unresolvedCalculation("SYN-PENDING"),
+			CardRuleVersion rule = rule(limitPeriodUnresolved(), List.of(base, cinema, unresolvedCalculation("SYN-PENDING"),
 					limited("SYN-LIMITED"), selectable("SYN-SELECT")));
 
 			CardServiceCandidates.Collected result = collect(select(rule), state);
@@ -434,10 +440,10 @@ class CardServiceCandidateCollectorTest {
 	class NewCardGraceEvidence {
 
 		private static final NewCardGrace GRACE_FOR_OTHER = new NewCardGrace(GraceSpan.UNTIL_END_OF_NEXT_MONTH,
-				Optional.empty(), Won.of(300_000), Set.of(ServiceId.of("SYN-OTHER")));
+				Optional.empty(), Won.of(300_000), Set.of(ServiceId.of("SYN-OTHER")), GracePartialPerformance.DEEMED_TIER);
 
 		private static final NewCardGrace GRACE_FOR_TIERED = new NewCardGrace(GraceSpan.UNTIL_END_OF_NEXT_MONTH,
-				Optional.empty(), Won.of(300_000), Set.of(ServiceId.of("SYN-TIERED")));
+				Optional.empty(), Won.of(300_000), Set.of(ServiceId.of("SYN-TIERED")), GracePartialPerformance.DEEMED_TIER);
 
 		private CardServiceCandidates.Collected collectTiered(RuleTerm<Optional<NewCardGrace>> grace) {
 			CardRuleVersion rule = rule(policy(RuleTerm.resolved(LimitPeriod.CALENDAR_MONTH), grace),
@@ -468,10 +474,17 @@ class CardServiceCandidateCollectorTest {
 		}
 
 		@Test
-		void serviceInsideConfirmedGraceIsUndeterminedWithoutJudgingThePeriod() {
-			CardServiceCandidates.Collected result = collectTiered(RuleTerm.resolved(Optional.of(GRACE_FOR_TIERED)));
+		void serviceInsideConfirmedGraceWithUnknownRegistrationNeedsConfirmation() {
+			CardRuleVersion rule = rule(
+					policy(RuleTerm.resolved(LimitPeriod.CALENDAR_MONTH), RuleTerm.resolved(Optional.of(GRACE_FOR_TIERED))),
+					List.of(twoTier("SYN-TIERED"), rate("SYN-OTHER", 100)));
 
-			assertUndetermined(result);
+			CardServiceCandidates.Collected result = (CardServiceCandidates.Collected) CardServiceCandidateCollector
+				.collect(select(rule), ORDER, performance(0), StateValue.unknown(null, null));
+
+			assertThat(result.needingConfirmation()).containsExactly(new ServiceNeedingConfirmation(
+					ServiceId.of("SYN-TIERED"), ConfirmationStage.CANDIDATE_EVALUATION,
+					List.of("service SYN-TIERED has new card grace but the registration date is UNKNOWN")));
 			// 유예 대상이 아닌 서비스는 같은 규칙에서도 부재 확인으로 판정한다.
 			assertThat(result.candidates())
 				.containsExactly(evaluate(rate("SYN-OTHER", 100), 0, TriggerEvidence.CONFIRMED_ABSENT));
@@ -494,7 +507,7 @@ class CardServiceCandidateCollectorTest {
 		void noVerifiedRuleStaysUnavailable() {
 			RuleSelection selection = new RuleCatalog(List.of()).select(CARD, DAY);
 
-			assertThat(CardServiceCandidateCollector.collect(selection, ORDER, NOT_PROVIDED)).isEqualTo(
+			assertThat(CardServiceCandidateCollector.collect(selection, ORDER, NOT_PROVIDED, PrimitiveTestData.REGISTERED)).isEqualTo(
 					new CardServiceCandidates.Unavailable(CARD, ApplicationStatus.NO_VERIFIED_RULE,
 							((RuleSelection.Unavailable) selection).reason()));
 		}
@@ -508,7 +521,7 @@ class CardServiceCandidateCollectorTest {
 					List.of(rate("SYN-BASE", 100)), List.of());
 			RuleSelection selection = new RuleCatalog(List.of(old)).select(CARD, DAY);
 
-			CardServiceCandidates result = CardServiceCandidateCollector.collect(selection, ORDER, performance(0));
+			CardServiceCandidates result = CardServiceCandidateCollector.collect(selection, ORDER, performance(0), PrimitiveTestData.REGISTERED);
 
 			assertThat(result).isEqualTo(new CardServiceCandidates.Unavailable(CARD, ApplicationStatus.RULE_EXPIRED,
 					((RuleSelection.Unavailable) selection).reason()));
@@ -523,11 +536,11 @@ class CardServiceCandidateCollectorTest {
 		void rejectsNull() {
 			RuleSelection.Selected selection = select(rate("SYN-BASE", 100));
 
-			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(null, ORDER, performance(0)))
+			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(null, ORDER, performance(0), PrimitiveTestData.REGISTERED))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(selection, null, performance(0)))
+			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(selection, null, performance(0), PrimitiveTestData.REGISTERED))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(selection, ORDER, null))
+			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(selection, ORDER, null, PrimitiveTestData.REGISTERED))
 				.isInstanceOf(NullPointerException.class);
 		}
 
@@ -535,11 +548,11 @@ class CardServiceCandidateCollectorTest {
 		void rejectsStateOfAnotherCard() {
 			CardMonthlyState other = state(CardId.of("SYN-OTHER-CARD"), Optional.empty());
 
-			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(select(rate("SYN-BASE", 100)), ORDER, other))
+			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(select(rate("SYN-BASE", 100)), ORDER, other, PrimitiveTestData.REGISTERED))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("does not match");
 			RuleSelection unavailable = new RuleCatalog(List.of()).select(CARD, DAY);
-			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(unavailable, ORDER, other))
+			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(unavailable, ORDER, other, PrimitiveTestData.REGISTERED))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("does not match");
 		}
@@ -548,15 +561,15 @@ class CardServiceCandidateCollectorTest {
 		void rejectsNegativePerformanceOnEveryPath() {
 			CardMonthlyState negative = performance(-1);
 
-			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(select(rate("SYN-BASE", 100)), ORDER, negative))
+			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(select(rate("SYN-BASE", 100)), ORDER, negative, PrimitiveTestData.REGISTERED))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("negative prior performance");
 			// 판정기를 호출하지 않는 범위 밖·규칙 사용 불가 경로에서도 거부한다.
-			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(select(limited("SYN-LIMITED")), ORDER, negative))
+			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(select(limited("SYN-LIMITED")), ORDER, negative, PrimitiveTestData.REGISTERED))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("negative prior performance");
 			RuleSelection unavailable = new RuleCatalog(List.of()).select(CARD, DAY);
-			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(unavailable, ORDER, negative))
+			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(unavailable, ORDER, negative, PrimitiveTestData.REGISTERED))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("negative prior performance");
 		}
@@ -639,13 +652,13 @@ class CardServiceCandidateCollectorTest {
 		private void assertBlankReasonRejected(BenefitService blocked, List<String> reasons) {
 			RuleSelection.Selected selection = blockedSelection(blocked, reasons);
 
-			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(selection, ORDER, performance(0)))
+			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(selection, ORDER, performance(0), PrimitiveTestData.REGISTERED))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("blank confirmation reason");
 		}
 
 		private void assertInconsistent(RuleSelection.Selected selection) {
-			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(selection, ORDER, performance(0)))
+			assertThatThrownBy(() -> CardServiceCandidateCollector.collect(selection, ORDER, performance(0), PrimitiveTestData.REGISTERED))
 				.isInstanceOf(IllegalArgumentException.class);
 		}
 
@@ -670,7 +683,7 @@ class CardServiceCandidateCollectorTest {
 
 		@Test
 		void returnedCollectionsCannotBeChanged() {
-			CardRuleVersion rule = rule(resolvedPolicy(),
+			CardRuleVersion rule = rule(limitPeriodUnresolved(),
 					List.of(rate("SYN-BASE", 100), unresolvedCalculation("SYN-PENDING"), limited("SYN-LIMITED")));
 			CardServiceCandidates.Collected result = collect(select(rule));
 
@@ -690,7 +703,7 @@ class CardServiceCandidateCollectorTest {
 		void laterChangesToSelectionReasonsDoNotLeakIntoTheResult() {
 			BenefitService base = rate("SYN-BASE", 100);
 			BenefitService limitedService = limited("SYN-LIMITED");
-			CardRuleVersion rule = rule(resolvedPolicy(), List.of(base, limitedService));
+			CardRuleVersion rule = rule(limitPeriodUnresolved(), List.of(base, limitedService));
 			List<String> reasons = new ArrayList<>(List.of("synthetic: mutable"));
 			Map<ServiceId, List<String>> blocked = new HashMap<>();
 			blocked.put(ServiceId.of("SYN-LIMITED"), reasons);
