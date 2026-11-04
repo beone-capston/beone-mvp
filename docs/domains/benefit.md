@@ -34,7 +34,7 @@ benefit/
 
 ### engine: 업무 API의 입구
 
-업무 API가 혜택 계산을 부르는 단일 입구입니다([D-22](../decisions.md#d-22-확정-정책)). **인터페이스와 입출력 타입, 생성 시 계약 검증만 있고 구현체와 빈은 아직 없습니다.** 호출하는 쪽의 시험은 자기 가짜 구현을 씁니다.
+업무 API가 혜택 계산을 부르는 단일 입구입니다([D-22](../decisions.md#d-22-확정-정책)). **인터페이스와 입출력 타입, 생성 시 계약 검증만 있고 구현체와 Spring 빈(Spring이 생성·관리하는 객체)은 아직 없습니다.** 호출하는 쪽의 시험은 자기 가짜 구현을 씁니다.
 
 - [RecommendationEngine](../../backend/src/main/java/com/beone/api/benefit/engine/RecommendationEngine.java): `EngineRequest`를 받아 `EngineResult`를 돌려줍니다.
 - 입력

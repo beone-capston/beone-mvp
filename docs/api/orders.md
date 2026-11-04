@@ -47,7 +47,7 @@ AUTOPAY
 
 #### merchantClass
 
-사용자나 시나리오가 확인한 가맹점·업종 분류 코드다. 전체 목록은 String/Enum 표에서 규칙 데이터와 함께 확정한다. 가맹점 이름으로 추정해 채우지 않는다.
+사용자나 시나리오가 확인한 가맹점·업종 분류 코드다. 허용 값은 [`rules/merchant-classes.txt`](../../backend/src/main/resources/rules/merchant-classes.txt) 기준이다(D-23). 가맹점 이름으로 추정해 채우지 않는다.
 
 ```text
 STARBUCKS_STORE

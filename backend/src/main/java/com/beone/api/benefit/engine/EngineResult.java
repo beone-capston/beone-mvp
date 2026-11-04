@@ -86,8 +86,12 @@ public record EngineResult(LocalDate decisionDate, String outcome, boolean condi
 		if (!Objects.equals(fixed.optimalUserCardId(), optimal)) {
 			throw new IllegalArgumentException("the optimal card must be the selected card");
 		}
-		if (fixed.differenceWon() != null && !comparedIds.contains(fixed.representativeUserCardId())) {
+		boolean representativeCompared = comparedIds.contains(fixed.representativeUserCardId());
+		if (fixed.differenceWon() != null && !representativeCompared) {
 			throw new IllegalArgumentException("a difference needs a representative card with a confirmed benefit");
+		}
+		if (fixed.differenceWon() == null && representativeCompared) {
+			throw new IllegalArgumentException("a compared representative card has a confirmed difference");
 		}
 	}
 

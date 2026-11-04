@@ -118,6 +118,28 @@ class EngineResultTest {
 	}
 
 	@Test
+	void comparedRepresentativeCardHasAConfirmedDifference() {
+		List<ComparedCard> two = List.of(compared("uc-1", "09174", 2), compared("uc-2", "09271", 1));
+		SelectedCard decided = new SelectedCard("uc-1", "09174", "MONTHLY_TOTAL", false, List.of(), 1L);
+		EngineResult result = new EngineResult(ORDER_DATE, "SELECTED", false, decided, two, List.of(),
+				new FixedComparison("uc-2", "uc-1", 1L), List.of(), List.of());
+		assertThat(result.fixedComparison().differenceWon()).isEqualTo(1L);
+		assertThatThrownBy(() -> new EngineResult(ORDER_DATE, "SELECTED", false, decided, two, List.of(),
+				new FixedComparison("uc-2", "uc-1", null), List.of(), List.of()))
+			.hasMessageContaining("confirmed difference");
+	}
+
+	@Test
+	void representativeNeedingConfirmationKeepsTheDifferenceUnknown() {
+		ExcludedCard needsConfirmation = new ExcludedCard("uc-2", "01664", "NEEDS_CONFIRMATION", "실적 미입력", null,
+				BenefitAmountOutput.needsConfirmation(), "NEEDS_CONFIRMATION", rule(), List.of());
+		EngineResult result = new EngineResult(ORDER_DATE, "SELECTED", true, single("uc-1", "09174"),
+				List.of(compared("uc-1", "09174", 1)), List.of(needsConfirmation), new FixedComparison("uc-2", "uc-1", null),
+				List.of(), List.of());
+		assertThat(result.fixedComparison().differenceWon()).isNull();
+	}
+
+	@Test
 	void representativeWithoutARuleStaysInTheResultForApproval() {
 		EngineResult result = new EngineResult(ORDER_DATE, "NOT_DETERMINED", false, null, List.of(),
 				List.of(excluded("uc-2", "RULE_UNAVAILABLE")), new FixedComparison("uc-2", null, null), List.of(), List.of());
