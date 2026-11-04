@@ -47,6 +47,7 @@
 - 모든 `error` 응답의 `v`는 항상 숫자 `1`입니다. 입력의 `v`를 응답에 그대로 복사하지 않습니다.
 - `v`가 없으면 `INVALID_MESSAGE`, `v`가 있지만 숫자 `1`이 아니면 `UNSUPPORTED_VERSION`입니다.
 - `UNKNOWN_TYPE`·`INVALID_MESSAGE`에도 같은 응답 `v`를 씁니다.
+- 오류가 겹치면 JSON 형식, `v`, `type` 순서로 검사해 먼저 걸린 코드를 보냅니다. `UNKNOWN_TYPE`은 `v`가 숫자 `1`일 때만 나옵니다. 예: `{"type":"unknown"}`은 `INVALID_MESSAGE`, `{"v":2,"type":"unknown"}`은 `UNSUPPORTED_VERSION`입니다.
 - 하위 프레임 메시지는 이 규칙과 무관하게 무시하며 `error`도 보내지 않습니다(1절).
 
 버전 협상 기능은 두지 않습니다. 이 규칙은 후보이며 구현 완료나 공개 계약 확정이 아닙니다.
@@ -99,4 +100,5 @@
 - `androidx.webkit` 안정판 버전과 `WebViewFeature.WEB_MESSAGE_LISTENER` 지원 확인(실기기 WebView 154에서는 PoC로 확인)
 - 구현 테스트: 하위 프레임 메시지를 `isMainFrame`으로 거르고 응답하지 않는지(1절)
 - release 빌드의 허용 origin 목록에 debug·테스트·`http://` origin이 없는지
-- 구현 테스트: 모르는 `type`, 지원하지 않는 `v`, `v` 누락, 크기·형식 오류가 인증 상태를 바꾸지 않고 해당 `code`의 `error`를 보내는지(3절)
+- 구현 테스트: 모르는 `type`, 지원하지 않는 `v`, `v` 누락, 형식 오류가 인증 상태를 바꾸지 않고 해당 `code`의 `error`를 보내는지, 오류가 겹칠 때 검사 순서를 따르는지(3절)
+- 최대 메시지 크기, 측정 단위, 초과 시 처리는 미정이며 브리지 구현 전에 결정합니다. 크기 제한과 크기 오류 처리는 아직 없습니다
