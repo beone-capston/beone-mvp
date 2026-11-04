@@ -19,6 +19,7 @@
 
 ```text
 benefit/
+├── engine/  업무 API가 부르는 단일 입구와 입력·출력 타입(구현체 없음)
 ├── card/    식별자와 거래 분류
 ├── money/   원화와 혜택 금액
 ├── state/   값의 출처·기준 기간·갱신 시각
@@ -30,6 +31,32 @@ benefit/
 ```
 
 ## 주요 클래스
+
+### engine: 업무 API의 입구
+
+업무 API가 혜택 계산을 부르는 단일 입구입니다([D-22](../decisions.md#d-22-확정-정책)). **인터페이스와 입출력 타입, 생성 시 계약 검증만 있고 구현체와 빈은 아직 없습니다.** 호출하는 쪽의 시험은 자기 가짜 구현을 씁니다.
+
+- [RecommendationEngine](../../backend/src/main/java/com/beone/api/benefit/engine/RecommendationEngine.java): `EngineRequest`를 받아 `EngineResult`를 돌려줍니다.
+- 입력
+  - [EngineRequest](../../backend/src/main/java/com/beone/api/benefit/engine/EngineRequest.java): 판정일(주문일과 같아야 함), 주문, 선택 방식, 대표 카드, 보유 카드. 같은 보유 카드 ID, 같은 규칙 카드 두 장, 보유하지 않은 대표 카드를 거부합니다.
+  - [HeldCardInput](../../backend/src/main/java/com/beone/api/benefit/engine/HeldCardInput.java): `userCardId`(해석하지 않고 돌려줌), 매핑 상태, 규칙 카드, 후보, 추천 제외, 월간 상태. 가상 포트폴리오 카드는 `SYNTHETIC`이고 매핑 상태가 null입니다.
+  - [MonthlyStateInput](../../backend/src/main/java/com/beone/api/benefit/engine/MonthlyStateInput.java)과 [StateInput](../../backend/src/main/java/com/beone/api/benefit/engine/StateInput.java): 값, 출처, 기준 기간, 시각, `usable`. `null`은 모름입니다.
+- 출력
+  - [EngineResult](../../backend/src/main/java/com/beone/api/benefit/engine/EngineResult.java): 결과, 조건부, 선택 카드, 비교·제외 카드, 대표 카드 비교, 차감 정보. 결과 조합을 생성 때 검사합니다.
+  - [ComparedCard](../../backend/src/main/java/com/beone/api/benefit/engine/ComparedCard.java), [ServiceResult](../../backend/src/main/java/com/beone/api/benefit/engine/ServiceResult.java), [ServiceLimitLine](../../backend/src/main/java/com/beone/api/benefit/engine/ServiceLimitLine.java), [ExcludedCard](../../backend/src/main/java/com/beone/api/benefit/engine/ExcludedCard.java): `docs/api/recommendations.md` 응답의 재료입니다. 카드 상태 `applicationStatus`는 평가와 화면 분기용이며 API 응답 필드가 아닙니다.
+  - [BucketUsageEffect](../../backend/src/main/java/com/beone/api/benefit/engine/BucketUsageEffect.java): 그 카드로 승인했을 때 버킷에 더해지는 사용액. `null`은 모름입니다.
+
+경계 규칙:
+
+- 업무 코드는 `benefit.engine`만 import합니다. 카드 상품 조회의 `RuleCatalog` 읽기만 예외입니다. 자동 검사는 없고 문서 규칙과 리뷰로 지킵니다.
+- 기준 기간은 엔진이 판단합니다. `usable=false`·`reason`은 업무 API만 아는 사유(`SOURCE_CONFLICT` 등)에만 씁니다. 두 판단은 겹치지 않으며 `PERIOD_MISMATCH`는 입력으로 받지 않습니다.
+- 스냅샷과 스냅샷 뒤 승인의 합산, 표시 이름, 저장, 시각은 업무 API가 맡습니다. 금액, 상태, 사유, 비교, 남은 한도, 차감액은 엔진이 맡습니다.
+- 원장 기반 산출(`INFERRED`), 예정 소비, 원장은 입력에 없습니다.
+
+```java
+EngineRequest request = new EngineRequest(order.date(), order, "AUTO_RECOMMEND", null, cards);
+EngineResult result = engine.recommend(request); // 구현은 후속 PR
+```
 
 ### card: 식별자와 거래 분류
 
