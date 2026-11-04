@@ -16,7 +16,7 @@
 
 | 후보 | 내용 | 평가 |
 | --- | --- | --- |
-| A (채택, D-21) | AndroidX WebKit `WebViewCompat.addWebMessageListener`에 허용 origin 규칙을 지정 | origin을 플랫폼이 검사합니다. PoC에서 동작을 확인했습니다. `androidx.webkit` 의존성과 WebView 기능 지원 확인이 필요합니다 |
+| A (후보, D-21) | AndroidX WebKit `WebViewCompat.addWebMessageListener`에 허용 origin 규칙을 지정 | origin을 플랫폼이 검사합니다. PoC에서 동작을 확인했습니다. `androidx.webkit` 의존성과 WebView 기능 지원 확인이 필요합니다 |
 | B | `addJavascriptInterface` | 모든 프레임·origin에 노출되기 쉬워 쓰지 않습니다 |
 
 ## 3. 메시지
@@ -37,9 +37,19 @@
 | --- | --- | --- |
 | `state` | `active: boolean`, `remainingMs: number`, `reason: string`, `method?: string`, `authenticating: boolean` | 현재 상태. 상태가 바뀔 때마다, 그리고 `state.get` 응답으로 보냅니다. `authenticating`: 네이티브가 새 인증 요청을 받을 수 없는 동안 `true`(인증 중·정리 중·정지 포함). `method`: 인증 수단을 알 수 없으면(`UNKNOWN`) 보내지 않습니다 |
 | `payment.check.result` | `allowed: boolean`, `reason: string` | `payment.check`의 응답. `allowed=false`면 웹은 결제 요청을 보내지 않고 재인증을 안내합니다 |
-| `error` | `code: string` | 처리를 거부한 사유(계약 후보). `UNKNOWN_TYPE`: 모르는 `type`. `UNSUPPORTED_VERSION`: 지원하지 않는 `v`. `INVALID_MESSAGE`: JSON이 아니거나 필수 필드가 없는 등 앞의 둘로 나타낼 수 없는 형식 오류(6절의 형식 검증에 필요). 네이티브가 지원하는 `v`로 보냅니다 |
+| `error` | `code: string` | 처리를 거부한 사유(계약 후보). `UNKNOWN_TYPE`: 모르는 `type`. `UNSUPPORTED_VERSION`: 지원하지 않는 `v`. `INVALID_MESSAGE`: JSON이 아니거나 필수 필드가 없는 등 앞의 둘로 나타낼 수 없는 형식 오류(6절의 형식 검증에 필요). 응답의 `v`는 아래 버전 오류 규칙을 따릅니다 |
 
 `reason` 값: `NOT_AUTHENTICATED`, `EXPIRED`, `AUTH_FAILED`, `AUTH_CANCELED`, `LEFT_APP`, `SETUP_REQUIRED`, `UNAVAILABLE`, `NO_RESPONSE`. 활성 상태면 `ACTIVE`. #22 구현의 `InactiveReason`과 같습니다. `NO_RESPONSE`는 인증 응답 대기 시간 초과(정지)이며, 웹은 "앱을 완전히 종료한 뒤 다시 열어 주세요"를 안내합니다. 네이티브가 자동으로 다시 인증하지 않습니다.
+
+버전 오류 규칙(후보):
+
+- 이 후보안이 지원하는 버전은 숫자 `v=1` 하나입니다.
+- 모든 `error` 응답의 `v`는 항상 숫자 `1`입니다. 입력의 `v`를 응답에 그대로 복사하지 않습니다.
+- `v`가 없으면 `INVALID_MESSAGE`, `v`가 있지만 숫자 `1`이 아니면 `UNSUPPORTED_VERSION`입니다.
+- `UNKNOWN_TYPE`·`INVALID_MESSAGE`에도 같은 응답 `v`를 씁니다.
+- 하위 프레임 메시지는 이 규칙과 무관하게 무시하며 `error`도 보내지 않습니다(1절).
+
+버전 협상 기능은 두지 않습니다. 이 규칙은 후보이며 구현 완료나 공개 계약 확정이 아닙니다.
 
 예시:
 
@@ -49,6 +59,10 @@
 
 ```json
 {"v":1,"type":"state","active":false,"remainingMs":0,"reason":"LEFT_APP","authenticating":false}
+```
+
+```json
+{"v":1,"type":"error","code":"UNSUPPORTED_VERSION"}
 ```
 
 ## 4. 흐름
@@ -85,4 +99,4 @@
 - `androidx.webkit` 안정판 버전과 `WebViewFeature.WEB_MESSAGE_LISTENER` 지원 확인(실기기 WebView 154에서는 PoC로 확인)
 - 구현 테스트: 하위 프레임 메시지를 `isMainFrame`으로 거르고 응답하지 않는지(1절)
 - release 빌드의 허용 origin 목록에 debug·테스트·`http://` origin이 없는지
-- 구현 테스트: 모르는 `type`, 지원하지 않는 `v`, 크기·형식 오류가 인증 상태를 바꾸지 않고 해당 `code`의 `error`를 보내는지(3절)
+- 구현 테스트: 모르는 `type`, 지원하지 않는 `v`, `v` 누락, 크기·형식 오류가 인증 상태를 바꾸지 않고 해당 `code`의 `error`를 보내는지(3절)
