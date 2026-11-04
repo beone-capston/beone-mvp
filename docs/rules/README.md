@@ -31,7 +31,7 @@
 | 필드 | 뜻 | 구현 | 근거 |
 | --- | --- | --- | --- |
 | `fractionalWon.basis`, `fractionalWon.decision` | 절사가 문서 대조가 아닌 사용자 결정임을 표시 | #65. 원 미만을 실제로 버린 서비스의 결과에 표시 | [D-03](../decisions.md#d-03d-04-확정-정책) |
-| `stackingBasis` | 중복 합산의 계산 기준. 없으면 합산하지 않음 | 미구현(합산 작업) | [D-13 #35 8번](../decisions.md#d-13-확정-정책) |
+| `stackingBasis` | 중복 합산의 계산 기준. 없으면 합산하지 않음 | 합산 조건 판정에 사용 | [D-13 #35 8번](../decisions.md#d-13-확정-정책) |
 | `inclusionUnconfirmed` | 포함 관계가 확인되지 않은 코드 쌍 | 서비스 쪽은 #65. `policy` 쪽은 미구현(원장·실적 작업) | 아래 "포함 관계 확인 필요" |
 | `unevaluatedExclusions` | 주문 입력에 없어 판정하지 못하는 제외 조건의 문서 표현 | #65. 서비스 결과에 그대로 담음. API 응답은 미구현 | [D-20](../decisions.md#d-20-확정-정책) |
 | `displayName` | 화면 이름. 내부 서비스를 나눠도 문서 이름을 유지(09174 `BASIC`) | 미구현(API) | [D-20](../decisions.md#d-20-확정-정책) |

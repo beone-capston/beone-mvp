@@ -31,6 +31,7 @@ import com.beone.api.benefit.card.TransactionNature;
 import com.beone.api.benefit.money.BenefitAmount;
 import com.beone.api.benefit.money.Won;
 import com.beone.api.benefit.primitive.OrderBenefitResolver;
+import com.beone.api.benefit.result.Adoption;
 import com.beone.api.benefit.result.ApplicationStatus;
 import com.beone.api.benefit.result.OrderBenefit;
 import com.beone.api.benefit.result.OrderServiceBenefit;
@@ -59,10 +60,12 @@ import com.beone.api.benefit.state.StateValue;
 class EvaluationCaseRunnerTest {
 
 	/** 대상 밖 사례와 이유. 건너뛰기 표시 대신 목록으로 남기고, 전체 사례와 빠짐없이 나뉘는지 확인한다. */
-	private static final Map<String, String> OUT_OF_SCOPE = Map.of("C07", "중복 합산 (가) 필요", "M04", "중복 합산 (가) 필요", "C09",
-			"원장의 세금 실적 제외 필요", "C14", "원장의 취소 귀속 필요", "C20", "예정 소비 비교 필요(D-18 K4, MVP 범위 밖)");
+	private static final Map<String, String> OUT_OF_SCOPE = Map.of("C09", "원장의 세금 실적 제외 필요", "C14", "원장의 취소 귀속 필요", "C20", "예정 소비 비교 필요(D-18 K4, MVP 범위 밖)");
 
 	private static final Map<String, String> USED_KEY_TO_BUCKET = Map.of("Great", "GREAT", "CU_AREA", "CU");
+
+	/** fixture의 서비스 키와 규칙 서비스 ID의 대응. fixture는 바꾸지 않고 실행기에서 해석한다. */
+	private static final Map<String, String> SERVICE_KEY_TO_ID = Map.of("Great", "GREAT", "Check", "CHECK");
 
 	private static RuleCatalog catalog;
 
@@ -85,8 +88,8 @@ class EvaluationCaseRunnerTest {
 
 	@Test
 	void targetAndOutOfScopeCasesCoverTheFixture() throws IOException {
-		assertThat(targetIds().toList()).hasSize(25);
-		assertThat(scenarios).hasSize(25 + OUT_OF_SCOPE.size());
+		assertThat(targetIds().toList()).hasSize(27);
+		assertThat(scenarios).hasSize(27 + OUT_OF_SCOPE.size());
 		assertThat(scenarios.keySet()).containsAll(OUT_OF_SCOPE.keySet());
 	}
 
@@ -128,6 +131,30 @@ class EvaluationCaseRunnerTest {
 		assertThat(great.candidate().standaloneAmount()).isEqualTo(BenefitAmount.confirmed(10_000));
 		assertThat(great.contribution()).isEqualTo(BenefitAmount.confirmed(1_000));
 		assertThat(great.appliedStatus()).contains(ApplicationStatus.APPLIED_CAP_REMAINING);
+	}
+
+	@Test
+	void c07AdoptsGreatAndCheckTogether() {
+		OrderBenefit result = run(scenarios.get("C07")).get(CardId.of("09174"));
+
+		assertThat(result.orderBenefit()).isEqualTo(BenefitAmount.confirmed(12_000));
+		assertThat(service(result, ServiceId.of("GREAT")).adoption()).isEqualTo(Adoption.ADOPTED);
+		assertThat(service(result, ServiceId.of("CHECK")).adoption()).isEqualTo(Adoption.ADOPTED);
+	}
+
+	@Test
+	void m04CutsOnlyGreatByItsOwnChain() {
+		OrderBenefit result = run(scenarios.get("M04")).get(CardId.of("09174"));
+
+		assertThat(result.orderBenefit()).isEqualTo(BenefitAmount.confirmed(3_000));
+		OrderServiceBenefit great = service(result, ServiceId.of("GREAT"));
+		OrderServiceBenefit check = service(result, ServiceId.of("CHECK"));
+		assertThat(great.adoption()).isEqualTo(Adoption.ADOPTED);
+		assertThat(great.contribution()).isEqualTo(BenefitAmount.confirmed(1_000));
+		assertThat(great.appliedStatus()).contains(ApplicationStatus.APPLIED_CAP_REMAINING);
+		assertThat(check.adoption()).isEqualTo(Adoption.ADOPTED);
+		assertThat(check.contribution()).isEqualTo(BenefitAmount.confirmed(2_000));
+		assertThat(check.appliedStatus()).contains(ApplicationStatus.APPLIED);
 	}
 
 	@Test
@@ -193,9 +220,10 @@ class EvaluationCaseRunnerTest {
 
 	private static OrderServiceBenefit service(OrderBenefit result, ServiceId id) {
 		assertThat(result).isInstanceOf(OrderBenefit.Decided.class);
+		ServiceId ruleId = ServiceId.of(SERVICE_KEY_TO_ID.getOrDefault(id.toString(), id.toString()));
 		return ((OrderBenefit.Decided) result).services()
 			.stream()
-			.filter(service -> service.candidate().serviceId().equals(id))
+			.filter(service -> service.candidate().serviceId().equals(ruleId))
 			.findFirst()
 			.orElseThrow(() -> new AssertionError("no decided service " + id + " in " + result));
 	}

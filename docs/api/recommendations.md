@@ -215,7 +215,7 @@ X-BeONE-Demo-User: MY_CARDS
 - `fixedCardComparison` · Object|null · 대표 카드 고정일 때 월간 최적 카드와의 비교(PRD §4.1). `representativeUserCardId`, `optimalUserCardId`, `differenceWon`. 비교할 수 없으면 `optimalUserCardId`·`differenceWon`이 `null`이다. 자동 추천이면 객체 자체가 `null`
 - `inputSnapshot` · 계산에 쓴 주문·대표 카드·월간 상태 스냅샷 시각. 같은 입력·규칙 버전의 재현을 확인하는 기록이다
 - `conditional=false`여도 비교 카드가 1장이면 "최적"이라고 표시하지 않는다
-- `pendingReasons[]` · 카드 금액을 확정하지 못한 사유(`NEEDS_CONFIRMATION`·`UNSUPPORTED`·`PERFORMANCE_POLICY`·`STACKING_UNRESOLVED`·`STACKING_CONFIRMED`(코드 `PendingReason.Kind`)). `STACKING_CONFIRMED`는 중복 허용이 확정됐지만 합산 예외(D-13 #35 8번) 조건을 만족하지 않는 쌍에만 남는다
+- `pendingReasons[]` · 카드 금액을 확정하지 못한 사유(`NEEDS_CONFIRMATION`·`UNSUPPORTED`·`PERFORMANCE_POLICY`·`STACKING_UNRESOLVED`·`STACKING_CONFIRMED`·`STACKING_EXCEEDS_PAYMENT`(코드 `PendingReason.Kind`)). `STACKING_CONFIRMED`는 중복 허용이 확정됐지만 합산 예외(D-13 #35 8번) 조건을 만족하지 않는 쌍에만 남는다. `STACKING_EXCEEDS_PAYMENT`는 합산 조건을 만족했지만 기여액 합계가 결제 금액을 넘은 경우이며, 서비스는 합산 대상 전체다(같으면 확정)
 
 비교 가능한 카드가 0장인 응답(2026-11-03 기준 규칙 데이터가 없어 실제로는 모두 이 형태입니다):
 

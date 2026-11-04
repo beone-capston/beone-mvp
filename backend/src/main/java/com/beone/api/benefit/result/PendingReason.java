@@ -11,7 +11,7 @@ import com.beone.api.benefit.card.ServiceId;
  * 단일 주문 카드 금액을 확정하지 못한 사유 하나(#35, D-13). 이 사유가 하나라도 있으면 카드 금액은 {@code 확인 필요}다.
  *
  * <p>
- * 생성 시 서비스 수(쌍 단위 사유는 2개, 나머지는 1개), 서비스 ID 중복과 오름차순({@code String.compareTo}), 공백 설명을 확인한다.
+ * 생성 시 서비스 수(쌍 단위 사유는 2개, 합계 초과는 2개 이상, 나머지는 1개), 서비스 ID 중복과 오름차순({@code String.compareTo}), 공백 설명을 확인한다.
  *
  * @param kind 사유 종류
  * @param services 사유에 해당하는 서비스. 서비스 ID 오름차순이다
@@ -43,16 +43,32 @@ public record PendingReason(Kind kind, List<ServiceId> services, String detail) 
 		/** 양수 후보 두 서비스의 중복 관계가 미확정이거나 한쪽에만 적혀 있음. 서비스 쌍. */
 		STACKING_UNRESOLVED,
 
-		/** 양수 후보 두 서비스의 중복 허용이 확정됐지만 중복 계산은 이번 범위 밖임. 서비스 쌍. */
-		STACKING_CONFIRMED;
+		/** 양수 후보 두 서비스의 중복 허용이 확정됐지만 그 주문이 합산 예외(D-13 #35 8번) 조건을 만족하지 않음. 서비스 쌍. */
+		STACKING_CONFIRMED,
+
+		/** 합산 조건을 만족한 서비스의 기여액 합계가 결제 금액을 넘음(D-13 #35 8번). 합산 대상 전체, 서비스 2개 이상. */
+		STACKING_EXCEEDS_PAYMENT;
 
 		/**
-		 * 이 종류의 사유가 가리키는 서비스 수.
+		 * 이 종류의 사유가 가리킬 수 있는 서비스 수인지 확인한다.
 		 *
-		 * @return 서비스 쌍 종류면 2, 나머지는 1
+		 * @param count 서비스 수
+		 * @return 허용하는 수이면 참
 		 */
-		public int serviceCount() {
-			return this == STACKING_UNRESOLVED || this == STACKING_CONFIRMED ? 2 : 1;
+		boolean allowsServiceCount(int count) {
+			return switch (this) {
+				case NEEDS_CONFIRMATION, UNSUPPORTED, PERFORMANCE_POLICY -> count == 1;
+				case STACKING_UNRESOLVED, STACKING_CONFIRMED -> count == 2;
+				case STACKING_EXCEEDS_PAYMENT -> count >= 2;
+			};
+		}
+
+		private String serviceCountText() {
+			return switch (this) {
+				case NEEDS_CONFIRMATION, UNSUPPORTED, PERFORMANCE_POLICY -> "exactly 1";
+				case STACKING_UNRESOLVED, STACKING_CONFIRMED -> "exactly 2";
+				case STACKING_EXCEEDS_PAYMENT -> "at least 2";
+			};
 		}
 
 	}
@@ -65,8 +81,8 @@ public record PendingReason(Kind kind, List<ServiceId> services, String detail) 
 	public PendingReason {
 		Objects.requireNonNull(kind, "kind");
 		services = List.copyOf(services);
-		if (services.size() != kind.serviceCount()) {
-			throw new IllegalArgumentException(kind + " needs exactly " + kind.serviceCount() + " service(s): " + services);
+		if (!kind.allowsServiceCount(services.size())) {
+			throw new IllegalArgumentException(kind + " needs " + kind.serviceCountText() + " service(s): " + services);
 		}
 		if (new HashSet<>(services).size() != services.size()) {
 			throw new IllegalArgumentException(kind + " lists a service twice: " + services);
