@@ -44,6 +44,16 @@ class PendingReasonTest {
 	}
 
 	@Test
+	void exceedsPaymentNeedsAtLeastTwoServices() {
+		ServiceId c = ServiceId.of("SYN-C");
+
+		assertThat(new PendingReason(PendingReason.Kind.STACKING_EXCEEDS_PAYMENT, List.of(A, B, c), "synthetic").services())
+			.containsExactly(A, B, c);
+		assertThatThrownBy(() -> new PendingReason(PendingReason.Kind.STACKING_EXCEEDS_PAYMENT, List.of(A), "synthetic"))
+			.hasMessageContaining("at least 2");
+	}
+
+	@Test
 	void serviceOrderIsCaseSensitiveStringOrder() {
 		// 'S'(0x53)가 's'(0x73)보다 앞선다. 대소문자를 무시하거나 로캘로 정렬하지 않는다.
 		assertThat(PendingReason.SERVICE_ORDER.compare(B, LOWER)).isNegative();
@@ -90,7 +100,8 @@ class PendingReasonTest {
 		assertThat(reasons).containsExactly(confirmationA, confirmationB, policyB, stackingAb, stackingAc);
 		assertThat(PendingReason.Kind.values()).containsExactly(PendingReason.Kind.NEEDS_CONFIRMATION,
 				PendingReason.Kind.UNSUPPORTED, PendingReason.Kind.PERFORMANCE_POLICY,
-				PendingReason.Kind.STACKING_UNRESOLVED, PendingReason.Kind.STACKING_CONFIRMED);
+				PendingReason.Kind.STACKING_UNRESOLVED, PendingReason.Kind.STACKING_CONFIRMED,
+				PendingReason.Kind.STACKING_EXCEEDS_PAYMENT);
 	}
 
 }

@@ -79,13 +79,14 @@ public sealed interface OrderBenefit {
 	 * 중복 관계→양수 후보).</li>
 	 * <li>카드 금액이 확정이면 사유가 없고, {@code 확인 필요}이면 사유가 있다.</li>
 	 * <li>확정 0원 후보는 {@code NOT_ADOPTED}다.</li>
-	 * <li>확정일 때: {@code UNDETERMINED}가 없고, 양수 후보가 있으면 한도 적용 후 금액 최댓값 중 서비스 ID가 가장 앞선 하나만 그 금액으로
-	 * {@code ADOPTED}이며, 카드 금액은 기여액 합이다.</li>
+	 * <li>확정일 때: {@code UNDETERMINED}가 없고, 양수 후보가 있으면 다음 두 모양 중 하나이며 채택 기여액은 한도 적용 후 금액, 카드 금액은 기여액
+	 * 합이다. 한도 적용 후 금액 최댓값 중 서비스 ID가 가장 앞선 하나만 {@code ADOPTED}이거나, 합산 예외(D-13 #35 8번)로 양수 후보 전부가
+	 * {@code ADOPTED}다.</li>
 	 * <li>미확정일 때: {@code ADOPTED}가 없고 양수 후보는 모두 {@code UNDETERMINED}·기여액 {@code 확인 필요}다.</li>
 	 * <li>{@code services}·{@code rechecks}는 서비스 ID 오름차순, {@code reasons}는 {@link PendingReason#ORDER} 순서이며 중복이 없다.
 	 * 정렬하지 않고 어긋나면 거부한다. 모든 목록은 불변 복사본이다.</li>
 	 * </ol>
-	 * 실적 조건 여부, 중복 관계, 취소 귀속·할인 매출 근거의 영향처럼 규칙과 근거가 있어야 알 수 있는 판단은 확인하지 않는다(결정기 책임).
+	 * 실적 조건 여부, 중복 관계와 합산 조건, 합계와 결제 금액의 비교, 취소 귀속·할인 매출 근거의 영향처럼 규칙·주문·근거가 있어야 알 수 있는 판단은 확인하지 않는다(결정기 책임).
 	 *
 	 * @param source 원본 후보 취합 결과. 바꾸지 않고 보존한다
 	 * @param services 최종 채택·기여액을 정한 후보(미확정 표시 포함)
@@ -205,7 +206,7 @@ public sealed interface OrderBenefit {
 					case NEEDS_CONFIRMATION -> pending;
 					case UNSUPPORTED -> unsupported;
 					case PERFORMANCE_POLICY -> policyTargets;
-					case STACKING_UNRESOLVED, STACKING_CONFIRMED -> positive;
+					case STACKING_UNRESOLVED, STACKING_CONFIRMED, STACKING_EXCEEDS_PAYMENT -> positive;
 				};
 				if (!allowed.containsAll(reason.services())) {
 					throw new IllegalArgumentException(reason.kind() + " reason refers to services outside its classification: "
@@ -297,14 +298,17 @@ public sealed interface OrderBenefit {
 				.comparing((OrderServiceBenefit service) -> service.candidate().amountAfterLimit().confirmedWon())
 				.reversed()
 				.thenComparing(service -> service.candidate().serviceId(), PendingReason.SERVICE_ORDER);
-			List<OrderServiceBenefit> expected = services.stream()
+			List<OrderServiceBenefit> positives = services.stream()
 				.filter(service -> isPositive(service.candidate()))
 				.sorted(preferred)
-				.limit(1)
 				.toList();
-			if (!adopted.equals(expected)) {
+			List<OrderServiceBenefit> expected = positives.stream().limit(1).toList();
+			// 합산 예외의 모양: 양수 후보가 둘 이상이면 전부 채택할 수 있다. 합산 조건 충족 여부는 결정기 책임이다.
+			boolean allAdopted = positives.size() > 1 && adopted.size() == positives.size()
+					&& adopted.containsAll(positives);
+			if (!adopted.equals(expected) && !allAdopted) {
 				throw new IllegalArgumentException("adopted services " + ids(adopted) + " must be the largest candidate "
-						+ ids(expected) + " with the first service id");
+						+ ids(expected) + " with the first service id, or every positive candidate");
 			}
 			for (OrderServiceBenefit service : adopted) {
 				if (!service.contribution().equals(service.candidate().amountAfterLimit())) {
