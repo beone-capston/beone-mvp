@@ -1,36 +1,273 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 
 const cards = [
-  ['올라운드 티타늄카드', '신용', 'titanium'],
-  ['청춘대로 톡톡카드', '신용', 'coral'],
-  ['노리 체크카드', '체크', 'lime'],
-  ['첵첵 체크카드', '체크', 'violet'],
+  {
+    name: '올라운드 티타늄카드',
+    type: '신용',
+    theme: 'navy',
+    caption: 'ALLROUND TITANIUM',
+  },
+  {
+    name: '청춘대로 톡톡카드',
+    type: '신용',
+    theme: 'mint-card',
+    caption: 'YOUTH, EVERY DAY',
+  },
+  {
+    name: '노리 체크카드',
+    type: '체크',
+    theme: 'silver',
+    caption: 'ENJOY YOUR EVERYDAY',
+  },
+  {
+    name: '첵첵 체크카드',
+    type: '체크',
+    theme: 'forest',
+    caption: 'CHECK YOUR MOMENT',
+  },
 ]
-function Brand() {
-  return <span className="brand"><span className="brand-symbol"><img src="/beone-brand.png" alt="" /></span><span>B<span className="mint">:</span>ONE</span></span>
-}
-function App() {
-  const [demo, setDemo] = useState(false)
-  const [notice, setNotice] = useState('')
-  function comingSoon(name: string) { setNotice(name + ' 기능은 준비 중이에요. 지금은 메인화면을 둘러볼 수 있어요.') }
-  function selectMode(value: boolean) { setDemo(value); setNotice('') }
+const menus = ['혜택', '빠른결제', '모의결제'] as const
+type Menu = (typeof menus)[number]
+
+function Icon({
+  name,
+}: {
+  name: 'plus' | 'more' | 'card' | 'benefit' | 'simulation' | 'arrow' | 'shield'
+}) {
+  const paths = {
+    plus: 'M12 4v16M4 12h16',
+    more: 'M12 5h.01M12 12h.01M12 19h.01',
+    card: 'M3 9h18M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z',
+    benefit: 'M12 3v18M16 7h-6a3 3 0 0 0 0 6h4a3 3 0 0 1 0 6H7',
+    simulation:
+      'm9 8 7 4-7 4V8ZM5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z',
+    arrow: 'M5 12h14m-5-5 5 5-5 5',
+    shield: 'm12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Zm-4 9 3 3 5-6',
+  }
   return (
-    <div className="app-shell">
-      <header><a href="#main" aria-label="B:ONE 홈"><Brand /></a><span className="badge">● 시뮬레이션</span></header>
-      <main id="main">
-        <section className="welcome"><div><p className="eyebrow">나의 똑똑한 카드 생활</p><h1>모든 결제에,<br className="mobile-break" /> 더 현명한 한 장.</h1><p className="description">오늘의 결제도 B:ONE과 함께 준비하세요.</p></div></section>
-        <div className="mode-switch" role="group" aria-label="포트폴리오 모드"><button aria-pressed={!demo} onClick={() => selectMode(false)}>내 카드</button><button aria-pressed={demo} onClick={() => selectMode(true)}>가상 포트폴리오 <small>체험</small></button></div>
-        <div className="dashboard">
-          <section className="hero" aria-labelledby="hero-title"><span className="kicker">YOUR ONE CARD</span><h2 id="hero-title">나의 B:ONE 가상카드</h2><p>결제 전, 내 카드의 혜택을 한곳에서.</p><div className="virtual-card" aria-label="B:ONE 가상카드 디자인"><div className="card-brand">B<span>:</span>ONE <small>VIRTUAL CARD</small></div><div className="card-art" aria-hidden="true"><i /><i /><i /></div><div className="card-bottom">ONE STEP AHEAD <span>◇</span></div></div><div className="hero-footer"><span>● 실제 결제 없는 가상카드</span></div></section>
-          <section className="start panel" aria-labelledby="start-title"><span className="kicker">LET’S GET STARTED</span><h2 id="start-title">{demo ? '내 카드 없이도, 가볍게 체험' : '현명한 결제의 시작'}</h2><p>{demo ? '가상의 카드 4종으로 서비스 흐름을 살펴보세요.' : '카드와 월간 상태를 입력하고 준비해보세요.'}</p><ol className="steps"><li><span>01</span><div><strong>카드와 월간 상태 확인</strong><p>보유 카드 · 전월 실적 · 혜택 사용액</p></div></li><li><span>02</span><div><strong>가상 주문 만들기</strong><p>가맹점과 금액을 자유롭게 입력</p></div></li><li><span>03</span><div><strong>추천 확인 후 모의 승인</strong><p>계산 근거와 카드별 예상 혜택 비교</p></div></li></ol><button className="primary" onClick={() => comingSoon('가상 주문 만들기')}>가상 주문 만들기 <span aria-hidden="true">↗</span></button><small className="hint">주문 편집 기능은 준비 중이에요</small></section>
-          <section className="portfolio panel" aria-labelledby="portfolio-title"><div className="section-heading"><div><span className="kicker">MY PORTFOLIO</span><h2 id="portfolio-title">{demo ? '가상 포트폴리오' : '내 카드'} <span className="count">{demo ? 4 : 0}</span></h2></div><button className="text-button" onClick={() => comingSoon('카드 관리')}>{demo ? '카드 살펴보기' : '카드 등록'} <span aria-hidden="true">→</span></button></div>{demo ? <><p className="demo-notice">예시 데이터 · 실제 보유 카드가 아닌 시연용 구성입니다.</p><ul className="demo-cards">{cards.map(([name, type, color]) => <li key={name}><span className={'mini-card ' + color} aria-hidden="true">B:1</span><div><small>{type}</small><strong>{name}</strong><span className="unknown">월간 상태 확인 필요</span></div></li>)}</ul></> : <div className="empty"><span className="empty-icon" aria-hidden="true">▱</span><h3>첫 번째 카드를 기다리고 있어요</h3><p>카드를 등록하면 나의 포트폴리오를 확인할 수 있어요.<br />등록 전에는 가상 포트폴리오를 둘러보세요.</p><button className="secondary" onClick={() => selectMode(true)}>가상 포트폴리오 체험 <span aria-hidden="true">→</span></button></div>}</section>
-          <section className="insight" aria-labelledby="state-title"><span className="insight-icon" aria-hidden="true">◇</span><span className="kicker">A CLEARER PICTURE</span><h2 id="state-title">정확한 혜택은<br />정확한 상태에서부터.</h2><p>전월 실적과 이번 달 혜택 사용액을 확인해주세요. 모르는 값은 <strong>‘확인 필요’</strong>로 구분해요.</p><button className="text-button" onClick={() => comingSoon('월간 상태 확인')}>월간 상태 확인 <span aria-hidden="true">→</span></button></section>
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={name === 'more' ? 3.5 : 1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={paths[name]} />
+    </svg>
+  )
+}
+
+function App() {
+  const [menu, setMenu] = useState<Menu>('빠른결제')
+  const [activeCard, setActiveCard] = useState(0)
+  const [notice, setNotice] = useState('')
+  const carousel = useRef<HTMLDivElement>(null)
+
+  function selectMenu(value: Menu) {
+    setMenu(value)
+    setNotice('')
+    if (value === '빠른결제') setActiveCard(0)
+  }
+
+  function comingSoon(feature: string) {
+    setNotice(feature + ' 기능은 준비 중이에요.')
+  }
+  function moveCard(index: number) {
+    const track = carousel.current
+    if (!track) return
+    const target = track.children[index] as HTMLElement | undefined
+    if (!target) return
+    track.scrollTo({
+      left: target.offsetLeft - (track.children[0] as HTMLElement).offsetLeft,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'instant'
+        : 'smooth',
+    })
+  }
+
+  return (
+    <div className="wallet-app">
+      <header className="wallet-header">
+        <a
+          className="brand"
+          href="#main"
+          aria-label="B:ONE 빠른결제 홈"
+          onClick={() => selectMenu('빠른결제')}
+        >
+          <span className="brand-symbol">
+            <img src="/beone-brand.png" alt="" />
+          </span>
+          <span>
+            B<span className="brand-colon">:</span>ONE
+          </span>
+        </a>
+        <div className="header-actions">
+          <button
+            aria-label="카드 추가"
+            onClick={() => comingSoon('카드 추가')}
+          >
+            <Icon name="plus" />
+          </button>
+          <button
+            aria-label="마이페이지"
+            onClick={() => comingSoon('마이페이지')}
+          >
+            <Icon name="more" />
+          </button>
         </div>
-        <div className="service-notice"><span aria-hidden="true">◇</span><p>B:ONE은 카드 혜택 시뮬레이터입니다. <strong>실제 결제 및 금융거래는 발생하지 않습니다.</strong><br />예상 혜택은 입력한 상태와 적용 규칙에 따라 달라질 수 있습니다.</p></div>
-        {notice && <div className="notice" role="status"><span>{notice}</span><button aria-label="안내 닫기" onClick={() => setNotice('')}>×</button></div>}
+      </header>
+
+      <main id="main">
+        {menu === '빠른결제' ? (
+          <section className="quick-payment" aria-labelledby="quick-title">
+            <div className="wallet-intro">
+              <div>
+                <p className="eyebrow">ONE STEP AHEAD</p>
+                <h1 id="quick-title">나의 모든 카드, 한곳에.</h1>
+              </div>
+            </div>
+            <div className="tip-banner">
+              <span className="tip-icon">
+                <Icon name="shield" />
+              </span>
+              <p>
+                모든 결제에, <strong>더 현명한 한 장.</strong>
+                <small>내 카드의 혜택을 B:ONE과 함께 확인해보세요.</small>
+              </p>
+            </div>
+            <div className="card-section-heading">
+              <h2>
+                나의 카드 <span>4</span>
+              </h2>
+            </div>
+            <div
+              className="card-carousel"
+              ref={carousel}
+              aria-label="예시 카드 목록"
+              onScroll={() => {
+                const track = carousel.current
+                if (!track || track.children.length < 2) return
+                const step =
+                  (track.children[1] as HTMLElement).offsetLeft -
+                  (track.children[0] as HTMLElement).offsetLeft
+                if (step > 0)
+                  setActiveCard(
+                    Math.min(
+                      cards.length - 1,
+                      Math.max(0, Math.round(track.scrollLeft / step)),
+                    ),
+                  )
+              }}
+            >
+              {cards.map((card, index) => (
+                <article
+                  className="card-slide"
+                  key={card.name}
+                  aria-label={card.name + ' · 예시 카드 ' + (index + 1) + '/4'}
+                >
+                  <div className={'payment-card ' + card.theme}>
+                    <div className="card-topline">
+                      <span>
+                        KB국민카드 <small>{card.type}</small>
+                      </span>
+                      <span className="example-label">DEMO</span>
+                    </div>
+                    <h3>{card.name}</h3>
+                    <div className="card-decoration" aria-hidden="true">
+                      <i />
+                      <i />
+                    </div>
+                    <div className="chip" aria-hidden="true">
+                      <span />
+                    </div>
+                    <div className="card-footline">
+                      <span>{card.caption}</span>
+                      <strong>
+                        B<span>:</span>ONE
+                      </strong>
+                    </div>
+                  </div>
+                  <button
+                    className="card-services"
+                    aria-label={card.name + ' 부가서비스'}
+                    onClick={() => comingSoon(card.name + ' 부가서비스')}
+                  >
+                    부가서비스
+                  </button>
+                </article>
+              ))}
+            </div>
+            <div className="card-pagination" aria-label="카드 선택">
+              {cards.map((card, index) => (
+                <button
+                  key={card.name}
+                  aria-label={card.name + ' 보기'}
+                  aria-pressed={activeCard === index}
+                  onClick={() => moveCard(index)}
+                >
+                  <span />
+                </button>
+              ))}
+            </div>
+            <div className="card-caption">
+              <strong>{cards[activeCard].name}</strong>
+            </div>
+            <p className="simulation-disclaimer">
+              실제 결제 및 금융거래는 발생하지 않습니다.
+            </p>
+          </section>
+        ) : (
+          <section className="placeholder-page" aria-labelledby="page-title">
+            <span className="placeholder-icon">
+              <Icon name={menu === '혜택' ? 'benefit' : 'simulation'} />
+            </span>
+            <p className="eyebrow">COMING SOON</p>
+            <h1 id="page-title">{menu}</h1>
+            <p>
+              {menu === '혜택'
+                ? '달별로 받은 혜택과 결제 정보를 확인할 수 있는 공간이에요.'
+                : '가상의 주문으로 카드 혜택과 결제를 시뮬레이션하는 공간이에요.'}
+            </p>
+            <span className="preparing-label">준비 중이에요</span>
+            <button
+              className="return-button"
+              onClick={() => selectMenu('빠른결제')}
+            >
+              빠른결제로 돌아가기 <Icon name="arrow" />
+            </button>
+          </section>
+        )}
       </main>
-      <footer><small>© 2026 BeONE · ONE STEP AHEAD</small></footer>
-      <nav className="mobile-nav" aria-label="주요 메뉴"><a href="#main" aria-current="page"><span aria-hidden="true">⌂</span>홈</a><button onClick={() => comingSoon('카드 관리')}><span aria-hidden="true">▱</span>카드</button><button onClick={() => comingSoon('가상 주문 만들기')}><span aria-hidden="true">☷</span>가상 주문</button></nav>
+      {notice && (
+        <div className="toast" role="status">
+          <span>{notice}</span>
+          <button aria-label="안내 닫기" onClick={() => setNotice('')}>
+            ×
+          </button>
+        </div>
+      )}
+      <nav
+        className="bottom-nav"
+        aria-label="주요 메뉴"
+        style={{ '--active-index': menus.indexOf(menu) } as CSSProperties}
+      >
+        <span className="nav-indicator" aria-hidden="true" />
+        {menus.map((item, index) => (
+          <button
+            key={item}
+            aria-current={menu === item ? 'page' : undefined}
+            onClick={() => selectMenu(item)}
+          >
+            <Icon name={(['benefit', 'card', 'simulation'] as const)[index]} />
+            <span>{item}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   )
 }

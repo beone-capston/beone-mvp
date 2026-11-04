@@ -2,32 +2,72 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from './App.tsx'
 
-describe('메인화면', () => {
-  it('빈 카드 상태와 모의 서비스 안내를 표시한다', () => {
+describe('B:ONE 지갑 메인화면', () => {
+  it('빠른결제를 기본 선택하고 예시 카드와 부가서비스를 표시한다', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('더 현명한 한 장.')
-    expect(screen.getByText('첫 번째 카드를 기다리고 있어요')).toBeInTheDocument()
-    expect(screen.getByText('실제 결제 및 금융거래는 발생하지 않습니다.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '내 카드' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '빠른결제' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    expect(screen.getAllByRole('article')).toHaveLength(4)
+    expect(
+      screen.getAllByRole('button', { name: / 부가서비스$/ }),
+    ).toHaveLength(4)
+    expect(
+      screen.getByText('실제 결제 및 금융거래는 발생하지 않습니다.'),
+    ).toBeInTheDocument()
   })
-  it('가상 모드에서 예시 카드 4종과 미확인 상태를 표시하고 복귀한다', () => {
+
+  it('상단과 부가서비스 버튼은 준비 중 안내를 제공한다', () => {
     render(<App />)
-    fireEvent.click(screen.getAllByRole('button', { name: '가상 포트폴리오 체험' })[0])
-    expect(screen.getByText(/실제 보유 카드가 아닌 시연용/)).toBeInTheDocument()
-    expect(screen.getAllByText('월간 상태 확인 필요')).toHaveLength(4)
-    expect(screen.getByText('올라운드 티타늄카드')).toBeInTheDocument()
-    expect(screen.queryByText(/^0원$/)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '내 카드' }))
-    expect(screen.queryByText('올라운드 티타늄카드')).not.toBeInTheDocument()
-    expect(screen.getByText('첫 번째 카드를 기다리고 있어요')).toBeInTheDocument()
+    for (const name of [
+      '카드 추가',
+      '마이페이지',
+      '올라운드 티타늄카드 부가서비스',
+      '노리 체크카드 부가서비스',
+    ]) {
+      fireEvent.click(screen.getByRole('button', { name }))
+      expect(screen.getByRole('status')).toHaveTextContent(
+        name + ' 기능은 준비 중이에요.',
+      )
+      fireEvent.click(screen.getByRole('button', { name: '안내 닫기' }))
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    }
   })
-  it('미구현 기능의 안내를 표시하고 닫는다', () => {
+
+  it('메뉴를 바꾸면 선택 표시와 준비 중 화면이 바뀌고 빠른결제로 돌아온다', () => {
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /^월간 상태 확인/ }))
-    expect(screen.getByRole('status')).toHaveTextContent('월간 상태 확인 기능은 준비 중')
-    fireEvent.click(screen.getByRole('button', { name: '안내 닫기' }))
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '카드 등록' }))
-    expect(screen.getByRole('status')).toHaveTextContent('카드 관리 기능은 준비 중')
+    fireEvent.click(screen.getByRole('button', { name: '혜택' }))
+    expect(screen.getByRole('heading', { name: '혜택' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '혜택' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    expect(
+      screen.getByRole('button', { name: '빠른결제' }),
+    ).not.toHaveAttribute('aria-current')
+    fireEvent.click(screen.getByRole('button', { name: '모의결제' }))
+    expect(
+      screen.getByRole('heading', { name: '모의결제' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('준비 중이에요')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '빠른결제로 돌아가기' }))
+    expect(
+      screen.getByRole('heading', { name: '나의 모든 카드, 한곳에.' }),
+    ).toBeInTheDocument()
+  })
+
+  it('카드를 가로로 넘기면 카드 이름과 페이지 표시가 바뀐다', () => {
+    render(<App />)
+    const track = screen.getByLabelText('예시 카드 목록')
+    Object.defineProperty(track.children[0], 'offsetLeft', { value: 32 })
+    Object.defineProperty(track.children[1], 'offsetLeft', { value: 360 })
+    fireEvent.scroll(track, { target: { scrollLeft: 328 } })
+    expect(
+      screen.getByRole('button', { name: '청춘대로 톡톡카드 보기' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      screen.getByRole('button', { name: '올라운드 티타늄카드 보기' }),
+    ).toHaveAttribute('aria-pressed', 'false')
   })
 })

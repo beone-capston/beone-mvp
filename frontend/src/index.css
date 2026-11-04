@@ -1,120 +1,712 @@
+/* 기본 글꼴과 색상 */
 :root {
   font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif;
-  color: #1b2b40;
-  background: #e8edf0;
+  color: #1a2b40;
+  background: #e6ebee;
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 }
-* { box-sizing: border-box; }
-body { margin: 0; }
-button { font: inherit; cursor: pointer; border: 0; }
-button, a { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-button:focus-visible, a:focus-visible { outline: 3px solid #328875; outline-offset: 4px; }
-a { color: inherit; text-decoration: none; }
-h1, h2, h3, p { margin: 0; }
-.app-shell {
-  max-width: 480px;
-  min-height: 100dvh;
-  margin: auto;
-  background: #f6f8fa;
-  padding: 0 max(20px, env(safe-area-inset-right)) 0 max(20px, env(safe-area-inset-left));
+
+* {
+  box-sizing: border-box;
 }
-header {
-  height: calc(72px + env(safe-area-inset-top));
+
+body {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+}
+
+button,
+a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #398d78;
+  outline-offset: 3px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+/* 앱 전체 크기와 화면 구성 */
+.wallet-app {
+  max-width: 480px;
+  height: 100dvh;
+  min-height: 560px;
+  display: flex;
+  flex-direction: column;
+  margin: auto;
+  background: #f4f6f7;
   padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  overflow-x: clip;
+}
+
+/* 상단 로고 · 카드 추가 · 마이페이지 */
+.wallet-header {
+  display: flex;
+  flex: 0 0 68px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px max(22px, env(safe-area-inset-right)) 8px max(24px, env(safe-area-inset-left));
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 29px;
+  font-weight: 900;
+  letter-spacing: -1.5px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand-colon {
+  color: #589e90;
+}
+
+.brand-symbol {
+  position: relative;
+  display: inline-block;
+  width: 29px;
+  height: 36px;
+  overflow: hidden;
+}
+
+.brand-symbol img {
+  position: absolute;
+  width: 110px;
+  max-width: none;
+  left: -40px;
+  top: -10px;
+  mix-blend-mode: multiply;
+}
+
+.header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.header-actions button {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: #24374a;
+  background: transparent;
+  border-radius: 50%;
+}
+
+.header-actions button:hover {
+  background: #e6ecee;
+}
+
+.header-actions button:first-child svg {
+  width: 30px;
+  height: 30px;
+}
+
+/* 소개 문구와 안내 배너 */
+.wallet-intro {
+  margin: 0 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  min-height: 42px;
 }
-.brand { display: inline-flex; align-items: center; gap: 8px; font-size: 26px; font-weight: 900; letter-spacing: -1.5px; }
-.mint { color: #569f90; }
-.brand-symbol { position: relative; width: 29px; height: 36px; overflow: hidden; display: inline-block; }
-.brand-symbol img { position: absolute; width: 110px; max-width: none; left: -40px; top: -10px; mix-blend-mode: multiply; }
-.badge { font-size: 10px; padding: 8px 10px; background: #e9f3ee; border-radius: 20px; color: #467a67; }
-.welcome { padding: 16px 0 24px; }
-.eyebrow { font-size: 12px; color: #657d73; margin-bottom: 10px; }
-h1 { font-size: 29px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.4; }
-.mobile-break { display: block; }
-.description { font-size: 12px; color: #72808c; margin-top: 10px; line-height: 1.7; }
-.kicker { font-size: 9px; font-weight: 700; letter-spacing: 1.6px; color: #70848c; }
-.mode-switch { display: flex; width: 100%; padding: 4px; background: #e7ecf0; border-radius: 12px; margin-bottom: 18px; gap: 4px; }
-.mode-switch button { flex: 1; min-height: 44px; background: transparent; padding: 10px 4px; border-radius: 9px; font-size: 13px; color: #677684; font-weight: 600; }
-.mode-switch button[aria-pressed=true] { background: white; color: #23384d; box-shadow: 0 2px 5px #1529400d; }
-.mode-switch small { font-size: 9px; padding: 3px 5px; background: #e6f4ee; color: #3e7b69; border-radius: 4px; margin-left: 3px; }
-.dashboard { display: flex; flex-direction: column; gap: 16px; }
-.panel { background: white; border: 1px solid #e5eaee; border-radius: 20px; padding: 24px 22px; }
-.hero { position: relative; overflow: hidden; border-radius: 22px; padding: 24px; height: 330px; color: white; background: radial-gradient(ellipse at 100% 100%, #39646a, transparent 70%), #172b43; }
-.hero > .kicker { color: #a2c1c0; font-size: 8px; }
-.hero h2 { font-size: 20px; letter-spacing: -.8px; margin-top: 10px; }
-.hero > p { font-size: 11px; color: #b5c4d1; margin-top: 9px; }
-.virtual-card { position: absolute; width: 215px; height: 135px; right: calc(50% - 107px); bottom: 58px; border-radius: 13px; transform: rotate(-9deg); background: linear-gradient(115deg, #3c5972, #15283e 80%); box-shadow: -12px 22px 30px #06152555, inset 0 0 0 1px #c8e4e32b; overflow: hidden; padding: 18px; }
-.card-brand { position: relative; z-index: 1; font-size: 19px; font-weight: 800; letter-spacing: -1px; display: flex; align-items: center; }
-.card-brand > span { color: #9dd7c0; }
-.card-brand small { margin-left: auto; font-size: 5px; letter-spacing: 1.3px; font-weight: 400; color: #c2d7dc; }
-.card-art { position: absolute; right: -20px; top: 0; transform: rotate(-20deg); width: 140px; height: 170px; }
-.card-art i { position: absolute; border-radius: 50%; width: 90px; height: 200px; background: linear-gradient(#b4e3c4b3, #489b8a30); transform: rotate(40deg); }
-.card-art i:nth-child(2) { left: 30px; opacity: .5; }
-.card-art i:nth-child(3) { left: 60px; opacity: .3; }
-.card-bottom { position: absolute; bottom: 15px; left: 18px; right: 18px; display: flex; align-items: center; justify-content: space-between; color: #c4d8da; font-size: 6px; letter-spacing: 1.8px; }
-.card-bottom > span { font-size: 18px; }
-.hero-footer { position: absolute; bottom: 18px; left: 24px; right: 24px; border-top: 1px solid #ffffff26; padding-top: 13px; font-size: 10px; color: #c1d6d7; text-align: center; }
-.start { order: 2; }
-.start h2 { font-size: 21px; letter-spacing: -.9px; margin-top: 10px; }
-.start > p { font-size: 12px; color: #738290; margin-top: 9px; line-height: 1.7; }
-.steps { list-style: none; padding: 0; margin: 24px 0; display: flex; flex-direction: column; gap: 19px; }
-.steps li { display: flex; align-items: center; gap: 12px; }
-.steps li > span { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: #edf5f1; color: #4e806e; font-size: 10px; font-weight: 700; flex-shrink: 0; }
-.steps strong { font-size: 13px; font-weight: 600; }
-.steps p { font-size: 11px; color: #798793; margin-top: 5px; line-height: 1.5; }
-.primary { width: 100%; min-height: 52px; padding: 14px 17px; display: flex; align-items: center; justify-content: space-between; background: #acddca; color: #153f36; border-radius: 12px; font-size: 14px; font-weight: 700; }
-.primary:hover { background: #98d0bb; }
-.primary > span { font-size: 22px; font-weight: 400; }
-.hint { display: block; text-align: center; font-size: 10px; color: #798691; margin-top: 12px; }
-.portfolio { order: 1; }
-.section-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.section-heading h2 { font-size: 19px; letter-spacing: -.6px; margin-top: 8px; }
-.count { font-size: 16px; color: #538c76; margin-left: 5px; }
-.text-button { min-height: 44px; background: transparent; display: inline-flex; align-items: center; gap: 10px; padding: 8px 0; color: #516879; font-size: 12px; }
-.text-button > span { font-size: 18px; }
-.empty { text-align: center; padding: 25px 0 2px; }
-.empty-icon { display: inline-grid; place-items: center; width: 43px; height: 43px; background: #f0f5f7; color: #7092a6; border-radius: 14px; font-size: 36px; transform: rotate(-8deg); }
-.empty h3 { font-size: 14px; font-weight: 600; margin-top: 14px; }
-.empty p { font-size: 11px; line-height: 1.9; color: #778793; margin-top: 8px; }
-.secondary { display: inline-flex; align-items: center; gap: 18px; min-height: 44px; background: #edf5f0; border: 1px solid #dcebe2; color: #396e5c; font-size: 11px; padding: 10px 13px; border-radius: 9px; margin-top: 16px; }
-.insight { order: 3; position: relative; border-radius: 20px; padding: 24px 22px; background: #edf3ef; border: 1px solid #dfe9e2; }
-.insight h2 { font-size: 22px; line-height: 1.5; letter-spacing: -.8px; margin-top: 12px; }
-.insight > p { max-width: 300px; font-size: 12px; line-height: 1.9; color: #6c8073; margin-top: 12px; }
-.insight strong { color: #3b6b56; font-weight: 500; }
-.insight .text-button { color: #3b705b; margin-top: 12px; }
-.insight-icon { position: absolute; right: 22px; top: 22px; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #dfebe2; color: #698f76; font-size: 27px; }
-.service-notice { display: flex; gap: 10px; padding: 24px 2px 16px; color: #7c8a97; }
-.service-notice > span { font-size: 19px; }
-.service-notice p { font-size: 10px; line-height: 1.9; }
-.service-notice strong { font-weight: 500; color: #647684; }
-footer { padding: 0 0 calc(108px + env(safe-area-inset-bottom)); color: #8897a2; text-align: center; }
-footer small { font-size: 9px; letter-spacing: .6px; }
-.mobile-nav { display: flex; position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; justify-content: space-around; background: #fffffff5; backdrop-filter: blur(14px); border-top: 1px solid #e3e9ed; padding: 9px max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); z-index: 4; }
-.mobile-nav > a, .mobile-nav > button { min-height: 48px; background: transparent; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: #728390; min-width: 70px; }
-.mobile-nav > a { color: #326c58; font-weight: 600; }
-.mobile-nav span { font-size: 25px; height: 28px; }
-.notice { position: fixed; bottom: calc(90px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: calc(100% - 32px); max-width: 440px; padding: 16px; display: flex; align-items: center; gap: 12px; background: #20384c; color: white; border-radius: 14px; z-index: 5; font-size: 12px; line-height: 1.7; box-shadow: 0 8px 28px #142d4030; }
-.notice button { margin-left: auto; min-width: 44px; min-height: 44px; background: transparent; color: white; font-size: 24px; }
-.demo-notice { font-size: 10px; line-height: 1.7; color: #4c7764; background: #eef5f0; padding: 10px; border-radius: 8px; margin-top: 17px; }
-.demo-cards { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0; margin: 12px 0 0; }
-.demo-cards li { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid #edf1f3; }
-.demo-cards li:last-child { border: 0; padding-bottom: 0; }
-.mini-card { width: 37px; height: 50px; display: grid; place-items: center; border-radius: 6px; flex-shrink: 0; font-size: 9px; font-weight: 700; color: white; }
-.titanium { background: linear-gradient(140deg, #8792a3, #28364b); }
-.coral { background: linear-gradient(140deg, #efb6a0, #ba5a62); }
-.lime { background: linear-gradient(140deg, #b3c881, #658768); }
-.violet { background: linear-gradient(140deg, #b5a8d0, #74658e); }
-.demo-cards li > div { display: flex; flex-direction: column; gap: 5px; }
-.demo-cards small { font-size: 10px; color: #768693; }
-.demo-cards strong { font-size: 13px; font-weight: 500; }
-.unknown { font-size: 11px; color: #816b43; }
+
+.eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.7px;
+  color: #5c8277;
+  font-weight: 600;
+  margin-bottom: 9px;
+}
+
+.wallet-intro h1 {
+  font-size: 22px;
+  letter-spacing: -1px;
+  font-weight: 750;
+}
+
+.tip-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 22px;
+  padding: 10px 14px;
+  border: 1px solid #dceae3;
+  background: #e9f3ed;
+  border-radius: 15px;
+}
+
+.tip-icon {
+  width: 37px;
+  height: 41px;
+  border-radius: 12px;
+  background: #d3e9dc;
+  display: grid;
+  place-items: center;
+  color: #437967;
+  flex-shrink: 0;
+}
+
+.tip-banner p {
+  font-size: 13px;
+  color: #3b6155;
+  line-height: 1.5;
+}
+
+.tip-banner strong {
+  font-weight: 700;
+}
+
+.tip-banner small {
+  display: block;
+  font-size: 10px;
+  color: #6e857b;
+  margin-top: 5px;
+}
+
+/* 카드 목록 제목 */
+.card-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 26px;
+}
+
+.card-section-heading h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.card-section-heading h2 span {
+  margin-left: 5px;
+  color: #5f8e7d;
+  font-size: 12px;
+}
+
+/* 카드 슬라이드: 카드 크기, 좌우 간격, 위아래 여백 */
+.card-carousel {
+  --card-width: min(78vw, 285px);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px calc((100% - var(--card-width)) / 2) 6px;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: calc((100% - var(--card-width)) / 2);
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.card-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.card-slide {
+  flex: 0 0 var(--card-width);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  scroll-snap-align: center;
+}
+
+/* 카드 디자인과 카드 안의 정보 */
+.payment-card {
+  width: 100%;
+  aspect-ratio: 1.586;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 5px 10px -8px #10283b66;
+  color: #edf5fa;
+  border: 1px solid #ffffff1a;
+}
+
+.navy {
+  background: linear-gradient(125deg, #35516d, #152a41 75%);
+}
+
+.mint-card {
+  background: linear-gradient(125deg, #b6dfcf, #6ba791);
+  color: #214a40;
+}
+
+.silver {
+  background: linear-gradient(125deg, #e3e9ee, #a5b5c2);
+  color: #324657;
+}
+
+.forest {
+  background: linear-gradient(125deg, #447d72, #173c3d);
+}
+
+.card-topline {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.card-topline small {
+  font-size: 9px;
+  font-weight: 400;
+  margin-left: 5px;
+  opacity: 0.75;
+}
+
+.example-label {
+  font-size: 7px;
+  letter-spacing: 1px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 4px 5px;
+  opacity: 0.65;
+}
+
+.payment-card h3 {
+  position: relative;
+  z-index: 1;
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 7px;
+  letter-spacing: -0.4px;
+}
+
+.card-decoration {
+  position: absolute;
+  width: 210px;
+  height: 250px;
+  top: -17px;
+  right: -50px;
+  transform: rotate(32deg);
+}
+
+.card-decoration i {
+  position: absolute;
+  width: 85px;
+  height: 260px;
+  border-radius: 60px;
+  background: linear-gradient(#b9e3ce66, #8dc9b31a);
+}
+
+.card-decoration i:last-child {
+  left: 90px;
+  top: 30px;
+  opacity: 0.45;
+}
+
+.chip {
+  position: absolute;
+  top: 52%;
+  left: 23px;
+  width: 33px;
+  height: 26px;
+  border: 1px solid #b9c7bd;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #e4e9d6, #aebcad);
+  overflow: hidden;
+}
+
+.chip::before,
+.chip::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  background: #7c948b;
+  top: 8px;
+}
+
+.chip::after {
+  top: 16px;
+}
+
+.chip span {
+  position: absolute;
+  width: 14px;
+  height: 100%;
+  left: 9px;
+  border-inline: 1px solid #7c948b;
+}
+
+.card-footline {
+  position: absolute;
+  bottom: 20px;
+  left: 22px;
+  right: 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-footline > span {
+  font-size: 6px;
+  letter-spacing: 1.4px;
+  opacity: 0.75;
+}
+
+.card-footline strong {
+  font-size: 19px;
+  letter-spacing: -1px;
+}
+
+.card-footline strong span {
+  color: #9bd1b8;
+}
+
+/* 카드 아래 순서 표시 점 */
+.card-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.card-pagination button {
+  background: transparent;
+  width: 28px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.card-pagination span {
+  width: 5px;
+  height: 5px;
+  background: #c9d2d6;
+  border-radius: 8px;
+  transition: width 0.2s, background 0.2s;
+}
+
+.card-pagination button[aria-pressed='true'] span {
+  width: 16px;
+  background: #385e57;
+}
+
+/* 선택된 카드 이름 */
+.card-caption {
+  text-align: center;
+  margin: 0 20px;
+}
+
+.card-caption strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.simulation-disclaimer {
+  grid-row: 8;
+  font-size: 9px;
+  color: #899697;
+  text-align: center;
+  padding: 0 12px;
+  align-self: center;
+}
+
+/* 하단 혜택 · 빠른결제 · 모의결제 메뉴 */
+.bottom-nav {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 5;
+  width: calc(100% - 52px);
+  margin: 10px auto 16px;
+  border-radius: 50px;
+  background: #ffffffed;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 5px 24px #172e3c12, 0 1px 4px #172e3c0d;
+  border: 1px solid #fff;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 5px;
+}
+
+.nav-indicator {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 5px;
+  width: calc((100% - 10px) / 3);
+  border-radius: 40px;
+  background: #20384b;
+  transform: translateX(calc(var(--active-index) * 100%));
+  transition: transform 0.36s cubic-bezier(0.22, 0.8, 0.25, 1);
+}
+
+.bottom-nav button {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  min-height: 57px;
+  padding: 7px 4px;
+  background: transparent;
+  border-radius: 40px;
+  color: #75838c;
+  font-size: 11px;
+  transition: color 0.25s;
+}
+
+.bottom-nav button[aria-current='page'] {
+  color: #e0f4e9;
+  font-weight: 600;
+}
+
+.bottom-nav button svg {
+  width: 23px;
+  height: 23px;
+}
+
+/* 준비 중 안내 */
+.toast {
+  position: fixed;
+  z-index: 6;
+  bottom: calc(116px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 44px);
+  max-width: 436px;
+  border-radius: 13px;
+  padding: 10px 13px 10px 18px;
+  background: #243e50;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 6px 24px #20384b22;
+  font-size: 12px;
+}
+
+.toast button {
+  margin-left: auto;
+  min-width: 44px;
+  min-height: 44px;
+  background: transparent;
+  color: white;
+  font-size: 24px;
+}
+
+/* 혜택 · 모의결제 준비 중 화면 */
+.placeholder-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+}
+
+.placeholder-icon {
+  width: 70px;
+  height: 70px;
+  border-radius: 25px;
+  background: #e1efe7;
+  display: grid;
+  place-items: center;
+  color: #4d7c6d;
+  margin-bottom: 25px;
+}
+
+.placeholder-icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.placeholder-page h1 {
+  font-size: 28px;
+  letter-spacing: -1px;
+}
+
+.placeholder-page > p:not(.eyebrow) {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #7b8d92;
+  margin: 15px 0;
+  max-width: 270px;
+}
+
+.preparing-label {
+  font-size: 11px;
+  border-radius: 16px;
+  background: #e7eeeb;
+  color: #577669;
+  padding: 7px 12px;
+}
+
+.return-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 48px;
+  background: #20384b;
+  color: #ddf1e5;
+  border-radius: 12px;
+  margin-top: 30px;
+  padding: 12px 20px;
+  font-size: 12px;
+}
+
+.return-button svg {
+  width: 17px;
+}
+
 @media (max-width: 350px) {
-  .app-shell { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
-  h1 { font-size: 27px; }
-  .panel, .insight { padding: 22px 18px; }
-  .mode-switch button { font-size: 12px; }
+  .wallet-header {
+    padding-inline: 17px;
+  }
+  .wallet-intro {
+    margin-inline: 20px;
+  }
+  .wallet-intro h1 {
+    font-size: 19px;
+  }
+  .tip-banner {
+    margin-inline: 17px;
+    padding: 14px 12px;
+    gap: 9px;
+  }
+  .tip-banner p {
+    font-size: 12px;
+  }
+  .tip-banner small {
+    font-size: 9px;
+  }
+  .payment-card {
+    padding: 17px;
+  }
+  .payment-card h3 {
+    font-size: 12px;
+  }
+  .card-topline {
+    font-size: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+/* Reserve space for navigation; distribute the remaining viewport to the wallet. */
+.wallet-app > main {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 빠른결제 세로 배치: 각 영역의 높이 조정 */
+.quick-payment {
+  height: 100%;
+  display: grid;
+  grid-template-rows: 42px 64px 28px auto 24px 25px minmax(0, 1fr) 25px;
+}
+
+.wallet-intro .eyebrow {
+  display: none;
+}
+
+.wallet-intro h1 {
+  font-size: 19px;
+}
+
+/* 높이 700px 이하 화면의 간격과 카드 내부 크기 */
+@media (max-height: 700px) {
+  .wallet-header {
+    flex-basis: 60px;
+  }
+  .quick-payment {
+    grid-template-rows: 35px 56px 24px auto 24px 25px minmax(0, 1fr) 22px;
+  }
+  .tip-banner {
+    padding-block: 7px;
+  }
+  .tip-banner small {
+    margin-top: 2px;
+    font-size: 9px;
+  }
+  .tip-icon {
+    width: 32px;
+    height: 34px;
+  }
+  .bottom-nav {
+    margin-block: 7px 10px;
+  }
+  .payment-card {
+    padding: 14px 16px;
+  }
+  .card-topline {
+    font-size: 10px;
+  }
+  .payment-card h3 {
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .chip {
+    width: 27px;
+    height: 22px;
+    left: 17px;
+  }
+  .card-footline {
+    bottom: 12px;
+    left: 16px;
+    right: 16px;
+  }
+  .card-footline strong {
+    font-size: 16px;
+  }
+}
+
+
+/* 각 카드 아래에 붙는 부가서비스 버튼 */
+.card-services {
+  width: calc(100% - 12px);
+  min-height: 44px;
+  margin-top: -8px;
+  padding: 17px 12px 11px;
+  border: 1px solid #e5e9ed;
+  border-radius: 0 0 20px 20px;
+  background: #fff;
+  box-shadow: 0 9px 12px -8px #20384b33;
+  color: #62736f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.card-services:hover {
+  background: #edf4ef;
 }
