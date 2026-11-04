@@ -1,0 +1,465 @@
+{
+  "cardId": "09174",
+  "ruleVersion": "09174-A-20170126-9120-00109-07",
+  "status": "VERIFIED",
+  "evaluationOnly": false,
+  "validity": {
+    "from": "2026-07-14",
+    "to": null
+  },
+  "sources": [
+    {
+      "uri": "https://img2.kbcard.com/obj/card/download/09174__prdctOpmn_20260714.pdf",
+      "locator": "문서번호 A-20170126-9120-00109-07, 전체 3쪽"
+    }
+  ],
+  "policy": {
+    "performanceWindow": {
+      "value": "PREVIOUS_CALENDAR_MONTH",
+      "evidence": "E12"
+    },
+    "performanceDateBasis": {
+      "value": "APPROVAL",
+      "evidence": "E12"
+    },
+    "cancellationAttribution": {
+      "unresolved": "취소금액이 실적 제외라는 표기만 있고 귀속월 표기 없음"
+    },
+    "performanceExcludedNatures": [
+      "TAX"
+    ],
+    "performanceExcludedClasses": [
+      "ANNUAL_FEE",
+      "APARTMENT_FEE",
+      "CANCELLED_AMOUNT",
+      "CARD_LOAN",
+      "CASH_ADVANCE",
+      "FEES_AND_INTEREST",
+      "GIFT_CARD_PREPAID",
+      "GOVERNMENT_SUBSIDY",
+      "LATE_FEE",
+      "NON_APPROVAL_SLIP",
+      "TAX",
+      "UNIVERSITY_TUITION"
+    ],
+    "performanceExcludedClassesEvidence": "E13",
+    "excludesBenefitedSales": {
+      "value": true,
+      "evidence": "E13"
+    },
+    "limitPeriod": {
+      "value": "CALENDAR_MONTH",
+      "evidence": "E14"
+    },
+    "limitDeductionOrder": {
+      "unresolved": "승인·매입 순서 표기 없음. 승인 순서로 대체하지 않음. 단일 주문 계산에 쓰지 않음"
+    },
+    "newCardGrace": {
+      "value": {
+        "span": "UNTIL_END_OF_NEXT_MONTH",
+        "days": null,
+        "deemedPerformance": 300000,
+        "services": [
+          "GREAT",
+          "ENJOY",
+          "CHECK",
+          "BASIC_TELECOM",
+          "BASIC_TRANSIT"
+        ],
+        "partialPerformance": "NEEDS_CONFIRMATION"
+      },
+      "evidence": "E2"
+    },
+    "inclusionUnconfirmed": [
+      {
+        "merchantClass": "LOCAL_TAX",
+        "relatedClass": "TAX"
+      },
+      {
+        "merchantClass": "ELECTRICITY_WATER",
+        "relatedClass": "TAX"
+      },
+      {
+        "merchantClass": "POINTREE_CHARGE",
+        "relatedClass": "GIFT_CARD_PREPAID"
+      },
+      {
+        "merchantClass": "TRANSIT_BUS_SUBWAY",
+        "relatedClass": "NON_APPROVAL_SLIP"
+      },
+      {
+        "merchantClass": "POSTPAID_TRANSIT",
+        "relatedClass": "NON_APPROVAL_SLIP"
+      }
+    ]
+  },
+  "limitBuckets": [
+    {
+      "id": "GREAT",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 10000
+        }
+      ],
+      "parent": null,
+      "evidence": "E3"
+    },
+    {
+      "id": "ENJOY",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 5000
+        }
+      ],
+      "parent": null,
+      "evidence": "E5"
+    },
+    {
+      "id": "CHECK",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 5000
+        }
+      ],
+      "parent": null,
+      "evidence": "E7"
+    },
+    {
+      "id": "BASIC",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 5000
+        }
+      ],
+      "parent": null,
+      "evidence": "E9"
+    }
+  ],
+  "services": [
+    {
+      "id": "GREAT",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "STARBUCKS_STORE"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "건물 내 임대매장",
+        "무이자할부"
+      ],
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 5000
+            },
+            "evidence": "E3"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "GREAT"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "value": [
+          "CHECK"
+        ],
+        "evidence": "E11"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "stackingBasis": {
+        "value": "PRE_DISCOUNT_EACH_BUCKET",
+        "evidence": "E11"
+      },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "COFFEE_BEVERAGE",
+          "relatedClass": "STARBUCKS_STORE"
+        }
+      ],
+      "evidence": [
+        "E1",
+        "E3",
+        "E4",
+        "E15"
+      ]
+    },
+    {
+      "id": "ENJOY",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "BURGER_FASTFOOD"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "건물 내 임대매장",
+        "무이자할부"
+      ],
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 2000
+            },
+            "evidence": "E5"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "ENJOY"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "value": [
+          "CHECK"
+        ],
+        "evidence": "E11"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "stackingBasis": {
+        "value": "PRE_DISCOUNT_EACH_BUCKET",
+        "evidence": "E11"
+      },
+      "evidence": [
+        "E1",
+        "E5",
+        "E6",
+        "E15"
+      ]
+    },
+    {
+      "id": "CHECK",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "ALL_MERCHANTS"
+      },
+      "paymentMethods": [
+        "ELIGIBLE_SIMPLE_PAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "ISP 이용금액",
+        "MISP 이용금액",
+        "무이자할부"
+      ],
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 1000
+            },
+            "evidence": "E7"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "CHECK"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "value": [
+          "GREAT",
+          "ENJOY",
+          "BASIC_TELECOM",
+          "BASIC_TRANSIT"
+        ],
+        "evidence": "E11"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "stackingBasis": {
+        "value": "PRE_DISCOUNT_EACH_BUCKET",
+        "evidence": "E11"
+      },
+      "evidence": [
+        "E1",
+        "E7",
+        "E8",
+        "E15"
+      ]
+    },
+    {
+      "id": "BASIC_TELECOM",
+      "displayName": "BASIC",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "TELECOM_SKT",
+          "TELECOM_KT",
+          "TELECOM_LGU"
+        ]
+      },
+      "paymentMethods": [
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "인터넷, IPTV 등 결합상품",
+        "알뜰폰",
+        "무이자할부"
+      ],
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 1000
+            },
+            "evidence": "E9"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "BASIC"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "value": [
+          "CHECK"
+        ],
+        "evidence": "E11"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "stackingBasis": {
+        "value": "PRE_DISCOUNT_EACH_BUCKET",
+        "evidence": "E11"
+      },
+      "evidence": [
+        "E1",
+        "E9",
+        "E10",
+        "E15"
+      ]
+    },
+    {
+      "id": "BASIC_TRANSIT",
+      "displayName": "BASIC",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "TRANSIT_BUS_SUBWAY",
+          "TAXI"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID",
+        "TRANSIT_INTERCITY_BUS"
+      ],
+      "unevaluatedExclusions": [
+        "모바일 티머니(후불형)",
+        "무이자할부"
+      ],
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 1000
+            },
+            "evidence": "E9"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "BASIC"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "value": [
+          "CHECK"
+        ],
+        "evidence": "E11"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "stackingBasis": {
+        "value": "PRE_DISCOUNT_EACH_BUCKET",
+        "evidence": "E11"
+      },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "POSTPAID_TRANSIT",
+          "relatedClass": "TRANSIT_BUS_SUBWAY"
+        }
+      ],
+      "evidence": [
+        "E1",
+        "E9",
+        "E10",
+        "E15"
+      ]
+    }
+  ]
+}

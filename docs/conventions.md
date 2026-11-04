@@ -34,6 +34,8 @@
 
 - 백엔드 소스와 테스트는 Java로 작성합니다. 백엔드 Gradle 설정은 Groovy DSL(`build.gradle`, `settings.gradle`)을 사용합니다.
 - HTTP 요청·응답 처리, 혜택 계산, DB 접근, CODEF 연동의 책임을 구분합니다.
+- API 성공·실패 응답 형식, 오류 코드, 예외 처리·로깅 기준은 [API 공통 응답·오류 처리](api.md)를 따릅니다. 기능별 오류는 `ApiErrorCode` 구현 enum과 공통 처리기보다 높은 우선순위의 처리기로 추가하고, `ApiErrorCode`를 계산·도메인 코드에서 사용하지 않습니다.
+- 요청 DTO의 검증 메시지는 한글로 명시하고 `${validatedValue}`나 입력 원문을 넣지 않습니다.
 - 혜택 계산과 최종 카드 추천은 입력이 같으면 결과가 같은 결정론적 코드로 작성합니다. AI 출력을 계산의 정답이나 최종 결정으로 사용하지 않습니다.
 - 금액 계산에 `float`나 `double`을 사용하지 않습니다. 원화 금액은 정수로 다루고, 비율·반올림 규칙은 명시하여 테스트합니다.
 - 할인 제외, 전월 실적, 월 한도, 동률 처리 등 결과에 영향을 주는 규칙은 카드 약관 및 결정 기록에 근거를 남깁니다.
@@ -68,6 +70,8 @@
 ### 백엔드
 
 - 단위 테스트는 Spring 컨텍스트와 DB 없이 실행되도록 유지합니다. 실행 명령은 `./gradlew test`입니다.
+- 컨트롤러·요청 검증·응답 직렬화·예외 처리는 프로젝트의 `@WebSliceTest`(`@WebMvcTest` + `web` 태그)와 MockMvc로 확인합니다. 실행 명령은 `./gradlew webTest`이며 DB·Docker 없이 실행되어야 합니다. 처리기 메서드를 직접 호출하는 테스트로 HTTP 동작 검증을 대신하지 않습니다.
+- `@WebSliceTest`와 `@IntegrationTest`를 한 클래스에 함께 쓰지 않습니다. 테스트 전용 컨트롤러는 테스트 클래스 안의 정적 클래스로 두고 `@Import`로 등록해 다른 테스트 컨텍스트에 섞이지 않게 합니다. `TestTagSelectionTest`가 태그 중복과 태그 없는 Spring 컨텍스트 테스트를 검사합니다.
 - DB 통합 테스트에는 프로젝트의 `@IntegrationTest`를 사용하고 Testcontainers MySQL로 실행합니다. 실행 명령은 `./gradlew integrationTest`입니다.
 - 첫 카드 4종의 약관을 선정한 뒤 규칙 엔진 구현 전에 독립 정답 사례 20개와 입력 변경 시험 10개의 기대 결과를 고정합니다. 두 개발자가 작성·교차 검토하며, 엔진 결과를 복사해 기대값으로 삼지 않습니다.
 - MySQL 이미지를 바꾸면 `docker-compose.yml`과 Testcontainers 이미지 버전을 함께 확인합니다.

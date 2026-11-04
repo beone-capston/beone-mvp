@@ -45,7 +45,7 @@ cp .env.example .env
 ```
 
 - `.env`는 git에서 제외됩니다. 실제 값은 절대 커밋하지 않습니다.
-- CODEF 키(`CODEF_*`)는 **서버(backend)에서만** 사용합니다. `android/`와 `frontend/`에 넣지 않습니다.
+- CODEF 키(`CODEF_*`)는 **서버(backend)에서만** 사용합니다. `android/`와 `frontend/`에 넣지 않습니다. 키가 없어도 서버는 뜨고 CODEF 호출만 실패합니다. 변수 목록은 [CODEF 설정과 샌드박스 확인 절차](docs/development/codef-sandbox-check.md)를 봅니다.
 - `frontend/.env.example`은 프론트엔드 전용 공개 설정(`VITE_API_BASE_URL`)입니다. `VITE_` 변수는 번들에 포함되므로 비밀값을 넣지 않습니다.
 
 ## 실행
@@ -98,10 +98,14 @@ cd android
 | 명령 | 내용 | Docker |
 |---|---|---|
 | `./gradlew test` | 단위 테스트 (Spring 컨텍스트·DB 없음) | 불필요 |
+| `./gradlew webTest` | `@WebSliceTest` 웹 슬라이스 테스트 (MockMvc, DB 없음) | 불필요 |
 | `./gradlew integrationTest` | `@IntegrationTest` 통합 테스트 (Testcontainers MySQL) | 필요 |
-| `./gradlew build` | 단위 + 통합 테스트 + 빌드 | 필요 |
+| `./gradlew codefSandboxCheck` | CODEF 샌드박스 형식 확인. **외부를 호출하고 키가 필요합니다.** `check`·`build`에 들지 않으며 [절차](docs/development/codef-sandbox-check.md)대로 사용자가 직접 실행합니다 | 불필요 |
+| `./gradlew build` | 단위 + 웹 + 통합 테스트 + 빌드 | 필요 |
 
 - 통합 테스트는 `com.beone.api.support.IntegrationTest` 어노테이션을 붙입니다. `integration` 태그가 붙어 `test` 태스크에서는 제외됩니다.
+- 웹 슬라이스 테스트는 `com.beone.api.support.WebSliceTest` 어노테이션을 붙입니다. `web` 태그가 붙어 `webTest`에서만 실행됩니다. `check`·`build`는 `webTest`와 `integrationTest`를 함께 실행하므로 Docker가 필요합니다.
+- API 응답 형식과 오류 처리는 [`docs/api.md`](docs/api.md)를 따릅니다.
 - MySQL 버전을 바꿀 때는 `docker-compose.yml`과 `backend/src/test/java/com/beone/api/support/MySqlImage.java`를 함께 수정합니다. 두 값이 다르면 `MySqlVersionAlignmentTest`가 실패합니다.
 - DB 스키마는 Flyway 마이그레이션(`backend/src/main/resources/db/migration`)으로만 변경합니다.
 
