@@ -197,7 +197,7 @@ X-BeONE-Demo-User: MY_CARDS
   - 정액 혜택: 남은 한도가 0이면 확정 0원(`LIMIT_EXHAUSTED`), 0보다 크고 정액보다 적으면 `NEEDS_CONFIRMATION`
   - 체인 안 버킷 중 하나라도 사용액이 `UNKNOWN`이면 그 서비스는 `NEEDS_CONFIRMATION`이고 `remainingAfterWon=null`이다. 확정 0원은 체인 안 모든 버킷의 사용액이 입력되어 있을 때만이다
   - 사용액이 한도와 같으면 남은 한도 0으로 판정한다
-- `services[].limitReason` · String|null · `USAGE_EXCEEDS_LIMIT`. 업종·결제 방식·최소 금액·실적 미충족이 확인되면 사용액과 무관하게 확정 0원이고 이 사유를 쓰지 않는다. 그렇지 않고 체인 안 어느 버킷이든 입력 사용액이 한도보다 크면 입력이 규칙과 모순되므로 그 서비스는 `NEEDS_CONFIRMATION`이고 `amountWon=null`, `remainingAfterWon=null`이다. 0원 확정이나 음수 혜택으로 만들지 않는다. 같은 사유를 `pendingReasons[]`에 `NEEDS_CONFIRMATION`으로 담는다
+- `services[].limitReason` · String|null · `USAGE_EXCEEDS_LIMIT`. 제외 업종(`NOT_APPLICABLE_EXCLUDED`)·대상 업종·결제 방식·최소 금액·실적 미충족이 확인되거나, 택1 선택형 서비스에서 다른 서비스를 골랐거나 선택 없음이면(`NOT_APPLICABLE_SELECTION`) 사용액과 무관하게 확정 0원이고 이 사유를 쓰지 않는다. 그렇지 않고 체인 안 어느 버킷이든 입력 사용액이 한도보다 크면 입력이 규칙과 모순되므로 그 서비스는 `NEEDS_CONFIRMATION`이고 `amountWon=null`, `remainingAfterWon=null`이다. 0원 확정이나 음수 혜택으로 만들지 않는다. 같은 사유를 `pendingReasons[]`에 `NEEDS_CONFIRMATION`으로 담는다
 - `services[].usageBasis` · String|null · 한도가 있으면 `USER_ENTERED`, 없으면 `null`
 - `services[].mayDifferFromActual` · Boolean · 한도가 있는 모든 서비스 결과(0원 결과 포함)에서 `true`다. 실제 카드사 차감과 다를 수 있다는 표시다
 - `services[].usageNote` · String|null · 한도가 있으면 "입력한 사용액 기준, 미매입 전표에 따라 달라질 수 있음"을 그대로 표시한다

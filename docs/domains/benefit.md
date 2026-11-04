@@ -83,7 +83,7 @@ CODEF·수동 입력·추론 값에는 갱신 시각이 필요합니다. 추론 
 - [VerificationStatus](../../backend/src/main/java/com/beone/api/benefit/rule/VerificationStatus.java): VERIFIED·AI_DRAFT·CANDIDATE·SYNTHETIC_TEST_SNAPSHOT 구분.
 - [OfficialSource](../../backend/src/main/java/com/beone/api/benefit/rule/OfficialSource.java): 공식 자료 주소와 페이지·절 위치.
 - [BenefitService](../../backend/src/main/java/com/beone/api/benefit/rule/BenefitService.java): 대상·제외 업종, 결제 방식, 금액 조건, 실적 구간, 한도, 선택 여부, 중복 혜택과 원 미만 처리 조건.
-- [ServiceDetails](../../backend/src/main/java/com/beone/api/benefit/rule/ServiceDetails.java): 서비스의 화면 이름, 중복 합산 기준, 원 미만 처리 근거, 포함 관계 표시, 미판정 제외 조건. 포함 관계 표시는 판정에 쓰입니다. 주문 업종이 쌍의 코드이면 대상 불일치로 확정하지 않고 확인 필요로 처리합니다. 원 미만 처리 근거와 미판정 제외 조건은 결과 표시에 쓰고, 화면 이름과 중복 합산 기준은 아직 쓰지 않습니다.
+- [ServiceDetails](../../backend/src/main/java/com/beone/api/benefit/rule/ServiceDetails.java): 서비스의 화면 이름, 중복 합산 기준, 원 미만 처리 근거, 포함 관계 표시, 미판정 제외 조건. 포함 관계 표시는 판정에 쓰입니다. 주문 업종이 쌍의 코드이면 대상 불일치로 확정하지 않고 확인 필요로 처리합니다. 원 미만 처리 근거와 미판정 제외 조건은 서비스 결과의 `ServiceResultNotes`에 담기고(API 응답은 미구현), 화면 이름과 중복 합산 기준은 아직 쓰지 않습니다.
 - [InclusionUnconfirmed](../../backend/src/main/java/com/beone/api/benefit/rule/InclusionUnconfirmed.java): 포함 관계가 확인되지 않은 업종 코드 쌍. 서비스의 쌍은 대상·제외 코드와, 정책의 쌍은 실적 제외 코드와 연결되는지 생성 시 검사합니다.
 - [StackingBasis](../../backend/src/main/java/com/beone/api/benefit/rule/StackingBasis.java): 중복 합산의 계산 기준. 값이 없는 서비스는 합산하지 않습니다.
 - [TermBasis](../../backend/src/main/java/com/beone/api/benefit/rule/TermBasis.java): 값이 문서 대조가 아닌 사용자 결정임을 결정 번호와 함께 표시합니다.
@@ -326,7 +326,7 @@ RuleTerm<FractionalWonPolicy> rounding = RuleTerm.unresolved("공식 근거 확�
 - 미확정 조건은 관련 상황의 부재가 확인된 경우에만 무시합니다. 증거 없음은 부재가 아니라 UNDETERMINED입니다.
 - 날짜는 Asia/Seoul의 달력 날짜라는 입력 계약입니다. LocalDate 자체가 시간대를 변환하는 것은 아닙니다.
 - 모델 검증과 규칙 선택 성공은 실제 공식 약관의 정확성 또는 추천 엔진 정확성을 자동으로 입증하지 않습니다.
-- MVP 주문 입력은 일시불·일반 매장 결제를 가정합니다. 입력에 없는 제외 조건(`unevaluatedExclusions`)은 판정하지 않으므로, 그런 조건이 있는 서비스의 확정 금액은 실제보다 클 수 있습니다([D-20](../decisions.md#d-20-확정-정책)). 결과에 표시하는 필드는 아직 없습니다.
+- MVP 주문 입력은 일시불·일반 매장 결제를 가정합니다. 입력에 없는 제외 조건(`unevaluatedExclusions`)은 판정하지 않으므로, 그런 조건이 있는 서비스의 확정 금액은 실제보다 클 수 있습니다([D-20](../decisions.md#d-20-확정-정책)). 서비스 결과의 `ServiceResultNotes.unevaluatedExclusions`에 담기며, API 응답은 아직 구현하지 않았습니다.
 - 로더는 `inclusionUnconfirmed`를 담고 검증합니다. 서비스 판정은 주문 업종이 이 쌍의 코드이면 대상 불일치로 확정하지 않고 확인 필요로 처리합니다.
 
 ## 현재 구현 범위와 관련 문서
