@@ -149,14 +149,6 @@ class OrderBenefitTest {
 		}
 
 		@Test
-		void rejectsTwoAdoptedServices() {
-			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_100)),
-					List.of(adopted(A_300), adopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(400), List.of()))
-				.isInstanceOf(IllegalArgumentException.class)
-				.hasMessageContaining("adopted services");
-		}
-
-		@Test
 		void rejectsAdoptingTheSmallerOrTheLaterIdOnTie() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_100)),
 					List.of(notAdopted(A_300), adopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(100), List.of()))
@@ -164,6 +156,35 @@ class OrderBenefitTest {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_300)),
 					List.of(notAdopted(A_300), adopted(B_300)), List.of(), List.of(), BenefitAmount.confirmed(300), List.of()))
 				.hasMessageContaining("adopted services");
+		}
+
+		@Test
+		void acceptsEveryPositiveCandidateAdoptedForStacking() {
+			OrderBenefit.Decided result = new OrderBenefit.Decided(source(List.of(A_300, B_100)),
+					List.of(adopted(A_300), adopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(400), List.of());
+
+			assertThat(result.orderBenefit()).isEqualTo(BenefitAmount.confirmed(400));
+		}
+
+		@Test
+		void rejectsStackingWithWrongTotalOrPartialAdoption() {
+			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_100)),
+					List.of(adopted(A_300), adopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(300), List.of()))
+				.hasMessageContaining("not the sum");
+			ServiceCandidate c = positive("SYN-C", 50);
+			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_100, c)),
+					List.of(adopted(A_300), adopted(B_100), notAdopted(c)), List.of(), List.of(), BenefitAmount.confirmed(400),
+					List.of()))
+				.hasMessageContaining("adopted services");
+		}
+
+		@Test
+		void rejectsStackedContributionBelowItsAmountAfterLimit() {
+			OrderServiceBenefit partial = new OrderServiceBenefit(A_300, Adoption.ADOPTED, BenefitAmount.confirmed(200));
+
+			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_100)),
+					List.of(partial, adopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(300), List.of()))
+				.hasMessageContaining("amount after limit");
 		}
 
 		@Test

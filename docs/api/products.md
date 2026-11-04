@@ -1,6 +1,6 @@
 # 카드 상품
 
-규칙 카드 4종과 규칙 요약을 다룹니다. 규칙 데이터는 저장소의 JSON 리소스를 읽어 `RuleCatalog`에 넘길 계획입니다. JSON을 읽는 운영 코드는 아직 없습니다(DB 시드는 나중에 정합니다).
+규칙 카드 4종과 규칙 요약을 다룹니다. 규칙 데이터의 원본은 저장소의 JSON 리소스이고, 서버 시작 때 로더가 읽어 `RuleCatalog`에 넘깁니다. 카드 상품 테이블과 DB 시드는 두지 않습니다(D-23). 이 API는 `RuleCatalog`를 읽어 응답합니다.
 
 공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 모든 API는 구현 전입니다.
 
@@ -70,7 +70,7 @@ BeONE이 계산을 지원하는 카드 상품(규칙 카드 4종)과 각 상품�
 - `cardProductId` · String · 선행 0을 보존하는 공식 상품 식별자. 숫자로 바꾸지 않는다
 - `ruleStatus` · String · `VERIFIED` / `RULE_EXPIRED` / `NO_VERIFIED_RULE`. 계산에는 `VERIFIED`만 쓴다
 - `officialSources` · Array · 규칙의 공식 근거(`uri`·`locator`, 코드 `OfficialSource`). 규칙이 없으면 `[]`
-- `VERIFIED` 예시는 형식 예시입니다. 2026-11-03 기준 저장소에 `VERIFIED` 규칙 데이터가 없으므로 실제 응답은 모두 `NO_VERIFIED_RULE`입니다. 공식 SKU·약관 버전 일치는 D-01 미결입니다
+- `VERIFIED` 예시는 형식 예시입니다. 저장소의 4종 규칙은 `VERIFIED`이지만 공식 SKU·약관 버전 일치는 D-01 미결입니다
 
 ### 실패 응답
 

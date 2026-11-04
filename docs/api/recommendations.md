@@ -52,7 +52,7 @@ X-BeONE-Demo-User: MY_CARDS
       "userCardId": "uc-1001",
       "cardProductId": "09174",
       "basis": {
-        "decidedBy": "MONTHLY_TOTAL",
+        "decidedBy": null,
         "arbitraryTieBreak": false,
         "tiedUserCardIds": [],
         "gapToRunnerUpWon": null
@@ -181,8 +181,10 @@ X-BeONE-Demo-User: MY_CARDS
 #### 응답 필드
 
 - `outcome` · String · `SELECTED` / `NOT_DETERMINED`(비교 가능한 카드 0장, D-18 K2)
-- `conditional` · Boolean · 비교에서 빠진 카드가 있으면 `true`. "최적"이라고 단정하지 않는다
-- `selected.basis.decidedBy` · String · `MONTHLY_TOTAL` / `CURRENT_ORDER_BENEFIT` / `REPRESENTATIVE_CARD` / `CARD_ID_ASC`(코드 `SelectionBasis`). 뒤의 두 단계면 `arbitraryTieBreak=true`(혜택 우열이 아닌 임의 규칙, D-12)
+- `conditional` · Boolean · 사용자 제외(`USER_EXCLUDED`)를 뺀 제외 카드가 있으면 `true`. "최적"이라고 단정하지 않는다. 사용자 제외만 있으면 사용자가 고른 제외이므로 `false`다. `NOT_DETERMINED`면 `false`다(D-22)
+- `selected` · Object|null · 모드와 무관하게 D-12 최적 카드다. 대표 카드 고정이어도 대표 카드로 바꾸지 않고, 차이는 `fixedCardComparison`에 담는다. 승인 카드는 모의 승인이 설정으로 정한다(D-22)
+- `decisionDate` · Date · 판정일은 주문일이다. 추천과 승인 재계산이 같은 날짜를 쓴다(D-23)
+- `selected.basis.decidedBy` · String|null · `MONTHLY_TOTAL` / `CURRENT_ORDER_BENEFIT` / `REPRESENTATIVE_CARD` / `CARD_ID_ASC`(코드 `SelectionBasis`). 뒤의 두 단계면 `arbitraryTieBreak=true`(혜택 우열이 아닌 임의 규칙, D-12). 비교 카드가 1장이면 `null`이다(D-22)
 - `selected.basis.gapToRunnerUpWon` · Integer|null · 차선 카드와 차액. 비교 카드가 1장이라 비교할 수 없으면 `null`이다. 이때 카드 간 최적 추천을 주장하지 않는다
 - `comparedCards[].mapping.note` · 사용자 확인 매핑이면 "사용자 확인 매핑, 공식 SKU·약관 버전 미검증"(D-15)
 - `comparedCards[].appliedRule` · 규칙 버전·검증 상태·공식 근거(D-14 원칙 5)
@@ -192,6 +194,7 @@ X-BeONE-Demo-User: MY_CARDS
 - `services[].candidateWon` · Integer|null · 서비스 단독 후보 금액. 기여액과 다를 수 있다. 미확정이면 `null`
 - `services[].adoption` · `ADOPTED` / `NOT_ADOPTED` / `UNDETERMINED`(코드 `Adoption`). 중복 합산 예외(D-13 #35 8번)에서는 합산한 서비스가 모두 `ADOPTED`이고 카드 금액은 기여액의 합이다. 각 서비스를 할인 전 금액으로 계산해 서비스별로 절사하고(D-03) 자기 체인의 남은 한도로 줄인다. 합계가 결제 금액을 넘으면 `NEEDS_CONFIRMATION`이다
 - `services[].contribution` · 실제 기여액. 미확정이면 `amountWon=null`, `status=NEEDS_CONFIRMATION`
+- `remainingAfterWon` · Integer|null · 그 실적 구간의 한도 − 입력 사용액 − 이 주문의 `ADOPTED` 기여액 중 체인에 이 버킷이 있는 서비스의 합. 실적 구간이나 사용액을 모르거나, 사용액이 한도보다 크거나, 기여액이 `확인 필요`이면 `null`이다(D-22)
 - `services[].limits[]` · Array · 서비스가 속한 한도 버킷과 그 상위 버킷(체인)마다 한 항목. 한도·입력 사용액(출처 포함)·주문 뒤 남은 한도를 담는다. 한도가 없으면 `[]`다. 남은 한도는 체인 내 버킷별 (한도 − 입력 사용액)의 최솟값으로 판정한다(D-18 K1)
   - 정률 혜택: 남은 한도로 줄였으면 `APPLIED_CAP_REMAINING`
   - 정액 혜택: 남은 한도가 0이면 확정 0원(`LIMIT_EXHAUSTED`), 0보다 크고 정액보다 적으면 `NEEDS_CONFIRMATION`
@@ -212,12 +215,12 @@ X-BeONE-Demo-User: MY_CARDS
 - `excludedCards[].candidateCardProductId` · `MAPPING_UNCONFIRMED`일 때 확인할 수 있는 후보(D-15)
 - `comparedCards[].noBenefitReason` · String|null · 금액이 확정 0원인 비교 카드의 사유. `CONFIRMED_NOT_MET`(K3 순서의 마지막)이며, 적용 서비스가 있으면 `null`
 - `comparedCards[].policyNotes[]` · 약관 근거 없는 사용자 결정을 적용했을 때의 표시. 예: 음수 전월 실적 판정의 "약관 근거 없음, 사용자 결정"(D-17), 원 미만을 절사한 경우의 "약관 근거 없음, 사용자 결정"(D-03)
-- `fixedCardComparison` · Object|null · 대표 카드 고정일 때 월간 최적 카드와의 비교(PRD §4.1). `representativeUserCardId`, `optimalUserCardId`, `differenceWon`. 비교할 수 없으면 `optimalUserCardId`·`differenceWon`이 `null`이다. 자동 추천이면 객체 자체가 `null`
+- `fixedCardComparison` · Object|null · 대표 카드 고정일 때 월간 최적 카드와의 비교(PRD §4.1). `representativeUserCardId`, `optimalUserCardId`, `differenceWon`. 비교 카드가 없으면 `optimalUserCardId`가 `null`이고, 대표 카드 금액이 미확정이면 `differenceWon`이 `null`이다(D-22). 자동 추천이면 객체 자체가 `null`
 - `inputSnapshot` · 계산에 쓴 주문·대표 카드·월간 상태 스냅샷 시각. 같은 입력·규칙 버전의 재현을 확인하는 기록이다
 - `conditional=false`여도 비교 카드가 1장이면 "최적"이라고 표시하지 않는다
-- `pendingReasons[]` · 카드 금액을 확정하지 못한 사유(`NEEDS_CONFIRMATION`·`UNSUPPORTED`·`PERFORMANCE_POLICY`·`STACKING_UNRESOLVED`·`STACKING_CONFIRMED`(코드 `PendingReason.Kind`)). `STACKING_CONFIRMED`는 중복 허용이 확정됐지만 합산 예외(D-13 #35 8번) 조건을 만족하지 않는 쌍에만 남는다
+- `pendingReasons[]` · 카드 금액을 확정하지 못한 사유(`NEEDS_CONFIRMATION`·`UNSUPPORTED`·`PERFORMANCE_POLICY`·`STACKING_UNRESOLVED`·`STACKING_CONFIRMED`·`STACKING_EXCEEDS_PAYMENT`(코드 `PendingReason.Kind`)). `STACKING_CONFIRMED`는 중복 허용이 확정됐지만 합산 예외(D-13 #35 8번) 조건을 만족하지 않는 쌍에만 남는다. `STACKING_EXCEEDS_PAYMENT`는 합산 조건을 만족했지만 기여액 합계가 결제 금액을 넘은 경우이며, 서비스는 합산 대상 전체다(같으면 확정)
 
-비교 가능한 카드가 0장인 응답(2026-11-03 기준 규칙 데이터가 없어 실제로는 모두 이 형태입니다):
+비교 가능한 카드가 0장인 응답:
 
 ```json
 {
@@ -264,13 +267,11 @@ X-BeONE-Demo-User: MY_CARDS
 
 ### 명세 단계 미정
 
-- 판정일(`decisionDate`)을 주문일로 정하는 안은 [진행 기록](../progress/backend/README.md) 사용자 확인 7번(미결)입니다. 현재 예시는 주문일입니다.
 - 카드 사유 순서는 화면 문구 확인 뒤 다시 볼 수 있습니다(D-18 K3).
-- D-07 추천 2초 목표 측정 환경은 미결입니다.
 
 ### 근거
 
-- 결정 기록 D-12·D-13·D-15, D-18
+- 결정 기록 D-12·D-13·D-15, D-18, D-22, D-23
 - benefit 도메인 안내(OrderBenefit, CardBenefit, Recommendation, SelectionBasis, ApplicationStatus)
 
 ## GET /api/v1/me/recommendations/{recommendationId} — 추천 결과·근거 조회
@@ -311,7 +312,7 @@ X-BeONE-Demo-User: MY_CARDS
       "userCardId": "uc-1001",
       "cardProductId": "09174",
       "basis": {
-        "decidedBy": "MONTHLY_TOTAL",
+        "decidedBy": null,
         "arbitraryTieBreak": false,
         "tiedUserCardIds": [],
         "gapToRunnerUpWon": null

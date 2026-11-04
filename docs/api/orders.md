@@ -47,7 +47,7 @@ AUTOPAY
 
 #### merchantClass
 
-사용자나 시나리오가 확인한 가맹점·업종 분류 코드다. 전체 목록은 String/Enum 표에서 규칙 데이터와 함께 확정한다. 가맹점 이름으로 추정해 채우지 않는다.
+사용자나 시나리오가 확인한 가맹점·업종 분류 코드다. 허용 값은 [`rules/merchant-classes.txt`](../../backend/src/main/resources/rules/merchant-classes.txt) 기준이다(D-23). 가맹점 이름으로 추정해 채우지 않는다.
 
 ```text
 STARBUCKS_STORE
@@ -118,13 +118,10 @@ orderTime
 
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
-### 명세 단계 미정
-
-- `merchantClass` 전체 목록.
-
 ### 근거
 
-- 결정 기록 D-14
+- 결정 기록 D-14, D-23
+- `merchantClass` 허용 값은 [`rules/merchant-classes.txt`](../../backend/src/main/resources/rules/merchant-classes.txt) 기준이다(D-23). 입력 검증은 업무 API가 한다
 - benefit 도메인 안내(Order, MerchantClass, PaymentMethod)
 
 ## GET /api/v1/me/orders/{orderId} — 주문 상세 조회
@@ -277,7 +274,7 @@ items
 
 - `items`는 0~5건. 빈 배열이면 모두 지운다.
 - 각 항목의 `plannedDate`, `amountWon`(1 이상), `merchantClass`, `paymentMethod`가 필수다.
-- `plannedDate`는 이번 달이어야 한다. 조회 범위와 같으며, 벗어나면 400 `INVALID_REQUEST`다(제안).
+- `plannedDate`는 이번 달이어야 한다. 조회 범위와 같으며, 벗어나면 400 `INVALID_REQUEST`다(D-23).
 
 #### 선택 필드
 
