@@ -26,6 +26,7 @@ import com.beone.api.benefit.rule.BenefitService;
 import com.beone.api.benefit.rule.CancellationAttribution;
 import com.beone.api.benefit.rule.CardRuleVersion;
 import com.beone.api.benefit.rule.FractionalWonPolicy;
+import com.beone.api.benefit.rule.GracePartialPerformance;
 import com.beone.api.benefit.rule.GraceSpan;
 import com.beone.api.benefit.rule.InclusionUnconfirmed;
 import com.beone.api.benefit.rule.LimitBucket;
@@ -289,6 +290,17 @@ class RuleCatalogLoaderTest {
 	private static void assertTarget(String card, String id, String... classes) {
 		assertThat(service(card, id).target()).isEqualTo(MerchantTarget.only(
 				Arrays.stream(classes).map(MerchantClass::of).collect(Collectors.toSet())));
+	}
+
+	@Test
+	void gracePartialPerformanceFollowsTheWordingOfEachCard() {
+		// "실적이 없는 경우에도" 문구는 일부 실적을 말하지 않고, "1구간 서비스 제공" 문구는 실적을 가리지 않는다(D-20).
+		for (String card : List.of("09174", "01664", "09271")) {
+			assertThat(rules.get(card).policy().newCardGrace().resolvedValue().orElseThrow().partialPerformance())
+				.isEqualTo(GracePartialPerformance.NEEDS_CONFIRMATION);
+		}
+		assertThat(rules.get("01914").policy().newCardGrace().resolvedValue().orElseThrow().partialPerformance())
+			.isEqualTo(GracePartialPerformance.DEEMED_TIER);
 	}
 
 	private static void assertGrace(String card, GraceSpan span, Integer days, long deemed, String... services) {

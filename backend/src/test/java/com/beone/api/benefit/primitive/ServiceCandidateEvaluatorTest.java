@@ -49,7 +49,7 @@ class ServiceCandidateEvaluatorTest {
 	private static final Won NO_PERFORMANCE = Won.ZERO;
 
 	private static ServiceCandidate evaluate(BenefitService service, Order order) {
-		return ServiceCandidateEvaluator.evaluate(service, order, NO_PERFORMANCE, NO_GRACE);
+		return ServiceCandidateEvaluator.evaluate(service, order, NO_PERFORMANCE, NO_GRACE, ServiceLimits.NONE);
 	}
 
 	@Nested
@@ -163,8 +163,8 @@ class ServiceCandidateEvaluatorTest {
 		void performanceTierBoundaryIsInclusive() {
 			BenefitService service = service().tiers(tier(300_000, 100)).build();
 
-			assertConfirmed(ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.of(300_000), NO_GRACE), 100);
-			assertUnmet(ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.of(299_999), NO_GRACE),
+			assertConfirmed(ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.of(300_000), NO_GRACE, ServiceLimits.NONE), 100);
+			assertUnmet(ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.of(299_999), NO_GRACE, ServiceLimits.NONE),
 					ApplicationStatus.NOT_APPLICABLE_PERFORMANCE);
 		}
 
@@ -172,8 +172,8 @@ class ServiceCandidateEvaluatorTest {
 		void higherTierUsesItsOwnCalculation() {
 			BenefitService service = service().tiers(tier(0, 100), tier(300_000, 200)).build();
 
-			assertConfirmed(ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.of(299_999), NO_GRACE), 100);
-			assertConfirmed(ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.of(300_000), NO_GRACE), 200);
+			assertConfirmed(ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.of(299_999), NO_GRACE, ServiceLimits.NONE), 100);
+			assertConfirmed(ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.of(300_000), NO_GRACE, ServiceLimits.NONE), 200);
 		}
 
 		@Test
@@ -211,7 +211,7 @@ class ServiceCandidateEvaluatorTest {
 				.build();
 
 			ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service,
-					order(10_000, GIFT_CARD, PaymentMethod.DIRECT), Won.of(100_000), NO_GRACE);
+					order(10_000, GIFT_CARD, PaymentMethod.DIRECT), Won.of(100_000), NO_GRACE, ServiceLimits.NONE);
 
 			assertUnmet(candidate, ApplicationStatus.NOT_APPLICABLE_EXCLUDED, ApplicationStatus.NOT_APPLICABLE_CATEGORY,
 					ApplicationStatus.NOT_APPLICABLE_PAYMENT_METHOD, ApplicationStatus.NOT_APPLICABLE_MIN_AMOUNT,
@@ -229,7 +229,7 @@ class ServiceCandidateEvaluatorTest {
 			BenefitService service = service().tiers(tier(300_000, 100)).build();
 
 			ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.of(299_999),
-					grace);
+					grace, ServiceLimits.NONE);
 
 			assertNeedsConfirmation(candidate, "below every tier");
 		}
@@ -241,7 +241,7 @@ class ServiceCandidateEvaluatorTest {
 			BenefitService service = service().tiers(tier(0, 100), tier(300_000, 200)).build();
 
 			ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.of(100_000),
-					grace);
+					grace, ServiceLimits.NONE);
 
 			assertNeedsConfirmation(candidate, "higher tier");
 		}
@@ -252,8 +252,8 @@ class ServiceCandidateEvaluatorTest {
 			BenefitService tiered = service().tiers(tier(0, 100), tier(300_000, 200)).build();
 			BenefitService flat = rateService(100);
 
-			assertConfirmed(ServiceCandidateEvaluator.evaluate(tiered, order(10_000), Won.of(300_000), grace), 200);
-			assertConfirmed(ServiceCandidateEvaluator.evaluate(flat, order(10_000), Won.ZERO, grace), 100);
+			assertConfirmed(ServiceCandidateEvaluator.evaluate(tiered, order(10_000), Won.of(300_000), grace, ServiceLimits.NONE), 200);
+			assertConfirmed(ServiceCandidateEvaluator.evaluate(flat, order(10_000), Won.ZERO, grace, ServiceLimits.NONE), 100);
 		}
 
 	}
@@ -296,7 +296,7 @@ class ServiceCandidateEvaluatorTest {
 				.build();
 
 			ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service,
-					order(10_000, CINEMA, PaymentMethod.DIRECT), Won.of(100_000), TriggerEvidence.UNDETERMINED);
+					order(10_000, CINEMA, PaymentMethod.DIRECT), Won.of(100_000), TriggerEvidence.UNDETERMINED, ServiceLimits.NONE);
 
 			assertUnmet(candidate, ApplicationStatus.NOT_APPLICABLE_CATEGORY);
 		}
@@ -308,7 +308,7 @@ class ServiceCandidateEvaluatorTest {
 				.build();
 
 			ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.of(100_000),
-					TriggerEvidence.UNDETERMINED);
+					TriggerEvidence.UNDETERMINED, ServiceLimits.NONE);
 
 			assertUnmet(candidate, ApplicationStatus.NOT_APPLICABLE_PAYMENT_METHOD);
 		}
@@ -328,7 +328,7 @@ class ServiceCandidateEvaluatorTest {
 				.build();
 
 			ServiceCandidate candidate = ServiceCandidateEvaluator.evaluate(service, order(10_000), Won.ZERO,
-					TriggerEvidence.UNDETERMINED);
+					TriggerEvidence.UNDETERMINED, ServiceLimits.NONE);
 
 			assertNeedsConfirmation(candidate, "below every tier");
 			assertNeedsConfirmation(candidate, "synthetic: calc");
@@ -375,13 +375,13 @@ class ServiceCandidateEvaluatorTest {
 			BenefitService service = rateService(100);
 			Order order = order(10_000);
 
-			assertThatThrownBy(() -> ServiceCandidateEvaluator.evaluate(null, order, Won.ZERO, NO_GRACE))
+			assertThatThrownBy(() -> ServiceCandidateEvaluator.evaluate(null, order, Won.ZERO, NO_GRACE, ServiceLimits.NONE))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> ServiceCandidateEvaluator.evaluate(service, null, Won.ZERO, NO_GRACE))
+			assertThatThrownBy(() -> ServiceCandidateEvaluator.evaluate(service, null, Won.ZERO, NO_GRACE, ServiceLimits.NONE))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> ServiceCandidateEvaluator.evaluate(service, order, null, NO_GRACE))
+			assertThatThrownBy(() -> ServiceCandidateEvaluator.evaluate(service, order, null, NO_GRACE, ServiceLimits.NONE))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> ServiceCandidateEvaluator.evaluate(service, order, Won.ZERO, null))
+			assertThatThrownBy(() -> ServiceCandidateEvaluator.evaluate(service, order, Won.ZERO, null, ServiceLimits.NONE))
 				.isInstanceOf(NullPointerException.class);
 		}
 
@@ -390,9 +390,9 @@ class ServiceCandidateEvaluatorTest {
 			BenefitService unmet = service().paymentMethods(PaymentMethod.AUTOPAY).build();
 
 			assertThatThrownBy(() -> ServiceCandidateEvaluator.evaluate(rateService(100), order(10_000), Won.of(-1),
-					NO_GRACE))
+					NO_GRACE, ServiceLimits.NONE))
 				.isInstanceOf(IllegalArgumentException.class);
-			assertThatThrownBy(() -> ServiceCandidateEvaluator.evaluate(unmet, order(10_000), Won.of(-1), NO_GRACE))
+			assertThatThrownBy(() -> ServiceCandidateEvaluator.evaluate(unmet, order(10_000), Won.of(-1), NO_GRACE, ServiceLimits.NONE))
 				.isInstanceOf(IllegalArgumentException.class);
 		}
 

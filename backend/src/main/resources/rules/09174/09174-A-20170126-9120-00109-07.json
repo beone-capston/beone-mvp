@@ -65,7 +65,8 @@
           "CHECK",
           "BASIC_TELECOM",
           "BASIC_TRANSIT"
-        ]
+        ],
+        "partialPerformance": "NEEDS_CONFIRMATION"
       },
       "evidence": "E2"
     },

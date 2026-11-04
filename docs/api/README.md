@@ -53,10 +53,10 @@ D-14가 명세 단계로 넘긴 값 목록입니다. 2026-11-03 사용자 지시
 | 추천 제외 사유 | `RULE_UNAVAILABLE` > `MAPPING_UNCONFIRMED` > `NEEDS_CONFIRMATION` > `UNSUPPORTED`, `NO_SUPPORTED_RULE`. `USER_EXCLUDED`는 K3 순서 밖이며 "사용자 제외"로 따로 표시 | D-15, D-18 K3, D-19 |
 | 비교 카드 0원 사유 | `CONFIRMED_NOT_MET`(K3 순서의 마지막) | D-18 K3 |
 | 서비스 지원 범위 | `SUPPORTED`·`SUPPORTED_SINGLE_MONTHLY_LIMIT`(통합 한도와 매입 순서 명시 카드 포함)·`UNSUPPORTED_LIMIT_PERIOD`·`UNSUPPORTED_SELECTION_RULE` | D-18 K1 |
-| 한도 표시 | `usageBasis`: `USER_ENTERED`, `mayDifferFromActual`: `true`(제안) | D-18 K1 |
-| 한도 판정 사유 | `USAGE_EXCEEDS_LIMIT`(제안) | D-18 K1 |
+| 한도 표시 | `usageBasis`: `USER_ENTERED`, `mayDifferFromActual`: `true` | D-18 K1 |
+| 한도 판정 사유 | `USAGE_EXCEEDS_LIMIT` | D-18 K1 |
 | 택1 선택 상태 | `UNKNOWN`·`SELECTED`·`NONE` | D-18 K1 |
-| 선택으로 미적용 | `NOT_APPLICABLE_SELECTION`(제안, 코드 `ApplicationStatus`에 없어 구현 때 추가) | D-18 K1 |
+| 선택으로 미적용 | `NOT_APPLICABLE_SELECTION` | D-18 K1 |
 | 취소 영향 대상 | `PERFORMANCE`·`LIMIT_USAGE`·`BENEFIT` | D-17 |
 
 코드 enum을 그대로 쓰는 값: `StateSource`, `ApplicationStatus`, `Adoption`, `SelectionBasis`, `SelectionMode`, `PaymentMethod`, `LedgerEntryType`, `LedgerSource`, `VerificationStatus`, `PendingReason.Kind`.

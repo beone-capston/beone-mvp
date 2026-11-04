@@ -200,7 +200,7 @@ class EvaluationFixtureMappingTest {
 
 		assertThat(selections).singleElement().satisfies(selection -> {
 			assertThat(selection.source()).isEqualTo(StateSource.SYNTHETIC);
-			assertThat(selection.knownValue().service()).isEqualTo(ServiceId.of("FUEL"));
+			assertThat(selection.knownValue().service()).contains(ServiceId.of("FUEL"));
 			assertThat(selection.knownValue().effectiveFrom()).isEqualTo(LocalDate.of(2026, 9, 1));
 		});
 		var c04 = byId.get("C04").expected();

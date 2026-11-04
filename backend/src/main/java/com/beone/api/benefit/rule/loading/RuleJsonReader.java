@@ -22,6 +22,7 @@ import com.beone.api.benefit.rule.BenefitService;
 import com.beone.api.benefit.rule.CancellationAttribution;
 import com.beone.api.benefit.rule.CardRuleVersion;
 import com.beone.api.benefit.rule.FractionalWonPolicy;
+import com.beone.api.benefit.rule.GracePartialPerformance;
 import com.beone.api.benefit.rule.GraceSpan;
 import com.beone.api.benefit.rule.InclusionUnconfirmed;
 import com.beone.api.benefit.rule.LimitBucket;
@@ -123,12 +124,14 @@ public final class RuleJsonReader {
 		if (node.isNull()) {
 			return Optional.empty();
 		}
-		onlyKeys(node, where, "span", "days", "deemedPerformance", "services");
+		onlyKeys(node, where, "span", "days", "deemedPerformance", "services", "partialPerformance");
 		JsonNode days = required(node, "days", where);
 		return Optional.of(new NewCardGrace(enumValue(GraceSpan.class, required(node, "span", where), where + ".span"),
 				days.isNull() ? Optional.empty() : Optional.of(integer(days, where + ".days")),
 				won(required(node, "deemedPerformance", where), where + ".deemedPerformance"),
-				idSet(required(node, "services", where), where + ".services", ServiceId::of)));
+				idSet(required(node, "services", where), where + ".services", ServiceId::of),
+				enumValue(GracePartialPerformance.class, required(node, "partialPerformance", where),
+						where + ".partialPerformance")));
 	}
 
 	private LimitBucket limitBucket(JsonNode node) {

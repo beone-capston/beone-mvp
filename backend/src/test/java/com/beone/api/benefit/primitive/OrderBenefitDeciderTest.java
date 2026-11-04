@@ -151,11 +151,6 @@ class OrderBenefitDeciderTest {
 				NOT_STACKABLE);
 	}
 
-	private static BenefitService limited(String id) {
-		return service(id, MerchantTarget.allMerchants(), List.of(tier(0, BenefitCalculation.rate(100))),
-				List.of(BUCKET), false, NOT_STACKABLE);
-	}
-
 	private static BenefitService selectable(String id) {
 		return service(id, MerchantTarget.allMerchants(), List.of(tier(0, BenefitCalculation.rate(100))), List.of(),
 				true, NOT_STACKABLE);
@@ -226,7 +221,7 @@ class OrderBenefitDeciderTest {
 
 	private static OrderBenefit.Decided decide(RuleSelection selection, Order order, CardMonthlyState state,
 			PolicyTermEvidence evidence) {
-		return (OrderBenefit.Decided) OrderBenefitDecider.decide(selection, order, state, evidence);
+		return (OrderBenefit.Decided) OrderBenefitDecider.decide(selection, order, state, PrimitiveTestData.REGISTERED, evidence);
 	}
 
 	private static OrderBenefit.Decided decide(RuleSelection selection) {
@@ -237,6 +232,16 @@ class OrderBenefitDeciderTest {
 
 	private static ServiceCandidate candidate(String id, long won, ApplicationStatus... unmet) {
 		return new ServiceCandidate(ServiceId.of(id), BenefitAmount.confirmed(won), Set.of(unmet));
+	}
+
+	/** 원 미만을 버려 만든 후보. */
+	private static ServiceCandidate truncated(String id, long won) {
+		return new ServiceCandidate(ServiceId.of(id), BenefitAmount.confirmed(won), Set.of(), Optional.empty(),
+				Optional.empty(), true);
+	}
+
+	private static OrderServiceBenefit notAdoptedTruncated(String id) {
+		return new OrderServiceBenefit(truncated(id, 0), Adoption.NOT_ADOPTED, BenefitAmount.confirmed(0));
 	}
 
 	private static OrderServiceBenefit adopted(String id, long won) {
@@ -275,7 +280,7 @@ class OrderBenefitDeciderTest {
 		void unavailableSelectionStaysUnavailable(ApplicationStatus status) {
 			RuleSelection selection = new RuleSelection.Unavailable(CARD, status, "synthetic: no rule");
 
-			OrderBenefit result = OrderBenefitDecider.decide(selection, ORDER, performance(0), UNDETERMINED);
+			OrderBenefit result = OrderBenefitDecider.decide(selection, ORDER, performance(0), PrimitiveTestData.REGISTERED, UNDETERMINED);
 
 			assertThat(result).isEqualTo(new OrderBenefit.Unavailable(CARD, status, "synthetic: no rule"));
 			assertThat(result.orderBenefit()).isEqualTo(BenefitAmount.needsConfirmation("synthetic: no rule"));
@@ -293,9 +298,9 @@ class OrderBenefitDeciderTest {
 					RESOLVED, List.of(rate("SYN-A", 100)), List.of());
 
 			OrderBenefit expiredResult = OrderBenefitDecider.decide(new RuleCatalog(List.of(expired)).select(CARD, DAY),
-					ORDER, performance(0), UNDETERMINED);
+					ORDER, performance(0), PrimitiveTestData.REGISTERED, UNDETERMINED);
 			OrderBenefit unverifiedResult = OrderBenefitDecider.decide(
-					new RuleCatalog(List.of(candidate)).select(CARD, DAY), ORDER, performance(0), UNDETERMINED);
+					new RuleCatalog(List.of(candidate)).select(CARD, DAY), ORDER, performance(0), PrimitiveTestData.REGISTERED, UNDETERMINED);
 
 			assertThat(expiredResult).isInstanceOfSatisfying(OrderBenefit.Unavailable.class,
 					unavailable -> assertThat(unavailable.status()).isEqualTo(ApplicationStatus.RULE_EXPIRED));
@@ -365,7 +370,7 @@ class OrderBenefitDeciderTest {
 					rate("SYN-ZERO", 100)), SMALL_ORDER, performance(0), UNDETERMINED);
 
 			assertThat(result.services()).containsExactly(
-					notAdopted("SYN-CINEMA", 0, ApplicationStatus.NOT_APPLICABLE_CATEGORY), notAdopted("SYN-ZERO", 0));
+					notAdopted("SYN-CINEMA", 0, ApplicationStatus.NOT_APPLICABLE_CATEGORY), notAdoptedTruncated("SYN-ZERO"));
 			assertThat(result.services().get(1).candidate().unmetConditions()).isEmpty();
 			assertThat(result.rechecks()).isEmpty();
 			assertThat(result.reasons()).isEmpty();
@@ -377,7 +382,7 @@ class OrderBenefitDeciderTest {
 			OrderBenefit.Decided result = decide(select(rate("SYN-ZERO", 100)), SMALL_ORDER, performance(0),
 					UNDETERMINED);
 
-			assertThat(result.services()).containsExactly(notAdopted("SYN-ZERO", 0));
+			assertThat(result.services()).containsExactly(notAdoptedTruncated("SYN-ZERO"));
 			assertThat(result.orderBenefit()).isEqualTo(BenefitAmount.confirmed(0));
 		}
 
@@ -388,7 +393,7 @@ class OrderBenefitDeciderTest {
 					select(fixed("SYN-FIXED", 10, STACKING_UNKNOWN), rate("SYN-ZERO", 100, STACKING_UNKNOWN)),
 					SMALL_ORDER, performance(0), UNDETERMINED);
 
-			assertThat(result.services()).containsExactly(adopted("SYN-FIXED", 10), notAdopted("SYN-ZERO", 0));
+			assertThat(result.services()).containsExactly(adopted("SYN-FIXED", 10), notAdoptedTruncated("SYN-ZERO"));
 			assertThat(result.reasons()).isEmpty();
 			assertThat(result.orderBenefit()).isEqualTo(BenefitAmount.confirmed(10));
 		}
@@ -401,7 +406,7 @@ class OrderBenefitDeciderTest {
 		@Test
 		void needingConfirmationAndUnsupportedServicesBlockTheAmount() {
 			OrderBenefit.Decided result = decide(select(rate("SYN-A", 100), unresolvedCalculation("SYN-P"),
-					fixed("SYN-F", 20_000), limited("SYN-L"), selectable("SYN-S")));
+					fixed("SYN-F", 20_000), selectable("SYN-L"), selectable("SYN-S")));
 
 			assertPending(result);
 			assertThat(result.services()).containsExactly(new OrderServiceBenefit(candidate("SYN-A", 100),
@@ -411,7 +416,7 @@ class OrderBenefitDeciderTest {
 			// 앞 단계 사유 원문을 그대로 포함한다.
 			assertThat(result.reasons().get(1).detail()).contains("RULE_SELECTION").contains(CALCULATION_REASON);
 			assertThat(result.reasons().get(0).detail()).contains("CANDIDATE_EVALUATION").contains("exceeds order amount");
-			assertThat(result.reasons().get(2).detail()).contains("HAS_LIMIT_BUCKETS");
+			assertThat(result.reasons().get(2).detail()).contains("REQUIRES_SELECTION");
 			assertThat(result.reasons().get(3).detail()).contains("REQUIRES_SELECTION");
 		}
 
@@ -428,7 +433,7 @@ class OrderBenefitDeciderTest {
 
 		@Test
 		void unsupportedOnlyStillNeedsConfirmation() {
-			OrderBenefit.Decided result = decide(select(limited("SYN-L")));
+			OrderBenefit.Decided result = decide(select(selectable("SYN-L")));
 
 			assertPending(result);
 			assertThat(result.services()).isEmpty();
@@ -491,7 +496,7 @@ class OrderBenefitDeciderTest {
 		void performanceOnlyUnmetIsRecheckedWhenCancellationMayAffectIt(TriggerEvidence cancellation) {
 			RuleSelection selection = select(CANCELLATION_PENDING, belowTier);
 			CardServiceCandidates.Collected source = (CardServiceCandidates.Collected) CardServiceCandidateCollector
-				.collect(selection, ORDER, performance(100_000));
+				.collect(selection, ORDER, performance(100_000), PrimitiveTestData.REGISTERED);
 
 			OrderBenefit.Decided result = decide(selection, ORDER, performance(100_000),
 					evidence(cancellation, TriggerEvidence.CONFIRMED_ABSENT));
@@ -565,15 +570,15 @@ class OrderBenefitDeciderTest {
 		void reasonlessZeroThatMayRiseIsRechecked() {
 			// 실적 10만원 → 1% 구간: 30원 × 1% = 0.3원 → 절사 0원. 취소 귀속으로 실적이 30만원이면 5%: 1.5원 → 1원이 될 수 있다.
 			BenefitService two = twoTier("SYN-TWO");
-			assertThat(CardServiceCandidateCollector.collect(select(RESOLVED, two), SMALL_ORDER, performance(300_000)))
+			assertThat(CardServiceCandidateCollector.collect(select(RESOLVED, two), SMALL_ORDER, performance(300_000), PrimitiveTestData.REGISTERED))
 				.isInstanceOfSatisfying(CardServiceCandidates.Collected.class,
-						higher -> assertThat(higher.candidates()).containsExactly(candidate("SYN-TWO", 1)));
+						higher -> assertThat(higher.candidates()).containsExactly(truncated("SYN-TWO", 1)));
 
 			OrderBenefit.Decided result = decide(select(CANCELLATION_PENDING, two), SMALL_ORDER, performance(100_000),
 					UNDETERMINED);
 
 			assertThat(result.rechecks()).extracting(PerformanceRecheck::candidate)
-				.containsExactly(candidate("SYN-TWO", 0));
+				.containsExactly(truncated("SYN-TWO", 0));
 			assertThat(result.services()).isEmpty();
 			assertThat(result.orderBenefit().isConfirmed()).isFalse();
 			assertThat(kindsAndServices(result)).containsExactly("PERFORMANCE_POLICY [SYN-TWO]");
@@ -584,7 +589,7 @@ class OrderBenefitDeciderTest {
 			OrderBenefit.Decided result = decide(select(CANCELLATION_PENDING, rate("SYN-ZERO", 100)), SMALL_ORDER,
 					performance(100_000), UNDETERMINED);
 
-			assertThat(result.services()).containsExactly(notAdopted("SYN-ZERO", 0));
+			assertThat(result.services()).containsExactly(notAdoptedTruncated("SYN-ZERO"));
 			assertThat(result.rechecks()).isEmpty();
 			assertThat(result.orderBenefit()).isEqualTo(BenefitAmount.confirmed(0));
 		}
@@ -633,7 +638,7 @@ class OrderBenefitDeciderTest {
 	class SeveralReasons {
 
 		private final List<BenefitService> services = List.of(performanceRate("SYN-A", 100_000, 200),
-				rate("SYN-B", 100, STACKING_UNKNOWN), unresolvedCalculation("SYN-P"), limited("SYN-L"));
+				rate("SYN-B", 100, STACKING_UNKNOWN), unresolvedCalculation("SYN-P"), selectable("SYN-L"));
 
 		@Test
 		void allReasonsAreKeptInDeterministicOrder() {
@@ -670,9 +675,9 @@ class OrderBenefitDeciderTest {
 		@Test
 		void sourceAndConditionalTermsAreKeptUnchanged() {
 			RuleSelection.Selected selection = (RuleSelection.Selected) select(BOTH_PENDING,
-					rate("SYN-A", 100, STACKING_UNKNOWN), performanceRate("SYN-PERF", 300_000, 100), limited("SYN-L"));
+					rate("SYN-A", 100, STACKING_UNKNOWN), performanceRate("SYN-PERF", 300_000, 100), selectable("SYN-L"));
 			CardServiceCandidates.Collected expected = (CardServiceCandidates.Collected) CardServiceCandidateCollector
-				.collect(selection, ORDER, performance(100_000));
+				.collect(selection, ORDER, performance(100_000), PrimitiveTestData.REGISTERED);
 
 			OrderBenefit.Decided result = decide(selection, ORDER, performance(100_000), UNDETERMINED);
 
@@ -704,13 +709,13 @@ class OrderBenefitDeciderTest {
 
 		@Test
 		void rejectsNullInputs() {
-			assertThatThrownBy(() -> OrderBenefitDecider.decide(null, ORDER, performance(0), UNDETERMINED))
+			assertThatThrownBy(() -> OrderBenefitDecider.decide(null, ORDER, performance(0), PrimitiveTestData.REGISTERED, UNDETERMINED))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, null, performance(0), UNDETERMINED))
+			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, null, performance(0), PrimitiveTestData.REGISTERED, UNDETERMINED))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, ORDER, null, UNDETERMINED))
+			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, ORDER, null, PrimitiveTestData.REGISTERED, UNDETERMINED))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, ORDER, performance(0), null))
+			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, ORDER, performance(0), PrimitiveTestData.REGISTERED, null))
 				.isInstanceOf(NullPointerException.class);
 		}
 
@@ -721,10 +726,10 @@ class OrderBenefitDeciderTest {
 			RuleSelection unavailable = new RuleSelection.Unavailable(CARD, ApplicationStatus.NO_VERIFIED_RULE,
 					"synthetic: no rule");
 
-			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, ORDER, performance(0), other))
+			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, ORDER, performance(0), PrimitiveTestData.REGISTERED, other))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("policy evidence card");
-			assertThatThrownBy(() -> OrderBenefitDecider.decide(unavailable, ORDER, performance(0), other))
+			assertThatThrownBy(() -> OrderBenefitDecider.decide(unavailable, ORDER, performance(0), PrimitiveTestData.REGISTERED, other))
 				.hasMessageContaining("policy evidence card");
 		}
 
@@ -733,10 +738,10 @@ class OrderBenefitDeciderTest {
 			CardMonthlyState otherCard = state(CardId.of("SYN-OTHER"),
 					Optional.of(StateValue.synthetic(Won.ZERO, BasisPeriod.month(YearMonth.of(2026, 9)))));
 
-			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, ORDER, otherCard, UNDETERMINED))
+			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, ORDER, otherCard, PrimitiveTestData.REGISTERED, UNDETERMINED))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("monthly state card");
-			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, ORDER, performance(-1), UNDETERMINED))
+			assertThatThrownBy(() -> OrderBenefitDecider.decide(selection, ORDER, performance(-1), PrimitiveTestData.REGISTERED, UNDETERMINED))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("negative prior performance");
 		}

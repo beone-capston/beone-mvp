@@ -15,8 +15,8 @@ import com.beone.api.benefit.state.StateValue;
  *
  * @param priorPerformance 직접 입력된 전월 실적. 비어 있으면 원장에서 산출해야 한다
  * @param usedBenefits 한도 묶음별 이번 달 혜택 사용액
- * @param otherBucketsUsed {@code usedBenefits}에 없는 한도 묶음의 사용액. 입력이 없으면 {@code UNKNOWN}이며 0원으로 보지 않는다
- * @param serviceSelections 선택형 서비스와 적용 시작일
+ * @param otherBucketsUsed {@code usedBenefits}에 없는 한도 묶음의 사용액. 입력이 없으면 {@code UNKNOWN}이며 0원으로 보지 않는다. 한도 판정은 체인 버킷의 값을 대신하는 데 쓰지 않는다(D-18 K1)
+ * @param serviceSelections 택1 선택(서비스 또는 {@code NONE})과 적용 시작일. 비어 있으면 입력 없음이다
  */
 public record CardMonthlyState(CardId cardId, Optional<StateValue<Won>> priorPerformance,
 		Map<LimitBucketId, StateValue<Won>> usedBenefits, StateValue<Won> otherBucketsUsed,

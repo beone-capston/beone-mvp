@@ -188,7 +188,7 @@ X-BeONE-Demo-User: MY_CARDS
 - `comparedCards[].appliedRule` · 규칙 버전·검증 상태·공식 근거(D-14 원칙 5)
 - `currentOrderBenefit` · `OrderBenefit` 값을 그대로 쓴다(D-18 K3)
 - `monthlyTotalBenefit` · 1차에서는 현재 주문 기준이라 `currentOrderBenefit`과 같은 값이다. 예정 소비는 넣지 않는다(D-18 K4). 이번 달 상태는 잔여 한도와 실적 판정에 쓰고 합계에 더하지 않는다
-- `services[].applicationStatus` · `APPLIED` / `APPLIED_CAP_REMAINING` / `LIMIT_EXHAUSTED` / `NOT_APPLICABLE_EXCLUDED` / `NOT_APPLICABLE_CATEGORY` / `NOT_APPLICABLE_PERFORMANCE` / `NOT_APPLICABLE_MIN_AMOUNT` / `NOT_APPLICABLE_PAYMENT_METHOD` / `NOT_APPLICABLE_SELECTION`(제안, 코드에 없음) / `RULE_EXPIRED` / `NO_VERIFIED_RULE` / `NEEDS_CONFIRMATION`
+- `services[].applicationStatus` · `APPLIED` / `APPLIED_CAP_REMAINING` / `LIMIT_EXHAUSTED` / `NOT_APPLICABLE_EXCLUDED` / `NOT_APPLICABLE_CATEGORY` / `NOT_APPLICABLE_PERFORMANCE` / `NOT_APPLICABLE_MIN_AMOUNT` / `NOT_APPLICABLE_PAYMENT_METHOD` / `NOT_APPLICABLE_SELECTION` / `RULE_EXPIRED` / `NO_VERIFIED_RULE` / `NEEDS_CONFIRMATION`
 - `services[].candidateWon` · Integer|null · 서비스 단독 후보 금액. 기여액과 다를 수 있다. 미확정이면 `null`
 - `services[].adoption` · `ADOPTED` / `NOT_ADOPTED` / `UNDETERMINED`(코드 `Adoption`). 중복 합산 예외(D-13 #35 8번)에서는 합산한 서비스가 모두 `ADOPTED`이고 카드 금액은 기여액의 합이다. 각 서비스를 할인 전 금액으로 계산해 서비스별로 절사하고(D-03) 자기 체인의 남은 한도로 줄인다. 합계가 결제 금액을 넘으면 `NEEDS_CONFIRMATION`이다
 - `services[].contribution` · 실제 기여액. 미확정이면 `amountWon=null`, `status=NEEDS_CONFIRMATION`
@@ -197,13 +197,16 @@ X-BeONE-Demo-User: MY_CARDS
   - 정액 혜택: 남은 한도가 0이면 확정 0원(`LIMIT_EXHAUSTED`), 0보다 크고 정액보다 적으면 `NEEDS_CONFIRMATION`
   - 체인 안 버킷 중 하나라도 사용액이 `UNKNOWN`이면 그 서비스는 `NEEDS_CONFIRMATION`이고 `remainingAfterWon=null`이다. 확정 0원은 체인 안 모든 버킷의 사용액이 입력되어 있을 때만이다
   - 사용액이 한도와 같으면 남은 한도 0으로 판정한다
-- `services[].limitReason` · String|null · `USAGE_EXCEEDS_LIMIT`(제안). 체인 안 어느 버킷이든 입력 사용액이 한도보다 크면 입력이 규칙과 모순되므로 그 서비스는 `NEEDS_CONFIRMATION`이고 `amountWon=null`, `remainingAfterWon=null`이다. 0원 확정이나 음수 혜택으로 만들지 않는다. 같은 사유를 `pendingReasons[]`에 `NEEDS_CONFIRMATION`으로 담는다
-- `services[].usageBasis` · String|null · 제안. 한도가 있으면 `USER_ENTERED`, 없으면 `null`
-- `services[].mayDifferFromActual` · Boolean · 제안. 한도가 있는 모든 서비스 결과(0원 결과 포함)에서 `true`다. 실제 카드사 차감과 다를 수 있다는 표시다
+- `services[].limitReason` · String|null · `USAGE_EXCEEDS_LIMIT`. 제외 업종(`NOT_APPLICABLE_EXCLUDED`)·대상 업종·결제 방식·최소 금액·실적 미충족이 확인되거나, 택1 선택형 서비스에서 다른 서비스를 골랐거나 선택 없음이면(`NOT_APPLICABLE_SELECTION`) 사용액과 무관하게 확정 0원이고 이 사유를 쓰지 않는다. 그렇지 않고 체인 안 어느 버킷이든 입력 사용액이 한도보다 크면 입력이 규칙과 모순되므로 그 서비스는 `NEEDS_CONFIRMATION`이고 `amountWon=null`, `remainingAfterWon=null`이다. 0원 확정이나 음수 혜택으로 만들지 않는다. 같은 사유를 `pendingReasons[]`에 `NEEDS_CONFIRMATION`으로 담는다
+- `services[].usageBasis` · String|null · 한도가 있으면 `USER_ENTERED`, 없으면 `null`
+- `services[].mayDifferFromActual` · Boolean · 한도가 있는 모든 서비스 결과(0원 결과 포함)에서 `true`다. 실제 카드사 차감과 다를 수 있다는 표시다
 - `services[].usageNote` · String|null · 한도가 있으면 "입력한 사용액 기준, 미매입 전표에 따라 달라질 수 있음"을 그대로 표시한다
+- `services[].fractionalWonTruncated` · Boolean · 후보 금액을 계산하며 원 미만을 실제로 버렸으면 `true`(D-03)
+- `services[].fractionalWonBasis` · Object|null · `fractionalWonTruncated=true`일 때의 근거. `{"kind": ..., "decision": ...}` 형식이며 표시는 "약관 근거 없음, 사용자 결정"이다. 버리지 않았으면 `null`
+- `services[].unevaluatedExclusions[]` · String[] · 주문 입력에 없어 판정하지 못한 제외 조건의 문서 표현(D-20). 규칙에 있는 대로 모든 서비스에 담고 없으면 `[]`다. 이 조건이 있는 서비스의 확정 금액은 실제보다 클 수 있다
 - 택1 선택형 서비스(D-18 K1 U2 ① 예외): 선택형은 계속 범위 밖이다. 거래 업종이 확정되고 그 거래에 적용되지 않음이 확정되면 카드 금액을 막는 사유에서 뺀다
   - 대상 업종 불일치: `NOT_APPLICABLE_CATEGORY`
-  - 다른 서비스를 선택했거나 `serviceSelectionStatus=NONE`: `NOT_APPLICABLE_SELECTION`(제안)
+  - 다른 서비스를 선택했거나 `serviceSelectionStatus=NONE`: `NOT_APPLICABLE_SELECTION`
   - 그 밖의 경우(`UNKNOWN`, 업종 미확정, 적용일 없음, 선택 서비스가 그 거래에 적용됨): `NEEDS_CONFIRMATION`
 - `excludedCards[].reason` · 카드 사유 우선순위(D-18 K3): `RULE_UNAVAILABLE` > `MAPPING_UNCONFIRMED` > `NEEDS_CONFIRMATION` > `UNSUPPORTED`. 사용자가 4종이 아니라고 지정한 카드는 `NO_SUPPORTED_RULE`, 사용자가 추천에서 뺀 카드는 `USER_EXCLUDED`. 이 값은 K3 순서에 넣지 않고 "사용자 제외"로 따로 표시한다(D-19)
 - `excludedCards[].candidateCardProductId` · `MAPPING_UNCONFIRMED`일 때 확인할 수 있는 후보(D-15)

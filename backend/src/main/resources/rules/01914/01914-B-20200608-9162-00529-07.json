@@ -70,7 +70,8 @@
           "BOOKSTORE",
           "CULTURE",
           "TRANSIT"
-        ]
+        ],
+        "partialPerformance": "DEEMED_TIER"
       },
       "evidence": "E16"
     },
