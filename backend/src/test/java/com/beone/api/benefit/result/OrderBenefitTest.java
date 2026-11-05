@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.Nested;
@@ -15,6 +16,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 import com.beone.api.benefit.card.CardId;
 import com.beone.api.benefit.card.ServiceId;
+import com.beone.api.benefit.money.Won;
 import com.beone.api.benefit.money.BenefitAmount;
 import com.beone.api.benefit.rule.RuleVersionRef;
 
@@ -124,7 +126,7 @@ class OrderBenefitTest {
 		void adoptsTheLargestAndSumsContributions() {
 			OrderBenefit.Decided result = new OrderBenefit.Decided(source(List.of(C_CATEGORY, B_100, A_300)),
 					List.of(adopted(A_300), notAdopted(B_100), notAdopted(C_CATEGORY)), List.of(), List.of(),
-					BenefitAmount.confirmed(300));
+					BenefitAmount.confirmed(300), List.of());
 
 			assertThat(result.cardId()).isEqualTo(CARD);
 			assertThat(result.orderBenefit()).isEqualTo(BenefitAmount.confirmed(300));
@@ -133,7 +135,7 @@ class OrderBenefitTest {
 		@Test
 		void onlyZeroCandidatesGiveConfirmedZero() {
 			OrderBenefit.Decided result = new OrderBenefit.Decided(source(List.of(C_CATEGORY, E_ZERO)),
-					List.of(notAdopted(C_CATEGORY), notAdopted(E_ZERO)), List.of(), List.of(), BenefitAmount.confirmed(0));
+					List.of(notAdopted(C_CATEGORY), notAdopted(E_ZERO)), List.of(), List.of(), BenefitAmount.confirmed(0), List.of());
 
 			assertThat(result.orderBenefit()).isEqualTo(BenefitAmount.confirmed(0));
 		}
@@ -141,40 +143,61 @@ class OrderBenefitTest {
 		@Test
 		void rejectsSumMismatch() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_100)),
-					List.of(adopted(A_300), notAdopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(400)))
+					List.of(adopted(A_300), notAdopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(400), List.of()))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("not the sum");
 		}
 
 		@Test
-		void rejectsTwoAdoptedServices() {
+		void rejectsAdoptingTheSmallerOrTheLaterIdOnTie() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_100)),
-					List.of(adopted(A_300), adopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(400)))
-				.isInstanceOf(IllegalArgumentException.class)
+					List.of(notAdopted(A_300), adopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(100), List.of()))
+				.hasMessageContaining("adopted services");
+			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_300)),
+					List.of(notAdopted(A_300), adopted(B_300)), List.of(), List.of(), BenefitAmount.confirmed(300), List.of()))
 				.hasMessageContaining("adopted services");
 		}
 
 		@Test
-		void rejectsAdoptingTheSmallerOrTheLaterIdOnTie() {
+		void acceptsEveryPositiveCandidateAdoptedForStacking() {
+			OrderBenefit.Decided result = new OrderBenefit.Decided(source(List.of(A_300, B_100)),
+					List.of(adopted(A_300), adopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(400), List.of());
+
+			assertThat(result.orderBenefit()).isEqualTo(BenefitAmount.confirmed(400));
+		}
+
+		@Test
+		void rejectsStackingWithWrongTotalOrPartialAdoption() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_100)),
-					List.of(notAdopted(A_300), adopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(100)))
+					List.of(adopted(A_300), adopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(300), List.of()))
+				.hasMessageContaining("not the sum");
+			ServiceCandidate c = positive("SYN-C", 50);
+			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_100, c)),
+					List.of(adopted(A_300), adopted(B_100), notAdopted(c)), List.of(), List.of(), BenefitAmount.confirmed(400),
+					List.of()))
 				.hasMessageContaining("adopted services");
-			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_300)),
-					List.of(notAdopted(A_300), adopted(B_300)), List.of(), List.of(), BenefitAmount.confirmed(300)))
-				.hasMessageContaining("adopted services");
+		}
+
+		@Test
+		void rejectsStackedContributionBelowItsAmountAfterLimit() {
+			OrderServiceBenefit partial = new OrderServiceBenefit(A_300, Adoption.ADOPTED, BenefitAmount.confirmed(200));
+
+			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_100)),
+					List.of(partial, adopted(B_100)), List.of(), List.of(), BenefitAmount.confirmed(300), List.of()))
+				.hasMessageContaining("amount after limit");
 		}
 
 		@Test
 		void rejectsNoAdoptionWhenPositiveCandidatesExist() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300)), List.of(notAdopted(A_300)),
-					List.of(), List.of(), BenefitAmount.confirmed(0)))
+					List.of(), List.of(), BenefitAmount.confirmed(0), List.of()))
 				.hasMessageContaining("adopted services");
 		}
 
 		@Test
 		void rejectsUndeterminedWhileConfirmed() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300)), List.of(undetermined(A_300)),
-					List.of(), List.of(), BenefitAmount.confirmed(0)))
+					List.of(), List.of(), BenefitAmount.confirmed(0), List.of()))
 				.hasMessageContaining("undetermined");
 		}
 
@@ -183,8 +206,21 @@ class OrderBenefitTest {
 			OrderServiceBenefit partial = new OrderServiceBenefit(A_300, Adoption.ADOPTED, BenefitAmount.confirmed(200));
 
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300)), List.of(partial), List.of(),
-					List.of(), BenefitAmount.confirmed(200)))
-				.hasMessageContaining("candidate amount");
+					List.of(), BenefitAmount.confirmed(200), List.of()))
+				.hasMessageContaining("amount after limit");
+		}
+
+		@Test
+		void adoptedContributionFollowsTheRemainingLimit() {
+			ServiceCandidate capped = new ServiceCandidate(ServiceId.of("SYN-A"), BenefitAmount.confirmed(300), Set.of(),
+					Optional.of(Won.of(200)), Optional.empty(), false);
+			OrderServiceBenefit adopted = new OrderServiceBenefit(capped, Adoption.ADOPTED, BenefitAmount.confirmed(200));
+
+			OrderBenefit.Decided result = new OrderBenefit.Decided(source(List.of(capped)), List.of(adopted), List.of(),
+					List.of(), BenefitAmount.confirmed(200), List.of());
+
+			assertThat(result.orderBenefit()).isEqualTo(BenefitAmount.confirmed(200));
+			assertThat(adopted.appliedStatus()).contains(ApplicationStatus.APPLIED_CAP_REMAINING);
 		}
 
 		@Test
@@ -193,7 +229,7 @@ class OrderBenefitTest {
 					BenefitAmount.confirmed(0));
 
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(E_ZERO)), List.of(undeterminedZero),
-					List.of(), List.of(), BenefitAmount.confirmed(0)))
+					List.of(), List.of(), BenefitAmount.confirmed(0), List.of()))
 				.hasMessageContaining("NOT_ADOPTED");
 		}
 
@@ -201,7 +237,7 @@ class OrderBenefitTest {
 		void rejectsConfirmedAmountWithReasons() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300), List.of(P_PENDING), List.of()),
 					List.of(adopted(A_300)), List.of(), List.of(reason(PendingReason.Kind.NEEDS_CONFIRMATION, "SYN-P")),
-					BenefitAmount.confirmed(300)))
+					BenefitAmount.confirmed(300), List.of()))
 				.hasMessageContaining("exactly when there are no reasons");
 		}
 
@@ -220,7 +256,7 @@ class OrderBenefitTest {
 		@Test
 		void keepsPositiveCandidatesUndeterminedAndRechecksSeparate() {
 			OrderBenefit.Decided result = new OrderBenefit.Decided(source, List.of(undetermined(A_300), undetermined(B_100)),
-					List.of(recheck(D_PERFORMANCE)), reasons, PENDING);
+					List.of(recheck(D_PERFORMANCE)), reasons, PENDING, List.of());
 
 			assertThat(result.orderBenefit().isConfirmed()).isFalse();
 			assertThat(result.services()).extracting(service -> service.candidate().serviceId())
@@ -230,21 +266,21 @@ class OrderBenefitTest {
 		@Test
 		void rejectsPendingAmountWithoutReasons() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300)), List.of(undetermined(A_300)),
-					List.of(), List.of(), PENDING))
+					List.of(), List.of(), PENDING, List.of()))
 				.hasMessageContaining("exactly when there are no reasons");
 		}
 
 		@Test
 		void rejectsAdoptedWhilePending() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source, List.of(adopted(A_300), undetermined(B_100)),
-					List.of(recheck(D_PERFORMANCE)), reasons, PENDING))
+					List.of(recheck(D_PERFORMANCE)), reasons, PENDING, List.of()))
 				.hasMessageContaining("cannot be ADOPTED");
 		}
 
 		@Test
 		void rejectsPositiveNotAdoptedWhilePending() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source, List.of(notAdopted(A_300), undetermined(B_100)),
-					List.of(recheck(D_PERFORMANCE)), reasons, PENDING))
+					List.of(recheck(D_PERFORMANCE)), reasons, PENDING, List.of()))
 				.hasMessageContaining("must be UNDETERMINED");
 		}
 
@@ -252,15 +288,15 @@ class OrderBenefitTest {
 		void rejectsMissingReasonLinks() {
 			// 재확인 후보의 실적 정책 사유 누락
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source, List.of(undetermined(A_300), undetermined(B_100)),
-					List.of(recheck(D_PERFORMANCE)), without(PendingReason.Kind.PERFORMANCE_POLICY), PENDING))
+					List.of(recheck(D_PERFORMANCE)), without(PendingReason.Kind.PERFORMANCE_POLICY), PENDING, List.of()))
 				.hasMessageContaining("PERFORMANCE_POLICY reason");
 			// 확인 필요 서비스의 사유 누락
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source, List.of(undetermined(A_300), undetermined(B_100)),
-					List.of(recheck(D_PERFORMANCE)), without(PendingReason.Kind.NEEDS_CONFIRMATION), PENDING))
+					List.of(recheck(D_PERFORMANCE)), without(PendingReason.Kind.NEEDS_CONFIRMATION), PENDING, List.of()))
 				.hasMessageContaining("NEEDS_CONFIRMATION reason");
 			// 지원 범위 밖 서비스의 사유 누락
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source, List.of(undetermined(A_300), undetermined(B_100)),
-					List.of(recheck(D_PERFORMANCE)), without(PendingReason.Kind.UNSUPPORTED), PENDING))
+					List.of(recheck(D_PERFORMANCE)), without(PendingReason.Kind.UNSUPPORTED), PENDING, List.of()))
 				.hasMessageContaining("UNSUPPORTED reason");
 		}
 
@@ -268,16 +304,16 @@ class OrderBenefitTest {
 		void rejectsReasonsOutsideTheirClassification() {
 			// 확인 필요 사유가 후보 서비스를 가리킴
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300)), List.of(undetermined(A_300)),
-					List.of(), List.of(reason(PendingReason.Kind.NEEDS_CONFIRMATION, A_300)), PENDING))
+					List.of(), List.of(reason(PendingReason.Kind.NEEDS_CONFIRMATION, A_300)), PENDING, List.of()))
 				.hasMessageContaining("outside its classification");
 			// 원본에 없는 서비스
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300)), List.of(undetermined(A_300)),
-					List.of(), List.of(reason(PendingReason.Kind.UNSUPPORTED, "SYN-X")), PENDING))
+					List.of(), List.of(reason(PendingReason.Kind.UNSUPPORTED, "SYN-X")), PENDING, List.of()))
 				.hasMessageContaining("outside its classification");
 			// 중복 관계 사유가 0원 후보를 가리킴
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, E_ZERO)),
 					List.of(undetermined(A_300), notAdopted(E_ZERO)), List.of(),
-					List.of(reason(PendingReason.Kind.STACKING_UNRESOLVED, A_300, E_ZERO)), PENDING))
+					List.of(reason(PendingReason.Kind.STACKING_UNRESOLVED, A_300, E_ZERO)), PENDING, List.of()))
 				.hasMessageContaining("outside its classification");
 		}
 
@@ -286,12 +322,12 @@ class OrderBenefitTest {
 			List<PendingReason> reversed = new ArrayList<>(reasons);
 			Collections.reverse(reversed);
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source, List.of(undetermined(A_300), undetermined(B_100)),
-					List.of(recheck(D_PERFORMANCE)), reversed, PENDING))
+					List.of(recheck(D_PERFORMANCE)), reversed, PENDING, List.of()))
 				.hasMessageContaining("unique and in order");
 			List<PendingReason> duplicated = new ArrayList<>(reasons);
 			duplicated.add(1, reasons.get(0));
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source, List.of(undetermined(A_300), undetermined(B_100)),
-					List.of(recheck(D_PERFORMANCE)), duplicated, PENDING))
+					List.of(recheck(D_PERFORMANCE)), duplicated, PENDING, List.of()))
 				.hasMessageContaining("unique and in order");
 		}
 
@@ -307,7 +343,7 @@ class OrderBenefitTest {
 		@Test
 		void rejectsMissingCandidate() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, C_CATEGORY)), List.of(adopted(A_300)),
-					List.of(), List.of(), BenefitAmount.confirmed(300)))
+					List.of(), List.of(), BenefitAmount.confirmed(300), List.of()))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("not decided");
 		}
@@ -316,32 +352,32 @@ class OrderBenefitTest {
 		void rejectsCandidateInBothServicesAndRechecks() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(D_PERFORMANCE)),
 					List.of(notAdopted(D_PERFORMANCE)), List.of(recheck(D_PERFORMANCE)),
-					List.of(reason(PendingReason.Kind.PERFORMANCE_POLICY, D_PERFORMANCE)), PENDING))
+					List.of(reason(PendingReason.Kind.PERFORMANCE_POLICY, D_PERFORMANCE)), PENDING, List.of()))
 				.hasMessageContaining("more than once");
 		}
 
 		@Test
 		void rejectsCandidateNotInSource() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300)),
-					List.of(adopted(A_300), notAdopted(C_CATEGORY)), List.of(), List.of(), BenefitAmount.confirmed(300)))
+					List.of(adopted(A_300), notAdopted(C_CATEGORY)), List.of(), List.of(), BenefitAmount.confirmed(300), List.of()))
 				.hasMessageContaining("not in the source");
 			// 같은 서비스 ID라도 원본과 다른 후보는 거부한다.
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300)),
-					List.of(adopted(positive("SYN-A", 200))), List.of(), List.of(), BenefitAmount.confirmed(200)))
+					List.of(adopted(positive("SYN-A", 200))), List.of(), List.of(), BenefitAmount.confirmed(200), List.of()))
 				.hasMessageContaining("not in the source");
 		}
 
 		@Test
 		void rejectsUnsortedServicesAndRechecks() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(A_300, B_100)),
-					List.of(notAdopted(B_100), adopted(A_300)), List.of(), List.of(), BenefitAmount.confirmed(300)))
+					List.of(notAdopted(B_100), adopted(A_300)), List.of(), List.of(), BenefitAmount.confirmed(300), List.of()))
 				.hasMessageContaining("ascending");
 			ServiceCandidate earlier = new ServiceCandidate(ServiceId.of("SYN-0"), BenefitAmount.confirmed(0), Set.of());
 			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of(D_PERFORMANCE, earlier)), List.of(),
 					List.of(recheck(D_PERFORMANCE), recheck(earlier)),
 					List.of(reason(PendingReason.Kind.PERFORMANCE_POLICY, earlier),
 							reason(PendingReason.Kind.PERFORMANCE_POLICY, D_PERFORMANCE)),
-					PENDING))
+					PENDING, List.of()))
 				.hasMessageContaining("ascending");
 		}
 
@@ -349,7 +385,7 @@ class OrderBenefitTest {
 		void listsAreImmutableCopies() {
 			List<OrderServiceBenefit> services = new ArrayList<>(List.of(adopted(A_300)));
 			OrderBenefit.Decided result = new OrderBenefit.Decided(source(List.of(A_300)), services, new ArrayList<>(),
-					new ArrayList<>(), BenefitAmount.confirmed(300));
+					new ArrayList<>(), BenefitAmount.confirmed(300), List.of());
 			services.clear();
 
 			assertThat(result.services()).containsExactly(adopted(A_300));
@@ -363,9 +399,9 @@ class OrderBenefitTest {
 		@Test
 		void requiresSourceAndAmount() {
 			assertThatThrownBy(() -> new OrderBenefit.Decided(null, List.of(), List.of(), List.of(),
-					BenefitAmount.confirmed(0)))
+					BenefitAmount.confirmed(0), List.of()))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of()), List.of(), List.of(), List.of(), null))
+			assertThatThrownBy(() -> new OrderBenefit.Decided(source(List.of()), List.of(), List.of(), List.of(), null, List.of()))
 				.isInstanceOf(NullPointerException.class);
 		}
 

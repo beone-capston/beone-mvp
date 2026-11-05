@@ -1,8 +1,11 @@
 package com.beone.api.benefit.primitive;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,6 +21,10 @@ import com.beone.api.benefit.input.PolicyTermEvidence;
 import com.beone.api.benefit.money.BenefitAmount;
 import com.beone.api.benefit.result.Adoption;
 import com.beone.api.benefit.result.ApplicationStatus;
+import com.beone.api.benefit.state.StateValue;
+import com.beone.api.benefit.rule.LimitBucket;
+import com.beone.api.benefit.result.ServiceResultNotes;
+import com.beone.api.benefit.result.LimitReason;
 import com.beone.api.benefit.result.CardServiceCandidates;
 import com.beone.api.benefit.result.OrderBenefit;
 import com.beone.api.benefit.result.OrderServiceBenefit;
@@ -27,9 +34,11 @@ import com.beone.api.benefit.result.ServiceCandidate;
 import com.beone.api.benefit.result.ServiceNeedingConfirmation;
 import com.beone.api.benefit.result.UnsupportedService;
 import com.beone.api.benefit.rule.BenefitService;
+import com.beone.api.benefit.rule.CardRuleVersion;
 import com.beone.api.benefit.rule.ConditionalTerm;
 import com.beone.api.benefit.rule.RuleSelection;
 import com.beone.api.benefit.rule.RuleTerm;
+import com.beone.api.benefit.rule.StackingBasis;
 import com.beone.api.benefit.rule.TriggerEvidence;
 
 /**
@@ -38,13 +47,15 @@ import com.beone.api.benefit.rule.TriggerEvidence;
  * <p>
  * {@link CardServiceCandidateCollector}로 후보를 취합한 뒤 아래 순서로 판단한다. 규칙 선택({@code RuleCatalog.select})은 호출하지 않는다.
  * <ol>
- * <li>실적과 무관한 미충족(제외 업종·업종·결제 방식·최소 금액)이 있는 후보: {@code NOT_ADOPTED}·확정 0원.</li>
- * <li>나머지 후보는 실적 정책 영향을 본다. 서비스에 실적 조건이 있고, 원본 {@code unresolvedConditionalTerms}에 취소 귀속·할인 매출
+ * <li>실적과 무관한 미충족(제외 업종·업종·결제 방식·최소 금액·택1 선택)이 있는 후보: {@code NOT_ADOPTED}·확정 0원.</li>
+ * <li>나머지 후보는 실적 정책 영향을 본다. 서비스나 그 한도 체인에 실적 조건이 있고, 원본 {@code unresolvedConditionalTerms}에 취소 귀속·할인 매출
  * 실적 제외 조건이 있으며, 그 근거가 {@code CONFIRMED_ABSENT}가 아니면 영향이 있다고 본다.</li>
- * <li>실적 미충족만 있는 후보와 미충족 사유 없는 확정 0원 후보: 영향이 있으면 재확인 대상, 없으면 {@code NOT_ADOPTED}·확정 0원.</li>
+ * <li>실적 미충족·한도 소진만 있는 후보와 미충족 사유 없는 확정 0원 후보: 영향이 있으면 재확인 대상, 없으면 {@code NOT_ADOPTED}·확정 0원.</li>
  * <li>양수 후보: 영향이 있으면 실적 정책 사유를 남긴다.</li>
- * <li>막는 사유를 모두 모은다: 확인 필요·지원 범위 밖 서비스, 실적 정책 영향, 양수 후보 쌍의 중복 관계 미확정·중복 허용 확정.</li>
- * <li>사유가 없으면 양수 후보 중 금액이 가장 크고 같으면 서비스 ID가 가장 앞선 하나만 채택한다. 사유가 있으면 양수 후보는 모두
+ * <li>막는 사유를 모두 모은다: 확인 필요·지원 범위 밖 서비스, 실적 정책 영향. 양수 후보의 모든 쌍이 합산 조건(D-13 #35 8번)을 만족하지 않으면 쌍의
+ * 중복 관계 미확정·중복 허용 확정도 사유다.</li>
+ * <li>다른 사유가 없고 모든 쌍이 합산 조건을 만족하면 합계를 결제 금액과 비교한다. 넘으면 합계 초과 사유를 남기고, 넘지 않으면 양수 후보를 모두 채택한다.</li>
+ * <li>사유가 없고 합산 대상이 아니면 양수 후보 중 한도 적용 후 금액이 가장 크고 같으면 서비스 ID가 가장 앞선 하나만 채택한다. 사유가 있으면 양수 후보는 모두
  * {@code UNDETERMINED}이고 기여액과 카드 금액은 {@code 확인 필요}다.</li>
  * </ol>
  * 결과는 입력·컬렉션 순서와 무관하게 서비스 ID 순으로 정렬한다. 원본 취합 결과와 그 조건부 조건은 바꾸지 않고 보존한다.
@@ -54,7 +65,8 @@ public final class OrderBenefitDecider {
 	/** 실적 미충족 외의 미충족. 하나라도 있으면 실적이 바뀌어도 확정 0원이다. */
 	private static final Set<ApplicationStatus> PERFORMANCE_INDEPENDENT_UNMET = EnumSet.of(
 			ApplicationStatus.NOT_APPLICABLE_EXCLUDED, ApplicationStatus.NOT_APPLICABLE_CATEGORY,
-			ApplicationStatus.NOT_APPLICABLE_MIN_AMOUNT, ApplicationStatus.NOT_APPLICABLE_PAYMENT_METHOD);
+			ApplicationStatus.NOT_APPLICABLE_MIN_AMOUNT, ApplicationStatus.NOT_APPLICABLE_PAYMENT_METHOD,
+			ApplicationStatus.NOT_APPLICABLE_SELECTION);
 
 	private OrderBenefitDecider() {
 	}
@@ -65,14 +77,14 @@ public final class OrderBenefitDecider {
 	 * @param selection 카드 한 장의 규칙 선택 결과
 	 * @param order 현재 주문
 	 * @param state 같은 카드의 월간 상태
+	 * @param registeredAt 같은 카드의 등록일. 신규 유예 판정에 쓴다
 	 * @param evidence 같은 카드의 취소 귀속·할인 매출 근거. 실적 기간 적합성은 호출자 책임이다
 	 * @return 규칙을 쓸 수 없으면 {@link OrderBenefit.Unavailable}, 아니면 {@link OrderBenefit.Decided}
 	 * @throws NullPointerException 입력이 null인 경우
 	 * @throws IllegalArgumentException 근거의 카드가 규칙 선택 결과의 카드와 다르거나, 후보 취합기가 거부하는 입력인 경우
-	 * @throws IllegalStateException 지원 범위 서비스에서 나올 수 없는 한도 소진 후보를 받은 경우
 	 */
 	public static OrderBenefit decide(RuleSelection selection, Order order, CardMonthlyState state,
-			PolicyTermEvidence evidence) {
+			StateValue<LocalDate> registeredAt, PolicyTermEvidence evidence) {
 		Objects.requireNonNull(selection, "selection");
 		Objects.requireNonNull(order, "order");
 		Objects.requireNonNull(state, "state");
@@ -81,11 +93,11 @@ public final class OrderBenefitDecider {
 			throw new IllegalArgumentException(
 					"policy evidence card " + evidence.cardId() + " does not match rule selection card " + selection.cardId());
 		}
-		return switch (CardServiceCandidateCollector.collect(selection, order, state)) {
+		return switch (CardServiceCandidateCollector.collect(selection, order, state, registeredAt)) {
 			case CardServiceCandidates.Unavailable unavailable -> new OrderBenefit.Unavailable(unavailable.cardId(),
 					unavailable.status(), unavailable.reason());
 			case CardServiceCandidates.Collected collected -> decided((RuleSelection.Selected) selection, collected,
-					evidence);
+					order, evidence);
 		};
 	}
 
@@ -96,21 +108,21 @@ public final class OrderBenefitDecider {
 	 * 취합기가 {@code Collected}를 돌려준 경우에만 호출하며, 그때 규칙 선택 결과는 {@code Selected}다. 후보마다 실적과 무관한 미충족은
 	 * {@code NOT_ADOPTED}·확정 0원, 실적 정책 영향(U4)이 있으면 사유를 남기고 0원 후보는 재확인 대상으로 분리하며, 영향 없는 0원 후보는
 	 * {@code NOT_ADOPTED}·확정 0원(U6)이다. 확인 필요·지원 범위 밖 서비스와 양수 후보 쌍의 중복 관계도 사유로 모은다(U2). 사유가 없으면
-	 * 최댓값, 같으면 서비스 ID가 앞선 후보 하나만 채택하고(U3) 양수 후보가 없으면 카드 금액은 확정 0원이다. 사유가 있으면 양수 후보는 모두
-	 * {@code UNDETERMINED}이고 기여액과 카드 금액은 같은 {@code 확인 필요} 값이다.
+	 * 합산 대상은 양수 후보를 모두 채택하고(D-13 #35 8번), 그 밖에는 최댓값, 같으면 서비스 ID가 앞선 후보 하나만 채택하며(U3) 양수 후보가 없으면 카드
+	 * 금액은 확정 0원이다. 사유가 있으면 양수 후보는 모두 {@code UNDETERMINED}이고 기여액과 카드 금액은 같은 {@code 확인 필요} 값이다.
 	 *
 	 * <p>
-	 * 확정 후보 금액을 바꾸거나 한도·선택형·중복 합산을 계산하지 않는다. 결과의 대응·정렬·채택 불변식은 {@link OrderBenefit.Decided} 생성자가
+	 * 확정 후보 금액을 바꾸거나 선택형을 계산하지 않는다. 채택된 후보의 기여액만 남은 한도로 줄이며, 합계에 다시 절사하지 않는다. 결과의 대응·정렬·채택 불변식은 {@link OrderBenefit.Decided} 생성자가
 	 * 다시 확인한다.
 	 *
 	 * @param selection 취합에 쓴 규칙 선택 결과. 서비스 ID로 실적 조건·중복 관계를 찾는다
 	 * @param source 취합 결과. 그대로 결과에 보존한다
+	 * @param order 현재 주문. 합산 합계와 비교할 결제 금액을 쓴다
 	 * @param evidence 같은 카드의 취소 귀속·할인 매출 근거
 	 * @return 서비스 ID 순으로 정렬한 결정 결과
-	 * @throws IllegalStateException 지원 범위 서비스에서 나올 수 없는 한도 소진 후보를 받은 경우
 	 */
 	private static OrderBenefit.Decided decided(RuleSelection.Selected selection,
-			CardServiceCandidates.Collected source, PolicyTermEvidence evidence) {
+			CardServiceCandidates.Collected source, Order order, PolicyTermEvidence evidence) {
 		Map<ServiceId, BenefitService> servicesById = selection.rule()
 			.services()
 			.stream()
@@ -127,18 +139,15 @@ public final class OrderBenefitDecider {
 		List<PendingReason> reasons = new ArrayList<>();
 		for (ServiceCandidate candidate : candidates) {
 			Set<ApplicationStatus> unmet = candidate.unmetConditions();
-			if (unmet.contains(ApplicationStatus.LIMIT_EXHAUSTED)) {
-				throw new IllegalStateException("service " + candidate.serviceId()
-						+ " is LIMIT_EXHAUSTED, which supported services cannot produce");
-			}
 			// 1) 실적과 무관한 미충족은 실적 정책과 관계없이 확정 0원이다.
 			if (unmet.stream().anyMatch(PERFORMANCE_INDEPENDENT_UNMET::contains)) {
 				settled.add(notAdopted(candidate));
 				continue;
 			}
 			// 2) 실적 정책 조건이 이 서비스의 실적 충족·구간·금액을 바꿀 수 있는지
-			boolean affected = servicesById.get(candidate.serviceId()).hasPerformanceRequirement()
-					&& !policyTerms.isEmpty();
+			BenefitService service = servicesById.get(candidate.serviceId());
+			boolean affected = !policyTerms.isEmpty() && (service.hasPerformanceRequirement()
+					|| selection.rule().limitChain(service).stream().anyMatch(LimitBucket::dependsOnPerformance));
 			if (affected) {
 				reasons.add(new PendingReason(PendingReason.Kind.PERFORMANCE_POLICY, List.of(candidate.serviceId()),
 						"service " + candidate.serviceId() + " depends on prior performance affected by "
@@ -165,23 +174,39 @@ public final class OrderBenefitDecider {
 			reasons.add(new PendingReason(PendingReason.Kind.UNSUPPORTED, List.of(unsupported.serviceId()),
 					unsupportedDetail(unsupported)));
 		}
-		reasons.addAll(stackingReasons(positives, servicesById));
+		// 모든 쌍이 합산 조건을 만족하면 쌍 사유를 남기지 않는다. 다른 사유가 있으면 합산하지 않고 그 사유로 막는다.
+		boolean stacked = positives.size() > 1 && allPairsMeetStackingConditions(positives, servicesById, selection.rule());
+		if (!stacked) {
+			reasons.addAll(stackingReasons(positives, servicesById));
+		}
+		else if (reasons.isEmpty() && contributionsExceedPayment(positives, order.amount().value())) {
+			reasons.add(new PendingReason(PendingReason.Kind.STACKING_EXCEEDS_PAYMENT,
+					positives.stream().map(ServiceCandidate::serviceId).toList(),
+					"stacked contributions exceed payment amount " + order.amount().value()));
+		}
 		reasons.sort(PendingReason.ORDER);
 
 		List<OrderServiceBenefit> services = new ArrayList<>(settled);
 		BenefitAmount orderBenefit;
-		if (reasons.isEmpty()) {
-			// 4) 막는 사유가 없으면 양수 후보끼리 모두 중복 불가로 확정된 상태다. 최댓값, 같으면 서비스 ID가 앞선 하나만 채택한다.
+		if (reasons.isEmpty() && stacked) {
+			// 4) 합산 예외: 양수 후보 모두 한도 적용 후 금액으로 채택하고 카드 금액은 그 합이다.
+			for (ServiceCandidate candidate : positives) {
+				services.add(new OrderServiceBenefit(candidate, Adoption.ADOPTED, candidate.amountAfterLimit()));
+			}
+			orderBenefit = BenefitAmount.confirmed(contributionTotal(positives));
+		}
+		else if (reasons.isEmpty()) {
+			// 5) 막는 사유가 없으면 양수 후보끼리 모두 중복 불가로 확정된 상태다. 한도 적용 후 최댓값, 같으면 서비스 ID가 앞선 하나만 채택한다.
 			Optional<ServiceCandidate> best = positives.stream()
-				.min(Comparator.comparing((ServiceCandidate candidate) -> candidate.standaloneAmount().confirmedWon())
+				.min(Comparator.comparing((ServiceCandidate candidate) -> candidate.amountAfterLimit().confirmedWon())
 					.reversed()
 					.thenComparing(ServiceCandidate::serviceId, PendingReason.SERVICE_ORDER));
 			for (ServiceCandidate candidate : positives) {
 				services.add(candidate.equals(best.get())
-						? new OrderServiceBenefit(candidate, Adoption.ADOPTED, candidate.standaloneAmount())
+						? new OrderServiceBenefit(candidate, Adoption.ADOPTED, candidate.amountAfterLimit())
 						: notAdopted(candidate));
 			}
-			orderBenefit = best.map(ServiceCandidate::standaloneAmount).orElse(BenefitAmount.confirmed(0));
+			orderBenefit = best.map(ServiceCandidate::amountAfterLimit).orElse(BenefitAmount.confirmed(0));
 		}
 		else {
 			BenefitAmount pending = BenefitAmount.needsConfirmation(pendingSummary(reasons));
@@ -191,7 +216,29 @@ public final class OrderBenefitDecider {
 			orderBenefit = pending;
 		}
 		services.sort(Comparator.comparing(service -> service.candidate().serviceId(), PendingReason.SERVICE_ORDER));
-		return new OrderBenefit.Decided(source, services, rechecks, reasons, orderBenefit);
+		return new OrderBenefit.Decided(source, services, rechecks, reasons, orderBenefit,
+				serviceNotes(selection.rule().services(), source));
+	}
+
+	/**
+	 * 규칙의 모든 서비스에 표시 값을 만든다. 서비스 ID 순이다.
+	 */
+	private static List<ServiceResultNotes> serviceNotes(List<BenefitService> services,
+			CardServiceCandidates.Collected source) {
+		Map<ServiceId, LimitReason> limitReasons = new HashMap<>();
+		for (ServiceNeedingConfirmation pending : source.needingConfirmation()) {
+			pending.limitReason().ifPresent(reason -> limitReasons.put(pending.serviceId(), reason));
+		}
+		Set<ServiceId> truncated = source.candidates()
+			.stream()
+			.filter(ServiceCandidate::fractionalWonTruncated)
+			.map(ServiceCandidate::serviceId)
+			.collect(Collectors.toSet());
+		return services.stream()
+			.map(service -> ServiceResultNotes.of(service, Optional.ofNullable(limitReasons.get(service.id())),
+					truncated.contains(service.id())))
+			.sorted(Comparator.comparing(ServiceResultNotes::serviceId, PendingReason.SERVICE_ORDER))
+			.toList();
 	}
 
 	/**
@@ -218,11 +265,72 @@ public final class OrderBenefitDecider {
 	}
 
 	/**
-	 * 양수 후보 쌍마다 중복 관계를 본다. 양쪽이 확정이고 서로를 적지 않았을 때만 중복 불가로 확정한다.
+	 * 양수 후보의 모든 쌍이 합산 조건을 만족하는지 본다(D-13 #35 8번). 규칙 값으로만 판단하며 카드 ID를 보지 않는다.
+	 *
+	 * @param positives 양수 후보
+	 * @param servicesById 규칙의 서비스. 모든 후보의 서비스가 있어야 한다
+	 * @param rule 한도 체인을 찾을 규칙
+	 * @return 모든 쌍이 조건을 만족하면 참
+	 */
+	private static boolean allPairsMeetStackingConditions(List<ServiceCandidate> positives,
+			Map<ServiceId, BenefitService> servicesById, CardRuleVersion rule) {
+		for (int i = 0; i < positives.size(); i++) {
+			for (int j = i + 1; j < positives.size(); j++) {
+				if (!meetsStackingConditions(servicesById.get(positives.get(i).serviceId()),
+						servicesById.get(positives.get(j).serviceId()), rule)) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * 한 쌍의 합산 조건: 양쪽 {@code stackableWith} 확정·대칭, 양쪽 같은 계산 기준 명시, 한도 체인 비겹침.
+	 */
+	private static boolean meetsStackingConditions(BenefitService left, BenefitService right, CardRuleVersion rule) {
+		if (!left.stackableWith().isResolved() || !right.stackableWith().isResolved()
+				|| !left.stackableWith().resolvedValue().contains(right.id())
+				|| !right.stackableWith().resolvedValue().contains(left.id())) {
+			return false;
+		}
+		Optional<StackingBasis> basis = left.details().stackingBasis();
+		if (basis.isEmpty() || !basis.equals(right.details().stackingBasis())) {
+			return false;
+		}
+		return Collections.disjoint(rule.limitChain(left), rule.limitChain(right));
+	}
+
+	/**
+	 * 한도 적용 후 금액이 결제 금액을 넘는지 본다. 합계를 만들지 않고 결제 금액에서 차례로 빼므로 오버플로가 없다. 같으면 넘지 않는다.
+	 */
+	private static boolean contributionsExceedPayment(List<ServiceCandidate> positives, long payment) {
+		long remaining = payment;
+		for (ServiceCandidate candidate : positives) {
+			remaining -= candidate.amountAfterLimit().confirmedWon().value();
+			if (remaining < 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 양수 후보의 한도 적용 후 금액 합계. 결제 금액을 넘지 않음을 확인한 뒤에만 쓴다. 서비스별 절사·한도 적용이 끝난 값을 더하기만 한다.
+	 */
+	private static long contributionTotal(List<ServiceCandidate> positives) {
+		long total = 0;
+		for (ServiceCandidate candidate : positives) {
+			total = Math.addExact(total, candidate.amountAfterLimit().confirmedWon().value());
+		}
+		return total;
+	}
+
+	/**
+	 * 합산 대상이 아닌 주문에서 양수 후보 쌍마다 중복 관계를 본다. 양쪽이 확정이고 서로를 적지 않았을 때만 중복 불가로 확정한다.
 	 *
 	 * <p>
 	 * 한쪽이라도 미확정이거나 한쪽에만 적혀 있으면 {@code STACKING_UNRESOLVED}, 양쪽이 서로를 적었으면 {@code STACKING_CONFIRMED}다(U2).
-	 * 중복 허용 서비스의 합산은 하지 않는다.
 	 *
 	 * @param positives 서비스 ID 오름차순의 양수 후보. 쌍의 서비스 순서가 이 순서를 따른다
 	 * @param servicesById 규칙의 서비스. 모든 후보의 서비스가 있어야 한다
@@ -247,7 +355,7 @@ public final class OrderBenefitDecider {
 				boolean rightLists = rightTerm.resolvedValue().contains(left.id());
 				if (leftLists && rightLists) {
 					reasons.add(new PendingReason(PendingReason.Kind.STACKING_CONFIRMED, pair, "stacking of " + left.id()
-							+ " and " + right.id() + " is allowed, but stacked amounts are out of scope"));
+							+ " and " + right.id() + " is allowed, but this order does not meet the stacking exception conditions"));
 				}
 				else if (leftLists || rightLists) {
 					reasons.add(new PendingReason(PendingReason.Kind.STACKING_UNRESOLVED, pair, "stacking of " + left.id()

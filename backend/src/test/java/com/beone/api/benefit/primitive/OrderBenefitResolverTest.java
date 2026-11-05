@@ -111,7 +111,7 @@ class OrderBenefitResolverTest {
 	}
 
 	private static OrderBenefit resolve(RuleCatalog catalog, LocalDate decisionDate, Order order) {
-		return OrderBenefitResolver.resolve(catalog, CARD, decisionDate, order, state(CARD), evidence(CARD));
+		return OrderBenefitResolver.resolve(catalog, CARD, decisionDate, order, state(CARD), PrimitiveTestData.REGISTERED, evidence(CARD));
 	}
 
 	private static OrderServiceBenefit adopted(String id, long won) {
@@ -127,7 +127,7 @@ class OrderBenefitResolverTest {
 			OrderBenefit result = resolve(CATALOG, DAY, ORDER);
 
 			assertThat(result).isEqualTo(
-					OrderBenefitDecider.decide(CATALOG.select(CARD, DAY), ORDER, state(CARD), evidence(CARD)));
+					OrderBenefitDecider.decide(CATALOG.select(CARD, DAY), ORDER, state(CARD), PrimitiveTestData.REGISTERED, evidence(CARD)));
 			assertThat(result).isInstanceOfSatisfying(OrderBenefit.Decided.class, decided -> {
 				assertThat(decided.services()).containsExactly(adopted("SYN-A", 300));
 				assertThat(decided.orderBenefit()).isEqualTo(BenefitAmount.confirmed(300));
@@ -183,7 +183,7 @@ class OrderBenefitResolverTest {
 
 		@Test
 		void cardWithoutRuleVersionsHasNoVerifiedRule() {
-			OrderBenefit result = OrderBenefitResolver.resolve(CATALOG, OTHER_CARD, DAY, ORDER, state(OTHER_CARD),
+			OrderBenefit result = OrderBenefitResolver.resolve(CATALOG, OTHER_CARD, DAY, ORDER, state(OTHER_CARD), PrimitiveTestData.REGISTERED,
 					evidence(OTHER_CARD));
 
 			assertThat(result).isInstanceOfSatisfying(OrderBenefit.Unavailable.class, unavailable -> {
@@ -218,17 +218,17 @@ class OrderBenefitResolverTest {
 
 		@Test
 		void rejectsNullInputs() {
-			assertThatThrownBy(() -> OrderBenefitResolver.resolve(null, CARD, DAY, ORDER, state(CARD), evidence(CARD)))
+			assertThatThrownBy(() -> OrderBenefitResolver.resolve(null, CARD, DAY, ORDER, state(CARD), PrimitiveTestData.REGISTERED, evidence(CARD)))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, null, DAY, ORDER, state(CARD), evidence(CARD)))
+			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, null, DAY, ORDER, state(CARD), PrimitiveTestData.REGISTERED, evidence(CARD)))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, null, ORDER, state(CARD), evidence(CARD)))
+			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, null, ORDER, state(CARD), PrimitiveTestData.REGISTERED, evidence(CARD)))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, DAY, null, state(CARD), evidence(CARD)))
+			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, DAY, null, state(CARD), PrimitiveTestData.REGISTERED, evidence(CARD)))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, DAY, ORDER, null, evidence(CARD)))
+			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, DAY, ORDER, null, PrimitiveTestData.REGISTERED, evidence(CARD)))
 				.isInstanceOf(NullPointerException.class);
-			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, DAY, ORDER, state(CARD), null))
+			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, DAY, ORDER, state(CARD), PrimitiveTestData.REGISTERED, null))
 				.isInstanceOf(NullPointerException.class);
 		}
 
@@ -236,19 +236,19 @@ class OrderBenefitResolverTest {
 		void rejectsStateOrEvidenceOfAnotherCardWhetherOrNotARuleIsAvailable() {
 			LocalDate expired = LocalDate.of(2025, 12, 31);
 
-			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, DAY, ORDER, state(OTHER_CARD),
+			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, DAY, ORDER, state(OTHER_CARD), PrimitiveTestData.REGISTERED,
 					evidence(CARD)))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("monthly state card");
-			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, expired, ORDER, state(OTHER_CARD),
+			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, expired, ORDER, state(OTHER_CARD), PrimitiveTestData.REGISTERED,
 					evidence(CARD)))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("monthly state card");
-			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, DAY, ORDER, state(CARD),
+			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, DAY, ORDER, state(CARD), PrimitiveTestData.REGISTERED,
 					evidence(OTHER_CARD)))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("policy evidence card");
-			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, expired, ORDER, state(CARD),
+			assertThatThrownBy(() -> OrderBenefitResolver.resolve(CATALOG, CARD, expired, ORDER, state(CARD), PrimitiveTestData.REGISTERED,
 					evidence(OTHER_CARD)))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("policy evidence card");

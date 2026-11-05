@@ -35,7 +35,7 @@ docker-compose.yml   로컬 MySQL
 |---|---|
 | backend | Spring Boot 4.1.1, Gradle 9.7.1 (Groovy DSL), Flyway, MySQL Connector/J, Testcontainers |
 | frontend | React 19, Vite 8, TypeScript 6.0, Vitest 5, Testing Library, oxlint |
-| android | AGP 9.1.1, Gradle 9.3.1 (Kotlin DSL), compileSdk/targetSdk 36, minSdk 30, AppCompat |
+| android | AGP 9.1.1, Gradle 9.3.1 (Kotlin DSL), compileSdk/targetSdk 36, minSdk 30, AppCompat, androidx.biometric 1.1.0 |
 | DB | MySQL 8.4.11 (docker-compose와 Testcontainers가 같은 이미지 사용) |
 
 ## 환경변수
@@ -120,6 +120,8 @@ npm run build
 cd android
 ./gradlew assembleDebug testDebugUnitTest lintDebug
 ```
+
+debug 빌드에는 실기기 인증 확인용 **B:ONE 인증 점검** 화면이 함께 설치됩니다(release 미포함). 확인 항목은 [`docs/android/device-checklist.md`](docs/android/device-checklist.md)에 있습니다.
 
 계측 테스트(`connectedAndroidTest`)는 아직 작성하지 않았습니다. 추가하면 기기 또는 에뮬레이터를 연결해 실행합니다. 생체인증·기기 PIN·60초 활성화의 최종 확인은 에뮬레이터가 아닌 실제 Android 기기에서 합니다 ([PRD FR-06](docs/PRD.md)).
 

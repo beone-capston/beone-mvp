@@ -44,9 +44,15 @@ class PerformanceRecheckTest {
 			.isEqualTo(BenefitAmount.confirmed(0));
 	}
 
+	@Test
+	void acceptsLimitExhaustedBecauseTheLimitTierDependsOnPerformance() {
+		assertThat(new PerformanceRecheck(zero(Set.of(ApplicationStatus.LIMIT_EXHAUSTED)), REASONS).candidate()
+			.unmetConditions()).containsExactly(ApplicationStatus.LIMIT_EXHAUSTED);
+	}
+
 	@ParameterizedTest
 	@EnumSource(value = ApplicationStatus.class, names = { "NOT_APPLICABLE_EXCLUDED", "NOT_APPLICABLE_CATEGORY",
-			"NOT_APPLICABLE_MIN_AMOUNT", "NOT_APPLICABLE_PAYMENT_METHOD", "LIMIT_EXHAUSTED" })
+			"NOT_APPLICABLE_MIN_AMOUNT", "NOT_APPLICABLE_PAYMENT_METHOD", "NOT_APPLICABLE_SELECTION" })
 	void rejectsOtherUnmetConditionsEvenWithPerformance(ApplicationStatus other) {
 		assertThatThrownBy(() -> new PerformanceRecheck(zero(Set.of(other)), REASONS))
 			.isInstanceOf(IllegalArgumentException.class)

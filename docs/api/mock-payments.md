@@ -16,7 +16,7 @@ POST simulated-payments (Idempotency-Key)
 → 같은 사용자·같은 키·같은 본문의 이전 요청이 있으면 그 결과를 그대로 반환
 → 추천 재계산
 → AUTO_RECOMMEND: 재계산의 선택 카드 / FIXED_REPRESENTATIVE: 대표 카드
-→ seenRecommendationId 결과와 비교해 differences 작성
+→ seenRecommendationId 결과와 비교해 differences 작성. 무효가 된 추천이어도 막지 않고 사유를 담는다(D-23)
 → 원장에 SIMULATION·APPROVAL 행 기록, 주문 PAID
 ```
 
@@ -30,7 +30,7 @@ X-BeONE-Demo-User: MY_CARDS
 Idempotency-Key: 6f1c2a9e-3b7d-4c10-9e55-2d4b8a7f0c31
 ```
 
-- `Idempotency-Key` · 필수 · UUID 형식 권장. 같은 키·같은 본문은 같은 결과를 반환한다. 같은 키·다른 본문은 409다.
+- `Idempotency-Key` · 필수 · UUID 형식 권장. 같은 사용자·같은 키·같은 지문(메서드·경로·본문)은 같은 결과를 반환한다. 같은 키·다른 지문은 409다([공통 규약](../api.md#중복-방지)).
 
 ### Path / Query Parameter
 
@@ -40,9 +40,12 @@ Idempotency-Key: 6f1c2a9e-3b7d-4c10-9e55-2d4b8a7f0c31
 
 ```json
 {
-  "seenRecommendationId": "rec-3001"
+  "seenRecommendationId": "rec-3001",
+  "simulateFailure": false
 }
 ```
+
+- `simulateFailure` · Boolean · 선택. `true`면 내부 테스트 실패를 일으킨다(D-23). `local`·`demo` 프로필에서만 받고 그 밖에는 400 `INVALID_REQUEST`다. 카드사 거절이 아니다.
 
 #### 필수 필드
 
@@ -60,7 +63,7 @@ seenRecommendationId
 - 카드 ID는 요청으로 받지 않는다. 서버가 결제 전 설정을 읽어 카드를 정한다. 실제 카드사 승인·NFC·결제 토큰이 아니다.
 - 보내지 않으면 비교 없이 승인하고 `changed=null`로 둔다.
 
-> 조건부 추천이어도 승인할 수 있고, 승인 결과에 조건부였다는 사실을 남깁니다(D-18 K2). 대표 카드를 고정했으면 혜택이 `확인 필요`여도 승인하고, 혜택은 `확인 필요`(`amountWon=null`)로 기록합니다. 0원으로 바꾸지 않습니다(D-19).
+> 조건부 추천이어도 승인할 수 있고, 승인 결과에 조건부였다는 사실을 남깁니다(D-18 K2). 대표 카드를 고정했으면 혜택이 `확인 필요`이거나 판정일에 규칙이 없어도(`RULE_UNAVAILABLE`) 승인하고, 혜택은 `확인 필요`(`amountWon=null`)로 기록합니다. 0원으로 바꾸지 않습니다(D-19, D-22).
 
 ### Response Body
 
@@ -115,6 +118,8 @@ seenRecommendationId
 - `recalculation.changed` · Boolean|null · 사용자가 본 추천과 선택 카드·혜택이 달라졌는지
 - `recalculation.differences[]` · `{"field":"selected.userCardId","before":"uc-1001","after":"uc-1003","reason":"MONTHLY_STATE_CHANGED"}` 형식
 - `status` · `APPROVED` / `FAILED`. `FAILED`는 서비스 내부 테스트 조건의 실패이고 카드사 거절이 아니다(PRD §4, FR-07)
+- `FAILED`일 때(D-23): 응답은 **201**이고 실패 기록(`simulatedPaymentId`, 시각)을 저장한다. 원장에 승인 행을 남기지 않아 `ledgerTransactionId=null`이고, 주문은 `PAID`가 아니며 한도를 줄이지 않는다. `currentOrderBenefit.amountWon=null`, `cancellableAmountWon=0`이다. 같은 키·같은 지문은 같은 실패를 돌려주고, 다른 키로 다시 승인할 수 있다
+- `recalculation.changed`는 `seenRecommendationId`가 무효가 된 추천이어도 같은 규칙으로 계산한다. `differences[].reason`에 `MAPPING_CHANGED` 등 사유를 담는다(D-23)
 - `currentOrderBenefit` · 승인 시점 계산값. 미확정이면 `amountWon=null`. 카드사가 지급한 금액이 아니다
 - 승인된 혜택은 다음 계산의 사용액으로 서비스 체인 안 모든 한도 버킷에 반영한다(D-18 K1). 모의 원장 기준이며 실제 카드사 차감 시점이 아니다
 - `ledgerTransactionId` · 원장에 남긴 승인 행
@@ -124,8 +129,11 @@ seenRecommendationId
 
 - **400 `INVALID_REQUEST`**: 요청값이 올바르지 않은 경우
   - `Idempotency-Key` 누락
+  - `local`·`demo` 프로필 밖에서 `simulateFailure` 사용
 
 - **404 `ORDER_NOT_FOUND`**: 없거나 다른 사용자의 주문
+
+- **404 `RECOMMENDATION_NOT_FOUND`**: 없거나 다른 사용자의 `seenRecommendationId`
 
 - **409 `ORDER_ALREADY_PAID`**: 이미 결제된 주문
   - 다른 Idempotency-Key로 같은 주문을 다시 승인함
@@ -140,14 +148,9 @@ seenRecommendationId
 
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
-### 명세 단계 미정
-
-- 모의 승인 실패(`FAILED`)를 일으키는 내부 테스트 조건과 그 응답 코드.
-- `seenRecommendationId`가 무효화된 추천일 때 승인을 막을지, 차이만 표시할지(현재 제안: 차이만 표시).
-
 ### 근거
 
-- 결정 기록 D-08·D-12·D-14(원칙 6·7)·D-16, D-18 K2, D-19
+- 결정 기록 D-08·D-12·D-14(원칙 6·7)·D-16, D-18 K2, D-19, D-22, D-23
 - benefit 도메인 안내(LedgerTransaction, LedgerSource)
 
 ## GET /api/v1/me/simulated-payments/{simulatedPaymentId} — 모의 결제 상세 조회
@@ -248,6 +251,8 @@ BeONE이 만든 모의 승인을 취소하는 API. 원장에는 항상 기록하
 
 ```text
 POST cancellations (Idempotency-Key)
+→ 결제 소유 확인. 없거나 다른 사용자의 결제면 404
+→ 같은 사용자·같은 키·같은 지문의 이전 요청이 있으면 그 결과를 그대로 반환
 → 원 승인에 연결된 CANCELLATION 행(취소일, 음수 금액) 기록
 → 원 승인이 최근 스냅샷 뒤의 모의 승인이면 스냅샷 값에서 뺌, 앞이면 영향값 확인 필요
 → 실적 차감: 귀속 규칙(RECEIPT_MONTH 등)이 확정된 카드만
@@ -263,7 +268,7 @@ X-BeONE-Demo-User: MY_CARDS
 Idempotency-Key: 6f1c2a9e-3b7d-4c10-9e55-2d4b8a7f0c31
 ```
 
-- `Idempotency-Key` · 필수. 같은 키·같은 본문은 같은 결과, 같은 키·다른 본문은 409.
+- `Idempotency-Key` · 필수. 같은 사용자·같은 키·같은 지문(메서드·경로·본문)은 같은 결과, 같은 키·다른 지문은 409([공통 규약](../api.md#중복-방지)).
 
 ### Path / Query Parameter
 
