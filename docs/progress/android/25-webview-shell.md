@@ -1,9 +1,9 @@
 # #25 Android WebView 셸 기초
 
 - 이슈: [#25](https://github.com/yim0327/beone-mvp/issues/25)
-- 브랜치: `feat/25-android-webview-shell` (기준 `origin/develop` `cbc50fb`, #22와 독립)
+- 브랜치: `feat/25-android-webview-shell` (처음 기준 `origin/develop` `cbc50fb`, 현재 `0654205`를 통합)
 - 기술 설명: [Android WebView 셸](../../android/webview-shell.md)
-- 진행 기록 README는 #22 PR(#24)에 있습니다. 같은 파일을 두 PR이 새로 만들면 충돌하므로, #24가 병합된 뒤 이 작업의 줄을 반영합니다.
+- 진행 요약은 [Android 진행 상황](README.md)에 있습니다. PR #24는 `develop`에 병합됐고, README의 #25 내용은 이 브랜치에 반영했습니다.
 
 ## 단계 기록
 
@@ -67,3 +67,9 @@
 - 서비스에서 달라진 점: debug 앱에 인증 점검 화면과 WebView 셸이 함께 들어갑니다. 서로 연결되어 있지 않고 브리지는 없습니다.
 - 검증: 기본 주소와 변경 주소(`http://10.0.2.2:5173`)로 `testDebugUnitTest` 실행, 각각 101건 통과. `assembleDebug lintDebug assembleRelease lintRelease` 통과(lint 각각 오류 0·경고 7). 실기기는 미실행입니다.
 - 남은 제한: 커밋 전 소스 기준이라 후보 APK를 관측값으로 고정하지 않았습니다. release 로딩 구현과 정확한 origin은 별도 정책 PR입니다.
+
+### 2026-11-05 · CodeRabbit 리뷰 대응 · 완료(실기기 미실행)
+- 한 일: `21652b2` 리뷰 지적 4건을 코드와 공식 문서로 대조했습니다. `WebOrigin.parse`가 0~65535 밖 포트를 거부합니다. 신뢰 origin 밖 메인 프레임 최초 요청에 `shouldInterceptRequest`로 빈 응답을 돌려줍니다. 문서의 낡은 상태를 고치고 KDoc을 보강했습니다. `develop` 통합은 앞 단계에서 `5f7a46b`, `69f0e66`으로 커밋했습니다.
+- 서비스에서 달라진 점: 범위를 넘은 포트 설정은 "주소 미설정" 안내로 처리합니다. 다른 origin으로 가는 메인 프레임 POST의 최초 요청에 빈 응답을 씁니다. 같은 origin 요청과 다른 origin API 호출은 그대로입니다.
+- 검증: 변경 주소(`http://10.0.2.2:5173`)로 `testDebugUnitTest`, 기본 주소로 `testDebugUnitTest assembleDebug lintDebug assembleRelease lintRelease`를 `--rerun-tasks`로 실행해 통과했습니다. 단위 테스트는 각각 106건, 실패·skip 0, lint는 각각 오류 0·경고 7입니다. 범위 검사를 일시적으로 뺐을 때 포트 테스트 2건이 실패하는 것을 확인했습니다. 후보 APK sha256은 `4cc6b6de…`, 소스 기준은 `d6c3088`입니다.
+- 남은 제한: 실제 WebView에서 POST가 나가지 않는지는 미관측입니다(W6). 단위 테스트는 판정 함수만 확인합니다. 리디렉션 뒤 POST, iframe 안 POST, 하위 요청은 막는다고 보장하지 않습니다. 실제 프런트의 CSP는 인계 항목이며 `frontend/`는 변경하지 않았습니다. 임시 React 화면은 만들지 않았습니다.

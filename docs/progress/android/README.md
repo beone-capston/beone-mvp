@@ -1,6 +1,6 @@
 # Android 진행 상황
 
-- 작성: 2026-10-31, 기준 `origin/develop` `06ca2b8`(세 작업 브랜치 모두 이 커밋을 merge함). #22 실기기 요약은 2026-11-04, #27 상태와 #25 통합 상태는 2026-11-05 갱신
+- 작성: 2026-10-31, 기준 `origin/develop` `06ca2b8`(세 작업 브랜치 모두 이 커밋을 merge함). #22 실기기 요약은 2026-11-04, #22 병합과 #25·#27 상태는 2026-11-05 갱신
 - 상태 구분: #22는 PR #24로, #27은 PR #72로 `develop`에 반영됐습니다. #25는 **작업 브랜치 상태**입니다.
 
 ## 지금 가능한 것
@@ -10,30 +10,31 @@
 - 인증 요청 하나만 진행(#22, **검증용 구현**): 앱 이탈로 취소한 요청은 `정리 중`으로 두고 최종 결과가 올 때까지 새 요청을 받지 않습니다. 응답이 없으면 `정지`로 바꾸고 활성화하지 않습니다. 응답 대기 시간 현재 기본값은 120초·10초입니다(근거 없는 제안, D-21). 30초·5초는 2026-10-29~30 관측에 쓴 이전 실험값입니다.
 - 확인 수단(#22): 단위 테스트 84건(가짜 authenticator, 2026-10-31 실행), debug 앱의 **B:ONE 인증 점검** 화면과 debug 전용 관측 로그 `BeoneAuthTrace`(release 미포함, release APK 정적 점검으로 확인)
 - 실기기(#22, SM-S942N Android 17 한 대): 구조 도입 전 코드로 1~15번 통과. 지금 코드로 R1~R4·R6~R9와 1~6·8~11·13번 관측상 통과, R5·R10 관측 못 함 — [확인 기록](../../android/device-checklist.md#확인-기록-2026-10-2930-지금-코드-커밋-전). 2026-11-04 `42b1dcc`(120초·10초)로 1~3·8·9·12·R9 범위와 정지 뒤 앱 재실행을 관측했고, 14번은 창 1개·인증 후 추가 창 없음만 관측상 통과입니다 — [2026-11-04 확인 기록](../../android/device-checklist.md#확인-기록-2026-11-04-42b1dcc)
-- WebView 셸(#25): debug는 개발 서버를 열고 신뢰 origin 밖 탐색을 막습니다. release는 웹 주소 미설정으로 아무것도 열지 않습니다. `develop` 통합 상태(커밋 전)의 Android 단위 테스트는 #22 포함 전체 101건입니다. 실기기 W1~W5 미실행
+- WebView 셸(#25): debug는 개발 서버를 열고 신뢰 origin 밖 탐색을 막습니다. release는 웹 주소 미설정으로 아무것도 열지 않습니다. 다른 origin으로 가는 메인 프레임 POST의 최초 요청에 빈 응답을 돌려줍니다(실제 전송 차단은 미관측, [범위와 한계](../../android/webview-shell.md#외부-요청-차단-범위와-한계)). Android 단위 테스트는 #22 포함 전체 106건입니다. 실기기 W1~W6 미실행
 - 연결 단계: 기기 인증과 WebView는 서로 연결되지 않았고, 웹 브리지·서버 연결도 없습니다.
 
 ## 아직 안 되는 것
 
-- 실기기: #22의 `정리 중` 경로(R5·R10)·앱 취소 뒤 최종 결과·창이 사라진 정지·최종 결과가 아직 오지 않은 정지 상태의 재실행 복구, 7·16·17번. #25의 W1~W5 전체. 다음 시험 절차는 [#22 확인 목록](../../android/device-checklist.md#다음-시험-준비-설치본-확인과-남은-항목-2026-10-31-미실행)과 [`docs/android/webview-shell.md`](../../android/webview-shell.md)에 있습니다.
+- 실기기: #22의 `정리 중` 경로(R5·R10)·앱 취소 뒤 최종 결과·창이 사라진 정지·최종 결과가 아직 오지 않은 정지 상태의 재실행 복구, 7·16·17번. #25의 W1~W6 전체. 다음 시험 절차는 [#22 확인 목록](../../android/device-checklist.md#다음-시험-준비-설치본-확인과-남은-항목-2026-10-31-미실행)과 [`docs/android/webview-shell.md`](../../android/webview-shell.md)에 있습니다.
 - WebView로 실제 React 화면 확인(지금 React 화면은 제목 하나뿐), 웹으로 인증 상태 전달(브리지)
 - `가상 주문서 결제` 버튼과 모의 승인 흐름
 
 ## 현재 작업과 PR
 
-- [#22](https://github.com/yim0327/beone-mvp/issues/22) 기기 인증과 60초 활성 — draft [PR #24](https://github.com/yim0327/beone-mvp/pull/24). 모듈 전체 검증 통과(2026-10-31). 미해결 스레드 1건(outdated)에 현재 코드 기준 답글. 리뷰 대기, 남은 실기기 항목·정책 결정 대기, 병합 승인 대기 ([단계 기록](22-auth-session.md))
-- [#25](https://github.com/yim0327/beone-mvp/issues/25) WebView 셸 기초 — draft [PR #26](https://github.com/yim0327/beone-mvp/pull/26). 모듈 전체 검증 통과(2026-10-31). 독립 리뷰 0건(리뷰 대기), 실기기 대기, 병합 승인 대기
+- [#22](https://github.com/beone-capston/beone-mvp/issues/22) 기기 인증과 60초 활성 — [PR #24](https://github.com/beone-capston/beone-mvp/pull/24)로 병합. 미해결 스레드 2건(복구 조건, 세션·콜백 귀속 한계)은 브리지 연결 전 다시 검토할 조건입니다. 남은 실기기 항목·정책 결정 대기 ([단계 기록](22-auth-session.md))
+- [#25](https://github.com/beone-capston/beone-mvp/issues/25) WebView 셸 기초 — draft [PR #26](https://github.com/beone-capston/beone-mvp/pull/26). `develop` 통합과 `21652b2` CodeRabbit 리뷰 대응 완료, 보완 커밋 기준 리뷰 대기, 실기기 대기, 병합 승인 대기 ([단계 기록](25-webview-shell.md))
 - [#27](https://github.com/yim0327/beone-mvp/issues/27) 브리지 계약 초안(후보) — [PR #72](https://github.com/beone-capston/beone-mvp/pull/72)로 병합(PR #28을 대체). 공개 계약은 후보이고 구현은 없습니다
 
 ## 사용자 확인 사항
 
-1. **release 로딩 방식과 신뢰 origin** — 권장안: 앱 에셋(`WebViewAssetLoader`, `https://appassets.androidplatform.net`). PoC에서 동작 확인, 네트워크 없이 origin 고정 가능.
+1. **release 구현과 정확한 origin** — 사용자가 확인한 방향은 공개 HTTPS입니다. 구체적인 구현과 정확한 origin은 미정이며 별도 정책 PR에서 정합니다. 앱 에셋(`WebViewAssetLoader`) 권장안은 과거 이력입니다.
 2. **브리지 계약**(D-21 후보 B1~B6과, 리뷰·#22 대조에서 나온 활성 중 재인증 처리·하위 프레임 응답·`NO_RESPONSE`·요청 단계 표현) — 프런트엔드와 함께 정해야 합니다.
 3. **#22 운영 값** — 응답 대기 시간, 정지 뒤 복구 방식, 화면이 보일 때만 인증을 요청하는 조건(RESUMED).
 4. **실기기 시험 승인** — #22 16·17번(기기 보안 설정 변경), #25 W2 판정 기준·W3 계열 실행 방식·release 시험용 서명, 기기 설치·실행.
-5. **독립 리뷰 요청** — 이전 CodeRabbit 한도 안내에 사용량 기반 과금 가능성이 있어 draft PR 수동 리뷰를 다시 요청하지 않았습니다.
+5. **리뷰** — #25는 `21652b2`에 CodeRabbit 리뷰 1건이 있고 지적 4건에 대응했습니다. 보완 커밋 리뷰는 아직 없습니다. 자동 리뷰는 사람 승인이 아닙니다.
+6. **실제 프런트 인계** — 실제 화면 응답의 CSP와 리디렉션 조건 ([인계 항목](../../android/webview-shell.md#외부-요청-차단-범위와-한계)).
 
 ## 다음 작업
 
 - 결정·승인 뒤: 실기기 확인, release 로딩 방식 구현, 브리지 구현, 계측 테스트(기기 승인 후)
-- 병합 뒤: 나중 PR에 `develop`을 merge해 README·architecture 충돌 해결
+- README·architecture 충돌은 #25의 `develop` 통합 커밋 `5f7a46b`에서 해결했습니다.

@@ -8,6 +8,7 @@ React 화면을 Android 앱 안에서 보여줄 WebView의 기본 구조입니�
 | --- | --- |
 | 시작 주소·신뢰 origin을 빌드 설정값(`BuildConfig.WEB_START_URL`)으로 분리 | 구현 |
 | 신뢰 origin 밖 탐색 차단, 웹 이외 스킴 차단 | 구현, 단위 테스트 |
+| 신뢰 origin 밖 메인 프레임 최초 요청에 빈 응답 반환(POST 포함) | 구현. 판정만 단위 테스트, 실제 전송 차단은 실기기 미관측([범위](#외부-요청-차단-범위와-한계)) |
 | SSL 오류 시 연결 취소 | 구현 |
 | debug만 원격 디버깅·로컬 개발 서버 평문 HTTP 허용 | 구현. 소스 설정(네트워크 보안 설정·Manifest)은 단위 테스트, release 값은 빌드 산출물로 확인 |
 | 시스템 바·디스플레이 컷아웃 inset 적용 | 구현 |
@@ -34,7 +35,7 @@ React 화면을 Android 앱 안에서 보여줄 WebView의 기본 구조입니�
 | --- | --- |
 | [WebOrigin.kt](../../android/app/src/main/java/com/beone/app/web/WebOrigin.kt) | 주소에서 스킴·호스트·포트를 뽑아 비교. http·https만 받고 기본 포트(443·80)는 같게 봅니다 |
 | [WebNavigationPolicy.kt](../../android/app/src/main/java/com/beone/app/web/WebNavigationPolicy.kt) | 시작 주소의 origin과 같은 주소만 허용. 설정이 없거나 잘못되면 아무것도 허용하지 않습니다 |
-| [RestrictedWebViewClient.kt](../../android/app/src/main/java/com/beone/app/web/RestrictedWebViewClient.kt) | 신뢰 origin 밖 탐색 차단(하위 프레임 포함, 링크·리디렉션·POST), SSL 오류 취소, 뒤로 가기 가능 여부 전달 |
+| [RestrictedWebViewClient.kt](../../android/app/src/main/java/com/beone/app/web/RestrictedWebViewClient.kt) | 신뢰 origin 밖 탐색 차단(링크·리디렉션은 하위 프레임 포함), 메인 프레임 최초 요청의 빈 응답 처리, 페이지 시작 뒤 중지·안내, SSL 오류 취소, 뒤로 가기 가능 여부 전달 |
 | [MainActivity.kt](../../android/app/src/main/java/com/beone/app/MainActivity.kt) | WebView 생성·설정, 시스템 바·키보드 inset, 웹 기록이 있을 때만 웹 뒤로 가기, 상태 저장 |
 
 WebView 설정: JavaScript·DOM storage 켬(React 실행에 필요), 파일·콘텐츠 접근 끔, 새 창 열기 끔, 위치 정보 끔, HTTPS 페이지 안의 HTTP 리소스(mixed content) 차단.
@@ -49,18 +50,44 @@ MainActivity.onCreate
 페이지 안 링크·리디렉션 → shouldOverrideUrlLoading
   ├─ 신뢰 origin과 같음 → WebView에서 계속
   └─ 다름 → 열지 않음(메인 프레임이면 안내 문구). 외부 브라우저로 넘기지도 않음
-메인 프레임 페이지 시작 → onPageStarted (POST 폼 제출처럼 위 단계를 거치지 않는 탐색 대비)
+메인 프레임 문서의 최초 요청 → shouldInterceptRequest (POST 폼 제출 포함)
+  ├─ 신뢰 origin과 같음 → 그대로 진행
+  └─ 다름 → 네트워크 대신 쓸 빈 응답 반환
+메인 프레임 페이지 시작 → onPageStarted (사후 중지·안내용 보조, 이미 나간 요청은 되돌리지 못함)
   ├─ 신뢰 origin과 같음 → 안내 문구 숨김
   └─ 다름 → 불러오기 중지 + 안내 문구
 SSL 오류 → 연결 취소
 ```
 
+## 외부 요청 차단 범위와 한계
+
+[`WebViewClient` 공식 문서](https://developer.android.com/reference/android/webkit/WebViewClient)와 대조한 내용입니다. 공식 문서 기준 설계이며, 실제 WebView에서 요청이 나가지 않는지는 아직 관측하지 않았습니다.
+
+| 경로 | 네이티브 처리 | 한계 |
+| --- | --- | --- |
+| 다른 origin 링크·JS 이동(GET) | `shouldOverrideUrlLoading`이 열기 전에 막음 | 문서상 POST와 `loadUrl`에는 호출되지 않음 |
+| 다른 origin으로 가는 메인 프레임 POST의 최초 요청 | `shouldInterceptRequest`가 빈 응답(403)을 돌려줌 | 문서는 "반환한 응답을 사용한다"고만 함. 전송 여부와 이후 화면은 W6에서 확인 필요 |
+| 같은 origin의 요청(POST 포함) | 그대로 진행 | 메서드로 막지 않음 |
+| 리디렉션(GET) | 문서상 HTTP 리디렉션에 `shouldOverrideUrlLoading` 호출 | POST 응답의 리디렉션에도 불리는지는 미확인 |
+| POST를 유지한 채 다른 origin으로 가는 리디렉션(307·308 등) | 사전 차단 **보장 못 함** | 문서상 `shouldInterceptRequest`는 최초 URL에만 호출됨. `onPageStarted`의 사후 중지뿐 |
+| iframe 안의 POST | 막지 않음 | `isForMainFrame`이 false이고 `onPageStarted`도 호출되지 않음. 하위 리소스와 구분되지 않음 |
+| `fetch`·XHR·`sendBeacon`·이미지 같은 하위 요청 | 막지 않음 | 화면과 API의 origin이 달라 일괄 차단하면 정상 호출이 깨짐 |
+
+`onPageStarted`와 `stopLoading`은 사후 중지·안내용 보조입니다. 요청 전송 전 차단을 보장하지 않습니다.
+
+**실제 프런트 인계 항목 (미구현, 이 PR은 `frontend/`를 변경하지 않음)**
+
+- 실제 화면 응답에 `Content-Security-Policy: form-action 'self'`를 두는 것을 프런트·서버 담당과 정합니다. 위 표의 iframe 안 POST와 리디렉션은 네이티브로 막지 못합니다.
+- `form-action`은 폼 제출만 제한합니다. `fetch`·이미지·iframe 전체를 제한하지 않으므로, 필요한 지시문은 별도로 정합니다.
+- 같은 origin POST의 응답이 다른 origin으로 리디렉션하지 않도록 합니다.
+- 연동은 기존 `WEB_START_URL` 설정 경로를 씁니다. `beone.devServerUrl`로 지정한 페이지도 그 페이지가 CSP를 제공하지 않으면 CSP 보호를 받지 않습니다.
+
 ## release 로딩 이력과 현재 방향
 
 현재 release 구현은 주소 미설정입니다. 아무 페이지도 불러오지 않습니다.
 
-- **현재 방향:** 이후 사용자 결정으로 공개 HTTPS 화면을 여는 쪽으로 바뀌었습니다. release 로딩 구현과 정확한 origin은 정해지지 않았고 별도 정책 PR에서 개정합니다.
-- **이력(현재 방침 아님):** 2026-11-04 D-21 당시에는 앱 에셋(`WebViewAssetLoader`, `https://appassets.androidplatform.net`)을 release 설계로 정했고, 2026-11-16 시연은 debug 빌드, 개발 서버, `adb reverse`(5173, 8080)로 하기로 했습니다.
+- **현재 방향:** 사용자가 확인한 방향은 공개 HTTPS 화면을 여는 것입니다. 구체적인 release 구현과 정확한 origin은 미정이며 별도 정책 PR에서 개정합니다.
+- **이력(현재 방침 아님):** 앱 에셋(`WebViewAssetLoader`, `https://appassets.androidplatform.net`)은 과거 권장안으로, 2026-11-04 D-21 당시 release 설계로 정했습니다. 그때 2026-11-16 시연은 debug 빌드, 개발 서버, `adb reverse`(5173, 8080)로 하기로 했습니다.
 
 ## 실기기에서 확인할 항목
 
@@ -75,6 +102,7 @@ SSL 오류 → 연결 취소
 | W3b | 웹 안에서 페이지 이동 후 뒤로 가기, 첫 화면에서 뒤로 가기 후 앱 복귀, 다시 이동·뒤로 가기 | 웹 기록이 있으면 웹 이전 페이지, 없으면 앱이 백그라운드로. 복귀 후에도 웹 뒤로 가기가 동작 | 미실행(지금 React 화면에 페이지 이동 없음) |
 | W4 | release 앱 실행 | "웹 화면 주소가 설정되지 않았습니다" | 미확인. 로컬 debug 키 서명본 허용(커밋·배포 안 함, D-21). 11/14 전에 해도 됩니다 |
 | W5 | debug 앱에서 `chrome://inspect` | WebView가 보임. release 앱은 보이지 않음 | debug 부분 미확인(사용자 관측 대기), release 부분 미확인(W4와 같음) |
+| W6 | 외부 메인 프레임 POST와 같은 origin POST | 외부 POST가 수신기에 도착하지 않고 안내 문구 표시. 같은 origin POST는 안내 문구 없이 진행 | 미실행. [절차](#w6-post-차단-관측-절차-미실행-별도-승인)는 별도 승인 후 사용 |
 
 ### debug 실기기 관측 절차 (2026-11-01 준비, 사용자 관측 대기)
 
@@ -83,11 +111,12 @@ SSL 오류 → 연결 취소
 **시험 APK**
 
 - 빌드 변형: debug(기본 개발 서버 주소 `http://localhost:5173/`)
-- APK 대응 소스 기준: `69f0e66c31be091d72acfc1f84248d63c9ac1ce8` — 빌드 당시 소스와 `android/` 동일성을 확인한 커밋입니다.
-- sha256: `e91d4975d2c784222f22d3c3ab22d15822e459fe41a264ba85e335ccd8bac00f`
-- 생성·검증 이력: APK와 기본·변경 주소 각각 101건의 테스트, lint·빌드 결과는 커밋 전 통합 작업 트리 기준입니다. 이후 `android/` 동일성과 APK 해시를 대조했습니다. `69f0e66`에서 빌드·테스트를 재실행한 결과는 아닙니다.
+- APK 대응 소스 기준: `d6c308811901d2cf51dfe21a791be1e49ecfb7f2` — 빌드 당시 소스와 `android/` 동일성을 확인한 커밋입니다. 이후 문서 커밋으로 PR HEAD가 바뀌어도 이 값은 바꾸지 않습니다.
+- sha256: `4cc6b6de96558efe1deee62177b72f796d4ad6bfd851407fd9962501e3bc2c04`
+- 생성·검증 이력: APK와 기본·변경 주소 각각 106건의 테스트, lint·빌드 결과는 커밋 전 작업 트리 기준입니다. 이후 `android/` 변경분의 동일성을 대조했습니다. `d6c3088`에서 빌드·테스트를 재실행한 결과는 아닙니다.
+- 정적 확인: `com.beone.app`, versionCode 1, versionName 0.1.0, debug 서명. dex의 `WEB_START_URL`은 `http://localhost:5173/`, `DEV_SERVER_OVERRIDDEN`은 false입니다.
 - 실기기 관측은 미실행입니다. 이 기록은 설치 승인이 아니며, 별도 승인 후 설치본 APK의 SHA-256을 다시 대조합니다.
-- 이전 후보: `5ff441df…`(통합 전, 2026-11-01), `0af9497b…`(그 이전). 통합 전 APK이며 관측에 쓰지 않았고, 이 절차의 기준값이 아닙니다.
+- 이전 후보: `e91d4975d2c784222f22d3c3ab22d15822e459fe41a264ba85e335ccd8bac00f`(소스 기준 `69f0e66c31be091d72acfc1f84248d63c9ac1ce8`, 리뷰 보완 전 통합본), `5ff441df…`(통합 전, 2026-11-01), `0af9497b…`(그 이전). 관측에 쓰지 않았고, 이 절차의 기준값이 아닙니다.
 - 빌드 위치는 `android/app/build/outputs/apk/debug/app-debug.apk`입니다(기본 주소로 `./gradlew assembleDebug`).
 
 **1. 설치 전 확인 (사용자 실행, 기기 상태는 바꾸지 않음)**
@@ -146,7 +175,7 @@ adb shell dumpsys package com.beone.app | grep -E 'versionName|versionCode|lastU
 
 - 코드 기준으로는 회전하면 Activity와 WebView가 새로 만들어지고 `restoreState`로 웹 기록을 되살립니다. JS 상태가 남는지는 코드만으로 확정하지 않고 관측값으로 기록합니다.
 - 지금 웹 기록이 첫 화면뿐이면 `history.length`는 1일 수 있습니다. 그 값 그대로 적습니다. 웹 안 페이지 이동을 새로 만들지 않습니다.
-- 콘솔의 임시 값은 W2 관측용이며 React 화면을 바꾸는 것이 아닙니다. 그 외 콘솔 조작(다른 주소로 이동, 입력란 추가)은 하지 않습니다.
+- 콘솔의 임시 값은 W2 관측용이며 React 화면을 바꾸는 것이 아닙니다. W6 절차가 승인되기 전에는 그 외 콘솔 조작(다른 주소로 이동, 입력란 추가)을 하지 않습니다.
 - 판정 용어: 관측상 통과(관측 결과가 기대 결과와 일치), 실패, 재현 안 됨, 관측 불충분, 미실행, 관측 못 함
 - 계측 테스트용 HTML·에뮬레이터 결과는 이 관측으로 인정하지 않습니다.
 
@@ -168,11 +197,28 @@ W5(debug):
 특이사항(crash·ANR·안내 문구 등):
 ```
 
+### W6 POST 차단 관측 절차 (미실행, 별도 승인)
+
+임시 화면을 만들지 않고 debug 앱의 `chrome://inspect` 콘솔에서 합성 값으로 확인합니다. 외부 서버로 보내지 않습니다. 실제 프런트 화면의 연동 성공을 뜻하지 않습니다.
+
+1. PC에서 수신기 `nc -l 18080`을 켜고 `adb reverse tcp:18080 tcp:18080`을 실행합니다. `localhost:18080`은 화면과 포트가 달라 다른 origin입니다.
+2. **W6-외부:** 콘솔에서 아래를 실행합니다. 수신기에 요청이 도착하는지, 안내 문구가 뜨는지, 뒤로 가기로 돌아오는지 기록합니다. 도착하면 실패입니다.
+
+   ```js
+   const f = document.createElement('form'); f.method = 'post'; f.action = 'http://localhost:18080/w6';
+   const i = document.createElement('input'); i.name = 'sample'; i.value = 'synthetic'; f.append(i);
+   document.body.append(f); f.submit();
+   ```
+
+3. **W6-같은 origin:** 앱을 다시 띄워 `f.action`을 `/w6-same`으로 바꿔 실행합니다. 안내 문구가 뜨지 않으면 차단되지 않은 것입니다. 개발 서버의 응답 코드는 그대로 적습니다.
+4. **W6-하위 요청:** `fetch('http://localhost:18080/w6-sub', {method: 'POST', mode: 'no-cors', body: 'synthetic'})`를 실행합니다. 수신기에 도착하면 설계대로 네이티브가 막지 않는 경로입니다. 차단 관측이 아닙니다.
+5. 리디렉션과 iframe 경로는 이 절차로 확인하지 않습니다. 설치본 sha256과 앱 소스 기준을 회신 양식대로 함께 적습니다.
+
 ## 아직 하지 않은 것
 
 - release 로딩 구현과 정확한 origin 결정(별도 정책 PR)
 - 브리지 구현과 기기 인증 상태 전달(공개 계약은 D-21의 후보)
 - 계측 테스트(`androidTest`의 테스트용 HTML). 승인된 기기·에뮬레이터가 없어 이번에는 작성·실행하지 않았습니다.
 - 파일 업로드·다운로드·권한 요청 처리. 현재 화면 요구사항에 없어 기본 동작(처리 안 함)으로 둡니다.
-- iframe 로드 자체와 이미지·스크립트·fetch 같은 하위 리소스의 origin 제한. 하위 프레임의 이동은 메인 프레임과 같이 `shouldOverrideUrlLoading`에서 신뢰 origin 밖이면 막고, 안내는 메인 프레임일 때만 띄웁니다(D-21, 현행 차단 유지). 이 콜백이 모든 하위 프레임 이동에 불리는지는 공식 문서로 확인하지 못했으므로 브리지의 최상위 프레임 필터(`isMainFrame`)를 실제 방어선으로 봅니다. `shouldInterceptRequest`와 CSP는 브리지를 구현할 때 정합니다.
+- iframe 로드 자체와 이미지·스크립트·fetch 같은 하위 리소스의 origin 제한. 하위 프레임의 이동은 메인 프레임과 같이 `shouldOverrideUrlLoading`에서 신뢰 origin 밖이면 막고, 안내는 메인 프레임일 때만 띄웁니다(D-21, 현행 차단 유지). 이 콜백이 모든 하위 프레임 이동에 불리는지는 공식 문서로 확인하지 못했으므로 브리지의 최상위 프레임 필터(`isMainFrame`)를 실제 방어선으로 봅니다. 하위 요청에 대한 `shouldInterceptRequest` 사용과 CSP는 브리지 구현과 실제 프런트 연동 때 정합니다.
 - `about:blank`·`blob:` 주소의 메인 프레임 탐색은 신뢰 origin이 아니므로 막습니다. React 화면이 이 방식을 쓰게 되면 다시 판단합니다.
