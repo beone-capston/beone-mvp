@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">B:ONE</string>
+    <string name="web_not_configured">웹 화면 주소가 설정되지 않았습니다.</string>
+    <string name="web_navigation_blocked">허용되지 않은 주소라 열지 않았습니다.</string>
     <string name="device_auth_prompt_title">가상카드 사용 준비</string>
     <string name="device_auth_prompt_subtitle">앱 안의 가상 결제 화면을 열기 위한 기기 인증입니다</string>
 </resources>

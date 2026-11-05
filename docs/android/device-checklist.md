@@ -158,7 +158,7 @@ t=160736788 seq=24 ev=APP_LEFT from=IDLE to=IDLE req=- cancel=false
 1. **설치 전 확인:** WebView 셸(#25 브랜치)도 같은 패키지 이름 `com.beone.app`을 씁니다. 다른 브랜치 APK가 설치돼 있으면 조용히 덮어써지므로, 시험 전 저장소 루트에서 `adb uninstall com.beone.app`으로 지우고 `adb shell pm list packages com.beone.app` 출력이 비었는지 봅니다. 앱 상태는 메모리에만 있고 백업을 끄므로(`allowBackup=false`) 지워도 남는 기록이 없습니다.
 2. **APK 해시 기록:** `android/`에서 `./gradlew clean assembleDebug`를 실행한 뒤, 저장소 루트에서 `shasum -a 256 android/app/build/outputs/apk/debug/app-debug.apk`를 기록합니다. 증분 빌드는 해시가 다를 수 있어 `clean`을 씁니다. 시험한 커밋 SHA도 함께 적습니다.
 3. **설치와 설치본 대조:** 저장소 루트에서 `adb install android/app/build/outputs/apk/debug/app-debug.apk` → `adb shell pm path com.beone.app`이 알려준 경로를 저장소 밖 폴더로 `adb pull`해 sha256을 2와 비교합니다. 다르면 그 설치로는 시험하지 않고 다시 설치합니다.
-4. **실행 확인:** 런처에 **B:ONE 인증 점검** 아이콘이 있어야 합니다(WebView 셸 APK에는 없음).
+4. **실행 확인:** 런처에 **B:ONE 인증 점검** 아이콘이 있어야 합니다(`develop` 통합 전 WebView 셸 APK에는 없음).
 5. **기록:** 항목마다 판정 용어(위 확인 기록과 같음), 기기 모델·OS 버전, APK sha256, 커밋 SHA를 적습니다. 로그를 받을 때는 [관측 로그 수집 방법](#관측-로그-수집-방법-debug-전용)을 따릅니다.
 
 남은 항목(2026-11-04 관측 반영):
@@ -218,5 +218,5 @@ G 뒤 H는 앱 재실행 없이 같은 프로세스에서 버튼으로 보낸 �
 
 ## 이 목록 밖의 항목
 
-- WebView 화면 표시와 웹으로 상태 전달: 아직 구현하지 않았습니다(로딩 방식·신뢰 origin·브리지 계약 미확정).
+- WebView 화면 표시와 웹으로 상태 전달: WebView 셸은 [별도 문서](webview-shell.md)에서 다루며 실기기 관측 전입니다. 브리지는 구현하지 않았고 공개 계약은 D-21의 후보입니다. release 로딩과 정확한 origin은 별도 정책 PR에서 다룹니다.
 - 실제 `가상 주문서 결제` 버튼과 모의 승인 흐름: React 화면·브리지 연결 뒤 확인합니다.
