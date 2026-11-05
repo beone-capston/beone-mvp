@@ -6,7 +6,7 @@
 
 ## 모듈과 역할
 
-- [android/](../android/): Kotlin Android 앱. 제품에서는 React 화면을 표시할 WebView 셸과 기기 인증을 담당합니다. 기기 인증과 60초 활성 상태의 네이티브 기반은 [Android 기기 인증 안내](android/auth-session.md)에 있습니다. 인증 요청을 동시에 하나로 제한하고 앱 이탈로 취소한 요청의 최종 결과를 기다리는 요청 단계 관리(`AuthRequestGate`)는 검증용 구현(커밋 전)입니다. 이 구조를 넣기 전 코드로 실기기 1~15번을 통과했고, 지금 코드는 같은 기기 한 대에서 주요 항목을 관측상 통과했습니다. 다만 `정리 중` 경로는 관측하지 못했고 16·17번은 미실행입니다([실기기 확인 목록](android/device-checklist.md)). WebView 화면과 웹으로의 상태 전달은 아직 구현하지 않았습니다.
+- [android/](../android/): Kotlin Android 앱. 제품에서는 React 화면을 표시할 WebView 셸과 기기 인증을 담당합니다. 기기 인증과 60초 활성 상태의 네이티브 기반은 [Android 기기 인증 안내](android/auth-session.md)에 있습니다. 인증 요청을 동시에 하나로 제한하고 앱 이탈로 취소한 요청의 최종 결과를 기다리는 요청 단계 관리(`AuthRequestGate`)는 검증용 구현입니다. 이 구조를 넣기 전 코드로 실기기 1~15번을 통과했고, 지금 코드는 같은 기기 한 대에서 주요 항목을 관측상 통과했습니다. 다만 `정리 중` 경로는 관측하지 못했고 16·17번은 미실행입니다([실기기 확인 목록](android/device-checklist.md)). WebView 화면과 웹으로의 상태 전달은 아직 구현하지 않았습니다.
 - [frontend/](../frontend/): Vite·React·TypeScript 웹. 주문, 카드 상태, 추천 결과를 보여줄 화면 영역이며 현재는 초기 구성 단계입니다.
 - [backend/](../backend/): Java 21·Spring Boot API. 카드 규칙과 계산 입출력 모델, 공통 API 응답·예외 처리를 보유합니다. DB 마이그레이션은 Flyway로 관리합니다.
 - [docs/](./): 요구사항, 결정, 조사·평가 자료와 개발 안내.
