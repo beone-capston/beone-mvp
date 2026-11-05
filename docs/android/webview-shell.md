@@ -11,9 +11,9 @@ React 화면을 Android 앱 안에서 보여줄 WebView의 기본 구조입니�
 | SSL 오류 시 연결 취소 | 구현 |
 | debug만 원격 디버깅·로컬 개발 서버 평문 HTTP 허용 | 구현. 소스 설정(네트워크 보안 설정·Manifest)은 단위 테스트, release 값은 빌드 산출물로 확인 |
 | 시스템 바·디스플레이 컷아웃 inset 적용 | 구현 |
-| release 로딩 방식과 신뢰 origin | 결정됨(앱 에셋, 2026-11-04 사용자 결정 D-21), **미구현** — release는 아무 페이지도 불러오지 않음. 11/16 시연은 debug 빌드 |
-| 웹 ↔ 네이티브 브리지 | **미구현** — 계약은 D-21로 정해짐(#28). 어떤 origin에도 노출하지 않음 |
-| 기기 인증(#22)과의 연결 | 미구현 |
+| release 로딩과 정확한 origin | **미구현** — release는 주소를 설정하지 않아 아무 페이지도 불러오지 않음. 별도 정책 PR에서 개정([아래](#release-로딩-이력과-현재-방향)) |
+| 웹 ↔ 네이티브 브리지 | **미구현** — 공개 계약은 [D-21](../decisions.md#d-21-확정-정책)의 [후보](bridge-contract-candidate.md)이며 확정이 아님. 어떤 origin에도 노출하지 않음 |
+| 기기 인증(#22)과의 연결 | 미구현. debug 앱에 인증 점검 화면과 WebView 셸이 함께 있지만 서로 연결되어 있지 않음 |
 | 실기기·계측 테스트 | 미실행 |
 
 ## 빌드별 설정
@@ -55,12 +55,12 @@ MainActivity.onCreate
 SSL 오류 → 연결 취소
 ```
 
-## release 로딩과 시연 빌드 (D-21)
+## release 로딩 이력과 현재 방향
 
-2026-11-04 사용자 결정으로 release는 후보 A(앱 에셋)로 설계합니다. 2026-11-16 시연은 debug 빌드, 개발 서버, `adb reverse`(5173, 8080)로 하고, release 에셋 구현은 시연 뒤로 미룰 수 있습니다. 아직 구현하지 않았습니다.
+현재 release 구현은 주소 미설정입니다. 아무 페이지도 불러오지 않습니다.
 
-- **후보 A(채택) — 앱 에셋:** React 빌드 결과를 APK에 넣고 `WebViewAssetLoader`로 `https://appassets.androidplatform.net/` 아래에서 제공합니다. PoC에서 이 origin으로 제한한 `addWebMessageListener` 브리지가 동작했습니다. 네트워크 없이 열리고 origin이 고정되지만, 프런트엔드 빌드 산출물을 앱 빌드에 넣는 절차가 필요합니다.
-- **후보 B(채택 안 함) — 원격 주소:** 배포된 HTTPS 주소를 엽니다. 웹을 따로 배포할 수 있지만 네트워크가 필요하고, 배포 주소와 인증서를 정해야 합니다.
+- **현재 방향:** 이후 사용자 결정으로 공개 HTTPS 화면을 여는 쪽으로 바뀌었습니다. release 로딩 구현과 정확한 origin은 정해지지 않았고 별도 정책 PR에서 개정합니다.
+- **이력(현재 방침 아님):** 2026-11-04 D-21 당시에는 앱 에셋(`WebViewAssetLoader`, `https://appassets.androidplatform.net`)을 release 설계로 정했고, 2026-11-16 시연은 debug 빌드, 개발 서버, `adb reverse`(5173, 8080)로 하기로 했습니다.
 
 ## 실기기에서 확인할 항목
 
@@ -82,9 +82,9 @@ SSL 오류 → 연결 취소
 
 **시험 APK**
 
-- 빌드 변형: debug(기본 개발 서버 주소 `http://localhost:5173/`, dex에서 확인)
-- sha256: `5ff441df2baa8536570a8661826623a400080bac919f98cc82206933d422f7a3`(2026-11-01 리뷰 반영 뒤 빌드)
-- 리뷰 반영으로 debug `BuildConfig`에 테스트용 상수 `DEV_SERVER_OVERRIDDEN`이 추가돼, 이전 APK `0af9497b…`와 바이트가 달라졌습니다. 앱 코드는 이 상수를 쓰지 않으므로 화면 동작은 같습니다. 관측에는 위 sha256의 APK를 씁니다.
+- 빌드 변형: debug(기본 개발 서버 주소 `http://localhost:5173/`)
+- sha256: 미정. `develop` 통합 커밋으로 소스 기준을 고정한 뒤, 그 소스에 대응하는 APK를 확인해 적습니다. 이 값을 확인하기 전에는 관측하지 않습니다.
+- 이전 후보: `5ff441df…`(통합 전, 2026-11-01), `0af9497b…`(그 이전). 통합 전 APK이며 관측에 쓰지 않았고, 이 절차의 기준값이 아닙니다.
 - 빌드 위치는 `android/app/build/outputs/apk/debug/app-debug.apk`입니다(기본 주소로 `./gradlew assembleDebug`).
 
 **1. 설치 전 확인 (사용자 실행, 기기 상태는 바꾸지 않음)**
@@ -95,15 +95,15 @@ adb shell dumpsys package com.beone.app | grep -E 'versionName|versionCode|lastU
 ```
 
 - 회신할 때 기기 일련번호·IP·페어링 정보는 적지 않습니다.
-- 2026-11-05~06 관측은 #24(`feat/22-android-auth-session`) debug APK를 먼저 설치하고 이어서 이 APK를 설치합니다(D-21). 설치 전 `lastUpdateTime`이 #24 APK를 설치한 시각과 다르면 그 사이 다른 설치가 있었던 것이므로 기록해 주세요.
-- 런처에 **B:ONE 인증 점검** 아이콘이 있으면 #22 debug 앱이 설치된 상태입니다.
+- #24 debug APK 관측은 2026-11-04에 끝났습니다. 설치 전 `lastUpdateTime`이 그 설치 시각과 다르면 그 사이 다른 설치가 있었던 것이므로 기록해 주세요.
+- **B:ONE 인증 점검** 아이콘은 #24 단독 debug APK와 통합 debug APK에 모두 있을 수 있으므로, 아이콘만으로 설치본을 구분하지 않습니다. 설치본 APK의 SHA-256으로 확인하고 `lastUpdateTime`은 보조 기록으로 남깁니다.
 
 **2. 교체 영향 (설치 전에 확인)**
 
 - 이 APK는 #22 debug와 패키지 이름(`com.beone.app`)·debug 서명 키·versionCode(1)가 같습니다. `adb install -r`로 설치하면 #22 debug 앱을 **덮어씁니다**.
-- 덮어쓰면 **B:ONE 인증 점검** 런처와 그 앱의 상태가 사라집니다. #22의 인증·60초 상태는 메모리에만 있고 백업도 끄므로(`allowBackup=false`), 되살릴 앱 데이터는 없습니다.
+- 이 APK에는 #22가 통합되어 **B:ONE 인증 점검** 화면이 함께 들어 있습니다. 덮어쓰면 #22 앱의 실행 상태만 사라집니다. #22의 인증·60초 상태는 메모리에만 있고 백업도 끄므로(`allowBackup=false`), 되살릴 앱 데이터는 없습니다.
 - 지금까지의 #22 실기기 관측 결과(D-08·R 항목)는 문서에 그대로 남고, 이번 설치로 무효가 되지 않습니다.
-- #22에서 더 관측할 것(정리 중 경로, 7·12·14 단독, 16·17 등)이 있으면 **이 설치 전에 끝냅니다**.
+- 지금까지의 #22 관측은 `42b1dcc` APK 기준이며, 이 APK로 승계하지 않습니다.
 - 위 내용을 확인한 뒤에만 설치합니다.
 - `adb uninstall com.beone.app`은 꼭 필요하지 않습니다. 기존 앱을 먼저 지우고 싶을 때만 사용자 판단으로 선택합니다.
 
@@ -112,12 +112,12 @@ adb shell dumpsys package com.beone.app | grep -E 'versionName|versionCode|lastU
 1. `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`(또는 같은 sha256의 사본)
 2. `adb shell pm path com.beone.app`이 알려준 `base.apk` 경로를 저장소 밖 폴더로 `adb pull` → `shasum -a 256`이 위 sha256과 같은지 봅니다.
 3. 다르면 그 설치로는 관측하지 않습니다. 보조로 `dumpsys package com.beone.app`의 `lastUpdateTime`이 설치 시각으로 바뀌었는지와 런처 아이콘을 적고 알려 주세요.
-4. 런처에 **B:ONE** 하나만 있고 **B:ONE 인증 점검**이 없어야 합니다.
+4. 런처에 **B:ONE**과 **B:ONE 인증 점검**이 모두 있는지 기록합니다. 두 화면이 함께 있어도 브리지 연결은 아닙니다.
 
-**#22 debug로 되돌리기 (필요할 때)**
+**이전 #22 debug APK**
 
-- #22 브랜치(`feat/22-android-auth-session`)에서 `./gradlew assembleDebug`로 만든 APK(커밋 `26dc432`에서 `./gradlew clean assembleDebug` 기준 sha256 `f59b96a52921b2e174a0011a27df293ee39a502f791a4e5f962e38031d168737`)를 `adb install -r`로 설치합니다.
-- 위 3번과 같은 방법으로 설치본 sha256을 대조합니다. WebView 셸 앱의 상태도 남지 않습니다.
+- 통합 APK에도 인증 점검 화면이 포함되지만, #24 단독 APK와 같은 실기기 동작이나 복구를 보장하지 않습니다. 이전 기준으로 되돌려 확인해야 한다면 별도 설치 승인 후 보관한 #24 APK를 사용하고 설치본 SHA-256을 대조합니다.
+- 2026-11-04 #24 관측 기준은 소스 `42b1dcc`, APK SHA-256 `f59b96a52921b2e174a0011a27df293ee39a502f791a4e5f962e38031d168737`입니다. 해당 관측 결과를 통합 APK 검증으로 승계하지 않습니다.
 
 **4. 개발 서버 준비 (사용자 실행, 이 작업선은 실행하지 않음)**
 
@@ -151,7 +151,8 @@ adb shell dumpsys package com.beone.app | grep -E 'versionName|versionCode|lastU
 
 ```text
 설치본 sha256: (pull한 base.apk 기준)
-기준 SHA: (이 문서의 커밋 또는 PR head)
+APK 소스 기준 SHA: (APK를 만든 소스와 android/ 동일성을 확인한 커밋)
+문서·PR HEAD: (APK 소스 기준과 다르면 별도 기록)
 빌드 변형: debug
 기기: 모델 / Android 버전 (일련번호·IP 제외)
 설치 전 확인: pm list 결과 유무 / lastUpdateTime(설치 전·후)
@@ -166,8 +167,8 @@ W5(debug):
 
 ## 아직 하지 않은 것
 
-- release 앱 에셋 구현(D-21, 2026-11-16 시연 뒤로 미룰 수 있음)
-- 브리지 구현과 기기 인증 상태 전달(계약은 #28)
+- release 로딩 구현과 정확한 origin 결정(별도 정책 PR)
+- 브리지 구현과 기기 인증 상태 전달(공개 계약은 D-21의 후보)
 - 계측 테스트(`androidTest`의 테스트용 HTML). 승인된 기기·에뮬레이터가 없어 이번에는 작성·실행하지 않았습니다.
 - 파일 업로드·다운로드·권한 요청 처리. 현재 화면 요구사항에 없어 기본 동작(처리 안 함)으로 둡니다.
 - iframe 로드 자체와 이미지·스크립트·fetch 같은 하위 리소스의 origin 제한. 하위 프레임의 이동은 메인 프레임과 같이 `shouldOverrideUrlLoading`에서 신뢰 origin 밖이면 막고, 안내는 메인 프레임일 때만 띄웁니다(D-21, 현행 차단 유지). 이 콜백이 모든 하위 프레임 이동에 불리는지는 공식 문서로 확인하지 못했으므로 브리지의 최상위 프레임 필터(`isMainFrame`)를 실제 방어선으로 봅니다. `shouldInterceptRequest`와 CSP는 브리지를 구현할 때 정합니다.

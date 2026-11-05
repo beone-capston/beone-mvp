@@ -44,6 +44,15 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    testOptions {
+        unitTests.all { test ->
+            // 요청한 개발 서버 주소를 BuildConfig와 다른 경로로 테스트에 전달한다.
+            providers.gradleProperty("beone.devServerUrl").orNull?.let { requested ->
+                test.systemProperty("beone.test.requestedDevServerUrl", requested)
+            }
+        }
+    }
 }
 
 dependencies {

@@ -17,4 +17,13 @@ class DebugWebConfigTest {
             assertEquals(WebOrigin("http", "localhost", 5173), origin)
         }
     }
+
+    @Test
+    fun debugUsesRequestedDevServerUrl() {
+        // 기대값은 BuildConfig가 아니라 Gradle이 넘긴 시스템 속성과 고정된 기본 주소에서 만든다.
+        val requested = System.getProperty("beone.test.requestedDevServerUrl")
+
+        assertEquals(requested ?: "http://localhost:5173/", BuildConfig.WEB_START_URL)
+        assertEquals(requested != null, BuildConfig.DEV_SERVER_OVERRIDDEN)
+    }
 }

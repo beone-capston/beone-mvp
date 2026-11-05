@@ -61,3 +61,9 @@
 - 서비스에서 달라진 점: 없음. 문서만 변경했습니다.
 - 검증: `assembleDebug testDebugUnitTest lintDebug` 실행. 실기기 확인은 사용자가 2026-11-05~06에 합니다.
 - 남은 제한: release 에셋과 브리지는 미구현입니다. 차단 안내 구분은 React에 외부 링크가 생길 때 구현합니다.
+
+### 2026-11-05 · `develop` 통합과 설정 테스트 보강 · 진행(커밋 전)
+- 한 일: `develop`(`0654205`)을 merge하며 `strings.xml`과 `docs/architecture.md` 충돌을 해결했습니다. `DebugWebConfigTest`는 요청한 개발 서버 주소를 Gradle 시스템 속성으로 받아 `BuildConfig`와 비교합니다. `webview-shell.md`에서 과거 앱 에셋 결정과 현재 공개 HTTPS 방향을 나눴고 관측 절차를 통합 APK 기준으로 고쳤습니다.
+- 서비스에서 달라진 점: debug 앱에 인증 점검 화면과 WebView 셸이 함께 들어갑니다. 서로 연결되어 있지 않고 브리지는 없습니다.
+- 검증: 기본 주소와 변경 주소(`http://10.0.2.2:5173`)로 `testDebugUnitTest` 실행, 각각 101건 통과. `assembleDebug lintDebug assembleRelease lintRelease` 통과(lint 각각 오류 0·경고 7). 실기기는 미실행입니다.
+- 남은 제한: 커밋 전 소스 기준이라 후보 APK를 관측값으로 고정하지 않았습니다. release 로딩 구현과 정확한 origin은 별도 정책 PR입니다.
