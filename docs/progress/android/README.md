@@ -1,7 +1,7 @@
 # Android 진행 상황
 
-- 작성: 2026-10-31, 기준 `origin/develop` `06ca2b8`(세 작업 브랜치 모두 이 커밋을 merge함). #22 실기기 요약만 2026-11-04 갱신
-- 상태 구분: 아래 내용은 모두 **작업 브랜치 상태**(#22·#25·#27 각 브랜치)이며 아직 `develop`에 반영되지 않았습니다.
+- 작성: 2026-10-31, 기준 `origin/develop` `06ca2b8`(세 작업 브랜치 모두 이 커밋을 merge함). #22 실기기 요약은 2026-11-04, #27 상태는 2026-11-05 갱신
+- 상태 구분: #22·#25 내용은 **작업 브랜치 상태**이며 아직 `develop`에 반영되지 않았습니다. #27은 PR #72로 `develop`에 반영됐습니다.
 
 ## 지금 가능한 것
 
@@ -23,12 +23,12 @@
 
 - [#22](https://github.com/yim0327/beone-mvp/issues/22) 기기 인증과 60초 활성 — draft [PR #24](https://github.com/yim0327/beone-mvp/pull/24). 모듈 전체 검증 통과(2026-10-31). 미해결 스레드 1건(outdated)에 현재 코드 기준 답글. 리뷰 대기, 남은 실기기 항목·정책 결정 대기, 병합 승인 대기 ([단계 기록](22-auth-session.md))
 - [#25](https://github.com/yim0327/beone-mvp/issues/25) WebView 셸 기초 — draft [PR #26](https://github.com/yim0327/beone-mvp/pull/26). 모듈 전체 검증 통과(2026-10-31). 독립 리뷰 0건(리뷰 대기), 실기기 대기, 병합 승인 대기
-- [#27](https://github.com/yim0327/beone-mvp/issues/27) 브리지 계약 초안(후보) — [PR #28](https://github.com/yim0327/beone-mvp/pull/28). 리뷰 지적 3건을 다룬 미커밋 수정안에 미승인 계약 변경이 섞여 있어 보류, 스레드에 사유 답글. 사용자 결정 대기
+- [#27](https://github.com/yim0327/beone-mvp/issues/27) 브리지 계약 초안(후보) — [PR #72](https://github.com/beone-capston/beone-mvp/pull/72)로 병합(PR #28을 대체). 공개 계약은 후보이고 구현은 없습니다
 
 ## 사용자 확인 사항
 
 1. **release 로딩 방식과 신뢰 origin** — 권장안: 앱 에셋(`WebViewAssetLoader`, `https://appassets.androidplatform.net`). PoC에서 동작 확인, 네트워크 없이 origin 고정 가능.
-2. **브리지 계약**(PR #28의 B1~B6과, 리뷰·#22 대조에서 나온 활성 중 재인증 처리·하위 프레임 응답·`NO_RESPONSE`·요청 단계 표현) — 프런트엔드와 함께 정해야 합니다. #28 미커밋 수정안의 커밋 여부도 함께 정합니다.
+2. **브리지 계약**(D-21 후보 B1~B6과, 리뷰·#22 대조에서 나온 활성 중 재인증 처리·하위 프레임 응답·`NO_RESPONSE`·요청 단계 표현) — 프런트엔드와 함께 정해야 합니다.
 3. **#22 운영 값** — 응답 대기 시간, 정지 뒤 복구 방식, 화면이 보일 때만 인증을 요청하는 조건(RESUMED).
 4. **실기기 시험 승인** — #22 16·17번(기기 보안 설정 변경), #25 W2 판정 기준·W3 계열 실행 방식·release 시험용 서명, 기기 설치·실행.
 5. **독립 리뷰 요청** — 이전 CodeRabbit 한도 안내에 사용량 기반 과금 가능성이 있어 draft PR 수동 리뷰를 다시 요청하지 않았습니다.
