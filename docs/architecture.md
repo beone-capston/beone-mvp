@@ -22,7 +22,7 @@
 
 - [benefit: 카드 혜택 규칙과 계산 입출력](domains/benefit.md)
   - 위치: `backend/src/main/java/com/beone/api/benefit/`
-  - 하위 패키지: `card`, `money`, `state`, `input`, `rule`, `primitive`, `result`
+  - 하위 패키지: `engine`, `card`, `money`, `state`, `input`, `rule`, `primitive`, `result`
   - 책임: 안전한 데이터 표현, 입력·결과 일관성 검사, 규칙 JSON 로드(`rule.loading`, 잘못되면 서버 시작 실패), 날짜에 맞는 검증 규칙 선택, 서비스 한 건의 산식·개별 조건 판정(`primitive`), 서비스 후보·채택·기여액 결과 표현(`result`).
   - 범위 밖: 판정을 묶어 카드별 혜택을 내는 계산·최적화 엔진, HTTP 추천 API, CODEF 통신 구현.
 - [codef: CODEF 카드 응답 해석 경계](domains/codef.md)
@@ -43,13 +43,38 @@
 - 사용자 식별은 [D-09](decisions.md#d-09d-14-확정-정책)에 따라 MVP 한정으로 고정 시연 사용자 2명(내 카드·가상 포트폴리오)을 씁니다. 로그인은 없고, 현재 사용자는 서버의 한 곳에서만 정합니다. 사용자 데이터는 `user_id`로 나눠 저장합니다.
 - 업무 API는 [D-14](decisions.md#d-09d-14-확정-정책)에 따라 `/api/v1/me/...` 형태로 둡니다. 1차는 수동 입력·가상 포트폴리오, 2차는 CODEF 연결·조회입니다.
 - 개별 API 명세는 [`docs/api/`](api/README.md)에 있습니다(2026-11-03, 구현 전).
-- 2026-11-03 기준 업무 API·DB 테이블·인증 계층은 없습니다. 패키지 위치는 구현할 때 정하고 이 문서에 추가합니다.
+- 2026-11-04 기준 업무 API·DB 테이블·인증 계층은 없습니다.
+
+## 업무 API 패키지 구조 (D-23, 미구현)
+
+[D-23](decisions.md#d-23-확정-정책)이 정한 구조입니다. 패키지는 아직 없습니다.
+
+```text
+com.beone.api
+├── user            # CurrentUserResolver, 시연 사용자
+├── card            # 보유 카드, 매핑, 상품 조회
+├── preference      # 결제 전 설정
+├── monthlystate    # 월간 상태
+├── order           # 주문, 예정 소비
+├── recommendation  # 추천 저장·조회, 엔진 호출
+├── payment         # 모의 승인·취소, 멱등 키
+└── ledger          # 원장
+    각 패키지 안: web/(Controller, 요청·응답 DTO), application/(서비스), persistence/(엔티티, 저장소)
+```
+
+- `com.beone.api.card`는 보유 카드 기능이고 `com.beone.api.benefit.card`는 엔진의 식별자 타입입니다. 전체 경로가 달라 충돌하지 않습니다.
+- 혜택 계산은 [엔진 입구](domains/benefit.md#engine-업무-api의-입구) `benefit.engine`만 부릅니다. 카드 상품 조회의 `RuleCatalog` 읽기만 예외입니다. 금액 판단을 업무 코드에 복제하지 않습니다.
+- 응답은 `ApiResponse`, 기능 오류는 패키지별 `ApiErrorCode`와 높은 우선순위의 처리기로 추가합니다. `ApiErrorCode`와 `common.web`은 웹 경계에서만 씁니다.
+- 카드 상품 테이블을 두지 않습니다. 규칙 JSON이 원본이고 보유 카드는 `card_product_id` 문자열로 참조합니다. Flyway 번호 규칙은 D-23을 따릅니다.
+- 화면 연결은 CORS 허용 목록을 씁니다. `X-BeONE-Demo-User` 때문에 사전 요청이 항상 발생하므로 허용 헤더에 넣습니다.
 
 ## 데이터 흐름과 현재 구현의 경계
 
 아래는 모델을 연결하는 개념 흐름이며 완성된 실행 경로가 아닙니다.
 
 ```text
+업무 API
+    → RecommendationEngine(benefit.engine) [입구 타입만 있음, 구현은 후속]
 주문·보유 카드·거래 원장·월별 상태·예정 지출
     → RecommendationInput
 카드 약관과 검증된 규칙 버전

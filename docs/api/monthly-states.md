@@ -10,7 +10,7 @@
 
 카드 한 장의 월간 상태(전월 실적, 한도 버킷 사용액, 선택 서비스, 등록일)를 값마다 출처·기준 기간과 함께 조회하는 API.
 
-값마다 `source`·`period`·`updatedAt`을 붙입니다(D-04, D-14 원칙 4). 입력하지 않은 값은 `UNKNOWN`이고 `value`는 `null`입니다. 기준 기간이 카드의 실적·한도 기간과 맞지 않거나 출처 충돌이 있으면 `usable=false`와 이유를 줍니다.
+값마다 `source`·`period`·`updatedAt`을 붙입니다(D-04, D-14 원칙 4). 입력하지 않은 값은 `UNKNOWN`이고 `value`는 `null`입니다. 출처 충돌이 있으면 `usable=false`와 이유를 줍니다. 기준 기간이 맞는지는 이 API가 판단하지 않고 엔진이 계산 때 판단합니다(D-22).
 
 ### Request Header
 
@@ -103,7 +103,7 @@ X-BeONE-Demo-User: MY_CARDS
 - `serviceSelectionStatus` · String · 택1 선택 입력 상태: `UNKNOWN`(미입력, `확인 필요`) / `SELECTED`(서비스 선택) / `NONE`(선택 없음, 사용자 명시 입력). 서버가 정하며 요청으로 받지 않는다
 - `noServiceSelection` · Object|null · `NONE`일 때 `effectiveFrom`, `source`, `updatedAt`, `usable`, `reason`
 - `registeredOn` · 카드 사용 등록일(코드 `HeldCard.registeredAt`). 카드 단위 값이라 달이 달라도 같은 값이다
-- `usable` / `reason` · 계산에 쓸 수 있는지와 이유: `NOT_ENTERED` / `PERIOD_MISMATCH` / `SOURCE_CONFLICT` / `NEGATIVE_UNCONFIRMED_ATTRIBUTION`
+- `usable` / `reason` · 계산에 쓸 수 있는지와 이유: `NOT_ENTERED` / `SOURCE_CONFLICT` / `NEGATIVE_UNCONFIRMED_ATTRIBUTION`
 - `referencedCodef` · Object|null · 2차에서 사용자가 CODEF 참고값을 보고 입력했을 때 참고한 조회월·조회 시각
 - `conflicts` · Array · 같은 항목·같은 기준 기간에 출처가 다른 값이 서로 다를 때만 담는다(D-16). 1차 수동 입력만 있으면 항상 `[]`. 항목 형식: `item`, `period`, `conflictVersion`, `candidates[]`(`source`, `value`, `period`, `updatedAt`), `selection`(`selectedSource`, `selectedAt`, 없으면 `null`)
 - `afterSnapshot` · Object · 스냅샷 뒤 모의 승인·취소 요약. 화면 표시용이며 상태값을 덮어쓰지 않는다
@@ -188,7 +188,7 @@ X-BeONE-Demo-User: MY_CARDS
 ```
 
 - 본문 전체가 이 카드·이 달의 수동 입력을 **교체**한다. 생략한 항목이나 `null`은 `UNKNOWN`으로 저장한다.
-- 가상 포트폴리오도 이 API로 월간 상태와 택1 선택(`NONE` 포함)을 바꿀 수 있고 그 값으로 다시 계산한다(D-19, PRD §3.2). 입력값의 출처는 `MANUAL`이고 시드 값 `SYNTHETIC`과 구분한다. 생략한 항목은 `UNKNOWN`이 아니라 시드 값으로 돌아간다(제안).
+- 가상 포트폴리오도 이 API로 월간 상태와 택1 선택(`NONE` 포함)을 바꿀 수 있고 그 값으로 다시 계산한다(D-19, PRD §3.2). 입력값의 출처는 `MANUAL`이고 시드 값 `SYNTHETIC`과 구분한다. 생략한 항목은 `UNKNOWN`이 아니라 시드 값으로 돌아간다(D-23).
 - 값을 보낸 금액 항목과 `registeredOn`은 `period`(`from`·`to`, YYYY-MM-DD)가 필수다. `selectedServices`·`noServiceSelection`은 `period` 대신 `effectiveFrom`을 쓴다.
 
 #### 선택 필드
@@ -206,14 +206,14 @@ registeredOn
 - `source`·`updatedAt`은 서버가 정한다. 요청으로 받지 않는다. 이 입력은 CODEF 조회값을 덮어쓰지 않는다.
 - `limitBucketUsages[].value`는 0 이상 정수다. `0`은 "사용한 혜택 없음"을 직접 입력한 값이다.
 - 한도가 체인으로 묶인 서비스는 체인 안 버킷마다 사용액을 입력한다. 하나라도 `UNKNOWN`이면 그 서비스는 `확인 필요`다(D-16, D-18 K1).
-- 입력 사용액이 한도보다 커도 저장은 한다. 한도는 실적 구간에 따라 달라 추천 때 판정한다. 추천에서 그 서비스는 `확인 필요`(제안 사유 `USAGE_EXCEEDS_LIMIT`)이고, 사용액이 한도와 같으면 남은 한도 0이다(D-18 K1).
+- 입력 사용액이 한도보다 커도 저장은 한다. 한도는 실적 구간에 따라 달라 추천 때 판정한다. 제외 업종(`NOT_APPLICABLE_EXCLUDED`)·대상 업종·결제 방식·최소 금액·실적 미충족이 확인되거나, 택1 선택형 서비스에서 다른 서비스를 골랐거나 선택 없음이면(`NOT_APPLICABLE_SELECTION`) 사용액과 무관하게 확정 0원이다. 그렇지 않으면 추천에서 그 서비스는 `확인 필요`(사유 `USAGE_EXCEEDS_LIMIT`)이고, 사용액이 한도와 같으면 남은 한도 0이다(D-18 K1).
 - 카드 규칙에 없는 버킷 ID는 400이다. 버킷을 나눠 입력할 수 없는 나머지 사용액은 `otherBucketsUsedWon`에 넣는다. 이 값으로 체인 버킷의 사용액을 대신하지 않는다.
 - `selectedServices[].effectiveFrom`(적용일)이 없으면 그 서비스는 `확인 필요`다.
 - 택1 선택은 세 상태다(D-18 K1). 둘 다 비우면 미입력(`UNKNOWN`), `selectedServices`에 항목을 보내면 서비스 선택(`SELECTED`), `noServiceSelection`에 `{"effectiveFrom":"2026-11-01"}`을 보내면 선택 없음(`NONE`)이다.
 - `NONE`이면 택1 서비스는 그 거래에 적용되지 않음으로 보고 기본 서비스를 판정한다. `effectiveFrom`이 없거나 거래일보다 늦으면 `확인 필요`다.
 - 실물 카드에 선택 없음 상태가 있는지는 상품설명서로 확인되지 않는다. `NONE`은 사용자 입력값이며 가상 포트폴리오·평가 사례용이다. 내 카드 모드 화면에서는 실제 선택을 입력받도록 안내한다.
-- `registeredOn`은 `{"value":"2026-09-01","period":{"from":"2026-09-01","to":"2026-09-01"}}` 형식이다. 기준 기간은 등록일 하루로 둔다(제안).
-- `period`가 카드의 실적·한도 기간(D-03)과 다르면 저장은 하되 `usable=false`, `reason=PERIOD_MISMATCH`로 둔다. 오류가 아니다.
+- `registeredOn`은 `{"value":"2026-09-01","period":{"from":"2026-09-01","to":"2026-09-01"}}` 형식이다. 기준 기간은 등록일 하루로 둔다(D-23).
+- `period`가 카드의 실적·한도 기간(D-03)과 다른지는 저장·조회 때 판단하지 않는다. 받은 값을 그대로 저장한다. 엔진이 계산 때 판단해 맞지 않으면 그 값을 쓰지 않고 추천에 `확인 필요`로 나타낸다(D-16, D-22).
 
 > 저장 시각(`snapshotAt`)보다 앞선 모의 승인을 다시 더하지 않습니다. 그 승인을 나중에 취소하면 스냅샷에 들어 있었는지 알 수 없으므로 영향받는 값은 `확인 필요`가 됩니다(D-17).
 

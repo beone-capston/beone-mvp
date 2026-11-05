@@ -9,6 +9,7 @@ import com.beone.api.benefit.input.Order;
 import com.beone.api.benefit.input.PolicyTermEvidence;
 import com.beone.api.benefit.result.OrderBenefit;
 import com.beone.api.benefit.rule.RuleCatalog;
+import com.beone.api.benefit.state.StateValue;
 
 /**
  * 카드 한 장·주문 한 건에 대해 규칙 선택부터 주문 혜택 결정까지 잇는 내부 진입점(#38).
@@ -34,6 +35,7 @@ public final class OrderBenefitResolver {
 	 * @param decisionDate 규칙 버전을 고를 판정일. 호출자가 정한다
 	 * @param order 현재 주문
 	 * @param state 같은 카드의 월간 상태
+	 * @param registeredAt 같은 카드의 등록일. 신규 유예 판정에 쓴다
 	 * @param evidence 같은 카드의 취소 귀속·할인 매출 근거. 실적 기간 적합성은 호출자 책임이다
 	 * @return 쓸 수 있는 규칙이 없으면 {@link OrderBenefit.Unavailable}, 아니면 {@link OrderBenefit.Decided}
 	 * @throws NullPointerException 입력이 null인 경우
@@ -41,10 +43,10 @@ public final class OrderBenefitResolver {
 	 * @throws IllegalStateException 결정기가 지원 범위 서비스에서 나올 수 없는 한도 소진 후보를 받은 경우
 	 */
 	public static OrderBenefit resolve(RuleCatalog catalog, CardId cardId, LocalDate decisionDate, Order order,
-			CardMonthlyState state, PolicyTermEvidence evidence) {
+			CardMonthlyState state, StateValue<LocalDate> registeredAt, PolicyTermEvidence evidence) {
 		Objects.requireNonNull(catalog, "catalog");
 		// 카드 불일치는 규칙 선택 결과와 관계없이 결정기·취합기의 입력 검사가 거부한다.
-		return OrderBenefitDecider.decide(catalog.select(cardId, decisionDate), order, state, evidence);
+		return OrderBenefitDecider.decide(catalog.select(cardId, decisionDate), order, state, registeredAt, evidence);
 	}
 
 }

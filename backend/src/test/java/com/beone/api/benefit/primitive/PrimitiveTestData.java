@@ -1,5 +1,6 @@
 package com.beone.api.benefit.primitive;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -12,6 +13,8 @@ import com.beone.api.benefit.money.Won;
 import com.beone.api.benefit.rule.BenefitCalculation;
 import com.beone.api.benefit.rule.BenefitKind;
 import com.beone.api.benefit.rule.BenefitService;
+import com.beone.api.benefit.state.BasisPeriod;
+import com.beone.api.benefit.state.StateValue;
 import com.beone.api.benefit.rule.LimitBucket;
 import com.beone.api.benefit.rule.LimitTier;
 import com.beone.api.benefit.rule.MerchantTarget;
@@ -22,6 +25,10 @@ import com.beone.api.benefit.rule.ServiceTier;
  * 가상 서비스·업종으로 만든 합성 테스트 데이터. 실제 카드 약관을 주장하지 않는다.
  */
 final class PrimitiveTestData {
+
+	/** 유예 기간이 지난 합성 등록일. 유예가 없는 규칙에서는 쓰이지 않는다. */
+	static final StateValue<LocalDate> REGISTERED = StateValue.synthetic(LocalDate.of(2020, 1, 1),
+			BasisPeriod.day(LocalDate.of(2020, 1, 1)));
 
 	static final MerchantClass CAFE = MerchantClass.of("SYNTHETIC_CAFE");
 
