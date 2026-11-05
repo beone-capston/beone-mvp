@@ -35,7 +35,7 @@ React 화면을 Android 앱 안에서 보여줄 WebView의 기본 구조입니�
 | --- | --- |
 | [WebOrigin.kt](../../android/app/src/main/java/com/beone/app/web/WebOrigin.kt) | 주소에서 스킴·호스트·포트를 뽑아 비교. http·https만 받고 기본 포트(443·80)는 같게 봅니다 |
 | [WebNavigationPolicy.kt](../../android/app/src/main/java/com/beone/app/web/WebNavigationPolicy.kt) | 시작 주소의 origin과 같은 주소만 허용. 설정이 없거나 잘못되면 아무것도 허용하지 않습니다 |
-| [RestrictedWebViewClient.kt](../../android/app/src/main/java/com/beone/app/web/RestrictedWebViewClient.kt) | 신뢰 origin 밖 탐색 차단(링크·리디렉션은 하위 프레임 포함), 메인 프레임 최초 요청의 빈 응답 처리, 페이지 시작 뒤 중지·안내, SSL 오류 취소, 뒤로 가기 가능 여부 전달 |
+| [RestrictedWebViewClient.kt](../../android/app/src/main/java/com/beone/app/web/RestrictedWebViewClient.kt) | `shouldOverrideUrlLoading`이 전달한 탐색의 origin 검사·차단, 외부 메인 프레임 최초 요청의 빈 응답 처리, `onPageStarted`의 사후 중지·안내, SSL 오류 취소, 뒤로 가기 가능 여부 전달. iframe POST·하위 요청 차단과 하위 프레임 전체 격리는 보장하지 않습니다 |
 | [MainActivity.kt](../../android/app/src/main/java/com/beone/app/MainActivity.kt) | WebView 생성·설정, 시스템 바·키보드 inset, 웹 기록이 있을 때만 웹 뒤로 가기, 상태 저장 |
 
 WebView 설정: JavaScript·DOM storage 켬(React 실행에 필요), 파일·콘텐츠 접근 끔, 새 창 열기 끔, 위치 정보 끔, HTTPS 페이지 안의 HTTP 리소스(mixed content) 차단.
