@@ -5,10 +5,11 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { Readable } from 'node:stream'
 import { after, before, describe, it } from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 // 이 파일의 어떤 검사도 실제 포트를 열지 못하게 막는다.
 net.Server.prototype.listen = () => {
@@ -61,28 +62,111 @@ const form = (fields) => new URLSearchParams(fields).toString()
 const synthetic = (caseId, extra = {}) => form({ run: RUN, case: caseId, sample: 'synthetic', ...extra })
 const hasCsp = (res) => Object.keys(res.headers).some((name) => name.toLowerCase().includes('content-security-policy'))
 
+// 새 Node 프로세스에서 감시·차단 장치를 먼저 설치한 뒤 대상 모듈을 처음 import한다.
+// 부모의 모듈 캐시와 무관하고, ESM 이름 가져오기에도 감시가 걸리도록 내장 모듈 export를 동기화한다.
+// 감지한 호출은 실제 함수로 넘기지 않고 즉시 예외로 막는다. 끝나면 원래 함수를 되돌리고 다시 동기화한다.
+const IMPORT_PROBE = `
+import fs from 'node:fs'
+import net from 'node:net'
+import timers from 'node:timers'
+import { syncBuiltinESMExports } from 'node:module'
+
+const counts = { streams: 0, timers: 0, listens: 0 }
+const original = {
+  createWriteStream: fs.createWriteStream,
+  listen: net.Server.prototype.listen,
+  globalTimeout: globalThis.setTimeout,
+  globalInterval: globalThis.setInterval,
+  timeout: timers.setTimeout,
+  interval: timers.setInterval,
+}
+const block = (kind) => {
+  counts[kind] += 1
+  throw new Error('blocked:' + kind)
+}
+let error = null
+try {
+  fs.createWriteStream = () => block('streams')
+  net.Server.prototype.listen = function () {
+    block('listens')
+  }
+  globalThis.setTimeout = () => block('timers')
+  globalThis.setInterval = () => block('timers')
+  timers.setTimeout = () => block('timers')
+  timers.setInterval = () => block('timers')
+  syncBuiltinESMExports()
+  await import(process.env.FIXTURE_IMPORT_TARGET)
+} catch (caught) {
+  error = String(caught?.message ?? caught)
+} finally {
+  fs.createWriteStream = original.createWriteStream
+  net.Server.prototype.listen = original.listen
+  globalThis.setTimeout = original.globalTimeout
+  globalThis.setInterval = original.globalInterval
+  timers.setTimeout = original.timeout
+  timers.setInterval = original.interval
+  syncBuiltinESMExports()
+}
+const restored =
+  fs.createWriteStream === original.createWriteStream &&
+  net.Server.prototype.listen === original.listen &&
+  globalThis.setTimeout === original.globalTimeout &&
+  timers.setTimeout === original.timeout
+process.stdout.write(JSON.stringify({ counts, error, restored }))
+`
+
+/** 대상 URL을 새 프로세스에서 처음 import하고 감시 결과를 돌려준다. 시간 초과·비정상 종료·진단 출력은 실패로 본다. */
+function probeImport(targetUrl) {
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', IMPORT_PROBE], {
+    cwd: ROOT,
+    env: { ...process.env, FIXTURE_IMPORT_TARGET: targetUrl, NODE_OPTIONS: '' },
+    encoding: 'utf8',
+    timeout: 10_000,
+  })
+  assert.equal(result.error, undefined, `하위 프로세스 오류: ${result.error?.code}`)
+  assert.equal(result.signal, null)
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.stderr, '')
+  const report = JSON.parse(result.stdout)
+  assert.equal(report.restored, true)
+  return report
+}
+
+/** 내장 모듈만 쓰는 고정 탐침 코드를 data URL 모듈로 만든다. 파일을 만들지 않는다. */
+const probeModule = (code) => `data:text/javascript,${encodeURIComponent(code)}`
+
 describe('import 부작용', () => {
-  it('실행 진입점을 import해도 포트·타이머·기록을 시작하지 않는다', async () => {
-    const originalTimeout = globalThis.setTimeout
-    let timers = 0
-    let streams = 0
-    globalThis.setTimeout = (...args) => {
-      timers += 1
-      return originalTimeout(...args)
-    }
-    fs.createWriteStream = (...args) => {
-      streams += 1
-      return realCreateWriteStream(...args)
-    }
-    try {
-      await import('../server/run-fixture.mjs')
-      await import('../server/run-receiver.mjs')
-      assert.equal(timers, 0)
-      assert.equal(streams, 0)
-    } finally {
-      globalThis.setTimeout = originalTimeout
-      fs.createWriteStream = realCreateWriteStream
-    }
+  for (const entry of ['server/run-fixture.mjs', 'server/run-receiver.mjs']) {
+    it(`${entry}를 새 프로세스에서 처음 import해도 포트·타이머·기록을 시작하지 않는다`, () => {
+      const report = probeImport(pathToFileURL(path.join(ROOT, entry)).href)
+      assert.equal(report.error, null)
+      assert.deepEqual(report.counts, { streams: 0, timers: 0, listens: 0 })
+    })
+  }
+
+  it('감시기는 ESM 이름으로 가져온 createWriteStream 호출을 감지하고 막는다', () => {
+    const report = probeImport(probeModule("import { createWriteStream } from 'node:fs'\ncreateWriteStream('/nonexistent-fixture-dir/x.jsonl')"))
+    assert.equal(report.error, 'blocked:streams')
+    assert.deepEqual(report.counts, { streams: 1, timers: 0, listens: 0 })
+  })
+
+  it('감시기는 전역·이름 가져오기 타이머 호출을 감지하고 막는다', () => {
+    const global = probeImport(probeModule('setTimeout(() => {}, 60_000)'))
+    assert.equal(global.error, 'blocked:timers')
+    assert.deepEqual(global.counts, { streams: 0, timers: 1, listens: 0 })
+    const named = probeImport(probeModule("import { setInterval } from 'node:timers'\nsetInterval(() => {}, 60_000)"))
+    assert.equal(named.error, 'blocked:timers')
+    assert.deepEqual(named.counts, { streams: 0, timers: 1, listens: 0 })
+  })
+
+  it('감시기는 HTTP 서버의 포트 열기를 감지하고 막는다', () => {
+    const report = probeImport(probeModule("import { createServer } from 'node:http'\ncreateServer().listen(0, '127.0.0.1')"))
+    assert.equal(report.error, 'blocked:listens')
+    assert.deepEqual(report.counts, { streams: 0, timers: 0, listens: 1 })
+  })
+
+  it('부모 프로세스의 전역 함수는 바뀌지 않는다', () => {
+    assert.equal(fs.createWriteStream, realCreateWriteStream)
   })
 })
 
