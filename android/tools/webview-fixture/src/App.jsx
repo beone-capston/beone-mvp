@@ -29,6 +29,7 @@ function readLocation() {
 
 /** 합성 값을 담은 폼 POST. 제출 직전에 같은 origin으로 시도 기록을 보낸다. */
 function SyntheticForm({ run, caseId, action, label, onAttempt }) {
+  /** 기본 폼 제출 전에 현재 사례와 시도를 세션에 남기고, 같은 origin으로 시도 기록을 보낸다. 시도 기록의 도착은 보장하지 않는다. */
   const handleSubmit = () => {
     setCurrentCase(caseId)
     recordAttempt(run, caseId)
@@ -72,6 +73,7 @@ export function App() {
 
   const refresh = () => setRevision((value) => value + 1)
 
+  /** 수신기로 합성 하위 요청을 보낸다. 응답이 불투명하므로 화면 문구가 아니라 수신기 기록으로 판정한다. */
   const sendSubRequest = (caseId) => {
     setCurrentCase(caseId)
     recordAttempt(run, caseId)

@@ -25,6 +25,7 @@ const { AUTO_STOP_MS, openJsonlLog, parseLogPath, startLoopbackServer } = await 
 const { MAX_BODY_BYTES } = await import('../server/http-common.mjs')
 const protocol = await import('../shared/protocol.js')
 
+/** 소켓 없이 처리기에 넣을 가짜 요청을 만든다. 본문은 스트림으로 읽히고 길이 헤더를 함께 둔다. */
 function fakeRequest({ method = 'POST', url, host, type = 'application/x-www-form-urlencoded', body = '' }) {
   const req = Readable.from(body ? [Buffer.from(body)] : [])
   req.method = method
@@ -55,6 +56,7 @@ async function call(handler, options) {
 }
 
 const form = (fields) => new URLSearchParams(fields).toString()
+/** 합성 POST 본문을 만든다. extra로 필드를 더하거나 덮어써 거부 사례를 만든다. */
 const synthetic = (caseId, extra = {}) => form({ run: RUN, case: caseId, sample: 'synthetic', ...extra })
 const hasCsp = (res) => Object.keys(res.headers).some((name) => name.toLowerCase().includes('content-security-policy'))
 

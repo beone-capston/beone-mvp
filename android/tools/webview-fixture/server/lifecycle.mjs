@@ -45,6 +45,7 @@ export function startLoopbackServer({ name, port, handler, logSink, durationMs =
   let stopped = false
   let timer = null
 
+  /** 타이머를 해제하고 서버와 기록 스트림 닫기를 요청한다. 두 번째 호출부터는 아무것도 하지 않는다. */
   const stop = (reason) => {
     if (stopped) return
     stopped = true

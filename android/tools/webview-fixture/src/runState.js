@@ -4,6 +4,7 @@ const CASE_KEY = 'fixture.case'
 const ATTEMPTS_KEY = 'fixture.attempts'
 const VIOLATIONS_KEY = 'fixture.violations'
 
+/** 세션 저장소 값을 읽는다. 값이 없거나 저장소를 쓸 수 없으면 기본값을 돌려준다. */
 function read(key, fallback) {
   try {
     return sessionStorage.getItem(key) ?? fallback
@@ -12,6 +13,7 @@ function read(key, fallback) {
   }
 }
 
+/** 세션 저장소에 값을 쓴다. 저장소를 쓸 수 없으면 오류 없이 넘어간다. */
 function write(key, value) {
   try {
     sessionStorage.setItem(key, value)
@@ -20,6 +22,7 @@ function write(key, value) {
   }
 }
 
+/** 세션 저장소의 JSON 객체를 읽는다. 해석할 수 없으면 빈 객체를 돌려준다. */
 function readMap(key) {
   try {
     return JSON.parse(read(key, '{}'))

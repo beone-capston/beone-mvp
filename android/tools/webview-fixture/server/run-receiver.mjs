@@ -7,6 +7,7 @@ import { createReceiverHandler } from './receiver-handler.mjs'
 
 const FIXTURE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+/** 기록 경로를 확인한 뒤 수신기를 시작한다. 경로가 맞지 않으면 종료 코드 2를 남기고 시작하지 않는다. */
 function main() {
   const logPath = parseLogPath(process.argv.slice(2), FIXTURE_ROOT)
   if (!logPath) {

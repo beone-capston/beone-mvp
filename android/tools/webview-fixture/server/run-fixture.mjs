@@ -8,6 +8,7 @@ import { openJsonlLog, parseLogPath, startLoopbackServer } from './lifecycle.mjs
 
 const FIXTURE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+/** 기록 경로와 dist를 확인한 뒤 화면 서버를 시작한다. 조건이 맞지 않으면 종료 코드 2를 남기고 시작하지 않는다. */
 async function main() {
   const logPath = parseLogPath(process.argv.slice(2), FIXTURE_ROOT)
   if (!logPath) {

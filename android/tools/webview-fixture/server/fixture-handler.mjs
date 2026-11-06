@@ -57,6 +57,7 @@ function sameOriginPage(run) {
     + `<body><h1>${MARKER}</h1><p>같은 origin POST를 받았습니다. 실행 ID: ${run}</p><p><a href="/">첫 페이지로</a></p></body></html>`
 }
 
+/** dist 안의 정적 파일을 응답하고 결과를 기록한다. dist 밖이거나 없는 파일이면 404로 응답한다. */
 async function serveStatic(req, res, distDir, pathname, log) {
   const file = await resolveStaticFile(distDir, pathname)
   if (!file) {
@@ -69,6 +70,11 @@ async function serveStatic(req, res, distDir, pathname, log) {
   log({ status: 200, outcome: 'served' })
 }
 
+/**
+ * 같은 origin POST 경로(same·attempt·csp-violation)를 처리한다.
+ * 본문을 1KB까지 읽어 경로별 허용 필드·사례만 받고, 기록에는 본문 값 대신 run·case 같은 요약만 남긴다.
+ * 형식이 맞지 않으면 400, 다른 경로면 404로 응답한다.
+ */
 async function handlePost(req, res, pathname, log) {
   if (pathname !== PATHS.same && pathname !== PATHS.attempt && pathname !== PATHS.violation) {
     respond(req, res, 404, TEXT, 'not found')
