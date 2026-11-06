@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import { EventEmitter } from 'node:events'
 import { Readable } from 'node:stream'
 import { after, before, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -243,7 +244,7 @@ describe('시작과 종료', () => {
   function fakeDeps() {
     const handlers = {}
     const signals = {}
-    const state = { closed: 0, closedAll: 0, timerMs: null, cleared: 0, exitCode: null, listen: null, printed: [] }
+    const state = { closed: 0, closedAll: 0, timerMs: null, cleared: 0, exitCode: null, exitCodes: [], listen: null, printed: [] }
     const server = {
       on: (event, listener) => {
         handlers[event] = listener
@@ -277,13 +278,24 @@ describe('시작과 종료', () => {
       printError: (message) => state.printed.push(message),
       setExitCode: (code) => {
         state.exitCode = code
+        state.exitCodes.push(code)
       },
     }
     const logSink = {
       closed: 0,
+      listener: null,
+      failure: null,
       close(done) {
         this.closed += 1
         done()
+      },
+      onError(listener) {
+        if (this.failure) listener(this.failure)
+        else this.listener = listener
+      },
+      fail(error) {
+        this.failure = error
+        this.listener?.(error)
       },
     }
     return { deps, state, handlers, signals, logSink, server }
@@ -328,6 +340,72 @@ describe('시작과 종료', () => {
     assert.match(state.printed.join(' '), /EADDRINUSE/)
   })
 
+  it('실행 중 기록 실패면 서버·연결·기록을 닫고 타이머를 해제하며 실패 코드를 남긴다', () => {
+    const { deps, state, logSink } = fakeDeps()
+    startLoopbackServer({ name: 't', port: 18080, handler: () => {}, logSink, deps })
+    state.ready()
+    logSink.fail({ code: 'ENOSPC', message: 'run=secret-body' })
+    assert.equal(state.exitCode, 1)
+    assert.equal(state.cleared, 1)
+    assert.equal(state.closed, 1)
+    assert.equal(state.closedAll, 1)
+    assert.equal(logSink.closed, 1)
+    const printed = state.printed.join(' ')
+    assert.match(printed, /기록 실패: ENOSPC/)
+    assert.doesNotMatch(printed, /secret-body/)
+  })
+
+  it('구독 전에 기록이 실패했으면 포트를 열지 않고 타이머·시작 안내도 만들지 않는다', () => {
+    const { deps, state, logSink } = fakeDeps()
+    logSink.failure = { code: 'EACCES' }
+    startLoopbackServer({ name: 't', port: 5173, handler: () => {}, logSink, deps })
+    assert.equal(state.listen, null)
+    assert.equal(state.timerMs, null)
+    assert.equal(state.exitCode, 1)
+    assert.equal(logSink.closed, 1)
+    assert.doesNotMatch(state.printed.join(' '), /시작:/)
+  })
+
+  it('시작 완료 전 실패 뒤 늦은 시작 콜백은 포트를 다시 닫고 타이머·시작 안내를 만들지 않는다', () => {
+    const { deps, state, logSink } = fakeDeps()
+    startLoopbackServer({ name: 't', port: 5173, handler: () => {}, logSink, deps })
+    logSink.fail({ code: 'EACCES' })
+    state.ready()
+    assert.equal(state.timerMs, null)
+    assert.equal(state.closed, 2)
+    assert.equal(logSink.closed, 1)
+    assert.equal(state.exitCode, 1)
+    assert.doesNotMatch(state.printed.join(' '), /시작:/)
+  })
+
+  it('반복 오류·신호·자동 종료가 겹쳐도 종료와 보고는 한 번이고 실패 코드를 0으로 덮지 않는다', () => {
+    const { deps, state, signals, logSink } = fakeDeps()
+    startLoopbackServer({ name: 't', port: 18080, handler: () => {}, logSink, deps })
+    state.ready()
+    logSink.fail({ code: 'EIO' })
+    logSink.fail({ code: 'EIO' })
+    signals.SIGTERM()
+    signals.SIGINT()
+    state.fire()
+    assert.equal(state.closed, 1)
+    assert.equal(state.closedAll, 1)
+    assert.equal(logSink.closed, 1)
+    assert.equal(state.printed.filter((line) => line.includes('기록 실패')).length, 1)
+    assert.deepEqual(state.exitCodes, [1])
+  })
+
+  it('정상 종료 중 기록이 실패해도 중복 종료 없이 실패 코드를 남긴다', () => {
+    const { deps, state, signals, logSink } = fakeDeps()
+    startLoopbackServer({ name: 't', port: 18080, handler: () => {}, logSink, deps })
+    state.ready()
+    signals.SIGTERM()
+    assert.deepEqual(state.exitCodes, [])
+    logSink.fail({ code: 'EIO' })
+    assert.equal(state.closed, 1)
+    assert.equal(logSink.closed, 1)
+    assert.deepEqual(state.exitCodes, [1])
+  })
+
   it('기록 경로는 fixture 폴더 밖의 절대 경로만 받는다', () => {
     assert.equal(parseLogPath([], ROOT), null)
     assert.equal(parseLogPath(['--log', 'relative.jsonl'], ROOT), null)
@@ -341,11 +419,89 @@ describe('시작과 종료', () => {
     let opened = 0
     const sink = openJsonlLog('/tmp/x', () => {
       opened += 1
-      return { write: (line) => lines.push(line), end: (done) => done() }
+      return { on: () => {}, write: (line) => lines.push(line), end: (done) => done() }
     })
     sink.write({ a: 1 })
     assert.equal(opened, 1)
     assert.deepEqual(lines, ['{"a":1}\n'])
+  })
+
+  /** 가짜 쓰기 스트림. 오류 이벤트는 리스너가 없으면 EventEmitter 규칙대로 예외가 된다. */
+  function fakeStream({ endCallsBack = true } = {}) {
+    const stream = new EventEmitter()
+    Object.assign(stream, { lines: [], ended: 0, destroyed: 0 })
+    stream.write = (line) => stream.lines.push(line)
+    stream.end = (done) => {
+      stream.ended += 1
+      if (endCallsBack) done()
+    }
+    stream.destroy = () => {
+      stream.destroyed += 1
+    }
+    return stream
+  }
+
+  it('열기 오류를 예외 없이 붙잡아 나중에 구독해도 전달하고 이후 쓰기를 버린다', () => {
+    const stream = fakeStream()
+    const sink = openJsonlLog('/tmp/x', () => stream)
+    stream.emit('error', { code: 'EACCES' })
+    const seen = []
+    sink.onError((error) => seen.push(error.code))
+    sink.write({ a: 1 })
+    let done = 0
+    sink.close(() => {
+      done += 1
+    })
+    assert.deepEqual(seen, ['EACCES'])
+    assert.deepEqual(stream.lines, [])
+    assert.equal(stream.ended, 0)
+    assert.equal(stream.destroyed, 1)
+    assert.equal(done, 1)
+  })
+
+  it('실제 파일 스트림의 열기 실패도 미처리 예외 없이 구독자에게 전달한다', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'fixture-log-'))
+    try {
+      const sink = openJsonlLog(path.join(dir, 'missing', 'x.jsonl'), realCreateWriteStream)
+      const error = await new Promise((resolve) => sink.onError(resolve))
+      assert.equal(error.code, 'ENOENT')
+      await new Promise((resolve) => sink.close(resolve))
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('반복 쓰기 오류는 구독자에게 한 번만 알린다', () => {
+    const stream = fakeStream()
+    const sink = openJsonlLog('/tmp/x', () => stream)
+    const seen = []
+    sink.onError((error) => seen.push(error.code))
+    sink.write({ a: 1 })
+    stream.emit('error', { code: 'ENOSPC' })
+    stream.emit('error', { code: 'ENOSPC' })
+    sink.write({ a: 2 })
+    assert.deepEqual(seen, ['ENOSPC'])
+    assert.equal(stream.lines.length, 1)
+  })
+
+  it('닫는 중 오류가 나면 완료 콜백을 한 번만 부르고 오류를 알린다', () => {
+    const stream = fakeStream({ endCallsBack: false })
+    const sink = openJsonlLog('/tmp/x', () => stream)
+    const seen = []
+    sink.onError((error) => seen.push(error.code))
+    let done = 0
+    sink.close(() => {
+      done += 1
+    })
+    sink.write({ late: true })
+    stream.emit('error', { code: 'EIO' })
+    stream.emit('error', { code: 'EIO' })
+    sink.close(() => {
+      done += 1
+    })
+    assert.equal(done, 1)
+    assert.deepEqual(seen, ['EIO'])
+    assert.deepEqual(stream.lines, [])
   })
 })
 

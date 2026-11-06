@@ -29,30 +29,95 @@ export function parseLogPath(argv, forbiddenRoot) {
   return inside ? null : path.resolve(value)
 }
 
-/** JSONL 기록기를 연다. */
+/**
+ * JSONL 기록기를 연다.
+ * 스트림 오류는 처음 한 번만 onError 구독자에게 알리고, 구독 전에 난 오류는 구독 시점에 바로 전달한다.
+ * 오류 뒤나 닫기 시작 뒤의 write는 버린다. close의 done은 정상 종료·오류 어느 쪽이든 한 번만 부른다.
+ * write 성공은 디스크 기록 완료를 뜻하지 않는다.
+ */
 export function openJsonlLog(logPath, createStream = createWriteStream) {
   const stream = createStream(logPath, { flags: 'a', mode: 0o600 })
+  const listeners = []
+  let failure = null
+  let finishClose = null
+
+  stream.on('error', (error) => {
+    if (failure === null) {
+      failure = error
+      for (const listener of listeners) listener(error)
+    }
+    if (finishClose) finishClose()
+  })
+
   return {
-    write: (entry) => stream.write(`${JSON.stringify(entry)}\n`),
-    close: (done) => stream.end(done),
+    write: (entry) => {
+      if (failure !== null || finishClose) return
+      stream.write(`${JSON.stringify(entry)}\n`)
+    },
+    onError: (listener) => {
+      if (failure !== null) listener(failure)
+      else listeners.push(listener)
+    },
+    close: (done) => {
+      if (finishClose) return
+      let called = false
+      finishClose = () => {
+        if (called) return
+        called = true
+        done()
+      }
+      if (failure !== null) {
+        // 실패한 스트림은 끝내기를 기다리지 않고 버린다.
+        stream.destroy()
+        finishClose()
+        return
+      }
+      stream.end(() => finishClose())
+    },
   }
 }
 
-/** loopback에서 서버를 시작하고 자동 종료와 신호 종료를 건다. */
+/**
+ * loopback에서 서버를 시작하고 자동 종료와 신호 종료를 건다.
+ * 기록 실패는 그 회차의 관측 실패로 보고 서버를 멈춘 뒤 종료 코드 1을 남긴다. 정상 종료 경로는 종료 코드를 바꾸지 않는다.
+ */
 export function startLoopbackServer({ name, port, handler, logSink, durationMs = AUTO_STOP_MS, deps = DEFAULT_DEPS }) {
   const server = deps.createServer(handler)
   server.requestTimeout = REQUEST_TIMEOUT_MS
   let stopped = false
   let timer = null
+  let logClosed = false
+  let logFailed = false
 
-  /** 타이머를 해제하고 서버와 기록 스트림 닫기를 요청한다. 두 번째 호출부터는 아무것도 하지 않는다. */
-  const stop = (reason) => {
+  const closeLog = () => {
+    if (logClosed) return
+    logClosed = true
+    logSink.close(() => {})
+  }
+
+  /** 타이머를 해제하고 새 연결 수락을 멈춘 뒤 기존 연결과 기록을 닫는다. 두 번째 호출부터는 아무것도 하지 않는다. */
+  const shutdown = () => {
     if (stopped) return
     stopped = true
     if (timer !== null) deps.clearTimer(timer)
-    deps.print(`[${name}] 종료: ${reason}`)
-    server.close(() => logSink.close(() => {}))
+    timer = null
+    server.close(() => closeLog())
     server.closeAllConnections()
+  }
+
+  const stop = (reason) => {
+    if (stopped) return
+    deps.print(`[${name}] 종료: ${reason}`)
+    shutdown()
+  }
+
+  /** 기록 실패를 한 번만 보고하고 서버를 멈춘다. 실패한 기록에는 다시 쓰지 않는다. */
+  const failOnLogError = (error) => {
+    if (logFailed) return
+    logFailed = true
+    deps.setExitCode(1)
+    deps.printError(`[${name}] 기록 실패: ${error?.code ?? 'UNKNOWN'}. 서버를 멈춥니다. 이 회차의 결과는 증거로 쓰지 않습니다.`)
+    shutdown()
   }
 
   server.on('error', (error) => {
@@ -61,17 +126,27 @@ export function startLoopbackServer({ name, port, handler, logSink, durationMs =
     deps.setExitCode(1)
     stopped = true
     if (timer !== null) deps.clearTimer(timer)
-    logSink.close(() => {})
+    timer = null
+    closeLog()
   })
 
   deps.onSignal('SIGINT', () => stop('SIGINT'))
   deps.onSignal('SIGTERM', () => stop('SIGTERM'))
+  logSink.onError(failOnLogError)
 
-  server.listen(port, LOOPBACK_HOST, () => {
-    if (stopped) return
-    timer = deps.setTimer(() => stop('자동 종료 시간 도달'), durationMs)
-    deps.print(`[${name}] 시작: http://${LOOPBACK_HOST}:${port} 자동 종료 ${Math.round(durationMs / 60000)}분 뒤`)
-  })
+  // 구독 시점에 이미 기록이 실패했다면 포트를 열지 않는다.
+  if (!stopped) {
+    server.listen(port, LOOPBACK_HOST, () => {
+      if (stopped) {
+        // 시작 완료 전에 멈췄다면 늦게 열린 포트를 바로 닫고 타이머·시작 안내를 만들지 않는다.
+        server.close(() => closeLog())
+        server.closeAllConnections()
+        return
+      }
+      timer = deps.setTimer(() => stop('자동 종료 시간 도달'), durationMs)
+      deps.print(`[${name}] 시작: http://${LOOPBACK_HOST}:${port} 자동 종료 ${Math.round(durationMs / 60000)}분 뒤`)
+    })
+  }
 
   return { server, stop }
 }
