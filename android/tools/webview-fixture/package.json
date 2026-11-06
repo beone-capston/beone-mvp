@@ -1,0 +1,25 @@
+{
+  "name": "beone-webview-fixture",
+  "description": "TEMP-WEBVIEW-FIXTURE Android WebView 관측 전용 임시 화면. 제품 코드가 아닙니다.",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "vite build",
+    "check:dist": "node scripts/check-dist.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "serve:fixture": "node server/run-fixture.mjs",
+    "serve:receiver": "node server/run-receiver.mjs"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.2.1",
+    "vite": "8.3.6"
+  }
+}
