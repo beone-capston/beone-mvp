@@ -31,6 +31,8 @@ restore_project="beone-deploy-restore"
 fail_count=0
 
 die() { echo "verify-local: $*" >&2; exit 1; }
+# 파일 맨 위의 사용법 주석만 출력한다(첫 줄 이후 처음 나오는 주석 아닌 줄에서 멈춘다).
+usage() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; }
 pass() { echo "PASS $*"; }
 fail() { echo "FAIL $*"; fail_count=$((fail_count + 1)); }
 finish() {
@@ -56,9 +58,25 @@ check_env_location() {
 	esac
 }
 
+# 비밀번호 형식 계약: 비어 있지 않은 16진수(openssl rand -hex 24). 옵션 파일([client] password=)에 그대로 넣으므로
+# 다른 문자는 받지 않는다. 실패 시 키 이름과 이유만 알리고 값은 출력하지 않는다.
+check_hex_secrets() {
+	local key value bad=0
+	for key in "$@"; do
+		value="$(env_value "$key")"
+		case "$value" in
+			"") echo "verify-local: $key 값이 비어 있습니다" >&2; bad=1 ;;
+			*[!0-9A-Fa-f]*) echo "verify-local: $key 값에 16진수가 아닌 문자가 있습니다(openssl rand -hex 24로 만드세요)" >&2; bad=1 ;;
+		esac
+	done
+	[ "$bad" = "0" ] || die "환경 파일의 비밀번호 형식 검사 실패. 값은 출력하지 않았고 파일은 바꾸지 않았습니다"
+}
+
+# Compose 기동에 쓰는 앱·root 비밀번호를 함께 확인한다. VERIFY_BACKUP_PASSWORD는 backup에서 따로 확인한다.
 need_env() {
 	check_env_location
 	[ -f "$VERIFY_ENV" ] || die "VERIFY_ENV 파일이 없습니다"
+	check_hex_secrets MYSQL_PASSWORD MYSQL_ROOT_PASSWORD
 }
 
 need_image() {
@@ -93,7 +111,8 @@ guard_services() {
 
 container_id() { dc "$1" ps -q "$2"; }
 
-# 상태를 바꾸지 않고 관찰만 한다. healthy면 성공, unhealthy·종료·재시작 발생이면 시간 제한을 기다리지 않고 실패한다.
+# 상태를 바꾸지 않고 관찰만 한다. 종료·재시작·unhealthy·재시작 횟수 변화를 먼저 판정해 시간 제한을 기다리지 않고 실패하고,
+# running이며 healthy이고 관찰 중 재시작하지 않았을 때만 성공한다.
 wait_healthy() {
 	local which="$1" service="$2" limit="$3" waited=0 id state first_restarts=""
 	while [ "$waited" -lt "$limit" ]; do
@@ -102,11 +121,11 @@ wait_healthy() {
 			state="$(docker inspect --format '{{.State.Status}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id")"
 			set -- $state
 			[ -n "$first_restarts" ] || first_restarts="$2"
-			[ "$3" = "healthy" ] && return 0
-			if [ "$3" = "unhealthy" ] || [ "$1" = "exited" ] || [ "$1" = "dead" ] || [ "$2" != "$first_restarts" ]; then
-				echo "verify-local: $service 조기 실패 감지(state=$1 restarts=$2 health=$3)" >&2
+			if [ "$1" = "exited" ] || [ "$1" = "dead" ] || [ "$1" = "restarting" ] || [ "$2" != "$first_restarts" ] || [ "$3" = "unhealthy" ]; then
+				echo "verify-local: $service 조기 실패 감지(state=$1 restarts=$first_restarts->$2 health=$3)" >&2
 				return 1
 			fi
+			[ "$1" = "running" ] && [ "$3" = "healthy" ] && return 0
 		fi
 		sleep 5
 		waited=$((waited + 5))
@@ -170,6 +189,13 @@ health_ok() {
 	esac
 }
 
+# backend 컨테이너 안에서 health 본문을 가져온다. 조회 명령이 실패하면 받은 일부 응답과 관계없이 실패를 돌려준다.
+health_body() {
+	local raw
+	raw="$(docker exec "$1" bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /actuator/health HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && cat <&3' 2> /dev/null)" || return 1
+	printf '%s' "$raw" | tr -d '\r' | sed '1,/^$/d'
+}
+
 sha_stdin() {
 	if command -v sha256sum > /dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi
 }
@@ -214,9 +240,14 @@ cmd_static() {
 	need_env
 	BEONE_API_IMAGE="${BEONE_API_IMAGE:-beone-api:static-check}" dc verify config --quiet && pass "V2 compose 문법(값 출력 없음)" || fail "V2 compose 문법"
 	BEONE_API_IMAGE="${BEONE_API_IMAGE:-beone-api:static-check}" guard_services verify && pass "V2 서비스 목록 mysql·backend"
-	local ports
-	ports="$(docker compose -f "$compose_file" config --no-interpolate --format json | grep -c '"published"' || true)"
-	[ "$ports" = "0" ] && pass "V2 포트 공개 선언 0건" || fail "V2 포트 공개 선언 ${ports}건"
+	# 값을 풀지 않은 설정에서 포트 선언을 센다. 설정 출력은 화면에 내지 않고, 명령이 실패하면 0건으로 보지 않는다.
+	local config_json ports
+	if config_json="$(docker compose -f "$compose_file" config --no-interpolate --format json 2> /dev/null)" && [ -n "$config_json" ]; then
+		ports="$(grep -c '"published"' <<< "$config_json" || true)"
+		[ "$ports" = "0" ] && pass "V2 포트 공개 선언 0건" || fail "V2 포트 공개 선언 ${ports}건"
+	else
+		fail "V2 포트 검사 불가: compose config 실패"
+	fi
 	local deploy_tag dev_tag
 	deploy_tag="$(sed -n 's/^[[:space:]]*image:[[:space:]]*\(mysql:[^[:space:]]*\)[[:space:]]*$/\1/p' "$compose_file")"
 	dev_tag="$(sed -n 's/^[[:space:]]*image:[[:space:]]*\(mysql:[^[:space:]]*\)[[:space:]]*$/\1/p' "$dev_compose_file")"
@@ -274,8 +305,11 @@ check_project() {
 	history="$(echo "SELECT version, success FROM flyway_schema_history WHERE version IS NOT NULL ORDER BY installed_rank;" | mysql_app "$which" | tr '\t' ':' | tr '\n' ' ')"
 	[ "$history" = "$(expected_flyway_history)" ] && pass "V8 Flyway 이력이 마이그레이션 폴더와 일치($history)" || fail "V8 Flyway 이력 '$history' 기대 '$(expected_flyway_history)'"
 
-	body="$(docker exec "$backend_id" bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /actuator/health HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && cat <&3' | tr -d '\r' | sed '1,/^$/d')"
-	health_ok "$body" && pass "V9 내부 health status UP, 구성 요소 세부 정보 없음(응답 $body)" || fail "V9 내부 health 응답 '$body'"
+	if body="$(health_body "$backend_id")"; then
+		health_ok "$body" && pass "V9 내부 health status UP, 구성 요소 세부 정보 없음(응답 $body)" || fail "V9 내부 health 응답 '$body'"
+	else
+		fail "V9 내부 health 조회 명령 실패"
+	fi
 
 	for id in "$(container_id "$which" mysql)" "$backend_id"; do
 		published="$(docker port "$id" | wc -l | tr -d ' ')"
@@ -374,6 +408,7 @@ check_cmdline_exposure() {
 
 cmd_backup() {
 	need_env
+	check_hex_secrets VERIFY_BACKUP_PASSWORD
 	need_image
 	guard_services verify
 	guard_services restore
@@ -443,8 +478,11 @@ cmd_swap() {
 		if BEONE_API_IMAGE="$tag" wait_healthy verify backend 300; then
 			id="$(BEONE_API_IMAGE="$tag" container_id verify backend)"
 			[ "$(docker inspect --format '{{.Image}}' "$id")" = "$expected" ] && pass "V13 $tag 로 전환, 이미지 ID 일치" || fail "V13 $tag 이미지 ID 불일치"
-			body="$(docker exec "$id" bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /actuator/health HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && cat <&3' | tr -d '\r' | sed '1,/^$/d')"
-			health_ok "$body" && pass "V13 $tag 내부 health UP" || fail "V13 $tag health '$body'"
+			if body="$(health_body "$id")"; then
+				health_ok "$body" && pass "V13 $tag 내부 health UP" || fail "V13 $tag health '$body'"
+			else
+				fail "V13 $tag health 조회 명령 실패"
+			fi
 		else
 			fail "V13 $tag 기동 실패 또는 시간 초과"
 		fi
@@ -471,5 +509,5 @@ case "$command" in
 	backup) cmd_backup ;;
 	swap) cmd_swap "$@" ;;
 	status) cmd_status ;;
-	*) sed -n '2,26p' "$0"; exit 2 ;;
+	*) usage; exit 2 ;;
 esac
