@@ -14,11 +14,14 @@ frontend/   React 웹 (Vite + TypeScript)
 backend/    Spring Boot API (Java 21, MySQL)
 docs/       PRD, 결정 기록, 코드·테스트 컨벤션
 fixtures/   평가·시연용 데이터 (fixtures/private/ 는 git 제외)
+deploy/     배포용 Compose와 이미지 빌드·로컬 검증 스크립트
 docker-compose.yml   로컬 MySQL
 .env.example         환경변수 예시
 ```
 
 세 애플리케이션은 각각 독립적으로 빌드·테스트합니다. 루트에는 공용 빌드 도구가 없습니다.
+
+백엔드 배포 이미지와 배포 Compose는 [백엔드 배포 기반](docs/deployment/backend-compose.md)에 있습니다. 로컬 개발 실행은 아래 절차를 그대로 따릅니다.
 
 ## 요구 환경
 
