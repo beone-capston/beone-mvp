@@ -193,10 +193,12 @@ sudo install -d -m 700 /opt/beone/app/backups
 
 ### 백업
 
+**배포 금지 구간:** 덤프를 시작하기 전부터 아래 짝 기록 블록이 `짝 기록 확인`을 출력할 때까지 새 backend 배포(`APP up -d backend`, 이때 Flyway 마이그레이션이 실행됨)·마이그레이션·수동 DDL(`CREATE`·`ALTER`·`DROP`·`RENAME`·`TRUNCATE`)을 실행하지 않습니다. 운영 서비스를 멈추거나 일반 DB 쓰기를 막지는 않습니다. 기록이 실패하면 배포를 보류합니다.
+
 앱 계정으로 앱 DB를 덤프합니다. 비밀번호는 명령행에 넣지 않고 컨테이너 안에서 옵션 파일로 전달합니다. 덤프는 먼저 `.partial` 파일로 쓰고, 명령이 모두 성공하고 마지막 줄에 덤프 완료 표식이 있을 때만 정식 이름으로 바꿉니다. 실패하면 불완전한 파일을 지우고 "백업 실패"를 출력합니다. 파일 권한은 `umask 077`로 600입니다.
 
 ```bash
-B=/opt/beone/app/backups/app-$(date -u +%Y%m%dT%H%M%SZ).sql; sudo bash -o pipefail -c 'umask 077; docker compose -f /opt/beone/app/compose.yaml -p beone-app --env-file /opt/beone/app/.env exec -T mysql bash -c "mysqldump --defaults-extra-file=<(printf \"[client]\nuser=%s\npassword=%s\n\" \"\$MYSQL_USER\" \"\$MYSQL_PASSWORD\") --single-transaction --no-tablespaces \"\$MYSQL_DATABASE\"" > "$1.partial" && tail -n 1 "$1.partial" | grep -q "^-- Dump completed" && mv "$1.partial" "$1"' _ "$B" && echo "백업 완료: $B" || { sudo rm -f "$B.partial"; echo "백업 실패: 불완전한 파일을 지웠습니다"; }
+unset DUMP_OK; B=/opt/beone/app/backups/app-$(date -u +%Y%m%dT%H%M%SZ).sql; sudo bash -o pipefail -c 'umask 077; docker compose -f /opt/beone/app/compose.yaml -p beone-app --env-file /opt/beone/app/.env exec -T mysql bash -c "mysqldump --defaults-extra-file=<(printf \"[client]\nuser=%s\npassword=%s\n\" \"\$MYSQL_USER\" \"\$MYSQL_PASSWORD\") --single-transaction --no-tablespaces \"\$MYSQL_DATABASE\"" > "$1.partial" && tail -n 1 "$1.partial" | grep -q "^-- Dump completed" && mv "$1.partial" "$1"' _ "$B" && { DUMP_OK="$B"; echo "백업 완료: $B"; } || { sudo rm -f "$B.partial"; echo "백업 실패: 불완전한 파일을 지웠습니다"; }
 ```
 
 | 확인 | 기대 | 다르면 |
@@ -206,7 +208,7 @@ B=/opt/beone/app/backups/app-$(date -u +%Y%m%dT%H%M%SZ).sql; sudo bash -o pipefa
 
 #### 덤프 짝 기록
 
-덤프가 성공하면(`백업 완료`) 배포를 시작하기 전에 바로 이어서 덤프와 짝지어진 기록을 남깁니다. 복원 확인에서 **덤프 당시 이미지**로 backend를 기동하고 **백업 시점 이력**과 비교하는 데 씁니다. 기록은 저장소 밖 `/opt/beone/app/backups`(권한 700)에 권한 600으로 남깁니다.
+덤프 명령과 **같은 셸**에서 바로 이어서 덤프와 짝지어진 기록을 남깁니다. 이번 덤프 명령이 성공해 `DUMP_OK`가 이번 `B`와 같을 때만 기록을 시작합니다. 파일이 있다는 것만으로 이번 덤프가 성공했다고 보지 않습니다. 복원 확인에서 **덤프 당시 이미지**로 backend를 기동하고 **백업 시점 이력**과 비교하는 데 씁니다. 기록은 저장소 밖 `/opt/beone/app/backups`(권한 700)에 권한 600으로 남깁니다.
 
 - `<덤프>.record`: 덤프 파일 이름·sha256, 실제 실행 중인 backend 컨테이너의 이미지 ID·태그·소스 revision 라벨, 이력 파일 sha256
 - `<덤프>.flyway`: 백업 시점 `flyway_schema_history`(`installed_rank, version, script, checksum, success`)
@@ -214,7 +216,8 @@ B=/opt/beone/app/backups/app-$(date -u +%Y%m%dT%H%M%SZ).sql; sudo bash -o pipefa
 `.env`에 적힌 태그를 그대로 쓰지 않고, 실행 중인 backend 컨테이너의 이미지 ID를 기준으로 그 태그가 같은 ID를 가리키는지 대조합니다. 비밀번호·환경 파일 내용은 기록하거나 출력하지 않습니다.
 
 ```bash
-sudo bash -s -- "$B" <<'EOF'
+if [ -n "${B:-}" ] && [ "${DUMP_OK:-}" = "$B" ]; then
+sudo bash -s -- "$B" <<'EOF' && echo "짝 기록 확인: 배포 금지 구간을 끝낼 수 있습니다" || echo "짝 기록 실패: 배포를 보류합니다(덤프는 남김)"
 set -euo pipefail
 umask 077
 B="$1"
@@ -242,19 +245,23 @@ mv "$B.flyway.partial" "$B.flyway"
 mv "$B.record.partial" "$B.record"
 echo "기록 완료: $B.record ($image_tag)"
 EOF
+else echo "기록 미시작: 이번 덤프의 성공이 확인되지 않았습니다. 배포를 보류하고 덤프부터 다시 합니다"; fi
 ```
 
 - 이 블록은 스크립트를 표준 입력으로 읽으므로, 안의 `APP exec`는 `< /dev/null`로 표준 입력을 막아 스크립트 나머지를 읽어 버리지 않게 합니다.
-- `백업 완료`(SQL 덤프 성공)와 `기록 완료`(복원 기동 검증에 필요한 짝 기록 완성)는 따로 판정합니다. `기록 불완전`이어도 정상 덤프는 지우지 않습니다. 그 덤프는 DB 반입·이력 조회 확인에만 쓰고, 앱 기동 검증에는 쓰지 않습니다. 남은 `.partial` 기록 파일은 기동 검증에 쓰지 않습니다.
+- `백업 완료`(SQL 덤프 성공)와 `짝 기록 확인`(복원 기동 검증에 필요한 짝 기록 완성)은 따로 판정합니다. 배포는 `짝 기록 확인`이 나온 뒤에만 시작합니다.
+- `짝 기록 실패`(`기록 불완전`·`기록 중단`)면 정상 덤프는 지우지 않고 배포를 보류합니다. 출력된 원인(실행 중인 backend 없음, 태그·ID 불일치, revision 라벨 없음, 이력 조회 실패 등)을 해결한 뒤, 그 사이 배포·DDL이 없었다면 같은 셸에서 이 블록을 다시 실행해 같은 덤프의 짝 기록을 확보합니다. 그 사이 변경이 없었다고 확신할 수 없으면 덤프부터 다시 합니다. 짝 기록 없는 덤프는 DB 반입·이력 조회 확인에만 쓰고 앱 기동 검증에는 쓰지 않으며, 남은 `.partial` 기록 파일도 쓰지 않습니다.
 - 기록이 없는 기존 덤프의 이미지·이력 정보는 추정해서 채우지 않습니다.
 - 덤프 이후의 변경은 다음 덤프 전까지 덤프로 복구할 수 없습니다. binlog는 3일 보관하지만 binlog 재생 절차는 아직 없습니다.
 - 배포·마이그레이션 전에는 반드시 덤프를 하나 남깁니다. 정기 덤프 주기와 자동화는 미정입니다.
-- **순서:** 덤프 명령이 `백업 완료`를 출력하고 위 표의 파일 확인이 끝난 뒤에만 새 backend 배포(`APP up -d backend`, 이때 Flyway 마이그레이션이 실행됨)·수동 DDL을 시작합니다. 덤프가 도는 동안에는 새 backend 기동, 마이그레이션, DDL(`CREATE`·`ALTER`·`DROP`·`RENAME`·`TRUNCATE`)을 실행하지 않습니다.
+- **순서:** 덤프 → `백업 완료`와 파일 확인 → 짝 기록 → `짝 기록 확인`이 모두 끝난 뒤에만 새 backend 배포·마이그레이션·수동 DDL을 시작합니다(위의 배포 금지 구간).
 - `--single-transaction`은 InnoDB 테이블을 한 시점의 일관된 상태로 읽게 할 뿐, 다른 세션의 DDL 동시 실행은 막지 않습니다. 덤프 중 DDL이 실행되면 덤프가 실패하거나 테이블 구조와 데이터가 어긋난 덤프가 남을 수 있습니다.
 
 ### 복원 확인 (회차별 분리 프로젝트)
 
 복원은 운영 프로젝트(`beone-app`)에 하지 않습니다. 같은 Compose 파일을 **복원 회차마다 새 프로젝트**(`beone-app-restore-<UTC 시각>`)로 띄워, 그 프로젝트 전용의 새 볼륨에 덤프를 넣습니다. 기존 DB를 비우거나 볼륨을 지우는 방식은 쓰지 않으며, 이미 있는 프로젝트·볼륨은 다시 쓰지 않습니다. 운영 DB에는 쓰지 않고(이력 조회만 참고로 함), 운영 `.env`도 바꾸지 않습니다. 운영 DB를 덤프로 바꾸는 일은 이 확인이 끝난 뒤의 별도 결정이며 이 문서에 명령을 두지 않습니다.
+
+backend는 다음 네 조건을 **모두** 만족할 때만 기동합니다. ① 현재 회차 사전 검사 통과(2단계) ② 선택한 덤프의 반입 성공(5단계) ③ 백업 시점 이력 일치(6단계) ④ 덤프와 짝지어진 이미지 확인(3단계). ②~④는 현재 `RP`와 덤프 `D`에 묶여 있어 회차나 덤프를 바꾸면 무효가 됩니다. `RESTORE`도 같은 조건을 검사해, 조건을 채우지 못하면 `mysql`만 지정한 기동 외의 기동 명령(서비스 이름을 생략한 `up` 포함)을 막습니다. 멈춤(`stop`)과 진단 조회(`ps`·`logs`·`config`·`exec`)는 언제나 됩니다.
 
 backend는 **덤프와 짝지어진 기록의 이미지**로만 기동합니다. 최신 이미지로 대신 기동하거나 복원 DB에 새 마이그레이션을 적용하지 않습니다. 짝 기록이나 같은 이미지를 확보하지 못하면 DB 반입·이력 조회까지만 하고, 앱 기동·health 검증은 **미실행(미검증)**으로 남깁니다. 이 경우 복원·롤백 전체가 끝났다고 기록하지 않습니다.
 
@@ -271,12 +278,23 @@ df -h /; free -h; sudo docker system df; sudo docker volume ls --filter name=beo
 2. 함수 정의와 회차 사전 검사: `APP`(운영, 프로젝트 `beone-app` 고정)와 `RESTORE`(이 회차 `RP`만)를 정의하고, 새 회차 이름에 해당하는 컨테이너·볼륨·네트워크가 없는지 조회합니다. 세 조회가 **모두 성공하고 결과가 없을 때만** `새 회차`가 나오고 `RESTORE`가 열립니다. 조회 실패나 기존 자원 발견이면 `중단`이 나오며 `RESTORE`는 계속 차단됩니다. 이 블록은 처음에 이전 준비 상태를 지우므로, 다시 실행하면 이전 회차의 통과 상태로 우회되지 않습니다. `중단`이면 원인을 확인한 뒤 이 블록을 다시 실행합니다(1초 이상 지나 새 이름이 됩니다).
 
 ```bash
-unset RESTORE_READY_FOR RESTORE_IMAGE RESTORE_IMAGE_OK_FOR RESTORE_EXPECTED_ID
+unset RESTORE_READY_FOR RESTORE_IMAGE RESTORE_IMAGE_OK_FOR RESTORE_EXPECTED_ID RESTORE_IMPORT_OK_FOR RESTORE_IMPORT_TRIED_FOR RESTORE_HISTORY_OK_FOR H_BEFORE
 RP=beone-app-restore-$(date -u +%Y%m%d-%H%M%S)
 APP() { sudo docker compose -f /opt/beone/app/compose.yaml -p beone-app --env-file /opt/beone/app/.env "$@"; }
+restore_backend_ok() {
+	local k="${RP:-}|${D:-}"
+	[ -n "${RP:-}" ] && [ -n "${D:-}" ] && [ "${RESTORE_READY_FOR:-}" = "$RP" ] && [ "${RESTORE_IMPORT_OK_FOR:-}" = "$k" ] && [ "${RESTORE_HISTORY_OK_FOR:-}" = "$k" ] && [ "${RESTORE_IMAGE_OK_FOR:-}" = "$k" ] && [ -n "${RESTORE_EXPECTED_ID:-}" ]
+}
 RESTORE() {
+	local sub="${1:-}" a svc=""
 	[ -n "${RP:-}" ] && [ "${RESTORE_READY_FOR:-}" = "$RP" ] || { echo "RESTORE 차단: 이 셸에서 회차 사전 검사를 통과하지 않았습니다" >&2; return 1; }
-	case " $* " in *" backend "*) [ "${RESTORE_IMAGE_OK_FOR:-}" = "$RP" ] || { echo "RESTORE 차단: 덤프와 짝지어진 이미지가 확인되지 않아 backend는 다루지 않습니다(앱 기동 검증 미실행)" >&2; return 1; } ;; esac
+	case "$sub" in
+		config | ps | logs | stop | exec) ;;
+		up | start | restart | create)
+			for a in "${@:2}"; do case "$a" in -*) ;; *) svc="$svc $a" ;; esac; done
+			[ "$svc" = " mysql" ] || restore_backend_ok || { echo "RESTORE 차단: backend 기동 조건(사전 검사·반입 성공·백업 시점 이력 일치·짝 이미지 확인)을 모두 만족하지 않았습니다. 서비스 이름 없는 기동도 막습니다" >&2; return 1; } ;;
+		*) echo "RESTORE 차단: 이 절차에서 쓰지 않는 명령입니다(${sub:-없음})" >&2; return 1 ;;
+	esac
 	sudo env BEONE_API_IMAGE="${RESTORE_IMAGE:-beone-restore-image-not-verified}" docker compose -f /opt/beone/app/compose.yaml -p "$RP" --env-file /opt/beone/app/.env "$@"
 }
 q_ok=1
@@ -288,39 +306,50 @@ elif [ -n "$q_c" ] || printf '%s\n' "$q_v" "$q_n" | grep -qE "^${RP}_| ${RP}\$";
 else RESTORE_READY_FOR=$RP; echo "새 회차: $RP"; fi
 ```
 
-3. 덤프·짝 기록·이미지 확인(`D`는 복원할 덤프 파일): 기록의 체크섬이 덤프·이력 파일과 맞고, 기록된 태그의 로컬 이미지 ID가 기록된 ID와 같을 때만 `이미지 확인`이 나옵니다. 그때만 `RESTORE`의 backend 명령이 열리고, 기록된 태그가 이 회차의 이미지로 지정됩니다(운영 `.env`는 바꾸지 않음). 다른 결과면 4~6단계(DB 반입·이력 조회)만 하고 7단계는 미실행으로 남깁니다.
+3. 덤프·짝 기록·이미지 확인(`D`는 복원할 덤프 파일): 덤프를 고르면 이전 반입·이력·이미지 확인 상태를 모두 지웁니다. 기록의 체크섬이 덤프·이력 파일과 맞고, 기록된 태그의 로컬 이미지 ID가 기록된 ID와 같을 때만 `이미지 확인`이 나오고 조건 ④가 채워집니다. 기록된 태그가 이 회차의 이미지로 지정됩니다(운영 `.env`는 바꾸지 않음). 다른 결과면 4~6단계(DB 반입·이력 조회)만 하고 7단계는 미실행으로 남깁니다.
 
 ```bash
 D=/opt/beone/app/backups/<덤프 파일>.sql
-unset RESTORE_IMAGE RESTORE_IMAGE_OK_FOR RESTORE_EXPECTED_ID
+unset RESTORE_IMAGE RESTORE_IMAGE_OK_FOR RESTORE_EXPECTED_ID RESTORE_IMPORT_OK_FOR RESTORE_HISTORY_OK_FOR H_BEFORE
 rec_get() { sudo sed -n "s/^$1=//p" "$D.record"; }
 if ! sudo test -f "$D"; then echo "중단: 덤프 파일이 없습니다"
 elif ! sudo test -f "$D.record" || ! sudo test -f "$D.flyway"; then echo "짝 기록 없음: DB 반입·이력 조회만 합니다. 앱 기동·health는 미실행"
 elif [ "$(sudo sha256sum "$D" | cut -d' ' -f1)" != "$(rec_get dump_sha256)" ] || [ "$(sudo sha256sum "$D.flyway" | cut -d' ' -f1)" != "$(rec_get flyway_sha256)" ]; then echo "짝 기록 체크섬 불일치: DB 반입·이력 조회만 합니다. 앱 기동·health는 미실행"
 elif [ -z "$(rec_get image_id)" ] || [ -z "$(rec_get image_tag)" ] || [ "$(sudo docker image inspect --format '{{.Id}}' "$(rec_get image_tag)" 2> /dev/null)" != "$(rec_get image_id)" ]; then echo "기록된 이미지 없음 또는 ID 불일치($(rec_get image_tag)): 앱 기동·health는 미실행"
-else RESTORE_IMAGE=$(rec_get image_tag); RESTORE_EXPECTED_ID=$(rec_get image_id); RESTORE_IMAGE_OK_FOR=$RP; echo "이미지 확인: $RESTORE_IMAGE (revision $(rec_get image_revision))"; fi
+else RESTORE_IMAGE=$(rec_get image_tag); RESTORE_EXPECTED_ID=$(rec_get image_id); RESTORE_IMAGE_OK_FOR="$RP|$D"; echo "이미지 확인: $RESTORE_IMAGE (revision $(rec_get image_revision))"; fi
 ```
 
 4. 대상 확인과 MySQL 기동: `RESTORE config --services` → `mysql`, `backend` 두 줄만(다르면 멈춤). `RESTORE up -d mysql` 후 `RESTORE ps mysql`이 `healthy`가 될 때까지 봅니다. 볼륨은 이 회차 전용 `${RP}_mysql-data`로 새로 만들어집니다.
-5. 덤프 반입:
+5. 덤프 반입: 시작할 때 이전 반입·이력 확인 상태를 지우고, SQL 반입 명령 전체가 성공했을 때만 조건 ②를 이 `RP`·`D`에 남깁니다. 한 회차에는 한 번만 반입합니다. 반입이 실패한 회차는 그대로 두고(DB를 비우거나 볼륨을 지우지 않음), 다시 할 때는 2단계부터 새 회차·새 볼륨으로 합니다.
 
 ```bash
-( set -o pipefail; sudo cat "$D" | RESTORE exec -T mysql bash -c 'mysql --defaults-extra-file=<(printf "[client]\nuser=%s\npassword=%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD") "$MYSQL_DATABASE"' ) && echo "반입 완료: $RP" || echo "반입 실패: 운영 DB는 건드리지 않았습니다"
+if [ "${RESTORE_IMPORT_TRIED_FOR:-}" = "${RP:-}" ]; then echo "중단: 이 회차($RP)에는 이미 반입을 시도했습니다. 2단계부터 새 회차로 합니다"
+else
+	unset RESTORE_IMPORT_OK_FOR RESTORE_HISTORY_OK_FOR H_BEFORE; RESTORE_IMPORT_TRIED_FOR=$RP
+	if ( set -o pipefail; sudo cat "$D" | RESTORE exec -T mysql bash -c 'mysql --defaults-extra-file=<(printf "[client]\nuser=%s\npassword=%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD") "$MYSQL_DATABASE"' ); then RESTORE_IMPORT_OK_FOR="$RP|$D"; echo "반입 완료: $RP"
+	else echo "반입 실패: 6·7단계는 진행하지 않습니다(운영 DB는 건드리지 않음). 이 회차는 보존하고 새 회차로 다시 합니다"; fi
+fi
 ```
 
-6. Flyway 이력 비교: 기준은 덤프와 짝지어진 **백업 시점 이력**(`$D.flyway`)입니다. 운영 DB의 현재 이력은 참고로만 출력하며, 배포 후 달라졌다는 이유만으로 복원 실패로 보지 않습니다.
+6. Flyway 이력 비교: 이 `RP`·`D`의 반입 성공(조건 ②)이 있을 때만 실행합니다. 기준은 덤프와 짝지어진 **백업 시점 이력**(`$D.flyway`)이며, 일치할 때만 조건 ③을 남깁니다. 이력 조회 실패·기록 없음·불일치면 backend를 열지 않습니다. 운영 DB의 현재 이력은 참고로만 출력하며, 배포 후 달라졌다는 이유만으로 복원 실패로 보지 않습니다.
 
 ```bash
 restore_history() { RESTORE exec -T mysql bash -c 'mysql --defaults-extra-file=<(printf "[client]\nuser=%s\npassword=%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD") -N -B -e "SELECT installed_rank, version, script, checksum, success FROM flyway_schema_history ORDER BY installed_rank" "$MYSQL_DATABASE"' < /dev/null; }
-H_BEFORE=$(restore_history) && [ -n "$H_BEFORE" ] || echo "중단: 복원 DB 이력 조회 실패"
-if sudo test -f "$D.flyway"; then [ -n "$H_BEFORE" ] && [ "$H_BEFORE" = "$(sudo cat "$D.flyway")" ] && echo "백업 시점 이력과 일치" || echo "백업 시점 이력과 불일치: 멈추고 확인"; else echo "백업 시점 이력 기록 없음: 이력 일치 판정 미실행"; fi
-echo "[참고] 운영 DB 현재 이력:"; APP exec -T mysql bash -c 'mysql --defaults-extra-file=<(printf "[client]\nuser=%s\npassword=%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD") -N -B -e "SELECT installed_rank, version, script, checksum, success FROM flyway_schema_history ORDER BY installed_rank" "$MYSQL_DATABASE"' < /dev/null
+unset RESTORE_HISTORY_OK_FOR H_BEFORE
+if [ -z "${RP:-}" ] || [ -z "${D:-}" ] || [ "${RESTORE_IMPORT_OK_FOR:-}" != "$RP|$D" ]; then echo "6단계 미실행: 이 회차·덤프의 반입 성공이 확인되지 않았습니다"
+else
+	if ! H_BEFORE=$(restore_history) || [ -z "$H_BEFORE" ]; then echo "이력 조회 실패: backend는 열지 않습니다"
+	elif ! sudo test -f "$D.flyway"; then echo "백업 시점 이력 기록 없음: 이력 일치 판정 미실행, backend는 열지 않습니다"
+	elif [ "$H_BEFORE" = "$(sudo cat "$D.flyway")" ]; then RESTORE_HISTORY_OK_FOR="$RP|$D"; echo "백업 시점 이력과 일치"
+	else echo "백업 시점 이력과 불일치: backend는 열지 않습니다. 멈추고 확인"; fi
+	echo "[참고] 운영 DB 현재 이력:"; APP exec -T mysql bash -c 'mysql --defaults-extra-file=<(printf "[client]\nuser=%s\npassword=%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD") -N -B -e "SELECT installed_rank, version, script, checksum, success FROM flyway_schema_history ORDER BY installed_rank" "$MYSQL_DATABASE"' < /dev/null
+fi
 ```
 
-7. backend 기동과 health(3단계에서 `이미지 확인`일 때만): `RESTORE up -d backend` 후 `RESTORE ps backend`가 `healthy`가 될 때까지 봅니다. 이미지가 확인되지 않았으면 `RESTORE`가 backend 명령을 차단합니다. healthy가 되면 다음을 실행합니다.
+7. backend 기동과 health(조건 ①~④를 모두 만족할 때만): `RESTORE up -d backend` 후 `RESTORE ps backend`가 `healthy`가 될 때까지 봅니다. 조건을 채우지 못했으면 `RESTORE`가 기동을 막고, 아래 블록은 7단계 전체를 미실행으로 표시합니다. healthy가 되면 다음을 실행합니다.
 
 ```bash
-if [ "${RESTORE_IMAGE_OK_FOR:-}" != "$RP" ] || [ -z "${RESTORE_EXPECTED_ID:-}" ]; then echo "앱 기동·health 미실행(미검증): 덤프와 짝지어진 이미지가 확인되지 않았습니다"
+if ! restore_backend_ok; then echo "7단계 미실행(앱 기동·health 미검증): backend 기동 조건(사전 검사·반입 성공·백업 시점 이력 일치·짝 이미지 확인)을 모두 만족하지 않았습니다"
 else
 	cid=$(RESTORE ps -q backend)
 	[ -n "$cid" ] && [ "$(sudo docker inspect --format '{{.Image}}' "$cid")" = "$RESTORE_EXPECTED_ID" ] && echo "실행 이미지 = 기록 이미지" || echo "실행 이미지 불일치 또는 backend 없음: RESTORE stop backend"
@@ -332,7 +361,7 @@ fi
 
    기대: 이미지 일치, 적용 로그 0, 이력 유지, 마지막 줄에 `"status":"UP"`이 있고 `components`·`details`가 없음. 하나라도 다르면 `RESTORE stop backend` 후 확인합니다.
 
-8. 확인 뒤 종료와 기록: `RESTORE stop`은 이 회차의 컨테이너를 멈추기만 합니다. 컨테이너·네트워크·볼륨은 남고 삭제되지 않습니다(`down`·`-v`·`volume rm`은 쓰지 않습니다). 다음 복원은 이 프로젝트를 다시 쓰지 않고 2단계부터 새 회차로 합니다. 결과에는 DB 반입·이력 비교와 앱 기동·health를 나눠 적고, 7단계를 하지 못했으면 앱 기동은 미검증으로 적습니다.
+8. 확인 뒤 종료와 기록: `RESTORE stop`은 이 회차의 컨테이너를 멈추기만 합니다. 컨테이너·네트워크·볼륨은 남고 삭제되지 않습니다(`down`·`-v`·`volume rm`은 쓰지 않습니다). 반입·이력 확인에 실패한 회차도 그대로 보존합니다. 다음 복원은 이 프로젝트를 다시 쓰지 않고 2단계부터 새 회차·새 볼륨으로 합니다. 결과에는 DB 반입·이력 비교와 앱 기동·health를 나눠 적고, 7단계를 하지 못했으면 앱 기동은 미검증으로 적습니다.
 
 ## 롤백
 
