@@ -1,0 +1,1035 @@
+{
+  "schemaVersion": "0.1-draft",
+  "status": "DRAFT_CONDITIONAL_NOT_VERIFIED",
+  "reviewStatus": "PASSED_BY_USER_REVIEW_D06",
+  "purpose": "PRD §6: 20 standalone answer cases + 10 single-input mutations before rule-engine implementation",
+  "policyBasisCommit": "55ff483ba8e61623a3a0017f49e99701af09bd5d",
+  "defaults": {
+    "mode": "SYNTHETIC",
+    "currentAt": "2026-10-15",
+    "registeredAt": "2026-01-01",
+    "priorLedgerCompleteness": "Complete for each relevant prior-month performance window; empty means no eligible transactions",
+    "knownClassification": "merchantClass and paymentMethod are synthetic confirmed inputs, not inferred from CODEF or names",
+    "usedBenefitsWon": 0,
+    "ruleApplicability": "CANDIDATE rule snapshot only; no actual effective date or real-card SKU match asserted Cases without ruleSnapshot assume a rule snapshot that is valid on the order date; C02 supplies a synthetic snapshot whose validTo precedes the order date.",
+    "future": [],
+    "otherExclusions": "No gift card, installment, tenant shop, integrated telecom billing, cancellation, or competing benefit unless the case says so",
+    "stateProvenance": "SYNTHETIC for all inputs; no CODEF or real-account data",
+    "representativeCard": null,
+    "tieBreak": "Total monthly benefit, then current-order benefit, then the user-designated representative card if it is among the tied cards, then card ID string ascending (D-12). The last two steps are arbitrary rules that do not imply a better card.",
+    "cardStatusRule": "Card status is APPLIED if any service benefit above 0 won applies; APPLIED_CAP_REMAINING if any service formula amount is cut by the remaining cap; otherwise the reason code of the case."
+  },
+  "sources": {
+    "TI_BASE": "https://img2.kbcard.com/obj/card/download/09271__prdctOpmn_20240417.pdf (pp.1,3)",
+    "TI_STORE": "https://img2.kbcard.com/obj/card/download/09271__prdctOpmn_20240417.pdf (pp.1-4)",
+    "TT": "https://img2.kbcard.com/obj/card/download/09174__prdctOpmn_20260714.pdf (pp.1-2)",
+    "NO": "https://img2.kbcard.com/obj/card/download/01664__prdctOpmn_20260818.pdf (pp.1-2); https://card.kbcard.com/CRD/DVIEW/HCAMCXPRICAC0076?mainCC=a&cooperationcode=01664 (product detail)",
+    "CC": "https://img2.kbcard.com/obj/card/download/01914__prdctOpmn_20260818.pdf (pp.1-2)",
+    "D03": "../docs/decisions.md#d-03d-04-확정-정책",
+    "PRD_RULE": "../docs/PRD.md#fr-01-공식-약관과-규칙-데이터",
+    "PRD_OPT": "../docs/PRD.md#fr-05-결정론적-혜택-계산과-최적화",
+    "D10": "../docs/decisions.md#d-10d-12-확정-정책 (D-10: 노리 통신 할인은 건당 5만원 이상 2,500원 정액, 월 1회, 자동이체 등록)",
+    "D11": "../docs/decisions.md#d-10d-12-확정-정책 (D-11: 티타늄 포인트리 1점=1원 혜택으로 포함)",
+    "D12": "../docs/decisions.md#d-10d-12-확정-정책 (D-12: 동률 시 대표 카드, 이후 카드 ID 오름차순. 임의 규칙)"
+  },
+  "cases": [
+    {
+      "id": "C01",
+      "focus": "기본 적립",
+      "cards": [
+        "09271"
+      ],
+      "prior": [],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "ORDINARY_DOMESTIC",
+        "amountWon": 100000,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "09271": 1000
+        },
+        "selected": "09271",
+        "calculation": "100,000×1%=1,000",
+        "applicationStatusByCard": {
+          "09271": "APPLIED"
+        }
+      },
+      "sources": [
+        "TI_BASE",
+        "D11"
+      ]
+    },
+    {
+      "id": "C02",
+      "focus": "약관 버전 만료/부재",
+      "cards": [
+        "09271"
+      ],
+      "prior": [],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "ORDINARY_DOMESTIC",
+        "amountWon": 100000,
+        "paymentMethod": "DIRECT"
+      },
+      "ruleSnapshot": {
+        "09271": {
+          "ruleVersion": "SYNTHETIC_EXPIRY_TEST_V1",
+          "status": "SYNTHETIC_TEST_SNAPSHOT",
+          "validFrom": "2026-01-01",
+          "validTo": "2026-10-14"
+        }
+      },
+      "expected": {
+        "benefits": {
+          "09271": null
+        },
+        "selected": null,
+        "calculation": "합성 규칙의 유효기간이 2026-10-14에 끝났고 주문일은 2026-10-15이므로 계산하지 않고 확인 필요. 0원 아님",
+        "applicationStatusByCard": {
+          "09271": "RULE_EXPIRED"
+        }
+      },
+      "sources": [
+        "PRD_RULE",
+        "D03"
+      ]
+    },
+    {
+      "id": "C03",
+      "focus": "적립 제외",
+      "cards": [
+        "09271"
+      ],
+      "prior": [],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "TAX",
+        "amountWon": 100000,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "09271": 0
+        },
+        "selected": "09271",
+        "calculation": "세금·공과금은 기본 적립 제외",
+        "applicationStatusByCard": {
+          "09271": "NOT_APPLICABLE_EXCLUDED"
+        }
+      },
+      "sources": [
+        "TI_BASE"
+      ]
+    },
+    {
+      "id": "C04",
+      "focus": "선택 FUEL 업종 불일치와 기본 적립",
+      "cards": [
+        "09271"
+      ],
+      "prior": [
+        {
+          "cardId": "09271",
+          "at": "2026-09-15",
+          "amountWon": 400000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "GS25_STORE",
+        "amountWon": 50000,
+        "paymentMethod": "DIRECT"
+      },
+      "selection": {
+        "type": "FUEL",
+        "effectiveFrom": "2026-09-01"
+      },
+      "expected": {
+        "benefits": {
+          "09271": 500
+        },
+        "services": {
+          "09271:FUEL": 0,
+          "09271:BASE": 500
+        },
+        "selected": "09271",
+        "calculation": "GS25는 FUEL 대상 아님. 선택 할인 0, 일반 국내 기본 적립 50,000×1%=500",
+        "applicationStatusByCard": {
+          "09271": "APPLIED"
+        },
+        "serviceStatus": {
+          "09271:FUEL": "NOT_APPLICABLE_CATEGORY",
+          "09271:BASE": "APPLIED"
+        }
+      },
+      "sources": [
+        "TI_BASE",
+        "TI_STORE",
+        "D11"
+      ]
+    },
+    {
+      "id": "C05",
+      "focus": "Great 한도 완전 소진",
+      "cards": [
+        "09174"
+      ],
+      "prior": [
+        {
+          "cardId": "09174",
+          "at": "2026-09-15",
+          "amountWon": 300000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "STARBUCKS_STORE",
+        "amountWon": 20000,
+        "paymentMethod": "DIRECT"
+      },
+      "usedBenefits": {
+        "09174:Great": 10000
+      },
+      "expected": {
+        "benefits": {
+          "09174": 0
+        },
+        "selected": "09174",
+        "calculation": "Great 월 한도 10,000을 이미 모두 사용해 추가 할인 0",
+        "applicationStatusByCard": {
+          "09174": "LIMIT_EXHAUSTED"
+        }
+      },
+      "sources": [
+        "TT"
+      ]
+    },
+    {
+      "id": "C06",
+      "focus": "Great 정상 할인",
+      "cards": [
+        "09174"
+      ],
+      "prior": [
+        {
+          "cardId": "09174",
+          "at": "2026-09-15",
+          "amountWon": 300000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "STARBUCKS_STORE",
+        "amountWon": 20000,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "09174": 10000
+        },
+        "selected": "09174",
+        "calculation": "20,000×50%=10,000 (Great 월 상한)",
+        "applicationStatusByCard": {
+          "09174": "APPLIED"
+        }
+      },
+      "sources": [
+        "TT"
+      ]
+    },
+    {
+      "id": "C07",
+      "focus": "Great+Check 허용 중복",
+      "cards": [
+        "09174"
+      ],
+      "prior": [
+        {
+          "cardId": "09174",
+          "at": "2026-09-15",
+          "amountWon": 300000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "STARBUCKS_STORE",
+        "amountWon": 20000,
+        "paymentMethod": "ELIGIBLE_SIMPLE_PAY"
+      },
+      "expected": {
+        "benefits": {
+          "09174": 12000
+        },
+        "services": {
+          "09174:Great": 10000,
+          "09174:Check": 2000
+        },
+        "selected": "09174",
+        "calculation": "Great 10,000 + Check 20,000×10%=2,000",
+        "applicationStatusByCard": {
+          "09174": "APPLIED"
+        },
+        "serviceStatus": {
+          "09174:Great": "APPLIED",
+          "09174:Check": "APPLIED"
+        }
+      },
+      "sources": [
+        "TT"
+      ]
+    },
+    {
+      "id": "C08",
+      "focus": "실적 1원 미달",
+      "cards": [
+        "09174"
+      ],
+      "prior": [
+        {
+          "cardId": "09174",
+          "at": "2026-09-15",
+          "amountWon": 299999,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "STARBUCKS_STORE",
+        "amountWon": 20000,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "09174": 0
+        },
+        "selected": "09174",
+        "calculation": "전월 299,999 < 300,000",
+        "applicationStatusByCard": {
+          "09174": "NOT_APPLICABLE_PERFORMANCE"
+        }
+      },
+      "sources": [
+        "TT"
+      ]
+    },
+    {
+      "id": "C09",
+      "focus": "실적 제외 거래",
+      "cards": [
+        "09174"
+      ],
+      "prior": [
+        {
+          "cardId": "09174",
+          "at": "2026-09-15",
+          "amountWon": 290000,
+          "kind": "ORDINARY"
+        },
+        {
+          "cardId": "09174",
+          "at": "2026-09-20",
+          "amountWon": 20000,
+          "kind": "TAX"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "STARBUCKS_STORE",
+        "amountWon": 20000,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "09174": 0
+        },
+        "selected": "09174",
+        "calculation": "전월 승인 합계 310,000이나 세금 20,000 제외, 인정 290,000",
+        "applicationStatusByCard": {
+          "09174": "NOT_APPLICABLE_PERFORMANCE"
+        }
+      },
+      "sources": [
+        "TT"
+      ]
+    },
+    {
+      "id": "C10",
+      "focus": "Great 잔여한도",
+      "cards": [
+        "09174"
+      ],
+      "prior": [
+        {
+          "cardId": "09174",
+          "at": "2026-09-15",
+          "amountWon": 300000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "STARBUCKS_STORE",
+        "amountWon": 20000,
+        "paymentMethod": "DIRECT"
+      },
+      "usedBenefits": {
+        "09174:Great": 9000
+      },
+      "expected": {
+        "benefits": {
+          "09174": 1000
+        },
+        "selected": "09174",
+        "calculation": "산식 10,000, Great 남은 1,000",
+        "applicationStatusByCard": {
+          "09174": "APPLIED_CAP_REMAINING"
+        }
+      },
+      "sources": [
+        "TT"
+      ]
+    },
+    {
+      "id": "C11",
+      "focus": "노리 스타벅스 정상",
+      "cards": [
+        "01664"
+      ],
+      "prior": [
+        {
+          "cardId": "01664",
+          "at": "2026-09-15",
+          "amountWon": 200000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "STARBUCKS_STORE",
+        "amountWon": 10000,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "01664": 2000
+        },
+        "selected": "01664",
+        "calculation": "10,000×20%=2,000; 통합한도 10,000 이내",
+        "applicationStatusByCard": {
+          "01664": "APPLIED"
+        }
+      },
+      "sources": [
+        "NO"
+      ]
+    },
+    {
+      "id": "C12",
+      "focus": "노리 건당 최소금액 미달",
+      "cards": [
+        "01664"
+      ],
+      "prior": [
+        {
+          "cardId": "01664",
+          "at": "2026-09-15",
+          "amountWon": 200000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "STARBUCKS_STORE",
+        "amountWon": 9999,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "01664": 0
+        },
+        "selected": "01664",
+        "calculation": "스타벅스 건당 10,000 미달",
+        "applicationStatusByCard": {
+          "01664": "NOT_APPLICABLE_MIN_AMOUNT"
+        }
+      },
+      "sources": [
+        "NO"
+      ]
+    },
+    {
+      "id": "C13",
+      "focus": "노리 통신 자동납부",
+      "cards": [
+        "01664"
+      ],
+      "prior": [
+        {
+          "cardId": "01664",
+          "at": "2026-09-15",
+          "amountWon": 300000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "TELECOM_SKT",
+        "amountWon": 50000,
+        "paymentMethod": "AUTOPAY"
+      },
+      "expected": {
+        "benefits": {
+          "01664": 2500
+        },
+        "selected": "01664",
+        "calculation": "전월 300,000(통신 문턱 30만원), 자동납부 건당 50,000(이상이므로 정확히 5만원도 해당), 정액 2,500원·월 1회(D-10)",
+        "applicationStatusByCard": {
+          "01664": "APPLIED"
+        }
+      },
+      "sources": [
+        "NO",
+        "D10"
+      ]
+    },
+    {
+      "id": "C14",
+      "focus": "노리 취소는 접수월 실적에서 차감",
+      "cards": [
+        "01664"
+      ],
+      "prior": [
+        {
+          "cardId": "01664",
+          "at": "2026-09-15",
+          "amountWon": 300000,
+          "kind": "ORDINARY"
+        },
+        {
+          "cardId": "01664",
+          "at": "2026-08-20",
+          "amountWon": 100000,
+          "kind": "ORDINARY"
+        },
+        {
+          "cardId": "01664",
+          "at": "2026-09-25",
+          "amountWon": -100000,
+          "kind": "CANCEL_RECEIVED",
+          "originalAt": "2026-08-20"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "TELECOM_SKT",
+        "amountWon": 50000,
+        "paymentMethod": "AUTOPAY"
+      },
+      "expected": {
+        "benefits": {
+          "01664": 0
+        },
+        "selected": "01664",
+        "calculation": "취소는 접수월 실적에서 차감: 9월 300,000−100,000=200,000. 8/20 원거래는 8월 실적이라 9월에 포함되지 않음. 통신은 전월 30만원 필요하므로 0",
+        "applicationStatusByCard": {
+          "01664": "NOT_APPLICABLE_PERFORMANCE"
+        }
+      },
+      "sources": [
+        "NO"
+      ]
+    },
+    {
+      "id": "C15",
+      "focus": "노리 자동납부 방식 불일치",
+      "cards": [
+        "01664"
+      ],
+      "prior": [
+        {
+          "cardId": "01664",
+          "at": "2026-09-15",
+          "amountWon": 300000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "TELECOM_SKT",
+        "amountWon": 50000,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "01664": 0
+        },
+        "selected": "01664",
+        "calculation": "건당 금액·실적은 충족하나 자동납부 아님",
+        "applicationStatusByCard": {
+          "01664": "NOT_APPLICABLE_PAYMENT_METHOD"
+        }
+      },
+      "sources": [
+        "NO",
+        "D10"
+      ]
+    },
+    {
+      "id": "C16",
+      "focus": "첵첵 1구간 CU 정액",
+      "cards": [
+        "01914"
+      ],
+      "prior": [
+        {
+          "cardId": "01914",
+          "at": "2026-09-15",
+          "amountWon": 300000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "CU_STORE",
+        "amountWon": 10000,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "01914": 1000
+        },
+        "selected": "01914",
+        "calculation": "전월 300,000, CU 10,000 이상: 1,000",
+        "applicationStatusByCard": {
+          "01914": "APPLIED"
+        }
+      },
+      "sources": [
+        "CC"
+      ]
+    },
+    {
+      "id": "C17",
+      "focus": "첵첵 최소금액 미달",
+      "cards": [
+        "01914"
+      ],
+      "prior": [
+        {
+          "cardId": "01914",
+          "at": "2026-09-15",
+          "amountWon": 300000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "CU_STORE",
+        "amountWon": 9999,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "01914": 0
+        },
+        "selected": "01914",
+        "calculation": "CU 건당 10,000 미달; 적용 혜택 없음",
+        "applicationStatusByCard": {
+          "01914": "NOT_APPLICABLE_MIN_AMOUNT"
+        }
+      },
+      "sources": [
+        "CC"
+      ]
+    },
+    {
+      "id": "C18",
+      "focus": "첵첵 2구간 CU 정액",
+      "cards": [
+        "01914"
+      ],
+      "prior": [
+        {
+          "cardId": "01914",
+          "at": "2026-09-15",
+          "amountWon": 600000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "CU_STORE",
+        "amountWon": 10000,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "01914": 2000
+        },
+        "selected": "01914",
+        "calculation": "전월 600,000 이상, CU 건당 2,000",
+        "applicationStatusByCard": {
+          "01914": "APPLIED"
+        }
+      },
+      "sources": [
+        "CC"
+      ],
+      "usedBenefits": {}
+    },
+    {
+      "id": "C19",
+      "focus": "기간 경계 및 동률",
+      "cards": [
+        "01914",
+        "09271"
+      ],
+      "prior": [
+        {
+          "cardId": "01914",
+          "at": "2026-09-30",
+          "amountWon": 300000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-01",
+        "merchantClass": "CU_STORE",
+        "amountWon": 100000,
+        "paymentMethod": "DIRECT"
+      },
+      "expected": {
+        "benefits": {
+          "01914": 1000,
+          "09271": 1000
+        },
+        "selected": "01914",
+        "calculation": "9/30 실적 300,000; 10/1 주문: 첵첵 1,000 = 티타늄 1% 포인트리 1,000(D-11). 월간 총혜택·현재 주문 혜택이 같고 대표 카드가 없어 카드 ID 오름차순 01914 선택(임의 규칙, D-12)",
+        "applicationStatusByCard": {
+          "01914": "APPLIED",
+          "09271": "APPLIED"
+        },
+        "tie": [
+          "01914",
+          "09271"
+        ],
+        "tieBreak": "CARD_ID_ASC"
+      },
+      "sources": [
+        "CC",
+        "TI_BASE",
+        "PRD_OPT",
+        "D11",
+        "D12"
+      ]
+    },
+    {
+      "id": "C20",
+      "focus": "당장 최대와 월간 최대의 차이",
+      "cards": [
+        "09174",
+        "09271"
+      ],
+      "prior": [
+        {
+          "cardId": "09174",
+          "at": "2026-09-15",
+          "amountWon": 300000,
+          "kind": "ORDINARY"
+        }
+      ],
+      "current": {
+        "at": "2026-10-15",
+        "merchantClass": "STARBUCKS_STORE",
+        "amountWon": 10000,
+        "paymentMethod": "DIRECT"
+      },
+      "future": [
+        {
+          "at": "2026-10-20",
+          "merchantClass": "STARBUCKS_STORE",
+          "amountWon": 20000,
+          "paymentMethod": "DIRECT"
+        }
+      ],
+      "expected": {
+        "benefits": {
+          "09174": 5000,
+          "09271": 100
+        },
+        "selected": "09271",
+        "monthlyTotalWon": 10100,
+        "calculation": "즉시 톡톡 5,000>티타늄 100. 현재 티타늄 100+미래 톡톡 10,000=10,100; 현재 톡톡 5,000+미래 톡톡 잔여 5,000=10,000",
+        "applicationStatusByCard": {
+          "09174": "APPLIED",
+          "09271": "APPLIED"
+        }
+      },
+      "sources": [
+        "TT",
+        "TI_BASE",
+        "PRD_OPT",
+        "D11"
+      ]
+    }
+  ],
+  "mutations": [
+    {
+      "id": "M01",
+      "base": "C19",
+      "expected": {
+        "benefits": {
+          "01914": 1000,
+          "09271": 1000
+        },
+        "tie": [
+          "01914",
+          "09271"
+        ],
+        "tieBreak": "REPRESENTATIVE_CARD",
+        "selected": "09271",
+        "applicationStatusByCard": {
+          "01914": "APPLIED",
+          "09271": "APPLIED"
+        }
+      },
+      "calculation": "동률 카드 중 사용자가 지정한 대표 카드 09271이 카드 ID 순보다 먼저 적용(D-12 3단계, 임의 규칙)",
+      "dimension": "대표 카드 설정",
+      "patch": [
+        {
+          "op": "add",
+          "path": "/representativeCard",
+          "value": "09271"
+        }
+      ]
+    },
+    {
+      "id": "M02",
+      "base": "C06",
+      "expected": {
+        "benefits": {
+          "09174": 0
+        },
+        "selected": "09174",
+        "applicationStatusByCard": {
+          "09174": "NOT_APPLICABLE_PERFORMANCE"
+        }
+      },
+      "calculation": "11월 주문은 10월 실적을 본다. 완전한 합성 원장에 10월 승인 0원",
+      "dimension": "주문 날짜",
+      "patch": [
+        {
+          "op": "replace",
+          "path": "/current/at",
+          "value": "2026-11-01"
+        }
+      ]
+    },
+    {
+      "id": "M03",
+      "base": "C06",
+      "expected": {
+        "benefits": {
+          "09174": 0
+        },
+        "selected": "09174",
+        "applicationStatusByCard": {
+          "09174": "NOT_APPLICABLE_CATEGORY"
+        }
+      },
+      "calculation": "스타벅스 대상 분류가 아니므로 Great 불적용",
+      "dimension": "업종",
+      "patch": [
+        {
+          "op": "replace",
+          "path": "/current/merchantClass",
+          "value": "ORDINARY_DOMESTIC"
+        }
+      ]
+    },
+    {
+      "id": "M04",
+      "base": "C10",
+      "expected": {
+        "benefits": {
+          "09174": 3000
+        },
+        "services": {
+          "09174:Great": 1000,
+          "09174:Check": 2000
+        },
+        "selected": "09174",
+        "applicationStatusByCard": {
+          "09174": "APPLIED_CAP_REMAINING"
+        },
+        "serviceStatus": {
+          "09174:Great": "APPLIED_CAP_REMAINING",
+          "09174:Check": "APPLIED"
+        }
+      },
+      "calculation": "Great는 산식 10,000 중 잔여 1,000, Check 20,000×10%=2,000. 한도는 서비스별로 각각 차감",
+      "dimension": "결제 방식",
+      "patch": [
+        {
+          "op": "replace",
+          "path": "/current/paymentMethod",
+          "value": "ELIGIBLE_SIMPLE_PAY"
+        }
+      ]
+    },
+    {
+      "id": "M05",
+      "base": "C11",
+      "expected": {
+        "benefits": {
+          "01664": 0
+        },
+        "selected": "01664",
+        "applicationStatusByCard": {
+          "01664": "NOT_APPLICABLE_PERFORMANCE"
+        }
+      },
+      "calculation": "생활혜택 전월 20만원 문턱 1원 미달",
+      "dimension": "원장 거래",
+      "patch": [
+        {
+          "op": "replace",
+          "path": "/prior/0/amountWon",
+          "value": 199999
+        }
+      ]
+    },
+    {
+      "id": "M06",
+      "base": "C13",
+      "expected": {
+        "benefits": {
+          "01664": 0
+        },
+        "selected": "01664",
+        "applicationStatusByCard": {
+          "01664": "NOT_APPLICABLE_MIN_AMOUNT"
+        }
+      },
+      "calculation": "통신 자동납부 건당 5만원 문턱 1원 미달",
+      "dimension": "주문 금액",
+      "patch": [
+        {
+          "op": "replace",
+          "path": "/current/amountWon",
+          "value": 49999
+        }
+      ]
+    },
+    {
+      "id": "M07",
+      "base": "C13",
+      "expected": {
+        "benefits": {
+          "01664": 2500
+        },
+        "selected": "01664",
+        "applicationStatusByCard": {
+          "01664": "APPLIED"
+        }
+      },
+      "calculation": "건당 5만원 이상이면 금액과 관계없이 정액 2,500원, 월 1회(D-10). 5% 요율이면 4,000원이므로 정액 해석을 구분",
+      "dimension": "주문 금액",
+      "patch": [
+        {
+          "op": "replace",
+          "path": "/current/amountWon",
+          "value": 80000
+        }
+      ]
+    },
+    {
+      "id": "M08",
+      "base": "C18",
+      "expected": {
+        "benefits": {
+          "01914": 0
+        },
+        "selected": "01914",
+        "applicationStatusByCard": {
+          "01914": "LIMIT_EXHAUSTED"
+        }
+      },
+      "calculation": "2구간 CU 영역 한도 4,000 전부 소진",
+      "dimension": "월 한도 상태",
+      "patch": [
+        {
+          "op": "add",
+          "path": "/usedBenefits/01914:CU_AREA",
+          "value": 4000
+        }
+      ]
+    },
+    {
+      "id": "M09",
+      "base": "C20",
+      "expected": {
+        "benefits": {
+          "09174": 5000,
+          "09271": 100
+        },
+        "selected": "09174",
+        "monthlyTotalWon": 5000,
+        "applicationStatusByCard": {
+          "09174": "APPLIED",
+          "09271": "APPLIED"
+        }
+      },
+      "calculation": "예정 소비 없으면 현재 주문 최대인 톡톡 5,000 선택",
+      "dimension": "예정 소비",
+      "patch": [
+        {
+          "op": "replace",
+          "path": "/future",
+          "value": []
+        }
+      ]
+    },
+    {
+      "id": "M10",
+      "base": "C19",
+      "expected": {
+        "benefits": {
+          "09271": 1000
+        },
+        "selected": "09271",
+        "applicationStatusByCard": {
+          "09271": "APPLIED"
+        }
+      },
+      "calculation": "첵첵을 보유 카드에서 제거하면 티타늄 1,000만 비교",
+      "dimension": "카드 구성",
+      "patch": [
+        {
+          "op": "replace",
+          "path": "/cards",
+          "value": [
+            "09271"
+          ]
+        }
+      ]
+    }
+  ],
+  "reviewRecord": {
+    "recordedAt": "2026-10-09",
+    "basis": "The user confirmed that they personally verified the evaluation cases and that D-06 human cross-review passed. This records the user's verification result, not an administrative pass by request or a substitute AI review.",
+    "reviewer": "임재영",
+    "actualReviewDate": null,
+    "evidenceLocation": "NOTION",
+    "detailsPolicy": "Review evidence is maintained in the Notion document named D-06 사람 교차 검토. Consult that document for the reviewer, actual review date and per-case calculation records. The actual review date is not duplicated in this fixture; recordedAt is the repository record update date.",
+    "scope": "C01-C20 and M01-M10 user review; official SKU/effective-rule validation and executable engine tests remain separate.",
+    "evidenceDocument": "D-06 사람 교차 검토"
+  }
+}

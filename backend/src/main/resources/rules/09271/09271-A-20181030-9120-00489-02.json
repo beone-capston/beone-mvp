@@ -1,0 +1,323 @@
+{
+  "cardId": "09271",
+  "ruleVersion": "09271-A-20181030-9120-00489-02",
+  "status": "VERIFIED",
+  "evaluationOnly": false,
+  "validity": {
+    "from": "2024-04-17",
+    "to": null
+  },
+  "sources": [
+    {
+      "uri": "https://img2.kbcard.com/obj/card/download/09271__prdctOpmn_20240417.pdf",
+      "locator": "상품설명서 문서번호 A-20181030-9120-00489-02, 전체 5쪽"
+    },
+    {
+      "uri": "https://img2.kbcard.com/obj/contents/download/Terms_sheet_persnal_MERGE_09271.pdf",
+      "locator": "KB국민 신용카드 설명서(개인), 표기 24.11개정·9104·04101195, 전체 8쪽. 상품 내용은 2~3쪽"
+    }
+  ],
+  "policy": {
+    "performanceWindow": {
+      "value": "PREVIOUS_CALENDAR_MONTH",
+      "evidence": "E13"
+    },
+    "performanceDateBasis": {
+      "value": "APPROVAL",
+      "evidence": "E13"
+    },
+    "cancellationAttribution": {
+      "value": "RECEIPT_MONTH",
+      "evidence": "E13"
+    },
+    "performanceExcludedNatures": [
+      "TAX"
+    ],
+    "performanceExcludedClasses": [
+      "ANNUAL_FEE",
+      "APARTMENT_FEE",
+      "CANCELLED_AMOUNT",
+      "CARD_LOAN",
+      "CASH_ADVANCE",
+      "ELECTRICITY_WATER",
+      "FEES_AND_INTEREST",
+      "GIFT_CARD_PREPAID",
+      "GOVERNMENT_SUBSIDY",
+      "LATE_FEE",
+      "NON_APPROVAL_SLIP",
+      "SCHOOL_PAYMENT",
+      "TAX",
+      "UNIVERSITY_TUITION"
+    ],
+    "performanceExcludedClassesEvidence": "E14",
+    "excludesBenefitedSales": {
+      "value": true,
+      "evidence": "E14"
+    },
+    "limitPeriod": {
+      "value": "CALENDAR_MONTH",
+      "evidence": "E15"
+    },
+    "limitDeductionOrder": {
+      "unresolved": "승인 순서로 바꾸지 않음. 단일·비공유·월 버킷이고 사용액을 입력으로 받으므로 단일 주문 계산에 쓰지 않음"
+    },
+    "newCardGrace": {
+      "value": {
+        "span": "UNTIL_END_OF_NEXT_MONTH",
+        "days": null,
+        "deemedPerformance": 400000,
+        "services": [
+          "FUEL",
+          "STORE"
+        ],
+        "partialPerformance": "NEEDS_CONFIRMATION"
+      },
+      "evidence": "E5"
+    },
+    "inclusionUnconfirmed": [
+      {
+        "merchantClass": "LOCAL_TAX",
+        "relatedClass": "TAX"
+      },
+      {
+        "merchantClass": "POINTREE_CHARGE",
+        "relatedClass": "GIFT_CARD_PREPAID"
+      },
+      {
+        "merchantClass": "TRANSIT_BUS_SUBWAY",
+        "relatedClass": "NON_APPROVAL_SLIP"
+      },
+      {
+        "merchantClass": "POSTPAID_TRANSIT",
+        "relatedClass": "NON_APPROVAL_SLIP"
+      }
+    ]
+  },
+  "limitBuckets": [
+    {
+      "id": "FUEL",
+      "tiers": [
+        {
+          "minimumPerformance": 400000,
+          "monthlyCap": 10000
+        },
+        {
+          "minimumPerformance": 800000,
+          "monthlyCap": 30000
+        },
+        {
+          "minimumPerformance": 1200000,
+          "monthlyCap": 50000
+        }
+      ],
+      "parent": null,
+      "evidence": "E8"
+    },
+    {
+      "id": "STORE",
+      "tiers": [
+        {
+          "minimumPerformance": 400000,
+          "monthlyCap": 10000
+        },
+        {
+          "minimumPerformance": 800000,
+          "monthlyCap": 30000
+        },
+        {
+          "minimumPerformance": 1200000,
+          "monthlyCap": 50000
+        }
+      ],
+      "parent": null,
+      "evidence": "E9"
+    }
+  ],
+  "services": [
+    {
+      "id": "BASE",
+      "kind": "POINT_ACCRUAL",
+      "target": {
+        "type": "ALL_MERCHANTS"
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "ANNUAL_FEE",
+        "APARTMENT_FEE",
+        "CANCELLED_AMOUNT",
+        "CARD_LOAN",
+        "CASH_ADVANCE",
+        "ELECTRICITY_WATER",
+        "FEES_AND_INTEREST",
+        "GIFT_CARD_PREPAID",
+        "GOVERNMENT_SUBSIDY",
+        "LATE_FEE",
+        "SCHOOL_PAYMENT",
+        "TAX",
+        "UNIVERSITY_TUITION"
+      ],
+      "unevaluatedExclusions": [
+        "무이자할부"
+      ],
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 0,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 100
+            },
+            "evidence": "E1"
+          }
+        }
+      ],
+      "limitBuckets": [],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "기본 적립과 선택 할인의 동시 적용 여부 표기 없음. 적립 제외 대상에 선택 할인 건이 없다는 점은 정황일 뿐 근거가 아님"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "LOCAL_TAX",
+          "relatedClass": "TAX"
+        }
+      ],
+      "evidence": [
+        "E1",
+        "E2",
+        "E3",
+        "E4"
+      ]
+    },
+    {
+      "id": "FUEL",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "FUEL_STATION"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "무이자할부"
+      ],
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 400000,
+          "calculation": {
+            "unresolved": "기준유가 값과 적용 시점이 미확정이고 요율·정액 모델로 표현하지 못한다"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "FUEL"
+      ],
+      "requiresSelection": true,
+      "stackableWith": {
+        "unresolved": "기본 적립과 선택 할인의 동시 적용 여부 표기 없음. 적립 제외 대상에 선택 할인 건이 없다는 점은 정황일 뿐 근거가 아님"
+      },
+      "fractionalWon": {
+        "unresolved": "산식이 미확정이라 원 미만 처리를 정하지 않는다(2026-11-03 사용자 결정)"
+      },
+      "evidence": [
+        "E5",
+        "E6",
+        "E7",
+        "E8",
+        "E12"
+      ]
+    },
+    {
+      "id": "STORE",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "HYPERMARKET_EMART",
+          "HYPERMARKET_LOTTEMART",
+          "HYPERMARKET_HOMEPLUS",
+          "GS25_STORE",
+          "CU_STORE",
+          "COFFEE_BEVERAGE",
+          "PHARMACY"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "대형마트: 온라인쇼핑몰",
+        "대형마트: SSM(이마트에브리데이, 홈플러스 익스프레스, 롯데슈퍼)",
+        "대형마트: 해당 마트와 상이한 별도의 가맹점으로 승인 처리되는 마트 내 입점 매장",
+        "무이자할부",
+        "편의점, 커피전문점, 약국: 백화점, 대형마트, 호텔/콘도 등 대형시설 입점 점포로서 해당 대형시설의 가맹점번호를 사용하는 매장은 제외될 수 있음"
+      ],
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 400000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 500
+            },
+            "evidence": "E9"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "STORE"
+      ],
+      "requiresSelection": true,
+      "stackableWith": {
+        "unresolved": "기본 적립과 선택 할인의 동시 적용 여부 표기 없음. 적립 제외 대상에 선택 할인 건이 없다는 점은 정황일 뿐 근거가 아님"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "STARBUCKS_STORE",
+          "relatedClass": "COFFEE_BEVERAGE"
+        }
+      ],
+      "evidence": [
+        "E5",
+        "E6",
+        "E9",
+        "E10",
+        "E11",
+        "E12"
+      ]
+    }
+  ]
+}

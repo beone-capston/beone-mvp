@@ -1,0 +1,100 @@
+# BeONE 구조 안내
+
+## 이 문서의 목적
+
+처음 참여한 팀원이 저장소의 역할 분담과 코드를 읽는 순서를 이해하기 위한 안내입니다. 요구사항은 [PRD](PRD.md), 확정 결정과 미결 사항은 [결정 기록](decisions.md), 실행·검증 명령은 [README](../README.md)를 기준으로 합니다. 이 문서는 요구사항을 새로 결정하지 않습니다.
+
+## 모듈과 역할
+
+- [android/](../android/): Kotlin Android 앱. 제품에서는 React 화면을 표시할 WebView 셸과 기기 인증을 담당합니다. 기기 인증과 60초 활성 상태의 네이티브 기반은 [Android 기기 인증 안내](android/auth-session.md)에 있습니다. 인증 요청을 동시에 하나로 제한하고 앱 이탈로 취소한 요청의 최종 결과를 기다리는 요청 단계 관리(`AuthRequestGate`)는 검증용 구현입니다. 이 구조를 넣기 전 코드로 실기기 1~15번을 통과했고, 지금 코드는 같은 기기 한 대에서 주요 항목을 관측상 통과했습니다. 다만 `정리 중` 경로는 관측하지 못했고 16·17번은 미실행입니다([실기기 확인 목록](android/device-checklist.md)). 웹 ↔ 네이티브 브리지와 기기 인증 상태 전달은 아직 구현하지 않았습니다. debug 앱에 인증 점검 화면과 WebView 셸이 함께 있지만 서로 연결되어 있지 않습니다.
+  - WebView 셸의 기본 구조(신뢰 origin 설정 분리, 탐색 제한, debug 개발 서버 로딩)는 [Android WebView 셸 안내](android/webview-shell.md)에 있으며, 실기기 관측은 끝나지 않았습니다. release는 주소를 설정하지 않아 아무 페이지도 불러오지 않습니다. 배포 앱이 서버 HTTPS 화면을 불러오는 방침은 [D-25](decisions.md#d-25-확정-정책)에 있으며, release 로딩 구현과 신뢰 origin 반영은 아직 하지 않았습니다. 브리지 공개 계약은 [D-21](decisions.md#d-21-확정-정책)의 후보입니다.
+- [frontend/](../frontend/): Vite·React·TypeScript 웹. 주문, 카드 상태, 추천 결과를 보여줄 화면 영역이며 현재는 초기 구성 단계입니다.
+- [backend/](../backend/): Java 21·Spring Boot API. 카드 규칙과 계산 입출력 모델, 공통 API 응답·예외 처리를 보유합니다. DB 마이그레이션은 Flyway로 관리합니다.
+- [docs/](./): 요구사항, 결정, 조사·평가 자료와 개발 안내.
+- [fixtures/](../fixtures/): 비식별 평가·시연 데이터. 테스트용 합성 값은 실제 관측값과 구분합니다.
+- [deploy/](../deploy/): 배포용 Compose(백엔드·MySQL, 호스트 포트 비공개)와 이미지 빌드·로컬 검증 스크립트. 서버 적용과 외부 API 공개는 아직 하지 않았습니다([백엔드 배포 기반](deployment/backend-compose.md)).
+
+세 애플리케이션은 독립적으로 빌드·테스트합니다. 실행 방법을 이 문서에 중복해서 관리하지 않습니다.
+
+## 도메인이란?
+
+도메인은 제품에서 다루는 문제 영역입니다. 패키지는 관련 코드를 묶는 단위입니다. 하나의 도메인 안에 식별자, 입력, 규칙, 결과 등 여러 책임의 패키지가 들어갈 수 있습니다.
+
+현재 설명 문서가 있는 도메인:
+
+- [benefit: 카드 혜택 규칙과 계산 입출력](domains/benefit.md)
+  - 위치: `backend/src/main/java/com/beone/api/benefit/`
+  - 하위 패키지: `engine`, `card`, `money`, `state`, `input`, `rule`, `primitive`, `result`
+  - 책임: 안전한 데이터 표현, 입력·결과 일관성 검사, 규칙 JSON 로드(`rule.loading`, 잘못되면 서버 시작 실패), 날짜에 맞는 검증 규칙 선택, 서비스 한 건의 산식·개별 조건 판정(`primitive`), 서비스 후보·채택·기여액 결과 표현(`result`).
+  - 범위 밖: 판정을 묶어 카드별 혜택을 내는 계산·최적화 엔진, HTTP 추천 API, CODEF 통신 구현.
+- [codef: CODEF 카드 응답 해석 경계](domains/codef.md)
+  - 위치: `backend/src/main/java/com/beone/api/codef/`
+  - 책임: 승인내역·보유카드·실적조회 응답 본문에서 결과 코드 분류와 비민감 필드만 해석. 빈 값·형식 오류를 0원이나 0건으로 바꾸지 않고, 민감 필드를 옮기지 않습니다. 해석된 KB 승인내역 한 건의 취소 표현 형태를 기술합니다(#45, 금액 계산·매칭 없음). 그 앞단 전송 단계(#43)는 입력받은 HTTP 상태를 200·401·그 밖으로 나누고, 200 본문만 URL 디코딩해 해석합니다. `codef.transport`(#62)는 토큰 발급·캐시, 상품 요청, 시간 초과, 호출 상한을 맡습니다. 키가 없어도 서버는 뜨고 CODEF 호출만 실패합니다.
+  - 범위 밖: 자동 재시도, 계정 연결(connectedId)·RSA 암호화·추가 인증 요청, 이 패키지를 호출하는 엔드포인트, DB 저장, BeONE 상태값으로의 변환. `benefit`·`common.web`에 의존하지 않습니다.
+
+도메인이 아닌 공통 웹 기반 코드:
+
+- `common.web`: 공통 API 응답 형식과 예외 처리
+  - 위치: `backend/src/main/java/com/beone/api/common/web/`
+  - 책임: 성공·실패 응답 형식, 공통 오류 코드, 요청 오류·예상하지 못한 오류의 HTTP 응답 변환과 안전한 로그.
+  - 의존 방향: 컨트롤러·예외 처리기 같은 웹 경계에서만 사용합니다. 도메인 코드는 이 패키지에 의존하지 않습니다.
+  - 설명 문서: [API 공통 응답·오류 처리](api.md)
+
+## 사용자 식별과 업무 API (결정만, 미구현)
+
+- 사용자 식별은 [D-09](decisions.md#d-09d-14-확정-정책)에 따라 MVP 한정으로 고정 시연 사용자 2명(내 카드·가상 포트폴리오)을 씁니다. 로그인은 없고, 현재 사용자는 서버의 한 곳에서만 정합니다. 사용자 데이터는 `user_id`로 나눠 저장합니다. 이는 `local`·`demo` 환경의 문서 계약이며(프로필과 현재 사용자 결정 지점은 아직 구현되지 않음), 공개 회원 환경은 [D-24](decisions.md#d-24-확정-정책)(구현 전)를 따릅니다.
+- 업무 API는 [D-14](decisions.md#d-09d-14-확정-정책)에 따라 `/api/v1/me/...` 형태로 둡니다. 1차는 수동 입력·가상 포트폴리오, 2차는 CODEF 연결·조회입니다.
+- 개별 API 명세는 [`docs/api/`](api/README.md)에 있습니다(2026-11-03, 구현 전).
+- 2026-11-04 기준 업무 API·DB 테이블·인증 계층은 없습니다.
+
+## 업무 API 패키지 구조 (D-23, 미구현)
+
+[D-23](decisions.md#d-23-확정-정책)이 정한 구조입니다. 패키지는 아직 없습니다.
+
+```text
+com.beone.api
+├── user            # CurrentUserResolver, 시연 사용자
+├── card            # 보유 카드, 매핑, 상품 조회
+├── preference      # 결제 전 설정
+├── monthlystate    # 월간 상태
+├── order           # 주문, 예정 소비
+├── recommendation  # 추천 저장·조회, 엔진 호출
+├── payment         # 모의 승인·취소, 멱등 키
+└── ledger          # 원장
+    각 패키지 안: web/(Controller, 요청·응답 DTO), application/(서비스), persistence/(엔티티, 저장소)
+```
+
+- `com.beone.api.card`는 보유 카드 기능이고 `com.beone.api.benefit.card`는 엔진의 식별자 타입입니다. 전체 경로가 달라 충돌하지 않습니다.
+- 혜택 계산은 [엔진 입구](domains/benefit.md#engine-업무-api의-입구) `benefit.engine`만 부릅니다. 카드 상품 조회의 `RuleCatalog` 읽기만 예외입니다. 금액 판단을 업무 코드에 복제하지 않습니다.
+- 응답은 `ApiResponse`, 기능 오류는 패키지별 `ApiErrorCode`와 높은 우선순위의 처리기로 추가합니다. `ApiErrorCode`와 `common.web`은 웹 경계에서만 씁니다.
+- 카드 상품 테이블을 두지 않습니다. 규칙 JSON이 원본이고 보유 카드는 `card_product_id` 문자열로 참조합니다. Flyway 번호 규칙은 D-23을 따릅니다.
+- 화면 연결은 CORS 허용 목록을 씁니다. `X-BeONE-Demo-User` 때문에 사전 요청이 항상 발생하므로 허용 헤더에 넣습니다.
+
+## 데이터 흐름과 현재 구현의 경계
+
+아래는 모델을 연결하는 개념 흐름이며 완성된 실행 경로가 아닙니다.
+
+```text
+업무 API
+    → RecommendationEngine(benefit.engine) [입구 타입만 있음, 구현은 후속]
+주문·보유 카드·거래 원장·월별 상태·예정 지출
+    → RecommendationInput
+카드 약관과 검증된 규칙 버전
+    → RuleCatalog → RuleSelection
+두 입력을 사용한 혜택 계산·최적화 [후속 구현]
+    → CardBenefit → Recommendation [결과 모델]
+```
+
+실제 결제는 제품 범위가 아닙니다. CODEF 실거래와 자체 모의 거래 원장은 분리합니다. 확인되지 않은 상태·규칙·혜택 금액을 0원으로 대체하지 않습니다.
+
+## 코드를 읽는 순서
+
+1. [benefit 안내](domains/benefit.md)에서 용어와 패키지 책임을 확인합니다.
+2. `RecommendationInput`으로 계산에 필요한 입력을 살펴봅니다.
+3. `CardRuleVersion`과 `RuleCatalog`로 규칙 표현과 선택을 살펴보고, [규칙 데이터 안내](rules/README.md)에서 로더가 읽는 JSON을 확인합니다.
+4. `Recommendation`과 `BenefitAmount`로 결과와 불확실성 표현을 확인합니다.
+5. `backend/src/test/java/com/beone/api/benefit/`에서 모델 검증과 fixture 매핑 테스트를 읽습니다. 매핑 성공은 계산 엔진 정확성이나 공식 약관 검증 완료를 뜻하지 않습니다.
+
+## 문서 유지
+
+도메인 추가·이동·삭제나 도메인 간 관계 변경 시 이 문서를 갱신합니다. 세부 클래스 설명은 해당 도메인 문서에서 관리합니다. 작성·갱신 규칙은 [CLAUDE.md](../CLAUDE.md)의 도메인·구조 문서 유지, PR 확인 항목은 [CONTRIBUTING.md](../CONTRIBUTING.md)를 따릅니다.

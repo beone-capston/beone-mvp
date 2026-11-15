@@ -14,11 +14,14 @@ frontend/   React 웹 (Vite + TypeScript)
 backend/    Spring Boot API (Java 21, MySQL)
 docs/       PRD, 결정 기록, 코드·테스트 컨벤션
 fixtures/   평가·시연용 데이터 (fixtures/private/ 는 git 제외)
+deploy/     배포용 Compose와 이미지 빌드·로컬 검증 스크립트
 docker-compose.yml   로컬 MySQL
 .env.example         환경변수 예시
 ```
 
 세 애플리케이션은 각각 독립적으로 빌드·테스트합니다. 루트에는 공용 빌드 도구가 없습니다.
+
+백엔드 배포 이미지와 배포 Compose는 [백엔드 배포 기반](docs/deployment/backend-compose.md)에 있습니다. 로컬 개발 실행은 아래 절차를 그대로 따릅니다.
 
 ## 요구 환경
 
@@ -35,7 +38,7 @@ docker-compose.yml   로컬 MySQL
 |---|---|
 | backend | Spring Boot 4.1.1, Gradle 9.7.1 (Groovy DSL), Flyway, MySQL Connector/J, Testcontainers |
 | frontend | React 19, Vite 8, TypeScript 6.0, Vitest 5, Testing Library, oxlint |
-| android | AGP 9.1.1, Gradle 9.3.1 (Kotlin DSL), compileSdk/targetSdk 36, minSdk 30, AppCompat |
+| android | AGP 9.1.1, Gradle 9.3.1 (Kotlin DSL), compileSdk/targetSdk 36, minSdk 30, AppCompat, androidx.biometric 1.1.0 |
 | DB | MySQL 8.4.11 (docker-compose와 Testcontainers가 같은 이미지 사용) |
 
 ## 환경변수
@@ -45,7 +48,7 @@ cp .env.example .env
 ```
 
 - `.env`는 git에서 제외됩니다. 실제 값은 절대 커밋하지 않습니다.
-- CODEF 키(`CODEF_*`)는 **서버(backend)에서만** 사용합니다. `android/`와 `frontend/`에 넣지 않습니다.
+- CODEF 키(`CODEF_*`)는 **서버(backend)에서만** 사용합니다. `android/`와 `frontend/`에 넣지 않습니다. 키가 없어도 서버는 뜨고 CODEF 호출만 실패합니다. 변수 목록은 [CODEF 설정과 샌드박스 확인 절차](docs/development/codef-sandbox-check.md)를 봅니다.
 - `frontend/.env.example`은 프론트엔드 전용 공개 설정(`VITE_API_BASE_URL`)입니다. `VITE_` 변수는 번들에 포함되므로 비밀값을 넣지 않습니다.
 
 ## 실행
@@ -84,6 +87,8 @@ cd android
 ./gradlew installDebug
 ```
 
+debug 앱은 개발 서버 `http://localhost:5173/`을 엽니다. 실기기에서는 프런트엔드 개발 서버를 켠 뒤 `adb reverse tcp:5173 tcp:5173`으로 연결합니다. 주소는 `./gradlew installDebug -Pbeone.devServerUrl=<주소>`로 바꿀 수 있습니다. debug에서 평문 HTTP는 `localhost`·`127.0.0.1`·`10.0.2.2`에만 허용되므로, 그 밖의 주소는 기기가 신뢰하는 시스템 인증서의 HTTPS여야 합니다. 실기기에서는 LAN 주소 대신 `adb reverse`를 쓸 수 있습니다. release 앱의 웹 화면 주소는 아직 정하지 않았습니다([`docs/android/webview-shell.md`](docs/android/webview-shell.md)).
+
 ## 빌드·테스트
 
 ### Backend
@@ -91,10 +96,14 @@ cd android
 | 명령 | 내용 | Docker |
 |---|---|---|
 | `./gradlew test` | 단위 테스트 (Spring 컨텍스트·DB 없음) | 불필요 |
+| `./gradlew webTest` | `@WebSliceTest` 웹 슬라이스 테스트 (MockMvc, DB 없음) | 불필요 |
 | `./gradlew integrationTest` | `@IntegrationTest` 통합 테스트 (Testcontainers MySQL) | 필요 |
-| `./gradlew build` | 단위 + 통합 테스트 + 빌드 | 필요 |
+| `./gradlew codefSandboxCheck` | CODEF 샌드박스 형식 확인. **외부를 호출하고 키가 필요합니다.** `check`·`build`에 들지 않으며 [절차](docs/development/codef-sandbox-check.md)대로 사용자가 직접 실행합니다 | 불필요 |
+| `./gradlew build` | 단위 + 웹 + 통합 테스트 + 빌드 | 필요 |
 
 - 통합 테스트는 `com.beone.api.support.IntegrationTest` 어노테이션을 붙입니다. `integration` 태그가 붙어 `test` 태스크에서는 제외됩니다.
+- 웹 슬라이스 테스트는 `com.beone.api.support.WebSliceTest` 어노테이션을 붙입니다. `web` 태그가 붙어 `webTest`에서만 실행됩니다. `check`·`build`는 `webTest`와 `integrationTest`를 함께 실행하므로 Docker가 필요합니다.
+- API 응답 형식과 오류 처리는 [`docs/api.md`](docs/api.md)를 따릅니다.
 - MySQL 버전을 바꿀 때는 `docker-compose.yml`과 `backend/src/test/java/com/beone/api/support/MySqlImage.java`를 함께 수정합니다. 두 값이 다르면 `MySqlVersionAlignmentTest`가 실패합니다.
 - DB 스키마는 Flyway 마이그레이션(`backend/src/main/resources/db/migration`)으로만 변경합니다.
 
@@ -114,6 +123,8 @@ npm run build
 cd android
 ./gradlew assembleDebug testDebugUnitTest lintDebug
 ```
+
+debug 빌드에는 실기기 인증 확인용 **B:ONE 인증 점검** 화면이 함께 설치됩니다(release 미포함). 확인 항목은 [`docs/android/device-checklist.md`](docs/android/device-checklist.md)에 있습니다.
 
 계측 테스트(`connectedAndroidTest`)는 아직 작성하지 않았습니다. 추가하면 기기 또는 에뮬레이터를 연결해 실행합니다. 생체인증·기기 PIN·60초 활성화의 최종 확인은 에뮬레이터가 아닌 실제 Android 기기에서 합니다 ([PRD FR-06](docs/PRD.md)).
 

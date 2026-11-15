@@ -1,0 +1,7 @@
+# TEMP-WEBVIEW-FIXTURE 생성물
+node_modules/
+dist/
+logs/
+*.log
+*.jsonl
+.vite/

@@ -1,0 +1,533 @@
+{
+  "cardId": "01664",
+  "ruleVersion": "01664-B-20101223-9162-00045-12",
+  "status": "VERIFIED",
+  "evaluationOnly": false,
+  "validity": {
+    "from": "2026-08-18",
+    "to": null
+  },
+  "sources": [
+    {
+      "uri": "https://img2.kbcard.com/obj/card/download/01664__prdctOpmn_20260818.pdf",
+      "locator": "상품설명서 문서번호 B-20101223-9162-00045-12, 전체 3쪽"
+    },
+    {
+      "uri": "https://card.kbcard.com/CRD/DVIEW/HCAMCXPRICAC0076?mainCC=a&cooperationcode=01664",
+      "locator": "KB 상품 페이지, 심의필 260522-01722-HPP(2026.05.22), 2026-11-03 조회. 내용이 바뀔 수 있음"
+    }
+  ],
+  "policy": {
+    "performanceWindow": {
+      "value": "PREVIOUS_CALENDAR_MONTH",
+      "evidence": "E11"
+    },
+    "performanceDateBasis": {
+      "value": "USAGE",
+      "evidence": "E11"
+    },
+    "cancellationAttribution": {
+      "value": "RECEIPT_MONTH",
+      "evidence": "C1"
+    },
+    "performanceExcludedNatures": [],
+    "performanceExcludedClasses": [
+      "OVERSEAS_USE",
+      "POSTPAID_TRANSIT"
+    ],
+    "performanceExcludedClassesEvidence": "C3",
+    "excludesBenefitedSales": {
+      "unresolved": "할인받은 매출을 실적에서 빼는 표기 없음. false로 단정하지 않고 확인 필요"
+    },
+    "limitPeriod": {
+      "value": "CALENDAR_MONTH",
+      "evidence": "E10"
+    },
+    "limitDeductionOrder": {
+      "value": "PURCHASE_ORDER",
+      "evidence": "E12"
+    },
+    "newCardGrace": {
+      "value": {
+        "span": "DAYS_FROM_REGISTRATION",
+        "days": 60,
+        "deemedPerformance": 200000,
+        "services": [
+          "CGV",
+          "OUTBACK_VIPS",
+          "STARBUCKS",
+          "THEME_PARK",
+          "GS25",
+          "KYOBO"
+        ],
+        "partialPerformance": "NEEDS_CONFIRMATION"
+      },
+      "evidence": "E13"
+    },
+    "inclusionUnconfirmed": [
+      {
+        "merchantClass": "TRANSIT_BUS_SUBWAY",
+        "relatedClass": "POSTPAID_TRANSIT"
+      }
+    ]
+  },
+  "limitBuckets": [
+    {
+      "id": "COMMON",
+      "tiers": [
+        {
+          "minimumPerformance": 200000,
+          "monthlyCap": 10000
+        },
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 20000
+        },
+        {
+          "minimumPerformance": 500000,
+          "monthlyCap": 30000
+        },
+        {
+          "minimumPerformance": 1000000,
+          "monthlyCap": 50000
+        }
+      ],
+      "parent": null,
+      "evidence": "E10"
+    },
+    {
+      "id": "TRANSIT",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 2000
+        }
+      ],
+      "parent": "COMMON",
+      "evidence": "E1"
+    },
+    {
+      "id": "TELECOM",
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "monthlyCap": 2500
+        }
+      ],
+      "parent": "COMMON",
+      "evidence": "E2"
+    }
+  ],
+  "services": [
+    {
+      "id": "CGV",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "CGV_THEATER"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "매점 이용분",
+        "인터넷 예매는 영화관 직영 홈페이지·스마트폰 앱 결제만"
+      ],
+      "minimumAmount": 10000,
+      "maximumTargetAmount": 20000,
+      "tiers": [
+        {
+          "minimumPerformance": 200000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 3500
+            },
+            "evidence": "E3"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "COMMON"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "같은 카드 안의 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E3",
+        "E10"
+      ]
+    },
+    {
+      "id": "OUTBACK_VIPS",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "OUTBACK",
+          "VIPS"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "백화점·대형할인점 입점 점포"
+      ],
+      "minimumAmount": 30000,
+      "maximumTargetAmount": 50000,
+      "tiers": [
+        {
+          "minimumPerformance": 200000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 2000
+            },
+            "evidence": "E4"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "COMMON"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "같은 카드 안의 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E4",
+        "E10"
+      ]
+    },
+    {
+      "id": "STARBUCKS",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "STARBUCKS_STORE"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [
+        "GIFT_CARD_PREPAID"
+      ],
+      "unevaluatedExclusions": [
+        "백화점, 대형마트 등에 입점된 일부 매장은 할인 적용에서 제외"
+      ],
+      "minimumAmount": 10000,
+      "maximumTargetAmount": 20000,
+      "tiers": [
+        {
+          "minimumPerformance": 200000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 2000
+            },
+            "evidence": "E5"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "COMMON"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "같은 카드 안의 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "COFFEE_BEVERAGE",
+          "relatedClass": "STARBUCKS_STORE"
+        }
+      ],
+      "evidence": [
+        "E5",
+        "E10"
+      ]
+    },
+    {
+      "id": "THEME_PARK",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "THEME_PARK_EVERLAND",
+          "THEME_PARK_LOTTEWORLD"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [],
+      "minimumAmount": 30000,
+      "maximumTargetAmount": 50000,
+      "tiers": [
+        {
+          "minimumPerformance": 200000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 5000
+            },
+            "evidence": "E6"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "COMMON"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "같은 카드 안의 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E6",
+        "E10"
+      ]
+    },
+    {
+      "id": "GS25",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "GS25_STORE"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [],
+      "minimumAmount": 10000,
+      "maximumTargetAmount": 20000,
+      "tiers": [
+        {
+          "minimumPerformance": 200000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 500
+            },
+            "evidence": "E7"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "COMMON"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "같은 카드 안의 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E7",
+        "E10"
+      ]
+    },
+    {
+      "id": "KYOBO",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "KYOBO_BOOKSTORE",
+          "KYOBO_ONLINE"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [
+        "핫트랙스",
+        "인터넷 결제는 교보문고 직영 홈페이지만(상품 페이지: 홈페이지·앱)"
+      ],
+      "minimumAmount": 20000,
+      "maximumTargetAmount": 50000,
+      "tiers": [
+        {
+          "minimumPerformance": 200000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 500
+            },
+            "evidence": "E8"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "COMMON"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "같은 카드 안의 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E8",
+        "E10"
+      ]
+    },
+    {
+      "id": "TRANSIT",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "TRANSIT_BUS_SUBWAY",
+          "TRANSIT_INTERCITY_BUS"
+        ]
+      },
+      "paymentMethods": [
+        "DIRECT",
+        "ELIGIBLE_SIMPLE_PAY",
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [],
+      "minimumAmount": 0,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "RATE",
+              "basisPoints": 1000
+            },
+            "evidence": "E1"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "TRANSIT"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "같은 카드 안의 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "inclusionUnconfirmed": [
+        {
+          "merchantClass": "POSTPAID_TRANSIT",
+          "relatedClass": "TRANSIT_BUS_SUBWAY"
+        }
+      ],
+      "evidence": [
+        "E1",
+        "E10"
+      ]
+    },
+    {
+      "id": "TELECOM",
+      "kind": "BILLING_DISCOUNT",
+      "target": {
+        "type": "SPECIFIC_CLASSES",
+        "classes": [
+          "TELECOM_SKT",
+          "TELECOM_KT",
+          "TELECOM_LGU"
+        ]
+      },
+      "paymentMethods": [
+        "AUTOPAY"
+      ],
+      "excludedClasses": [],
+      "unevaluatedExclusions": [
+        "유무선 통신요금 통합청구금액 자동이체"
+      ],
+      "minimumAmount": 50000,
+      "maximumTargetAmount": null,
+      "tiers": [
+        {
+          "minimumPerformance": 300000,
+          "calculation": {
+            "value": {
+              "type": "FIXED_AMOUNT",
+              "won": 2500
+            },
+            "evidence": "E2"
+          }
+        }
+      ],
+      "limitBuckets": [
+        "TELECOM"
+      ],
+      "requiresSelection": false,
+      "stackableWith": {
+        "unresolved": "같은 카드 안의 서비스 간 중복 표기 없음"
+      },
+      "fractionalWon": {
+        "value": "TRUNCATE",
+        "basis": "USER_DECISION",
+        "decision": "D-03"
+      },
+      "evidence": [
+        "E2",
+        "E10"
+      ]
+    }
+  ]
+}
