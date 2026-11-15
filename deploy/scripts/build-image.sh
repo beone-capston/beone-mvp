@@ -7,7 +7,7 @@
 #
 # uncommitted: 태그 beone-api:verify-<기준12자리>-uncommitted-<UTC시각>, 라벨 beone.source.state=uncommitted.
 #              소스 리비전 라벨(org.opencontainers.image.revision)은 붙이지 않는다.
-# final:       작업 트리가 깨끗할 때만 빌드한다. 태그 beone-api:<커밋12자리>, 리비전 라벨에 전체 SHA.
+# final:       작업 트리가 깨끗하고 backend/src/main 아래 ignored 파일이 없을 때만 빌드한다. 태그 beone-api:<커밋12자리>, 리비전 라벨에 전체 SHA.
 # tar경로를 주면 docker save로 저장하고 sha256을 출력한다. 비밀값은 다루지 않는다.
 set -euo pipefail
 
@@ -25,6 +25,12 @@ case "$mode" in
 	final)
 		if [ -n "$(git -C "$repo" status --porcelain --untracked-files=all)" ]; then
 			die "작업 트리가 깨끗하지 않습니다. final은 커밋 후에만 빌드합니다"
+		fi
+		# git status는 ignored 파일을 보여 주지 않는다. 이미지에 들어가는 src/main 아래 ignored 파일도 거부한다.
+		# 파일 이름·내용은 출력하지 않고 개수만 알린다.
+		ignored_count="$(git -C "$repo" ls-files --others --ignored --exclude-standard -- backend/src/main | wc -l | tr -d ' ')"
+		if [ "$ignored_count" != "0" ]; then
+			die "backend/src/main 아래 Git에 없는 ignored 파일이 ${ignored_count}개 있습니다. 이미지에 들어가므로 final 빌드를 거부합니다"
 		fi
 		tag="beone-api:${short_sha}"
 		set -- --label "org.opencontainers.image.revision=${head_sha}" --label "beone.source.state=clean"

@@ -183,15 +183,57 @@ sudo install -d -m 700 /opt/beone/app/backups
 
 ## 백업과 복원
 
-백업은 앱 계정으로 앱 DB를 덤프합니다. 비밀번호는 명령행에 넣지 않고 컨테이너 안에서 옵션 파일로 전달합니다.
+### 백업
+
+앱 계정으로 앱 DB를 덤프합니다. 비밀번호는 명령행에 넣지 않고 컨테이너 안에서 옵션 파일로 전달합니다. 덤프는 먼저 `.partial` 파일로 쓰고, 명령이 모두 성공하고 마지막 줄에 덤프 완료 표식이 있을 때만 정식 이름으로 바꿉니다. 실패하면 불완전한 파일을 지우고 "백업 실패"를 출력합니다. 파일 권한은 `umask 077`로 600입니다.
 
 ```bash
-APP exec -T mysql bash -c 'mysqldump --defaults-extra-file=<(printf "[client]\nuser=%s\npassword=%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD") --single-transaction --no-tablespaces "$MYSQL_DATABASE"' | sudo tee /opt/beone/app/backups/app-$(date -u +%Y%m%dT%H%M%SZ).sql > /dev/null
+B=/opt/beone/app/backups/app-$(date -u +%Y%m%dT%H%M%SZ).sql; sudo bash -o pipefail -c 'umask 077; docker compose -f /opt/beone/app/compose.yaml -p beone-app --env-file /opt/beone/app/.env exec -T mysql bash -c "mysqldump --defaults-extra-file=<(printf \"[client]\nuser=%s\npassword=%s\n\" \"\$MYSQL_USER\" \"\$MYSQL_PASSWORD\") --single-transaction --no-tablespaces \"\$MYSQL_DATABASE\"" > "$1.partial" && tail -n 1 "$1.partial" | grep -q "^-- Dump completed" && mv "$1.partial" "$1"' _ "$B" && echo "백업 완료: $B" || { sudo rm -f "$B.partial"; echo "백업 실패: 불완전한 파일을 지웠습니다"; }
 ```
+
+| 확인 | 기대 | 다르면 |
+| --- | --- | --- |
+| 위 명령 출력 | `백업 완료: …sql` | "백업 실패"면 그 파일은 없습니다. MySQL 상태(`APP ps mysql`)를 보고 다시 시도 |
+| `sudo ls -l /opt/beone/app/backups` | 새 파일, 권한 `-rw-------`, `.partial` 없음 | 멈추고 확인 |
 
 - 덤프 이후의 변경은 다음 덤프 전까지 덤프로 복구할 수 없습니다. binlog는 3일 보관하지만 binlog 재생 절차는 아직 없습니다.
 - 배포·마이그레이션 전에는 반드시 덤프를 하나 남깁니다. 정기 덤프 주기와 자동화는 미정입니다.
-- 복원은 운영 DB에 바로 하지 않습니다. 별도 프로젝트(예: `-p beone-app-restore`)에 먼저 복원해 Flyway 이력과 기동을 확인한 뒤 교체 여부를 판단합니다.
+
+### 복원 확인 (분리 프로젝트)
+
+복원은 운영 프로젝트(`beone-app`)에 하지 않습니다. 같은 Compose 파일을 별도 프로젝트 `beone-app-restore`로 띄워 덤프를 넣고 Flyway 이력과 기동을 확인합니다. 이 절차는 운영 DB에 쓰지 않습니다(운영에는 이력 조회만 합니다). 운영 DB를 덤프로 바꾸는 일은 이 확인이 끝난 뒤의 별도 결정이며 이 문서에 명령을 두지 않습니다.
+
+아래에서 `RESTORE` 명령은 다음 한 줄의 줄임입니다.
+
+```bash
+sudo docker compose -f /opt/beone/app/compose.yaml -p beone-app-restore --env-file /opt/beone/app/.env
+```
+
+1. 준비: `free -h`로 여유 메모리를 봅니다. 복원 프로젝트도 MySQL·backend 각각 최대 1GiB를 씁니다. 여유가 부족하면 6단계(backend 기동)는 생략하고 5단계까지만 확인합니다.
+2. 대상 확인: `RESTORE config --services` → `mysql`, `backend` 두 줄만. 다르면 멈춥니다.
+3. MySQL 기동: `RESTORE up -d mysql` 후 `RESTORE ps mysql`이 `healthy`가 될 때까지 봅니다. 이 프로젝트의 볼륨은 운영 볼륨과 이름이 다릅니다(`beone-app-restore_mysql-data`).
+4. 덤프 반입(`D`는 복원할 덤프 파일):
+
+```bash
+D=/opt/beone/app/backups/<덤프 파일>.sql; sudo bash -o pipefail -c 'docker compose -f /opt/beone/app/compose.yaml -p beone-app-restore --env-file /opt/beone/app/.env exec -T mysql bash -c "mysql --defaults-extra-file=<(printf \"[client]\nuser=%s\npassword=%s\n\" \"\$MYSQL_USER\" \"\$MYSQL_PASSWORD\") \"\$MYSQL_DATABASE\"" < "$1"' _ "$D" && echo "반입 완료" || echo "반입 실패: 운영 DB는 건드리지 않았습니다"
+```
+
+5. Flyway 이력 비교: 두 명령의 출력이 같아야 합니다. 덤프 이후 운영에 새 마이그레이션이 적용됐다면 그만큼 다를 수 있습니다.
+
+```bash
+RESTORE exec -T mysql bash -c 'mysql --defaults-extra-file=<(printf "[client]\nuser=%s\npassword=%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD") -N -B -e "SELECT version, success, checksum FROM flyway_schema_history ORDER BY installed_rank" "$MYSQL_DATABASE"'
+APP exec -T mysql bash -c 'mysql --defaults-extra-file=<(printf "[client]\nuser=%s\npassword=%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD") -N -B -e "SELECT version, success, checksum FROM flyway_schema_history ORDER BY installed_rank" "$MYSQL_DATABASE"'
+```
+
+6. backend 기동과 health:
+
+| 명령 | 기대 | 다르면 |
+| --- | --- | --- |
+| `RESTORE up -d backend` 후 `RESTORE ps backend` | `healthy` | `RESTORE stop backend` 후 로그 확인 |
+| `RESTORE logs backend \| grep -E 'is up to date\|Successfully applied'` | `is up to date`만 있음(복원 DB에 다시 적용하지 않음) | 멈추고 확인 |
+| `RESTORE exec backend bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /actuator/health HTTP/1.0\r\n\r\n" >&3 && cat <&3' \| tail -1` | `"status":"UP"`이 있고 `components`·`details`가 없음 | `RESTORE stop backend` |
+
+7. 확인 뒤 정리: `RESTORE down`은 복원 프로젝트의 컨테이너만 내리고 볼륨은 남깁니다. `-v`는 쓰지 않습니다. 복원 볼륨을 지울지는 별도로 판단하며 이 문서에 삭제 명령을 두지 않습니다.
 
 ## 롤백
 

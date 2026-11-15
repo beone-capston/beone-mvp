@@ -41,12 +41,24 @@ finish() {
 	echo "모두 통과"
 }
 
-need_env() {
+# 검증용 환경 파일과 그 폴더(덤프도 이 폴더 아래에 만든다)가 저장소 밖인지 실제 경로로 확인한다.
+# 상대경로·..·심볼릭 링크 폴더는 pwd -P로 풀어서 비교하고, 환경 파일 자체가 심볼릭 링크면 거부한다.
+check_env_location() {
+	local dir real_dir real_repo
 	[ -n "${VERIFY_ENV:-}" ] || die "VERIFY_ENV를 지정하세요"
-	[ -f "$VERIFY_ENV" ] || die "VERIFY_ENV 파일이 없습니다"
-	case "$VERIFY_ENV" in
-		"$repo"/*) die "검증용 환경 파일은 저장소 밖에 두세요" ;;
+	[ ! -L "$VERIFY_ENV" ] || die "VERIFY_ENV가 심볼릭 링크입니다. 실제 파일 경로를 지정하세요"
+	dir="$(dirname "$VERIFY_ENV")"
+	[ -d "$dir" ] || die "VERIFY_ENV 폴더가 없습니다"
+	real_dir="$(cd "$dir" && pwd -P)"
+	real_repo="$(cd "$repo" && pwd -P)"
+	case "$real_dir/" in
+		"$real_repo"/*) die "검증용 환경 파일과 덤프는 저장소 밖에 두세요" ;;
 	esac
+}
+
+need_env() {
+	check_env_location
+	[ -f "$VERIFY_ENV" ] || die "VERIFY_ENV 파일이 없습니다"
 }
 
 need_image() {
@@ -81,13 +93,20 @@ guard_services() {
 
 container_id() { dc "$1" ps -q "$2"; }
 
+# 상태를 바꾸지 않고 관찰만 한다. healthy면 성공, unhealthy·종료·재시작 발생이면 시간 제한을 기다리지 않고 실패한다.
 wait_healthy() {
-	local which="$1" service="$2" limit="$3" waited=0 id status
+	local which="$1" service="$2" limit="$3" waited=0 id state first_restarts=""
 	while [ "$waited" -lt "$limit" ]; do
 		id="$(container_id "$which" "$service")"
 		if [ -n "$id" ]; then
-			status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id")"
-			[ "$status" = "healthy" ] && return 0
+			state="$(docker inspect --format '{{.State.Status}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id")"
+			set -- $state
+			[ -n "$first_restarts" ] || first_restarts="$2"
+			[ "$3" = "healthy" ] && return 0
+			if [ "$3" = "unhealthy" ] || [ "$1" = "exited" ] || [ "$1" = "dead" ] || [ "$2" != "$first_restarts" ]; then
+				echo "verify-local: $service 조기 실패 감지(state=$1 restarts=$2 health=$3)" >&2
+				return 1
+			fi
 		fi
 		sleep 5
 		waited=$((waited + 5))
@@ -121,6 +140,17 @@ printf "CREATE USER IF NOT EXISTS 'verify_backup'@'%%' IDENTIFIED BY '%s';\nGRAN
 	"$VERIFY_BACKUP_PASSWORD" "$VERIFY_GRANTS" |
 	mysql --defaults-extra-file=<(printf "[client]\nuser=root\npassword=%s\n" "$MYSQL_ROOT_PASSWORD")
 SCRIPT
+}
+
+# Flyway 기대값의 유일한 근거: backend/src/main/resources/db/migration의 버전 마이그레이션 파일(V<버전>__설명.sql).
+# 버전의 밑줄은 Flyway 표기대로 점으로 바꾸고, 버전 순서로 정렬한다.
+expected_migration_versions() {
+	find "$repo/backend/src/main/resources/db/migration" -maxdepth 1 -type f -name 'V*__*.sql' -exec basename {} \; |
+		sed -E 's/^V([^_]+(_[0-9]+)*)__.*$/\1/; s/_/./g' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n
+}
+
+expected_flyway_history() {
+	expected_migration_versions | sed 's/$/:1/' | tr '\n' ' '
 }
 
 # 컨테이너 로그에 패턴이 있는지 본다. pipefail에서 grep -q가 파이프를 먼저 닫아 실패로 보이지 않도록 로그를 변수에 담아 검사한다.
@@ -165,10 +195,7 @@ marker_digest() {
 }
 
 cmd_init_env() {
-	[ -n "${VERIFY_ENV:-}" ] || die "VERIFY_ENV를 지정하세요"
-	case "$VERIFY_ENV" in
-		"$repo"/*) die "검증용 환경 파일은 저장소 밖에 두세요" ;;
-	esac
+	check_env_location
 	[ ! -e "$VERIFY_ENV" ] || die "이미 있습니다. 덮어쓰지 않습니다"
 	(
 		umask 077
@@ -180,7 +207,7 @@ cmd_init_env() {
 			echo "VERIFY_BACKUP_PASSWORD=$(openssl rand -hex 24)"
 		} > "$VERIFY_ENV"
 	)
-	echo "생성함(값은 출력하지 않음), 권한 $(stat -f '%Lp' "$VERIFY_ENV" 2>/dev/null || stat -c '%a' "$VERIFY_ENV")"
+	echo "생성함(값은 출력하지 않음), 권한 $(stat -c '%a' "$VERIFY_ENV" 2>/dev/null || stat -f '%Lp' "$VERIFY_ENV")"
 }
 
 cmd_static() {
@@ -245,7 +272,7 @@ check_project() {
 	fi
 	local history
 	history="$(echo "SELECT version, success FROM flyway_schema_history WHERE version IS NOT NULL ORDER BY installed_rank;" | mysql_app "$which" | tr '\t' ':' | tr '\n' ' ')"
-	[ "$history" = "1:1 " ] && pass "V8 Flyway 이력 V1 성공" || fail "V8 Flyway 이력 '$history'"
+	[ "$history" = "$(expected_flyway_history)" ] && pass "V8 Flyway 이력이 마이그레이션 폴더와 일치($history)" || fail "V8 Flyway 이력 '$history' 기대 '$(expected_flyway_history)'"
 
 	body="$(docker exec "$backend_id" bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /actuator/health HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && cat <&3' | tr -d '\r' | sed '1,/^$/d')"
 	health_ok "$body" && pass "V9 내부 health status UP, 구성 요소 세부 정보 없음(응답 $body)" || fail "V9 내부 health 응답 '$body'"
@@ -266,12 +293,14 @@ cmd_up() {
 	need_image
 	guard_services verify
 	dc verify up -d mysql
-	wait_healthy verify mysql 240 && pass "V4 MySQL healthy" || { fail "V4 MySQL readiness 시간 초과"; finish; }
+	wait_healthy verify mysql 240 && pass "V4 MySQL healthy" || { fail "V4 MySQL readiness 실패 또는 시간 초과"; finish; }
 	dc verify up -d backend
-	wait_healthy verify backend 300 && pass "V6 backend healthcheck healthy" || fail "V6 backend healthcheck 시간 초과"
+	wait_healthy verify backend 300 && pass "V6 backend healthcheck healthy" || fail "V6 backend healthcheck 실패 또는 시간 초과"
 	local backend_id
 	backend_id="$(container_id verify backend)"
-	logs_have "$backend_id" 'Successfully applied 1 migration' && pass "V8 Flyway V1 적용 로그" || fail "V8 Flyway 적용 로그 없음"
+	local count
+	count="$(expected_migration_versions | wc -l | tr -d ' ')"
+	logs_have "$backend_id" "Successfully applied ${count} migrations?( |$)" && pass "V8 Flyway ${count}건 적용 로그" || fail "V8 Flyway ${count}건 적용 로그 없음"
 	check_project verify
 	finish
 }
@@ -308,8 +337,8 @@ SQL
 	marker_before="$(marker_digest verify)"
 	flyway_before="$(flyway_digest verify)"
 	dc verify up -d --force-recreate
-	wait_healthy verify mysql 240 || fail "V11 재생성 후 MySQL readiness 시간 초과"
-	wait_healthy verify backend 300 || fail "V11 재생성 후 backend 시간 초과"
+	wait_healthy verify mysql 240 || fail "V11 재생성 후 MySQL readiness 실패 또는 시간 초과"
+	wait_healthy verify backend 300 || fail "V11 재생성 후 backend 실패 또는 시간 초과"
 	marker_after="$(marker_digest verify)"
 	flyway_after="$(flyway_digest verify)"
 	[ "$marker_before" = "$marker_after" ] && pass "V11 검증 표식 3행 값 유지" || fail "V11 검증 표식 값 변경"
@@ -331,13 +360,13 @@ check_cmdline_exposure() {
 		sleep 1
 		for f in /proc/[0-9]*/cmdline; do tr "\0" " " < "$f" 2>/dev/null; echo; done > /tmp/beone-cmdlines
 		wait
-		seen=$(grep -c "defaults-extra-file" /tmp/beone-cmdlines || true)
+		seen=$(grep -c "^mysql .*--defaults-extra-file=/dev/fd/" /tmp/beone-cmdlines || true)
 		hits=$(grep -cF -f <(printf "%s\n" "$MYSQL_PASSWORD") /tmp/beone-cmdlines || true)
 		rm -f /tmp/beone-cmdlines
 		echo "$seen $hits"')"
 	set -- $result
 	if [ "${1:-0}" -ge 1 ] && [ "${2:-1}" = "0" ]; then
-		pass "V12 실행 중 프로세스 명령행에 비밀번호 없음(옵션 파일 방식 프로세스 관측 ${1}건)"
+		pass "V12 실행 중 프로세스 명령행에 비밀번호 없음(mysql 클라이언트 프로세스 관측 ${1}건)"
 	else
 		fail "V12 명령행 노출 검사 결과 seen=${1:-?} hits=${2:-?}"
 	fi
@@ -369,7 +398,7 @@ cmd_backup() {
 
 	# 복원 대상 프로젝트: MySQL만 먼저 띄우고 복원한다.
 	dc restore up -d mysql
-	wait_healthy restore mysql 240 || { fail "V12 복원 프로젝트 MySQL 시간 초과"; finish; }
+	wait_healthy restore mysql 240 || { fail "V12 복원 프로젝트 MySQL 실패 또는 시간 초과"; finish; }
 	mysql_app restore < "$app_dump"
 	echo "CREATE DATABASE IF NOT EXISTS verify_persist CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;" | mysql_root restore
 	create_verify_backup_account restore "SELECT, INSERT, CREATE, DROP, ALTER, INDEX, LOCK TABLES, SHOW VIEW, REFERENCES"
@@ -389,7 +418,7 @@ cmd_backup() {
 			fail "V12a 복원 DB 기동 로그 확인 실패"
 		fi
 	else
-		fail "V12a 복원 DB backend 시간 초과"
+		fail "V12a 복원 DB backend 실패 또는 시간 초과"
 	fi
 
 	# 비밀번호가 덤프·로그에 남지 않았는지 센다.
@@ -417,7 +446,7 @@ cmd_swap() {
 			body="$(docker exec "$id" bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /actuator/health HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && cat <&3' | tr -d '\r' | sed '1,/^$/d')"
 			health_ok "$body" && pass "V13 $tag 내부 health UP" || fail "V13 $tag health '$body'"
 		else
-			fail "V13 $tag 기동 시간 초과"
+			fail "V13 $tag 기동 실패 또는 시간 초과"
 		fi
 	done
 	finish
