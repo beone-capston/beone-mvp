@@ -134,7 +134,7 @@ class CardExceptionHandler {
 
 ### 예약한 오류 코드 자리
 
-인증 필요(401)는 `UNAUTHENTICATED`, 권한 없음(403)은 `FORBIDDEN`으로 자리를 예약합니다(D-09, 값은 2026-11-03 사용자 지시). MVP는 로그인이 없어 이 응답을 보내지 않습니다. 아직 `CommonApiErrorCode`에 추가하지 않았습니다.
+인증 필요(401)는 `UNAUTHENTICATED`, 권한 없음(403)은 `FORBIDDEN`으로 자리를 예약합니다(D-09, 값은 2026-11-03 사용자 지시). `local`·`demo`의 고정 사용자 방식에서는 이 응답을 보내지 않습니다. 공개 회원 환경에서의 사용은 [D-24](decisions.md#d-24-확정-정책)에 따른 인증 API 명세를 따르며 구현 전입니다. 아직 `CommonApiErrorCode`에 추가하지 않았습니다.
 
 ## 업무 API 공통 규약
 
