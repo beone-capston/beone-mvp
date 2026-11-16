@@ -44,7 +44,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>기대 JSON은 docs/api/cards.md 응답 예시와 docs/api.md 공통 실패 응답, CORS 값은 D-23 11항에서 옮겼다.
  * 현재 사용자 주입은 테스트 전용 컨트롤러로 확인한다({@code GET /api/v1/me}는 보유 카드 작업에서 구현).
  */
-@WebSliceTest(properties = "logging.level.com.beone.api.user.web=DEBUG")
+@WebSliceTest(controllers = DemoUserController.class, properties = "logging.level.com.beone.api.user.web=DEBUG")
 @ActiveProfiles("local")
 @Import(DemoUserApiWebTest.CurrentUserProbeController.class)
 @ExtendWith(OutputCaptureExtension.class)

@@ -63,7 +63,7 @@ com.beone.api
 ├── card            # 보유 카드, 매핑, 상품 조회
 ├── preference      # 결제 전 설정
 ├── monthlystate    # 월간 상태
-├── order           # 주문, 예정 소비
+├── order           # 주문, 예정 소비 [구현, #104, order 안내: domains/order.md]
 ├── recommendation  # 추천 저장·조회, 엔진 호출
 ├── payment         # 모의 승인·취소, 멱등 키
 └── ledger          # 원장
