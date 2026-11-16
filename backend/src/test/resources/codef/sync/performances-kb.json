@@ -1,0 +1,28 @@
+{
+  "_fixture": {"synthetic": true, "basis": "실적조회!H12(카드명 O) H17 H21(목록 O) H22(충족여부 △, 주석) H23·H24(기준·현재이용금액 O) H25(필요실적 △) H26·H27(시작·종료일 O, 주석) H28(제공기준 -)", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "SYN-TX-PERF-0001"},
+  "data": [
+    {
+      "resCardName": "SYN 실적 카드 A",
+      "resCardNo": "SYN-MASKED-0000",
+      "resCardBenefitList": [
+        {
+          "resType": "",
+          "resCardBenefitName": "",
+          "resCardPerformanceList": [
+            {"resStandardUseAmt": "300000", "resCurrentUseAmt": "120000", "resRequiredPerformanceAmt": "180000", "commStartDate": "20261101", "commEndDate": "20261115", "resCoverageCriteria": "", "resMeetPerformanceYN": "0"},
+            {"resStandardUseAmt": "500000", "resCurrentUseAmt": "120000", "resRequiredPerformanceAmt": "", "commStartDate": "20261001", "commEndDate": "20261031", "resMeetPerformanceYN": ""}
+          ]
+        },
+        {"resType": "", "resCardBenefitName": "", "resCardPerformanceList": ""}
+      ]
+    },
+    {
+      "resCardName": "SYN 실적 카드 B",
+      "resCardBenefitList": {
+        "resCardPerformanceList": {"resStandardUseAmt": "300000", "resCurrentUseAmt": "12만", "resRequiredPerformanceAmt": "180000", "commStartDate": "2026-11-01", "commEndDate": "20261131", "resMeetPerformanceYN": "1"}
+      }
+    },
+    {"resCardName": "SYN 실적 카드 C", "resCardBenefitList": ""}
+  ]
+}
