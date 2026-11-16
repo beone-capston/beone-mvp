@@ -15,7 +15,7 @@
   - `SINGLE_COMPARED_CARD`의 화면 문구. 규칙("최적"이라고 표시하지 않음)만 있습니다.
   - 업무 API가 `policyEvidence`를 `CONFIRMED_ABSENT`·`PRESENT`로 판정하는 기준(어떤 원장·시드를 완전한 근거로 볼지, 가상 포트폴리오 시드에 값을 둘지). 정해지기 전에는 `UNDETERMINED`입니다.
   - D-23 #1의 "기준일이 승인일이 아닌 카드를 `notes`에 표시"를 만드는 쪽. 엔진 `noteCodes`에는 없습니다.
-  - `excludedCards[]` 추가 필드는 필드 설명에만 넣고 JSON 예시에는 넣지 않았습니다.
+  - `excludedCards[]` 추가 필드의 JSON 예시는 규칙이 없는 카드에만 넣었습니다(아래 CodeRabbit 반영). 금액 미확정 카드 예시는 가상의 규칙 값을 만들지 않으려고 생략했습니다.
 - 바꾸지 않은 것: `docs/domains/benefit.md`는 이미 코드와 같아 고치지 않았습니다. 예시 JSON의 금액·`VERIFIED`는 합성 예시이며 확정값으로 바꾸지 않았습니다. 제품 코드·테스트·규칙·fixture는 바꾸지 않았습니다.
 - Notion 사본과 차이, 미반영: Notion 명세 사본(2026-11-16 수집, Notion 원문 직접 확인 아님)에는 월간 상태의 `PERIOD_MISMATCH` 저장, `serviceSelectionStatus`·`otherBucketsUsedWon` 누락, 추천 응답의 enum 이름·`monthlyTotalBenefit` 예시 차이, 월간 상태 쓰기의 409 `PORTFOLIO_READ_ONLY` 등 저장소 문서와 다른 내용이 있습니다. 저장소 문서를 바꾸는 근거로 쓰지 않았고 Notion도 고치지 않았습니다.
 - 검증: 문서만 바뀌어 Gradle·npm은 실행하지 않았습니다. `git diff --check`, 바뀐 문서의 제목 구조·상대 링크, 문서의 클래스·필드·상태값 이름과 `origin/develop` 코드 대조(`git grep`), `git diff --name-only origin/develop`가 `docs/`만인지 확인했습니다.
@@ -24,3 +24,8 @@
 - 출처: PR #83(#82)의 CodeRabbit 리뷰 스레드(`docs/progress/backend/README.md`, 미해결)가 지적한 내용을 관리자가 이 작업 범위에 추가했습니다.
 - 내용: `docs/progress/backend/README.md`에서 PR #81을 "PR #81 브랜치 코드 기준, `develop` 미병합·병합 승인 대기"로 적은 #80 관련 문장(머리 기준 설명, 결과 연결 줄, 현재 작업과 PR의 #80 줄, 다음 작업의 "(미병합)" 세 곳)을 "`develop` 반영(PR #81, `5885454`)"으로 고쳤습니다. 날짜가 붙은 과거 기록은 그대로 두었고, 원장·예정 소비 저장·모의 취소·선택형·공유 한도 배분·API·화면은 계속 미지원으로 적었습니다.
 - PR #83이 같은 파일의 #80 줄 바로 아래에 줄 하나를 추가하므로, 이 작업 기록의 링크는 새 줄로 넣지 않고 #80 줄 끝에 붙였습니다. #80 줄 자체는 고쳐야 해서 PR #83과 인접 줄 충돌이 생길 수 있습니다.
+
+## 2026-11-16 · CodeRabbit 리뷰 1차 반영
+- 대상: PR #85 head `f4292ba`의 CodeRabbit 제출 리뷰(COMMENTED) 1건, 인라인 Minor 2건. 사람 승인 아님.
+- `docs/progress/backend/README.md` 42~43행 "(미병합)": 유효. 위 범위 추가 커밋 `60112ed`에서 이미 고쳤고, CodeRabbit도 그 커밋에서 반영됐다고 표시했습니다.
+- `docs/api/recommendations.md` 제외 카드 예시에 세 필드가 없음: 유효합니다. `ExcludedCard`는 `RULE_UNAVAILABLE`이면 `applicationStatus`가 `RULE_EXPIRED`·`NO_VERIFIED_RULE` 중 하나여야 합니다. 규칙이 없는 예시 카드 3곳에 값을 넣었습니다(`NO_SUPPORTED_RULE` 2곳은 `null`·`null`·`[]`, `RULE_UNAVAILABLE` 1곳은 `NO_VERIFIED_RULE`·`null`·`[]`). 다만 "아직 넣지 않았다" 문장을 지우라는 제안은 일부만 따랐습니다. 금액 미확정 카드(`uc-1003`)는 엔진 계약상 `appliedRule`이 필수인데, 넣으려면 가상의 규칙 버전과 `VERIFIED` 값을 지어내야 합니다. 그래서 그 카드의 생략 이유를 적는 문장으로 바꿨습니다.

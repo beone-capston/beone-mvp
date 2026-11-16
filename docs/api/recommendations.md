@@ -166,7 +166,10 @@ X-BeONE-Demo-User: MY_CARDS
         "monthlyTotalBenefit": {
           "amountWon": null,
           "status": "NEEDS_CONFIRMATION"
-        }
+        },
+        "applicationStatus": null,
+        "appliedRule": null,
+        "pendingReasons": []
       }
     ],
     "fixedCardComparison": null,
@@ -231,7 +234,7 @@ X-BeONE-Demo-User: MY_CARDS
 - `excludedCards[].applicationStatus` · String|null · 계산한 카드의 상태. `RULE_UNAVAILABLE`이면 `RULE_EXPIRED` / `NO_VERIFIED_RULE`, `NEEDS_CONFIRMATION`·`UNSUPPORTED`이면 `NEEDS_CONFIRMATION`, 계산하지 않은 카드(`USER_EXCLUDED`·`MAPPING_UNCONFIRMED`·`NO_SUPPORTED_RULE`)는 `null`
 - `excludedCards[].appliedRule` · Object|null · 규칙으로 계산했지만 금액이 미확정인 카드(`NEEDS_CONFIRMATION`·`UNSUPPORTED`)의 규칙. 형식은 `comparedCards[].appliedRule`과 같고 그 밖에는 `null`
 - `excludedCards[].pendingReasons[]` · 금액을 확정하지 못한 사유. 형식은 `comparedCards[].pendingReasons[]`와 같다
-- 위 세 필드는 엔진 출력(`ExcludedCard`)에 있는 값이다. 이 문서의 JSON 예시에는 아직 넣지 않았다
+- 위 세 필드는 엔진 출력(`ExcludedCard`)에 있는 값이다. JSON 예시의 금액 미확정 카드(`uc-1003`, `NEEDS_CONFIRMATION`)는 `appliedRule`에 가상의 규칙 값을 지어 넣지 않도록 세 필드를 생략했다. 실제 응답에서는 위 규칙대로 채운다
 - `comparedCards[].noBenefitReason` · String|null · 금액이 확정 0원인 비교 카드의 사유. `CONFIRMED_NOT_MET`(K3 순서의 마지막)이며, 적용 서비스가 있으면 `null`
 - `comparedCards[].policyNotes[]` · 약관 근거 없는 사용자 결정을 적용했을 때의 표시. 현재 엔진이 내는 값은 원 미만을 절사한 경우의 "원 미만 절사: 약관 근거 없음, 사용자 결정"(D-03) 하나입니다. 음수 전월 실적은 `확인 필요`로 처리되어 이 표시가 나오지 않습니다(D-17, D-22)
 - `fixedCardComparison` · Object|null · 대표 카드 고정일 때 월간 최적 카드와의 비교(PRD §4.1). `representativeUserCardId`, `optimalUserCardId`, `differenceWon`. 비교 카드가 없으면 `optimalUserCardId`가 `null`이고, 대표 카드 금액이 미확정이면 `differenceWon`이 `null`이다(D-22). 자동 추천이면 객체 자체가 `null`
@@ -268,7 +271,10 @@ X-BeONE-Demo-User: MY_CARDS
         "monthlyTotalBenefit": {
           "amountWon": null,
           "status": "NEEDS_CONFIRMATION"
-        }
+        },
+        "applicationStatus": "NO_VERIFIED_RULE",
+        "appliedRule": null,
+        "pendingReasons": []
       }
     ],
     "fixedCardComparison": null,
@@ -442,7 +448,10 @@ X-BeONE-Demo-User: MY_CARDS
         "monthlyTotalBenefit": {
           "amountWon": null,
           "status": "NEEDS_CONFIRMATION"
-        }
+        },
+        "applicationStatus": null,
+        "appliedRule": null,
+        "pendingReasons": []
       }
     ],
     "fixedCardComparison": null,
