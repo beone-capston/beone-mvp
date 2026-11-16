@@ -60,7 +60,7 @@
 ```text
 com.beone.api
 ├── user            # CurrentUserResolver, 시연 사용자 [구현, #100]
-├── card            # 보유 카드, 매핑, 상품 조회
+├── card            # 상품 조회 [구현, #105, 테이블 없음], 보유 카드·매핑 [미구현]
 ├── preference      # 결제 전 설정
 ├── monthlystate    # 월간 상태
 ├── order           # 주문, 예정 소비

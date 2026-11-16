@@ -65,7 +65,8 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>입력값과 예외 메시지에 비밀 표식을 넣고, 모든 테스트 뒤에 응답·로그에 표식이 없는지 확인한다.
  */
-@WebSliceTest(properties = "logging.level.com.beone.api.common.web=DEBUG")
+@WebSliceTest(controllers = GlobalExceptionHandlerWebTest.ContractTestController.class,
+		properties = "logging.level.com.beone.api.common.web=DEBUG")
 @Import({ GlobalExceptionHandlerWebTest.ContractTestController.class,
 		GlobalExceptionHandlerWebTest.FeatureExceptionHandler.class })
 @ExtendWith(OutputCaptureExtension.class)

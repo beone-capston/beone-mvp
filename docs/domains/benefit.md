@@ -123,7 +123,7 @@ CODEF·수동 입력·추론 값에는 갱신 시각이 필요합니다. 추론 
 ### rule: 약관 규칙
 
 - [CardRuleVersion](../../backend/src/main/java/com/beone/api/benefit/rule/CardRuleVersion.java): 카드별 규칙 버전의 최상위 모델. 출처·정책·서비스·한도를 묶고 중복 ID, 없는 참조, 한도 부모 순환 등을 검사합니다. blockingReasons()는 계산을 막는 규칙 사유를, limitChain()은 상위 통합 한도까지 반환합니다.
-- [RuleCatalog](../../backend/src/main/java/com/beone/api/benefit/rule/RuleCatalog.java): 카드와 판단 날짜에 맞는 VERIFIED 규칙만 선택합니다. 검증 규칙의 기간 중첩을 차단합니다.
+- [RuleCatalog](../../backend/src/main/java/com/beone/api/benefit/rule/RuleCatalog.java): 카드와 판단 날짜에 맞는 VERIFIED 규칙만 선택합니다. 검증 규칙의 기간 중첩을 차단합니다. 읽기 전용 `cardIds()`는 규칙 버전이 하나라도 있는 카드 ID를 문자열 오름차순으로 돌려주며 판정에는 쓰지 않습니다(카드 상품 조회용, #105).
 - [RuleSelection](../../backend/src/main/java/com/beone/api/benefit/rule/RuleSelection.java): 규칙 선택 성공 Selected와 사용 불가 Unavailable. 성공 시에도 규칙상 계산 가능한 서비스와 확인 필요 서비스를 구분합니다.
 - [RuleVersionRef](../../backend/src/main/java/com/beone/api/benefit/rule/RuleVersionRef.java): 카드 ID와 규칙 버전 참조.
 - [ValidityPeriod](../../backend/src/main/java/com/beone/api/benefit/rule/ValidityPeriod.java): 규칙 유효 기간과 포함·중첩 검사. 종료일 미지정은 알려진 종료일이 없음을 뜻합니다.

@@ -21,7 +21,7 @@ import org.springframework.test.web.servlet.MvcResult;
 /**
  * local·demo 밖(프로필 없음)에서는 시연 전환과 CORS 허용이 꺼진다(docs/api/cards.md: 다른 환경은 404).
  */
-@WebSliceTest
+@WebSliceTest(controllers = DemoUserController.class)
 class DemoUserProfileOffWebTest {
 
 	@Autowired
