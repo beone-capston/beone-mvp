@@ -35,7 +35,7 @@
 
 | type | 필드 | 의미 |
 | --- | --- | --- |
-| `state` | `active: boolean`, `remainingMs: number`, `reason: string`, `method?: string`, `authenticating: boolean` | 현재 상태. 상태가 바뀔 때마다, 그리고 `state.get` 응답으로 보냅니다. `authenticating`: 네이티브가 새 인증 요청을 받을 수 없는 동안 `true`(인증 중·정리 중·정지 포함). `method`: 인증 수단을 알 수 없으면(`UNKNOWN`) 보내지 않습니다 |
+| `state` | `active: boolean`, `remainingMs: number`, `reason: string`, `method?: string`, `authenticating: boolean` | 현재 상태. 상태가 바뀔 때마다, 그리고 `state.get` 응답으로 보냅니다. 단, 60초 만료는 밀어 보내지 않습니다. 웹이 `remainingMs`가 끝나면 `state.get`을 보내 만료 상태를 받습니다(B5). `authenticating`: 네이티브가 새 인증 요청을 받을 수 없는 동안 `true`(인증 중·정리 중·정지 포함). `method`: 인증 수단을 알 수 없으면(`UNKNOWN`) 보내지 않습니다 |
 | `payment.check.result` | `allowed: boolean`, `reason: string` | `payment.check`의 응답. `reason`의 값 집합은 `state.reason`과 같습니다(아래 목록). `allowed=false`면 웹은 결제 요청을 보내지 않고 재인증을 안내합니다 |
 | `error` | `code: string` | 처리를 거부한 사유. `UNKNOWN_TYPE`: 모르는 `type`. `UNSUPPORTED_VERSION`: 지원하지 않는 `v`. `INVALID_MESSAGE`: 크기 상한 초과, JSON이 아니거나 필수 필드가 없는 등 앞의 둘로 나타낼 수 없는 형식 오류. 응답의 `v`는 아래 버전 오류 규칙을 따릅니다 |
 
@@ -104,7 +104,8 @@
 → 버튼 누름 → 웹: payment.check → 네이티브: payment.check.result(allowed)
 → 웹 → 서버: 모의 승인 요청 (서버는 인증 결과를 신뢰 근거로 쓰지 않음)
 
-만료·실패·취소·앱 이탈 → 네이티브: state(비활성, reason) → 웹: 버튼 비활성 + 재인증 안내
+실패·취소·앱 이탈 → 네이티브: state(비활성, reason) → 웹: 버튼 비활성 + 재인증 안내
+만료 → 네이티브는 밀어 보내지 않음. 웹: remainingMs 종료 후 state.get → 네이티브: state(비활성, EXPIRED) → 웹: 버튼 비활성 + 재인증 안내 (B5)
 지문 불일치 1회는 인증 창이 열린 채로 AUTH_FAILED가 되므로 authenticating=true와 함께 올 수 있습니다.
 앱 이탈(화면 구성 변경 제외) → 네이티브: 활성 중이었거나 인증을 취소했으면 state(비활성, LEFT_APP)
 앱 복귀 → 웹: state.get. 네이티브는 복귀 시 인증을 자동으로 다시 시작하지 않습니다
