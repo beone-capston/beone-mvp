@@ -216,7 +216,77 @@ G 뒤 H는 앱 재실행 없이 같은 프로세스에서 버튼으로 보낸 �
 
 16·17은 기기 보안 설정을 바꿔야 하므로 기기 소유자가 직접 판단해 진행하고, 끝나면 D-08 설정(지문 + PIN)으로 되돌립니다.
 
+## 브리지 v1 실기기 확인 순서표
+
+> **상태: 순서표만 준비했고 실행하지 않았습니다.** 설치·adb·기기 조작은 사용자가 직접 합니다. 아래 기대 결과는 [브리지 v1 계약](bridge-contract-candidate.md)과 #88 코드(`com.beone.app.bridge`, `MainActivity`)에서 먼저 옮긴 것이며, 실기기 관측으로 확인한 값이 아닙니다. 실제 프런트엔드·서버 연결은 이 순서표의 범위가 아닙니다.
+
+번호는 `BR`로 시작합니다. 위의 1~17, R1~R10, [WebView 셸](webview-shell.md#실기기에서-확인할-항목)의 W1~W6, 계약 문서 5절의 결정 번호 B1~B6과 겹치지 않게 했습니다.
+
+### 준비
+
+- **빌드:** BR1~BR21은 debug 빌드, BR22~BR24는 release 빌드입니다. debug 설치는 위와 같이 사용자가 `cd android && ./gradlew installDebug`로 합니다. release 설치본의 서명 조건은 [W4](webview-shell.md#실기기에서-확인할-항목)를 따릅니다. 실행 아이콘은 **B:ONE**입니다. **B:ONE 인증 점검**(debug 전용)은 브리지와 연결되지 않은 별도 화면이라 이 순서표에 쓰지 않습니다.
+- **신뢰 origin:** debug는 시작 주소의 origin입니다. 기본값은 개발 서버 `http://localhost:5173`이고, `-Pbeone.devServerUrl`로 바꾸면 바꾼 주소의 origin입니다. release는 `https://beonepay.site` 하나입니다. 실기기 debug에서 개발 서버를 볼 때는 README와 같이 `adb reverse tcp:5173 tcp:5173`을 씁니다.
+- **시험 페이지(T):** 거의 모든 항목에 **신뢰 origin에서 서빙되는 시험 페이지가 필요하며, 준비 방식은 사용자 결정입니다.** 지금 React 화면에는 브리지 호출이 없습니다. T가 할 수 있어야 하는 일은 다음과 같습니다.
+  - `typeof window.BeoneBridge`를 화면에 표시
+  - 입력한 문자열을 그대로 `window.BeoneBridge.postMessage(문자열)`로 보내고, 보낸 문자열의 JavaScript `length`를 표시(JavaScript `length`와 Kotlin `String.length`는 둘 다 UTF-16 코드 단위입니다)
+  - `BeoneBridge`로 받은 메시지를 받은 시각과 함께 화면에 차례로 기록
+  - BR19·BR20용으로 같은 origin iframe과 다른 origin iframe을 넣고, iframe 안에서도 위 표시와 전송을 할 수 있어야 함
+- **관측 수단:** T의 화면 기록이 기본입니다. debug에서는 `chrome://inspect`의 원격 디버깅 콘솔로 T의 기록을 함께 볼 수 있습니다(W5). release는 원격 디버깅이 꺼져 있어 T의 화면 기록만 씁니다. debug 관측 로그 `BeoneAuthTrace`는 `MainActivity`가 기록기를 넘기지 않으므로(기본값 무동작) 이 화면에서는 남지 않습니다. 인증 창 표시 여부는 사용자가 화면으로 확인합니다.
+- **기록:** 항목마다 판정(통과·실패·관측 못 함·미실행), 받은 메시지 원문, 기기 모델·OS 버전, 확인 날짜, 시험한 커밋 SHA를 적습니다. 기기 일련번호 같은 식별 정보, 생체·PIN 값, 개인 정보가 보이는 화면은 적지 않습니다.
+- **용어:** 아래에서 "응답"은 보낸 메시지에 바로 돌아오는 메시지, "밀어 보냄"은 웹 요청 없이 네이티브가 보내는 `state`입니다. 밀어 보냄은 같은 화면에서 신뢰 판정을 통과한 메시지를 한 번 받은 뒤에만 그 최상위 프레임으로 갑니다. 그래서 각 시험은 `state.get`을 먼저 보내고 시작합니다.
+
+### 상태 메시지와 `reason` (debug)
+
+`state` 필드 순서는 `v, type, active, remainingMs, reason, method(있을 때만), authenticating`입니다. `remainingMs`는 비활성이면 0입니다.
+
+| # | 준비 | 조작 | 기대 결과 | 관측 방법 | 결과 |
+| --- | --- | --- | --- | --- | --- |
+| BR1 | debug, T | 앱 실행 직후 T에서 `typeof window.BeoneBridge` 확인. 아무 메시지도 보내지 않고 10초 기다림 | `"object"`. 인증 창이 자동으로 뜨지 않음. 밀어 보낸 메시지 없음 | T 화면 | 미실행 |
+| BR2 | BR1 다음 | `{"v":1,"type":"state.get"}` 전송 | 응답 `{"v":1,"type":"state","active":false,"remainingMs":0,"reason":"NOT_AUTHENTICATED","authenticating":false}`. `method` 없음 | T 기록 | 미실행 |
+| BR3 | BR2 다음 | `{"v":1,"type":"auth.request"}` 전송 → 지문 인증 성공 | 인증 창 1개. 바로 온 응답은 `active:false`, `authenticating:true`. 성공 뒤 밀어 보낸 `state`는 `active:true`, `remainingMs` 60000 이하, `reason:"ACTIVE"`, `method:"BIOMETRIC"`, `authenticating:false` | T 기록, 인증 창은 화면 | 미실행 |
+| BR4 | 인증 창이 떠 있는 동안 | `auth.request`를 3회 더 전송 | 인증 창이 더 뜨지 않음. 매번 응답 `state`의 `authenticating:true`. 별도 오류 메시지 없음 | T 기록, 화면 | 미실행 |
+| BR5 | 활성 중 | `{"v":1,"type":"payment.check"}` 전송 | 응답 `{"v":1,"type":"payment.check.result","allowed":true,"reason":"ACTIVE"}` | T 기록 | 미실행 |
+| BR6 | 활성 중, 남은 시간이 30초 안팎으로 줄어든 뒤 | `state.get`으로 재인증 전 `remainingMs` 기록 → `auth.request` → 인증 성공 | 응답 `active:true`, `authenticating:true`. 성공 뒤 밀어 보낸 `remainingMs`는 60000에 가깝고(60000 이하) 재인증 전 값보다 큼. 재인증 전 값에 60000이 더해진 값이 아님 | T 기록 | 미실행 |
+| BR7 | BR3 뒤 활성 | 60초가 지나도록 아무것도 보내지 않음 → `state.get` → `payment.check` | 0초 시점에 밀어 보낸 메시지 없음(만료는 밀어 보내지 않음). `state.get` 응답 `active:false`, `reason:"EXPIRED"`. `payment.check.result`는 `allowed:false`, `reason:"EXPIRED"` | T 기록(받은 시각) | 미실행 |
+| BR8 | 대기 | `auth.request` → 인증 창에서 취소(뒤로 가기) | 밀어 보낸 `state`의 `active:false`, `reason:"AUTH_CANCELED"`, `authenticating:false` | T 기록 | 미실행 |
+| BR9 | 대기 | `auth.request` → 등록하지 않은 손가락 1회 → 같은 창에서 지문 성공 | 불일치 직후 `reason:"AUTH_FAILED"`가 `authenticating:true`와 함께 올 수 있음. 성공 뒤 `active:true` | T 기록 | 미실행 |
+| BR10 | 대기 | `auth.request` → 인증 창에서 PIN으로 전환해 성공 | 성공 뒤 `method:"DEVICE_CREDENTIAL"` | T 기록 | 미실행 |
+| BR11 | 활성 중 | 홈으로 나감 → 5초 뒤 복귀 → `state.get` → `payment.check` | 복귀 때 인증 창이 자동으로 뜨지 않음. `state.get` 응답 `active:false`, `reason:"LEFT_APP"`. `payment.check.result`는 `allowed:false`, `reason:"LEFT_APP"`. 이탈 시점에 네이티브가 `LEFT_APP`을 밀어 보내지만 백그라운드의 T가 받았는지는 기록만 함 | T 기록 | 미실행 |
+| BR12 | 인증 창이 떠 있는 동안 | 홈으로 나감 → 3초 뒤 복귀 → `state.get` | 활성 아님. `reason`은 `LEFT_APP` 또는 `AUTH_CANCELED`이며 어느 쪽인지 기록(시스템 취소가 이탈 처리보다 먼저 오면 `AUTH_CANCELED`, R1과 같은 구분). `authenticating:true`로 남아 있으면 정리 중이므로 BR14로 이어서 기록 | T 기록 | 미실행 |
+| BR13 | 활성 중(남은 시간 30초 이상), 회전 전 T의 주소와 웹 기록(페이지 이동 1회 이상) 기록. T는 받은 메시지 기록을 페이지를 다시 불러와도 남는 곳(같은 origin의 웹 저장소 등, 방식은 사용자 결정)에 보관 | 회전 직전 `state.get`으로 `remainingMs` 기록 → 화면 회전 → `state.get` | 회전 전후 보관한 기록에 `LEFT_APP` 밀어 보냄 없음(화면 구성 변경은 이탈이 아님). `active:true` 유지, `remainingMs`는 회전 직전 값보다 줄어든 값(늘지 않음). 회전 중 60초가 끝났다면 `EXPIRED`가 정상이며 따로 기록. 회전 뒤 주소와 웹 기록이 유지됨(W2와 같은 기준). T 페이지·화면 기록이 다시 만들어졌는지는 판정과 분리해 따로 기록 | T 기록, 화면 | 미실행 |
+| BR14 | BR12에서 `authenticating:true`가 남은 경우만 | 10초 넘게 기다린 뒤 `state.get` | 그 사이 최종 결과가 오면 대기로 돌아가 `authenticating:false`가 정상이며, 이때는 정지 경로를 "관측 못 함"으로 기록. 최종 결과 없이 10초를 넘긴 경우에만 정지: `active:false`, `authenticating:true`, `reason`은 직전 값 유지. 정지 중 `auth.request`는 인증 창 없이 `state`만 응답. **10초는 근거 없는 잠정값이며 관측 대상입니다.** 강제 재현 수단은 없어 자연 발생 때만 기록(R5·R10과 같음) | T 기록(받은 시각) | 미실행 |
+| BR15 | 대기 | `auth.request` → 인증 창에서 아무것도 하지 않고 130초 이상 기다림 → `state.get` → 정지 중 `auth.request` → 그 창에서 지문 인증 → `state.get` | 120초 시점에 밀어 보낸 메시지 없음(정지는 다음 읽기 때 반영). 첫 `state.get` 응답 `active:false`, `reason:"NO_RESPONSE"`, `authenticating:true`. 정지 중 `auth.request`는 새 창 없이 `state`만 응답. 늦은 지문 성공은 적용되지 않고(`active:false`), 마지막 `state.get`은 `authenticating:false`, `reason:"NO_RESPONSE"`. **120초는 근거 없는 잠정값이며 관측 대상입니다.** 인증 창을 띄운 시각과 정지를 처음 본 시각을 함께 기록 | T 기록(받은 시각), 화면 | 미실행 |
+| BR16 | 화면 잠금 해제 상태(기기 보안 설정 변경, 17번과 같은 조건) | `auth.request` | 인증 창 없이 응답 `active:false`, `reason:"SETUP_REQUIRED"`. 설정 변경은 기기 소유자가 판단하고 끝나면 D-08 설정으로 되돌림 | T 기록 | 미실행 |
+
+`reason`의 나머지 값 `UNAVAILABLE`(생체 하드웨어를 쓸 수 없음 등)은 재현 수단이 없어 자연 발생 때만 기록합니다. 코드 대응은 `InactiveReason` → `reason` 문자열 1:1 매핑(`BridgeState.wireReason`)입니다.
+
+### 검사 순서와 오류 (debug)
+
+모든 `error` 응답의 `v`는 입력과 관계없이 숫자 1입니다. 각 항목 뒤에 `state.get`을 보내 인증 상태가 바뀌지 않았는지 확인합니다(인증 창도 뜨지 않아야 함).
+
+| # | 준비 | 조작(T에서 보낼 문자열) | 기대 결과 | 관측 방법 | 결과 |
+| --- | --- | --- | --- | --- | --- |
+| BR17 | 대기, T가 길이 표시 | ① `{"v":1,"type":"state.get","pad":"…"}`의 `pad`를 ASCII로 채워 `length` 4096 ② 같은 방식으로 4097 ③ `pad`를 한글(`가`)로 채워 4096 ④ `pad`에 이모지(`😀`, 길이 2)를 넣어 4097 ⑤ `{"v":2,"type":"state.get","pad":"…"}`를 ASCII로 채워 4097 | ①·③: 크기 검사 통과. 계약에 없는 `pad` 필드는 무시되어 `state` 응답. ②·④·⑤: JSON을 해석하지 않고 `{"v":1,"type":"error","code":"INVALID_MESSAGE"}`(⑤가 `UNSUPPORTED_VERSION`이면 크기 검사가 버전 검사보다 뒤에 있는 것이므로 실패). 이어서 보낸 `state.get` 응답이 시험 전과 같음 | T 기록(보낸 길이 함께) | 미실행 |
+| BR18 | 대기 | ① `not json` ② `[1]` ③ `{"type":"state.get"}` ④ `{"v":2,"type":"state.get"}` ⑤ `{"v":"1","type":"state.get"}` ⑥ `{"v":1,"type":"unknown"}` ⑦ `{"type":"unknown"}` ⑧ `{"v":2,"type":"unknown"}` ⑨ `{"v":1,"type":"state"}` ⑩ `{"v":1}` | ①②③⑦⑩ `INVALID_MESSAGE`, ④⑤⑧ `UNSUPPORTED_VERSION`, ⑥⑨ `UNKNOWN_TYPE`(⑨는 네이티브 → 웹 `type`을 웹이 보낸 경우). 모두 응답 `v`는 1이고 인증 상태 변화 없음 | T 기록 | 미실행 |
+| BR19 | T 안의 같은 origin iframe | iframe에서 `typeof window.BeoneBridge` 확인 → iframe에서 `{"v":1,"type":"state.get"}`, `{"v":1,"type":"auth.request"}`, `not json` 전송 | 객체는 있을 수 있음(플랫폼이 허용 origin 규칙에 맞는 프레임에 넣음). 세 메시지 모두 iframe에 어떤 응답도 없음(`error`도 없음). 인증 창이 뜨지 않음. 최상위 T에서 보낸 `state.get` 응답이 시험 전과 같음 | iframe·T 기록, 화면 | 미실행 |
+| BR20 | T 안의 다른 origin iframe | iframe이 열렸는지 기록 → 열렸으면 iframe에서 `typeof window.BeoneBridge` 확인 | iframe이 막히면 그대로 기록(하위 프레임 이동 차단, [WebView 셸 한계](webview-shell.md#아직-하지-않은-것)). 열렸다면 `"undefined"`(허용 origin 밖에는 객체를 넣지 않음). 어느 경우에도 인증 창과 응답 없음 | iframe 화면 | 미실행 |
+| BR21 | 대기, T가 문자열이 아닌 메시지(ArrayBuffer)를 보낼 수 있을 때만 | ArrayBuffer 전송 | `INVALID_MESSAGE`(문자열이 아닌 메시지, #88 구현 결정). WebView가 ArrayBuffer 전송을 지원하지 않으면 "관측 못 함"으로 기록 | T 기록 | 미실행 |
+
+### release 시작 주소와 단일 origin
+
+| # | 준비 | 조작 | 기대 결과 | 관측 방법 | 결과 |
+| --- | --- | --- | --- | --- | --- |
+| BR22 | release 설치본(W4 서명 조건) | 앱 실행 | `https://beonepay.site/`를 열고 "웹 화면 주소가 설정되지 않았습니다" 안내가 없음. 그 주소가 보여 주는 화면은 서버 배포 상태를 따름(현재는 정적 확인 화면, D-25). `chrome://inspect`에 WebView가 보이지 않음(W5 release) | 화면, PC의 `chrome://inspect` | 미실행 |
+| BR23 | release, `https://beonepay.site`에서 서빙되는 T(준비 방식은 사용자 결정) | BR1·BR2·BR3·BR17②·BR18④를 반복 | debug와 같은 결과 | T 화면 기록 | 미실행 |
+| BR24 | release, T에 `https://www.beonepay.site/`와 `http://beonepay.site/`로 가는 링크 | 각 링크를 누름 | 열리지 않고 차단 안내(W3과 같음). 신뢰 origin은 `https://beonepay.site` 하나 | 화면 | 미실행 |
+
+### 이 순서표 밖
+
+- `WEB_MESSAGE_LISTENER`를 지원하지 않는 WebView: 브리지를 붙이지 않고 페이지만 표시합니다. 이때의 안내·차단은 계약 밖이며 정하지 않았습니다. 관측 중 `typeof window.BeoneBridge`가 BR1에서 `"undefined"`면 WebView 버전과 함께 기록만 합니다.
+- 실제 React 화면·서버 API와의 통합, 모의 승인 흐름, 계측 테스트.
+- 120초·10초의 적정성 판단. 관측값은 재평가 자료이며 이 순서표로 값을 정하지 않습니다.
+
 ## 이 목록 밖의 항목
 
-- WebView 화면 표시와 웹으로 상태 전달: WebView 셸은 [별도 문서](webview-shell.md)에서 다루며, 2026-11-06 임시 fixture 화면으로 일부 항목만 관측했습니다. 브리지 v1 계약은 D-21 보충으로 확정됐고, Android 로컬 구현(#88, PR #89 병합)은 단위 테스트만 실행했으며 실기기 미확인입니다. release는 `https://beonepay.site/`를 열고 신뢰 origin은 `https://beonepay.site` 하나이며, release 실기기 확인은 하지 않았습니다.
+- WebView 화면 표시와 웹으로 상태 전달: WebView 셸은 [별도 문서](webview-shell.md)에서 다루며, 2026-11-06 임시 fixture 화면으로 일부 항목만 관측했습니다. 브리지 v1 계약은 D-21 보충으로 확정됐고, Android 로컬 구현(#88, PR #89 병합)은 단위 테스트만 실행했으며 실기기 미확인입니다. release는 `https://beonepay.site/`를 열고 신뢰 origin은 `https://beonepay.site` 하나이며, release 실기기 확인은 하지 않았습니다. 확인 절차는 [브리지 v1 실기기 확인 순서표](#브리지-v1-실기기-확인-순서표)에 있습니다.
 - 실제 `가상 주문서 결제` 버튼과 모의 승인 흐름: React 화면·브리지 연결 뒤 확인합니다.
