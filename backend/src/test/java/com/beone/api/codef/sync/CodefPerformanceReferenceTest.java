@@ -119,6 +119,16 @@ class CodefPerformanceReferenceTest {
 	}
 
 	@Test
+	void onlyExactlyEightDigitsAreReadAsADate() {
+		// 문서 형식은 yyyyMMdd다. 부호 있는 연도·자릿수가 다른 값은 날짜로 읽지 않는다(PR #83 리뷰).
+		for (String text : List.of("-00010101", "+20261101", "202611011", "2026111", " 20261101")) {
+			assertThat(ReferenceDate.from(Optional.of(text))).as(text)
+				.isEqualTo(new ReferenceDate(null, UnknownReason.UNPARSED));
+		}
+		assertThat(ReferenceDate.from(Optional.of("20261101"))).isEqualTo(ReferenceDate.of(LocalDate.of(2026, 11, 1)));
+	}
+
+	@Test
 	void referenceValuesNeedExactlyOneOfValueOrReason() {
 		assertThatThrownBy(() -> new ReferenceAmount(null, null)).isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> new ReferenceAmount(1L, UnknownReason.ABSENT))

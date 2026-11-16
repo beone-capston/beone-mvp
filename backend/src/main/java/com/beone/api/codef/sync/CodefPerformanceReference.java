@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 import com.beone.api.codef.CodefAmount;
 import com.beone.api.codef.CodefCardPerformance;
@@ -35,6 +36,9 @@ public record CodefPerformanceReference(Optional<String> cardName, Optional<Stri
 
 	private static final DateTimeFormatter YYYYMMDD = DateTimeFormatter.ofPattern("uuuuMMdd")
 		.withResolverStyle(ResolverStyle.STRICT);
+
+	/** {@code uuuu}는 부호 있는 연도·더 긴 연도도 받으므로 파싱 전에 정확히 8자리 숫자인지 먼저 본다. */
+	private static final Pattern EIGHT_DIGITS = Pattern.compile("[0-9]{8}");
 
 	/**
 	 * null을 거부한다.
@@ -220,6 +224,9 @@ public record CodefPerformanceReference(Optional<String> cardName, Optional<Stri
 		static ReferenceDate from(Optional<String> text) {
 			if (text.isEmpty()) {
 				return new ReferenceDate(null, UnknownReason.ABSENT);
+			}
+			if (!EIGHT_DIGITS.matcher(text.get()).matches()) {
+				return new ReferenceDate(null, UnknownReason.UNPARSED);
 			}
 			try {
 				return of(LocalDate.parse(text.get(), YYYYMMDD));
