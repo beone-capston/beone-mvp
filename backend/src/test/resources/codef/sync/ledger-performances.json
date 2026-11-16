@@ -1,0 +1,9 @@
+{
+  "_fixture": {"synthetic": true, "basis": "실적조회!H12(카드명 O) H21·H23·H24·H26·H27. R1 실적 카드 연결 시나리오: 정확히 1장, 같은 이름 2장, 일치 없음", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "SYN-TX-LPERF-0001"},
+  "data": [
+    {"resCardName": "SYN CARD A", "resCardBenefitList": {"resCardPerformanceList": {"resStandardUseAmt": "300000", "resCurrentUseAmt": "120000", "commStartDate": "20261101", "commEndDate": "20261115"}}},
+    {"resCardName": "SYN CARD B", "resCardBenefitList": {"resCardPerformanceList": {"resStandardUseAmt": "300000", "resCurrentUseAmt": "50000", "commStartDate": "20261101", "commEndDate": "20261115"}}},
+    {"resCardName": "SYN CARD Z", "resCardBenefitList": {"resCardPerformanceList": {"resStandardUseAmt": "300000", "resCurrentUseAmt": "70000", "commStartDate": "20261101", "commEndDate": "20261115"}}}
+  ]
+}

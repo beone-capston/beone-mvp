@@ -1,0 +1,11 @@
+{
+  "_fixture": {"synthetic": true, "basis": "보유카드!H10(카드명 O) H16(휴면 O). R1 카드 연결 시나리오: 정확히 1장, 같은 이름 2장, 발급사 붙은 이름, 이름 없음", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "SYN-TX-LHELD-0001"},
+  "data": [
+    {"resCardName": "SYN CARD A", "resSleepYN": "N"},
+    {"resCardName": "SYN CARD B", "resSleepYN": "N"},
+    {"resCardName": "SYN CARD B", "resSleepYN": "Y"},
+    {"resCardName": "SYN CARD C|SYN ISSUER", "resSleepYN": "N"},
+    {"resCardName": "", "resSleepYN": "N"}
+  ]
+}
