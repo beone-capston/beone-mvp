@@ -3,6 +3,8 @@
 - 이슈: [#88](https://github.com/beone-capston/beone-mvp/issues/88)
 - 브랜치: `feat/88-android-bridge-local` (기준 `origin/develop` `58854544a84b96e8bd309c3718a6bd6a4a8b6e6f`)
 - 계약: PR #87(브랜치 `docs/86-bridge-contract-v1`, head `9c10e03`, **미병합**)의 `docs/android/bridge-contract-candidate.md`. 이 브랜치에는 PR #87을 merge하지 않았으므로, 이 브랜치의 같은 파일은 아직 이전(후보) 문구입니다.
+- 성격: Android 부품 구현이며 HTTP API·frontend 연결 완성이 아닙니다. Notion 진행상황은 관리자가 별도 원고로 처리합니다.
+- PR: [#89](https://github.com/beone-capston/beone-mvp/pull/89)
 - 근거 결정: 2026-11-16 사용자 결정(브리지 v1 채택, release 시작 주소·신뢰 origin, 검사 순서, 크기 상한 4096 UTF-16 코드 단위), [D-21](../../decisions.md#d-21-확정-정책), [D-25](../../decisions.md#d-25-확정-정책)
 
 ## 2026-11-16 · 브리지 v1 구현·release origin·기기 인증 연결 · PR 대기
@@ -52,11 +54,12 @@
 
 | 명령 | 결과 |
 | --- | --- |
-| `./gradlew assembleDebug testDebugUnitTest lintDebug` | 성공. 단위 테스트 164건, 실패 0, 오류 0, 건너뜀 0(결과 XML 합산). 이 작업 전 106건 |
-| `./gradlew assembleRelease lintRelease testReleaseUnitTest` | 성공. 서명 없는 release APK 생성. 단위 테스트 164건, 실패 0, 오류 0, 건너뜀 0 |
+| `./gradlew assembleDebug testDebugUnitTest lintDebug` | 성공. 단위 테스트 166건, 실패 0, 오류 0, 건너뜀 0(결과 XML 합산). 이 작업 전 106건 |
+| `./gradlew assembleRelease lintRelease testReleaseUnitTest` | 성공. 서명 없는 release APK 생성. 단위 테스트 166건, 실패 0, 오류 0, 건너뜀 0 |
 | lint(debug·release 같음) | 오류 0. 경고: `AndroidGradlePluginVersion` 2, `DataExtractionRules`, `GradleDependency`, `MergeRootFrame`, `MissingApplicationIcon`, `OldTargetApi`, `MissingOnRenderProcessGone` |
 
 - 새 경고는 `MissingOnRenderProcessGone`(기존 `RestrictedWebViewClient`) 하나입니다. `androidx.webkit`이 추가하는 lint 검사로 드러난 것이고, 렌더러 종료 처리 정책이 필요해 이번 범위 밖으로 두었습니다.
+- CodeRabbit 지적 반영(`5dd0bce` 리뷰): `\uXXXX`에 ASCII 16진수만 허용(전각 숫자 거부), JSON 중첩을 재귀 대신 명시적 스택으로 읽어 크기 상한 안의 깊은 중첩에서도 스택 오류 없이 판정. 깊이 상한은 계약·사용자 결정에 없는 값이라 두지 않았습니다.
 - 크기 상한을 4097로 바꾸면 경계 테스트 4건이 실패하는 것을 확인하고 4096으로 되돌렸습니다.
 - 연결 경로 테스트(`ActivationBridgePortTest`): 가짜 시계·가짜 authenticator로 인증 시작·성공 60초·만료·중복 요청·120초 시간 초과(`NO_RESPONSE`, 요청 차단)·시간 초과 뒤 늦은 성공 무시·취소·실패·앱 이탈 취소와 늦은 결과 무시·정리 10초 초과·화면 구성 변경·설정 필요·미전달을 확인했습니다. 실기기 인증 창·콜백 순서를 대신하지 않습니다.
 - 실행하지 않음: 실기기·에뮬레이터·설치, `connectedAndroidTest`, 실제 프런트와의 연결.

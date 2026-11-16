@@ -103,6 +103,32 @@ class BridgeMessageParserTest {
     }
 
     @Test
+    fun unicodeEscapeAcceptsOnlyAsciiHexDigits() {
+        // RFC 8259: \uXXXX의 X는 ASCII 16진수만 허용한다.
+        assertEquals(Accepted(BridgeRequest.AUTH_REQUEST), parse("{\"v\":1,\"type\":\"\\u0061uth.request\"}"))
+        assertEquals(Accepted(BridgeRequest.AUTH_REQUEST), parse("{\"v\":1,\"type\":\"auth\\u002Erequest\"}"))
+        // 전각 숫자(U+FF10~)로 쓴 이스케이프는 형식 오류다.
+        assertEquals(Rejected(INVALID_MESSAGE), parse("{\"v\":1,\"type\":\"\\u\uFF10\uFF10\uFF16\uFF11uth.request\"}"))
+        assertEquals(Rejected(INVALID_MESSAGE), parse("{\"v\":1,\"type\":\"\\u00g1uth.request\"}"))
+    }
+
+    @Test
+    fun deeplyNestedValueWithinSizeLimitIsHandledWithoutStackError() {
+        // 크기 상한 안에서 가능한 최대 수준의 중첩. 형식이 맞으면 추가 필드로 무시되고, 틀리면 형식 오류다.
+        val head = """{"v":1,"type":"state.get","x":"""
+        val depth = (4096 - head.length - 1) / 2
+        val nested = head + "[".repeat(depth) + "]".repeat(depth) + "}"
+        assertTrue(nested.length <= 4096)
+        assertEquals(Accepted(BridgeRequest.STATE_GET), parse(nested))
+        val objects = head + """{"a":""".repeat(600) + "1" + "}".repeat(600) + "}"
+        assertTrue(objects.length <= 4096)
+        assertEquals(Accepted(BridgeRequest.STATE_GET), parse(objects))
+        assertEquals(Rejected(INVALID_MESSAGE), parse(head + "[".repeat(depth) + "}"))
+        assertEquals(Rejected(INVALID_MESSAGE), parse(head + "[".repeat(depth - 1) + "]".repeat(depth) + "}"))
+        assertEquals(Rejected(INVALID_MESSAGE), parse(head + "[{]}" + "}"))
+    }
+
+    @Test
     fun nonObjectRootIsInvalidMessage() {
         listOf("[]", """[{"v":1,"type":"state.get"}]""", "1", "\"state.get\"", "null", "true").forEach {
             assertEquals(it, Rejected(INVALID_MESSAGE), parse(it))

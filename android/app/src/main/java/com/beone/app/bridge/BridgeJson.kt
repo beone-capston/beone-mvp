@@ -36,11 +36,48 @@ internal object BridgeJson {
             while (index < text.length && text[index] in WHITESPACE) index++
         }
 
+        /**
+         * 값 하나를 읽는다. 중첩 객체·배열은 재귀 대신 명시적 스택으로 읽어,
+         * 깊게 중첩된 입력도 스택 오류 없이 형식 판정만 받는다.
+         */
         fun readValue(): Any {
+            val open = ArrayDeque<Container>()
+            while (true) {
+                var value: Any = readScalarOrOpen(open) ?: continue
+                // 값을 완성할 때마다 바깥 컨테이너에 넣고, 닫는 괄호면 그 컨테이너를 다음 완성 값으로 올린다.
+                while (true) {
+                    val parent = open.lastOrNull() ?: return value
+                    parent.add(value)
+                    skipWhitespace()
+                    when (next()) {
+                        ',' -> {
+                            parent.beforeNextValue()
+                            break
+                        }
+                        parent.closer -> value = open.removeLast().result()
+                        else -> throw MalformedJsonException("구분자 오류")
+                    }
+                }
+            }
+        }
+
+        /** 단일 값을 읽어 돌려준다. 비어 있지 않은 객체·배열을 열었으면 스택에 넣고 null을 돌려준다. */
+        private fun readScalarOrOpen(open: ArrayDeque<Container>): Any? {
+            skipWhitespace()
             if (atEnd()) throw MalformedJsonException("값이 없음")
             return when (text[index]) {
-                '{' -> readObject()
-                '[' -> readArray()
+                '{', '[' -> {
+                    val container = if (text[index++] == '{') ObjectContainer() else ArrayContainer()
+                    skipWhitespace()
+                    if (peek() == container.closer) {
+                        index++
+                        container.result()
+                    } else {
+                        container.beforeNextValue()
+                        open.addLast(container)
+                        null
+                    }
+                }
                 '"' -> readString()
                 't' -> readLiteral("true", true)
                 'f' -> readLiteral("false", false)
@@ -49,50 +86,39 @@ internal object BridgeJson {
             }
         }
 
-        private fun readObject(): Map<String, Any> {
-            index++ // '{'
-            val result = LinkedHashMap<String, Any>()
-            skipWhitespace()
-            if (peek() == '}') {
-                index++
-                return result
-            }
-            while (true) {
-                skipWhitespace()
-                if (peek() != '"') throw MalformedJsonException("객체 키는 문자열이어야 함")
-                val key = readString()
-                skipWhitespace()
-                expect(':')
-                skipWhitespace()
-                val value = readValue()
-                if (result.put(key, value) != null) throw MalformedJsonException("중복 키")
-                skipWhitespace()
-                when (next()) {
-                    ',' -> continue
-                    '}' -> return result
-                    else -> throw MalformedJsonException("객체 구분자 오류")
-                }
-            }
+        private abstract class Container(val closer: Char) {
+            /** 다음 값을 읽기 전 준비. 객체는 여기서 키와 `:`를 읽는다. */
+            open fun beforeNextValue() = Unit
+            abstract fun add(value: Any)
+            abstract fun result(): Any
         }
 
-        private fun readArray(): List<Any> {
-            index++ // '['
-            val result = ArrayList<Any>()
-            skipWhitespace()
-            if (peek() == ']') {
-                index++
-                return result
-            }
-            while (true) {
+        private inner class ObjectContainer : Container('}') {
+            private val map = LinkedHashMap<String, Any>()
+            private var key: String? = null
+
+            override fun beforeNextValue() {
                 skipWhitespace()
-                result.add(readValue())
+                if (peek() != '"') throw MalformedJsonException("객체 키는 문자열이어야 함")
+                key = readString()
                 skipWhitespace()
-                when (next()) {
-                    ',' -> continue
-                    ']' -> return result
-                    else -> throw MalformedJsonException("배열 구분자 오류")
-                }
+                expect(':')
             }
+
+            override fun add(value: Any) {
+                if (map.put(checkNotNull(key), value) != null) throw MalformedJsonException("중복 키")
+            }
+
+            override fun result(): Any = map
+        }
+
+        private class ArrayContainer : Container(']') {
+            private val list = ArrayList<Any>()
+            override fun add(value: Any) {
+                list.add(value)
+            }
+
+            override fun result(): Any = list
         }
 
         private fun readString(): String {
@@ -126,8 +152,13 @@ internal object BridgeJson {
             if (index + 4 > text.length) throw MalformedJsonException("\\u 뒤 16진수 부족")
             var code = 0
             repeat(4) {
-                val digit = Character.digit(text[index++], 16)
-                if (digit < 0) throw MalformedJsonException("\\u 뒤 16진수 오류")
+                // RFC 8259는 ASCII 16진수만 허용한다. 전각 숫자 등은 형식 오류다.
+                val digit = when (val c = text[index++]) {
+                    in '0'..'9' -> c - '0'
+                    in 'a'..'f' -> c - 'a' + 10
+                    in 'A'..'F' -> c - 'A' + 10
+                    else -> throw MalformedJsonException("\\u 뒤 16진수 오류")
+                }
                 code = code * 16 + digit
             }
             return code.toChar()
