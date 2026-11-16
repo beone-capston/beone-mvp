@@ -18,5 +18,6 @@
   - `GlobalExceptionHandlerWebTest`: `controllers`에 테스트 내부 `ContractTestController`만 지정(기존 `properties` 유지)
   - `WebSliceIsolationWebTest`: 전체 스캔을 유지해야 "다른 테스트 컨트롤러가 섞이지 않음"의 의미가 남으므로 `controllers`를 지정하지 않고 `@MockitoBean CardProductService`만 추가. 모든 프로필에 등록되는 업무 컨트롤러는 현재 상품 API뿐이라 유지 부담이 작습니다.
   - card 웹 테스트 2개는 처음부터 `controllers = CardProductController.class`로 한정했습니다.
+- CodeRabbit(head `57f4b90`) diff 밖 지적 1건 반영(관리자 판단 결정 28): `docs/architecture.md` 54·58행의 구현 현황에 카드 상품 조회를 넣고, `docs/domains/benefit.md` `RuleCatalogConfiguration` 줄을 "카드 상품 조회가 주입받는다"로 고쳤습니다. 56행 제목 "(D-23, 미구현)"은 `docs/decisions.md` D-23 13항의 링크 앵커(`#업무-api-패키지-구조-d-23-미구현`)가 걸려 있고 decisions.md는 수정 금지라 그대로 두었습니다.
 - 검증: `./gradlew test webTest integrationTest build javadoc --rerun-tasks` 결과는 PR 본문에 기록합니다.
 - 남은 제한: 보유 카드 API 5개와 `GET /api/v1/me`(A2), 계산식·실적 기간 미확정 서비스를 `supportStatus`로 표시하지 못하는 한계(현재 4종에는 해당 없음), D-01 SKU 일치 미결. 서버 DB 적용·배포는 하지 않았습니다.

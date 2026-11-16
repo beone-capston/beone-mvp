@@ -162,7 +162,7 @@ RuleCatalog.select()는 규칙 없음 → NO_VERIFIED_RULE, 날짜 불일치 →
 
 규칙 데이터(`backend/src/main/resources/rules/<cardId>/<ruleVersion>.json`)를 읽어 모델을 만듭니다. 형식은 [규칙 데이터 안내](../rules/README.md)를 봅니다.
 
-- [RuleCatalogConfiguration](../../backend/src/main/java/com/beone/api/benefit/rule/loading/RuleCatalogConfiguration.java): 서버 시작 때 `RuleCatalog` 빈을 만듭니다. 규칙 데이터가 잘못되면 서버가 뜨지 않습니다. 이 빈을 주입받는 업무 코드는 아직 없습니다.
+- [RuleCatalogConfiguration](../../backend/src/main/java/com/beone/api/benefit/rule/loading/RuleCatalogConfiguration.java): 서버 시작 때 `RuleCatalog` 빈을 만듭니다. 규칙 데이터가 잘못되면 서버가 뜨지 않습니다. 카드 상품 조회(`CardProductService`, #105)가 이 빈을 주입받습니다.
 - [RuleCatalogLoader](../../backend/src/main/java/com/beone/api/benefit/rule/loading/RuleCatalogLoader.java): 클래스패스의 규칙 파일과 허용 목록을 읽습니다. 폴더·파일 이름이 `cardId`·`ruleVersion`과 다르면 거부합니다.
 - [RuleJsonReader](../../backend/src/main/java/com/beone/api/benefit/rule/loading/RuleJsonReader.java): JSON 한 개를 `CardRuleVersion`으로 바꿉니다. 모르는 키, 빠진 필수 키, 중복 키, 잘못된 타입, 허용 목록 밖의 코드를 거부하고 기본값을 채우지 않습니다.
 - [MerchantClassAllowlist](../../backend/src/main/java/com/beone/api/benefit/rule/loading/MerchantClassAllowlist.java): 허용 업종 코드 파일을 읽습니다. 오타가 "대상 불일치"로 조용히 처리되는 것을 막습니다.
