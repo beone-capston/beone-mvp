@@ -51,16 +51,16 @@
 - 사용자 식별은 [D-09](decisions.md#d-09d-14-확정-정책)에 따라 MVP 한정으로 고정 시연 사용자 2명(내 카드·가상 포트폴리오)을 씁니다. 로그인은 없고, 현재 사용자는 서버의 한 곳에서만 정합니다. 사용자 데이터는 `user_id`로 나눠 저장합니다. 이는 `local`·`demo` 환경의 계약이며(현재 사용자 결정 지점은 #100에서 [user](domains/user.md)에 구현), 공개 회원 환경은 [D-24](decisions.md#d-24-확정-정책)(구현 전)를 따릅니다.
 - 업무 API는 [D-14](decisions.md#d-09d-14-확정-정책)에 따라 `/api/v1/me/...` 형태로 둡니다. 1차는 수동 입력·가상 포트폴리오, 2차는 CODEF 연결·조회입니다.
 - 개별 API 명세는 [`docs/api/`](api/README.md)에 있습니다(2026-11-03, 구현 전).
-- 업무 API는 `GET /api/v1/demo-users`(#100)만 구현됐고, DB 업무 테이블은 시연 사용자 `users`뿐입니다. 인증 계층은 없습니다.
+- 업무 API는 `GET /api/v1/demo-users`(#100), 카드 상품 조회 `GET /api/v1/card-products`·`/{cardProductId}`(#105, 테이블 없음), 주문·예정 소비 `POST /api/v1/me/orders`·`GET /api/v1/me/orders/{orderId}`·`GET`·`PUT /api/v1/me/planned-spends`(#104)만 구현됐고, DB 업무 테이블은 시연 사용자 `users`와 주문 `orders`·예정 소비 `planned_spends`(#104)뿐입니다. 인증 계층은 없습니다.
 
 ## 업무 API 패키지 구조 (D-23, 미구현)
 
-[D-23](decisions.md#d-23-확정-정책)이 정한 구조입니다. `user`만 구현됐고(#100, [user 안내](domains/user.md)) 나머지 패키지는 아직 없습니다.
+[D-23](decisions.md#d-23-확정-정책)이 정한 구조입니다. `user`, `card`의 상품 조회, `order`만 구현됐고(#100·#105·#104, [user 안내](domains/user.md)·[card 안내](domains/card.md)·[order 안내](domains/order.md)) 나머지는 아직 없습니다.
 
 ```text
 com.beone.api
 ├── user            # CurrentUserResolver, 시연 사용자 [구현, #100]
-├── card            # 보유 카드, 매핑, 상품 조회
+├── card            # 상품 조회 [구현, #105, 테이블 없음], 보유 카드·매핑 [미구현]
 ├── preference      # 결제 전 설정
 ├── monthlystate    # 월간 상태
 ├── order           # 주문, 예정 소비 [구현, #104, order 안내: domains/order.md]

@@ -25,3 +25,8 @@
 - 반영: 예정 소비 교체에서 웹 검증 뒤 달이 바뀌면 500이던 경로를 `PlannedDateOutOfMonthException` → `PlannedSpendExceptionHandler` 400 `INVALID_REQUEST`(errors `items`)로 바꿨습니다. 기존 값은 지우지 않습니다(`PlannedSpendServiceTest`, `OrderApiWebTest`).
 - 반영: `paymentMethod`를 `StrictPaymentMethodDeserializer`로 이름 문자열만 받게 했습니다. 숫자(열거 순번)는 400입니다.
 - 보류(관리자 순서 지시): `docs/architecture.md` 54·56·58행 구현 현황 문장은 A1(PR #106)이 먼저 고치므로, #106 병합 뒤 최신 `develop`을 merge하고 order 사실을 덧붙입니다.
+
+## 2026-11-17 · 최신 `develop` merge(#105 → PR #106 병합 `cda31ca`)
+- `origin/develop`을 merge했습니다(rebase 아님). 충돌은 `docs/progress/backend/README.md`의 진행 줄 하나였고 #105 줄과 이 작업 줄을 모두 남겼습니다. `DemoUserApiWebTest`는 #106과 같은 문장이라 충돌이 없었습니다.
+- `docs/architecture.md`의 업무 API 구현 현황 문장과 패키지 구조 설명 문장에 #105 내용을 보존하면서 주문·예정 소비 API 4개와 `orders`·`planned_spends` 테이블을 덧붙였습니다(CodeRabbit Outside-diff 지적 반영). 패키지 구조 절 제목은 D-23 앵커 때문에 그대로 둡니다.
+- Flyway: `develop`에 `V3`가 없어 `V3__orders_planned_spends.sql`을 유지합니다.
