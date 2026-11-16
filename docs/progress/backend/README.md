@@ -28,6 +28,7 @@
 - #80 → PR #81: 엔진 입구 구현체와 결과 연결(D-22). `develop`에 병합 완료(`5885454`). [작업 기록](80-engine-result-link.md) 공유 문서 정합 #84: [작업 기록](84-pr81-shared-sync.md)
 - #82 → PR #83: CODEF 2차 오프라인 변환 1단계(`codef.sync`: 대상별 판정·보유카드 후보·승인 행 분류·실적 참고값, 합성 응답만). `develop`에 병합 완료(`dc107da`). 실제 호출·HTTP/DB 연결은 없고, 카드 연결·짝짓기·후보 상품·승인 날짜 해석(R1~R4)은 이 1단계에 미적용. [작업 기록](82-codef-offline-adapter.md)
 - #92 → PR #93: CODEF 2차 오프라인 변환 2단계(`codef.sync`: 카드명 정확 일치 카드 연결, 승인 날짜·시각 해석, 승인번호 지문 주입 기반 중복 키·재조회 대조, D-17 Type2 짝짓기와 불완전 사유 5종, 합성 응답·합성 테스트 키만). PR #93(`develop` 대상, 병합 전). HMAC 키 공급·회전 미결, R3 보류, 부품 구현이며 HTTP API 완성 아님. [작업 기록](92-codef-ledger-candidate.md)
+- #100 → PR: 업무 API 공통 기반(`user` 패키지의 `CurrentUserResolver`·시연 사용자 헤더, Flyway `V2` 시연 사용자 시드, `local`·`demo` CORS)과 `GET /api/v1/demo-users`. `develop` 대상, 병합 전. `GET /api/v1/me`는 보유 카드 작업으로 옮김. [작업 기록](100-business-api-foundation.md)
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.
