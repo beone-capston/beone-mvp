@@ -25,8 +25,8 @@
 - [benefit: 카드 혜택 규칙과 계산 입출력](domains/benefit.md)
   - 위치: `backend/src/main/java/com/beone/api/benefit/`
   - 하위 패키지: `engine`, `card`, `money`, `state`, `input`, `rule`, `primitive`, `result`
-  - 책임: 안전한 데이터 표현, 입력·결과 일관성 검사, 규칙 JSON 로드(`rule.loading`, 잘못되면 서버 시작 실패), 날짜에 맞는 검증 규칙 선택, 서비스 한 건의 산식·개별 조건 판정(`primitive`), 서비스 후보·채택·기여액 결과 표현(`result`).
-  - 범위 밖: 판정을 묶어 카드별 혜택을 내는 계산·최적화 엔진, HTTP 추천 API, CODEF 통신 구현.
+  - 책임: 안전한 데이터 표현, 입력·결과 일관성 검사, 규칙 JSON 로드(`rule.loading`, 잘못되면 서버 시작 실패), 날짜에 맞는 검증 규칙 선택, 서비스 한 건의 산식·개별 조건 판정(`primitive`), 서비스 후보·채택·기여액 결과 표현(`result`), 보유 카드를 계산해 D-12 순서로 고르는 엔진 구현체(`engine.DefaultRecommendationEngine`, #80: 카드 상태·남은 한도·차감액·선별·조건부·대표 카드 비교).
+  - 범위 밖: 월간 최적화·예정 소비 반영, 승인 뒤 사용액 저장·합산(업무 API), HTTP 추천 API, CODEF 통신 구현.
 - [codef: CODEF 카드 응답 해석 경계](domains/codef.md)
   - 위치: `backend/src/main/java/com/beone/api/codef/`
   - 책임: 승인내역·보유카드·실적조회 응답 본문에서 결과 코드 분류와 비민감 필드만 해석. 빈 값·형식 오류를 0원이나 0건으로 바꾸지 않고, 민감 필드를 옮기지 않습니다. 해석된 KB 승인내역 한 건의 취소 표현 형태를 기술합니다(#45, 금액 계산·매칭 없음). 그 앞단 전송 단계(#43)는 입력받은 HTTP 상태를 200·401·그 밖으로 나누고, 200 본문만 URL 디코딩해 해석합니다. `codef.transport`(#62)는 토큰 발급·캐시, 상품 요청, 시간 초과, 호출 상한을 맡습니다. 키가 없어도 서버는 뜨고 CODEF 호출만 실패합니다.
@@ -76,13 +76,13 @@ com.beone.api
 
 ```text
 업무 API
-    → RecommendationEngine(benefit.engine) [입구 타입만 있음, 구현은 후속]
+    → RecommendationEngine(benefit.engine) → DefaultRecommendationEngine [#80, 업무 API 연결은 후속]
 주문·보유 카드·거래 원장·월별 상태·예정 지출
     → RecommendationInput
 카드 약관과 검증된 규칙 버전
     → RuleCatalog → RuleSelection
-두 입력을 사용한 혜택 계산·최적화 [후속 구현]
-    → CardBenefit → Recommendation [결과 모델]
+두 입력을 사용한 카드별 혜택 계산·D-12 선택 [엔진 구현], 월간 최적화 [범위 밖]
+    → CardBenefit(CardEvaluation) → EngineResult [엔진 출력]
 ```
 
 실제 결제는 제품 범위가 아닙니다. CODEF 실거래와 자체 모의 거래 원장은 분리합니다. 확인되지 않은 상태·규칙·혜택 금액을 0원으로 대체하지 않습니다.

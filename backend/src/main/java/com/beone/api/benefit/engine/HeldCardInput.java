@@ -20,10 +20,11 @@ import com.beone.api.benefit.card.CardId;
  * @param holdingSource {@code MANUAL}·{@code CODEF}·{@code SYNTHETIC}
  * @param registeredOn 카드 사용 등록일
  * @param monthlyState 그 달의 상태
+ * @param policyEvidence 실적 정책 조건의 근거. 확인하지 못했으면 {@link PolicyEvidenceInput#undetermined()}
  */
 public record HeldCardInput(String userCardId, String mappingStatus, String cardProductId,
 		String candidateCardProductId, boolean excludedByUser, String holdingSource, StateInput<LocalDate> registeredOn,
-		MonthlyStateInput monthlyState) {
+		MonthlyStateInput monthlyState, PolicyEvidenceInput policyEvidence) {
 
 	private static final Set<String> MAPPING_STATUSES = Set.of("UNMAPPED", "CANDIDATE", "USER_CONFIRMED", "NOT_SUPPORTED");
 
@@ -55,6 +56,7 @@ public record HeldCardInput(String userCardId, String mappingStatus, String card
 		}
 		Objects.requireNonNull(registeredOn, "registeredOn");
 		Objects.requireNonNull(monthlyState, "monthlyState");
+		Objects.requireNonNull(policyEvidence, "policyEvidence");
 	}
 
 	/** 규칙 카드가 정해져 계산 대상이 될 수 있으면 참. */

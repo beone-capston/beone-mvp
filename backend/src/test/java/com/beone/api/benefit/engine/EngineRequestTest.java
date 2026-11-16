@@ -15,6 +15,8 @@ import org.junit.jupiter.api.Test;
 
 class EngineRequestTest {
 
+	private static final PolicyEvidenceInput NO_EVIDENCE = PolicyEvidenceInput.undetermined();
+
 	@Test
 	void acceptsUnconfirmedCardsAndNoCards() {
 		EngineRequest request = new EngineRequest(ORDER_DATE, order(), "AUTO_RECOMMEND", null,
@@ -68,32 +70,32 @@ class EngineRequestTest {
 	@Test
 	void cardProductFollowsTheMappingStatus() {
 		assertThatThrownBy(() -> new HeldCardInput("uc", "USER_CONFIRMED", null, null, false, "MANUAL",
-				StateInput.notEntered(), emptyState()))
+				StateInput.notEntered(), emptyState(), NO_EVIDENCE))
 			.hasMessageContaining("USER_CONFIRMED");
 		assertThatThrownBy(() -> new HeldCardInput("uc", "UNMAPPED", "09174", null, false, "MANUAL",
-				StateInput.notEntered(), emptyState()))
+				StateInput.notEntered(), emptyState(), NO_EVIDENCE))
 			.hasMessageContaining("USER_CONFIRMED");
 		assertThatThrownBy(() -> new HeldCardInput("uc", "UNMAPPED", null, "09174", false, "MANUAL",
-				StateInput.notEntered(), emptyState()))
+				StateInput.notEntered(), emptyState(), NO_EVIDENCE))
 			.hasMessageContaining("CANDIDATE");
 		assertThatThrownBy(() -> new HeldCardInput("uc", "DONE", null, null, false, "MANUAL", StateInput.notEntered(),
-				emptyState()))
+				emptyState(), NO_EVIDENCE))
 			.hasMessageContaining("mappingStatus");
 	}
 
 	@Test
 	void syntheticCardHasNoMappingButNeedsProduct() {
 		HeldCardInput card = new HeldCardInput("uc", null, "09174", null, false, "SYNTHETIC", StateInput.notEntered(),
-				emptyState());
+				emptyState(), NO_EVIDENCE);
 		assertThat(card.mappingStatus()).isNull();
 		assertThatThrownBy(() -> new HeldCardInput("uc", "USER_CONFIRMED", "09174", null, false, "SYNTHETIC",
-				StateInput.notEntered(), emptyState()))
+				StateInput.notEntered(), emptyState(), NO_EVIDENCE))
 			.hasMessageContaining("mapping target");
 		assertThatThrownBy(() -> new HeldCardInput("uc", null, null, null, false, "SYNTHETIC", StateInput.notEntered(),
-				emptyState()))
+				emptyState(), NO_EVIDENCE))
 			.hasMessageContaining("cardProductId");
 		assertThatThrownBy(() -> new HeldCardInput("uc", null, "09174", null, false, "MANUAL", StateInput.notEntered(),
-				emptyState()))
+				emptyState(), NO_EVIDENCE))
 			.hasMessageContaining("mappingStatus");
 	}
 

@@ -35,6 +35,12 @@ public enum ApplicationStatus {
 	/** 택1 선택형 서비스인데 다른 서비스를 선택했거나 선택 없음({@code NONE})이 입력됨(D-18 K1). */
 	NOT_APPLICABLE_SELECTION(AmountShape.ZERO),
 
+	/**
+	 * 조건 미충족 사유는 없지만 기여액이 확정 0원임. 예: 원 미만을 버려 후보가 0원이거나, 양수 후보가 다른 서비스에 밀려 채택되지 않음.
+	 * 미충족 사유가 아니므로 후보의 미충족 조건으로 쓰지 않는다(2026-11-16 사용자 결정).
+	 */
+	NO_CONTRIBUTION(AmountShape.ZERO),
+
 	/** 판정일에 유효한 규칙 버전이 없음. */
 	RULE_EXPIRED(AmountShape.UNCONFIRMED),
 
