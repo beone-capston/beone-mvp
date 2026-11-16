@@ -1,0 +1,9 @@
+{
+  "_fixture": {"synthetic": true, "basis": "보유카드!H10(카드명 O) H16(휴면 O) H12·H14·H17(카드구분·발급일자·상태 -) H11·H15(카드번호·유효기간, 제거 확인용 가짜 값)", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "SYN-TX-HELD-0001"},
+  "data": [
+    {"resCardName": "SYN 휴면 카드", "resCardNo": "SYN-MASKED-0000", "resValidPeriod": "SYN-MASKED-0000", "resUserNm": "SYN-USER", "resSleepYN": "Y"},
+    {"resCardName": "SYN 일반 카드|SYN 발급사", "resSleepYN": "N"},
+    {"resCardName": "SYN 빈 휴면 카드", "resSleepYN": ""}
+  ]
+}
