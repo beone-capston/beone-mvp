@@ -80,15 +80,30 @@ sudo ls -l /opt/beone-backup
 
 ## 3. T 배치 (a)
 
+### 3-1. 업로드 파일 확인 (아직 배치하지 않음)
+
+업로드 폴더를 변수 `U`에 넣고(새 셸이면 다시 정의) 네 파일이 있는지와 SHA-256을 확인합니다.
+
 ```bash
+U=<네 파일을 둔 서버의 업로드 폴더 경로>
+sudo ls -l "$U/index.html" "$U/frame.html" "$U/test.js" "$U/style.css"
 sudo sha256sum "$U/index.html" "$U/frame.html" "$U/test.js" "$U/style.css"
+```
+
+| 확인 | 기대 | 다르면 |
+| --- | --- | --- |
+| `ls -l` | 네 파일이 모두 보임(`No such file`이 없음) | `U` 값을 다시 확인하고, 그래도 없으면 멈춤 |
+| `sha256sum` | 0절에서 PC로 기록한 값과 **네 파일 모두** 같음 | 3-2로 가지 않고 멈춤(파일을 다시 옮긴 뒤 3-1부터) |
+
+### 3-2. 배치 (3-1의 네 값이 모두 같을 때만)
+
+```bash
 sudo install -d -m 755 "$S/bridge-test"
 sudo install -m 644 "$U/index.html" "$U/frame.html" "$U/test.js" "$U/style.css" "$S/bridge-test/"
 ```
 
 | 확인 | 기대 | 다르면 |
 | --- | --- | --- |
-| 업로드 파일 `sha256sum` | 0절에서 PC로 기록한 값과 네 파일 모두 같음 | 배치하지 않고 멈춤 |
 | `curl -s -o /dev/null -w '%{http_code}\n' https://beonepay.site/bridge-test/` | `200` | 9절로 정리하고 멈춤(하위 경로 서빙에 설정 변경이 필요할 수 있음) |
 | `curl -s https://beonepay.site/bridge-test/ \| grep -c BeoneBridge` | `1` 이상 | 9절로 정리하고 멈춤 |
 | `curl -sI https://beonepay.site/bridge-test/test.js \| grep -i '^content-type'` | `javascript`가 들어간 형식 | `text/plain` 등이면 스크립트가 막힐 수 있으므로 9절로 정리하고 멈춤 |
@@ -99,16 +114,29 @@ sudo install -m 644 "$U/index.html" "$U/frame.html" "$U/test.js" "$U/style.css" 
 
 `index.html`의 `</body>` 바로 앞에 링크 한 줄을 넣습니다. 수정본을 백업 폴더에 먼저 만든 뒤 `cp`로 원래 파일에 덮어씁니다. `sed -i`는 파일을 새로 만들어 바꾸므로 쓰지 않습니다(파일 단위 마운트였다면 컨테이너가 새 파일을 보지 못할 수 있습니다).
 
+### 4-1. 수정본 만들기와 검토 (아직 덮어쓰지 않음)
+
 ```bash
-sudo sh -c "sed 's#</body>#<p><a href=\"/bridge-test/\">브리지 시험(임시, 시험 뒤 제거)</a></p></body>#' '$S/index.html' > '/opt/beone-backup/index.html.with-link-$TS'"
+sudo sh -c "sed 's#</body>#<p><a href=\"/bridge-test/\">브리지 시험(임시, 시험 뒤 제거)</a></p></body>#' '$S/index.html' > '/opt/beone-backup/index.html.with-link-$TS'" && echo "수정본 생성 성공"
+sudo grep -c '/bridge-test/' "/opt/beone-backup/index.html.with-link-$TS"
 sudo diff "/opt/beone-backup/index.html.pre-bridge-test-$TS" "/opt/beone-backup/index.html.with-link-$TS"
+```
+
+| 확인 | 기대 | 다르면 |
+| --- | --- | --- |
+| 첫 줄 | `수정본 생성 성공` 출력 | 4-2로 가지 않고 멈춤 |
+| `grep -c` | `1` | 4-2로 가지 않고 멈춤 |
+| `diff` | `</body>`가 있던 한 줄만 바뀜(그 밖의 줄은 그대로) | 4-2로 가지 않고 멈춤 |
+
+### 4-2. 덮어쓰기 (4-1이 모두 기대대로일 때만)
+
+```bash
 sudo cp "/opt/beone-backup/index.html.with-link-$TS" "$S/index.html"
 curl -s https://beonepay.site/ | grep -c '/bridge-test/'
 ```
 
 | 확인 | 기대 | 다르면 |
 | --- | --- | --- |
-| `diff` | `</body>`가 있던 한 줄만 바뀜 | `cp`하지 않고 멈춤 |
 | `grep -c '/bridge-test/'` | `1` | 9절로 정리하고 멈춤 |
 | `curl -sI https://beonepay.site/ \| head -1` | `200` | 9절로 정리하고 멈춤 |
 

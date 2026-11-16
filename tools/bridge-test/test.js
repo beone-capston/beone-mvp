@@ -16,11 +16,14 @@
   var memoryLog = [];
   var storageOk = true;
 
+  // 쓰기가 한 번 실패하면 저장소의 이전 값 대신 메모리 기록을 기준으로 표시·추가한다.
   function loadLog() {
+    if (!storageOk) return memoryLog;
     try {
       var raw = window.localStorage.getItem(LOG_KEY);
       var parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
+      memoryLog = Array.isArray(parsed) ? parsed : [];
+      return memoryLog;
     } catch (e) {
       storageOk = false;
       return memoryLog;
