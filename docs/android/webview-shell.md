@@ -13,7 +13,7 @@ React 화면을 Android 앱 안에서 보여줄 WebView의 기본 구조입니�
 | debug만 원격 디버깅·로컬 개발 서버 평문 HTTP 허용 | 구현. 소스 설정(네트워크 보안 설정·Manifest)은 단위 테스트, release 값은 빌드 산출물로 확인 |
 | 시스템 바·디스플레이 컷아웃 inset 적용 | 구현 |
 | release 로딩과 정확한 origin | 구현(#88, PR #89 병합). release 시작 주소 `https://beonepay.site/`, 신뢰 origin `https://beonepay.site` 하나. 빌드 설정 단위 테스트만 실행, 실기기 미확인([아래](#release-로딩-이력과-현재-방향)) |
-| 웹 ↔ 네이티브 브리지 | 구현(#88, PR #89 병합), 단위 테스트: 신뢰 origin의 최상위 프레임에만 `window.BeoneBridge` 노출([v1 계약](bridge-contract-candidate.md), PR #87 병합). `WEB_MESSAGE_LISTENER`를 지원하지 않는 WebView에서는 브리지를 붙이지 않으며, 그때의 안내·차단은 계약 밖·미정. 실제 프런트엔드·실기기 미확인([진행 기록](../progress/android/88-android-bridge-local.md)) |
+| 웹 ↔ 네이티브 브리지 | 구현(#88, PR #89 병합), 단위 테스트: `window.BeoneBridge`는 신뢰 origin 규칙에 맞는 프레임(같은 origin의 iframe 포함)에 노출되고, Android 핸들러는 최상위 프레임의 메시지만 처리하며 하위 프레임 메시지에는 응답하지 않음([v1 계약](bridge-contract-candidate.md), PR #87 병합). `WEB_MESSAGE_LISTENER`를 지원하지 않는 WebView에서는 브리지를 붙이지 않으며, 그때의 안내·차단은 계약 밖·미정. 실제 프런트엔드·실기기 미확인([진행 기록](../progress/android/88-android-bridge-local.md)) |
 | 기기 인증(#22)과의 연결 | 구현(#88), 단위 테스트. WebView 셸 화면(`MainActivity`)이 브리지를 통해 `VirtualCardActivationViewModel`과 연결됨. 대기 시간 120초·10초는 근거 없는 잠정값이며 실기기 관측 전 미확정. debug 인증 점검 화면은 브리지와 연결되지 않은 별도 화면 |
 | 실기기·계측 테스트 | 계측 테스트 미실행. 실기기는 2026-11-06 임시 fixture 화면으로 일부만 관측([아래 표](#실기기에서-확인할-항목)), #88 브리지·release는 미확인 |
 

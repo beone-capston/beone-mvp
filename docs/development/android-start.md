@@ -43,7 +43,7 @@ BeONE 저장소(`beone-capston/beone-mvp`)의 **Android 작업선**을 장기 �
    - 회전·폴드·테마 변경처럼 화면 구성만 바뀌는 경우는 앱 이탈로 보지 않는다. 화면 재생성 중 인증 결과가 유실되지 않게 한다.
    - 시간·생명주기 로직은 단위 테스트로 검증한다.
 3. **WebView**
-   - 아직 정하지 않은 것: release 빌드에서 React 화면을 불러오는 방식(앱 번들 에셋 또는 원격 주소)과 신뢰할 origin. 사용자 결정이 필요하다. (이력 보충, 2026-11-16: 사용자 결정으로 release 시작 주소 `https://beonepay.site/`, 신뢰 origin `https://beonepay.site` 하나로 정했고 #89에서 구현했다.)
+   - release 빌드에서 React 화면을 불러오는 방식과 신뢰할 origin: 2026-11-16 사용자 결정으로 원격 주소 `https://beonepay.site/`를 열고 신뢰 origin은 `https://beonepay.site` 하나로 정했으며, #89에서 구현했다. (이력: 2026-10-31 작성 당시에는 앱 번들 에셋 또는 원격 주소 중 미결이라 사용자 결정이 필요했다.)
      - 이 결정 전에는 origin을 설정값으로 분리해 둔다. debug에서는 개발 서버 주소, 테스트에서는 계측 테스트용 HTML로만 검증한다.
      - PoC의 `WebViewAssetLoader`·`appassets.androidplatform.net` 방식은 `docs/android/`에 `후보`로만 기록한다.
      - 프런트엔드 빌드(`npm ci`, `npm run build`)를 실행하거나 그 산출물을 복사하지 않는다.

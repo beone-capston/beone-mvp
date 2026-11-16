@@ -147,7 +147,7 @@ val canRequest = viewModel.requestPhase == AuthRequestPhase.Idle // 인증 버�
 | 기록 호출 | `AuthRequestGate`, `VirtualCardActivationViewModel`, `BiometricDeviceAuthenticator` | 생성자의 `trace` 인자(기본값 `AuthTracer.NONE`)로 받아, 전이가 끝난 뒤에만 기록합니다 |
 | `DebugAuthTrace` | [DebugAuthTrace.kt](../../android/app/src/debug/java/com/beone/app/auth/DebugAuthTrace.kt) (debug 소스셋) | `Log.i("BeoneAuthTrace", …)`로 출력하는 유일한 구현. 화면이 다시 만들어져도 순번이 이어지도록 프로세스에 하나만 둡니다. 점검 화면이 이 tracer를 주입하고 Activity 수명주기도 기록합니다 |
 
-- release에서 기록하지 않는 근거: logcat 출력 구현은 debug 소스셋에만 있고, main의 기본값은 무동작입니다. 인증 클래스를 만드는 곳도 debug 점검 화면뿐입니다. 2026-10-30 빌드에서는 release APK dex에 `BeoneAuthTrace`·`DebugAuthTrace` 문자열이 없는 것을 확인했습니다.
+- release에서 기록하지 않는 근거: logcat 출력 구현은 debug 소스셋에만 있고, main의 기본값은 무동작입니다. 인증 클래스를 만드는 곳은 debug 점검 화면(`DeviceAuthCheckActivity`)과 main의 `MainActivity`(#88)입니다. `MainActivity`는 trace 인자를 넘기지 않아 기본값 `AuthTracer.NONE`(무동작)을 쓰므로 기록하지 않습니다. 2026-10-30 빌드에서는 release APK dex에 `BeoneAuthTrace`·`DebugAuthTrace` 문자열이 없는 것을 확인했습니다.
 - 한 줄 형식: `t=<elapsedRealtime ms> seq=<순번> ev=<사건> from=<단계> to=<단계> req=<앱 내부 순번> <키=값>...`
 - 주요 사건:
   - `LIFECYCLE`: onCreate 최초·재생성, onStart, onResume, onPause, onStop, onDestroy와 구성 변경 여부
