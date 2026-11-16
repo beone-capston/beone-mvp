@@ -20,6 +20,18 @@
 → 확정 안 된 카드는 excludedCards + 이유(D-18 K3 순서)
 ```
 
+### 엔진 입력 중 요청으로 받지 않는 값
+
+업무 API는 카드마다 실적 정책 근거 `policyEvidence`를 엔진(`HeldCardInput`)에 넘깁니다(D-22 2026-11-16 보충). 이 값은 요청 본문으로 받지 않습니다.
+
+- `policyEvidence.cancellation` · 실적 기간에 귀속될 수 있는 취소가 있는지
+- `policyEvidence.benefitedSales` · 실적 기간에 할인받은 매출이 있는지
+- 값은 둘 다 `PRESENT` / `CONFIRMED_ABSENT` / `UNDETERMINED`이고 생략할 수 없습니다(`null`이면 엔진 계약 위반).
+- 업무 API가 확인하지 못했으면 `UNDETERMINED`를 넘깁니다(`PolicyEvidenceInput.undetermined()`). 이때 규칙에 미확정 실적 정책 조건이 있는 카드는 실적에 의존하는 서비스가 `확인 필요`입니다. 조회 실패·누락·빈 조회 결과는 부재의 근거가 아닙니다.
+- `CONFIRMED_ABSENT`는 그 상황이 실적 기간에 없음을 확인했을 때만 씁니다. 엔진은 이때만 미확정 조건을 무시합니다.
+- **미정:** 업무 API가 무엇을 근거로 `CONFIRMED_ABSENT`·`PRESENT`를 판정할지(어떤 원장·시드를 완전한 근거로 볼지, 가상 포트폴리오 시드에 값을 둘지)는 정하지 않았습니다. 정해지기 전에는 `UNDETERMINED`를 넘깁니다.
+- 기준 기간이 맞는지는 엔진이 판단합니다. 업무 API는 월간 상태의 `period`를 그대로 넘기고 `PERIOD_MISMATCH`를 넘기지 않습니다(D-22, [월간 상태](monthly-states.md)).
+
 ### Request Header
 
 ```text
@@ -190,7 +202,10 @@ X-BeONE-Demo-User: MY_CARDS
 - `comparedCards[].appliedRule` · 규칙 버전·검증 상태·공식 근거(D-14 원칙 5)
 - `currentOrderBenefit` · `OrderBenefit` 값을 그대로 쓴다(D-18 K3)
 - `monthlyTotalBenefit` · 1차에서는 현재 주문 기준이라 `currentOrderBenefit`과 같은 값이다. 예정 소비는 넣지 않는다(D-18 K4). 이번 달 상태는 잔여 한도와 실적 판정에 쓰고 합계에 더하지 않는다
-- `services[].applicationStatus` · `APPLIED` / `APPLIED_CAP_REMAINING` / `LIMIT_EXHAUSTED` / `NOT_APPLICABLE_EXCLUDED` / `NOT_APPLICABLE_CATEGORY` / `NOT_APPLICABLE_PERFORMANCE` / `NOT_APPLICABLE_MIN_AMOUNT` / `NOT_APPLICABLE_PAYMENT_METHOD` / `NOT_APPLICABLE_SELECTION` / `RULE_EXPIRED` / `NO_VERIFIED_RULE` / `NEEDS_CONFIRMATION`
+- `services[].applicationStatus` · `APPLIED` / `APPLIED_CAP_REMAINING` / `LIMIT_EXHAUSTED` / `NOT_APPLICABLE_EXCLUDED` / `NOT_APPLICABLE_CATEGORY` / `NOT_APPLICABLE_PERFORMANCE` / `NOT_APPLICABLE_MIN_AMOUNT` / `NOT_APPLICABLE_PAYMENT_METHOD` / `NOT_APPLICABLE_SELECTION` / `NO_CONTRIBUTION` / `RULE_EXPIRED` / `NO_VERIFIED_RULE` / `NEEDS_CONFIRMATION`
+  - 미채택 서비스는 미충족 조건 중 제외 > 대상 업종 > 택1 선택 > 실적 > 최소 금액 > 결제 방식 > 한도 소진의 첫 값입니다(D-22)
+  - `NO_CONTRIBUTION`: 미충족 사유는 없지만 기여액이 확정 0원입니다. 예: 원 미만 절사로 0원, 양수 후보가 다른 서비스에 밀려 미채택. 미충족 사유가 아닙니다(D-22 2026-11-16 보충)
+- `comparedCards[].applicationStatus` · 카드 상태. 값은 위와 같은 `ApplicationStatus`이며 0원 카드는 D-22 카드 상태 4의 순서로 정합니다. `NO_CONTRIBUTION`은 각 단계 순서의 마지막입니다
 - `services[].candidateWon` · Integer|null · 서비스 단독 후보 금액. 기여액과 다를 수 있다. 미확정이면 `null`
 - `services[].adoption` · `ADOPTED` / `NOT_ADOPTED` / `UNDETERMINED`(코드 `Adoption`). 중복 합산 예외(D-13 #35 8번)에서는 합산한 서비스가 모두 `ADOPTED`이고 카드 금액은 기여액의 합이다. 각 서비스를 할인 전 금액으로 계산해 서비스별로 절사하고(D-03) 자기 체인의 남은 한도로 줄인다. 합계가 결제 금액을 넘으면 `NEEDS_CONFIRMATION`이다
 - `services[].contribution` · 실제 기여액. 미확정이면 `amountWon=null`, `status=NEEDS_CONFIRMATION`
@@ -213,11 +228,20 @@ X-BeONE-Demo-User: MY_CARDS
   - 그 밖의 경우(`UNKNOWN`, 업종 미확정, 적용일 없음, 선택 서비스가 그 거래에 적용됨): `NEEDS_CONFIRMATION`
 - `excludedCards[].reason` · 카드 사유 우선순위(D-18 K3): `RULE_UNAVAILABLE` > `MAPPING_UNCONFIRMED` > `NEEDS_CONFIRMATION` > `UNSUPPORTED`. 사용자가 4종이 아니라고 지정한 카드는 `NO_SUPPORTED_RULE`, 사용자가 추천에서 뺀 카드는 `USER_EXCLUDED`. 이 값은 K3 순서에 넣지 않고 "사용자 제외"로 따로 표시한다(D-19)
 - `excludedCards[].candidateCardProductId` · `MAPPING_UNCONFIRMED`일 때 확인할 수 있는 후보(D-15)
+- `excludedCards[].applicationStatus` · String|null · 계산한 카드의 상태. `RULE_UNAVAILABLE`이면 `RULE_EXPIRED` / `NO_VERIFIED_RULE`, `NEEDS_CONFIRMATION`·`UNSUPPORTED`이면 `NEEDS_CONFIRMATION`, 계산하지 않은 카드(`USER_EXCLUDED`·`MAPPING_UNCONFIRMED`·`NO_SUPPORTED_RULE`)는 `null`
+- `excludedCards[].appliedRule` · Object|null · 규칙으로 계산했지만 금액이 미확정인 카드(`NEEDS_CONFIRMATION`·`UNSUPPORTED`)의 규칙. 형식은 `comparedCards[].appliedRule`과 같고 그 밖에는 `null`
+- `excludedCards[].pendingReasons[]` · 금액을 확정하지 못한 사유. 형식은 `comparedCards[].pendingReasons[]`와 같다
+- 위 세 필드는 엔진 출력(`ExcludedCard`)에 있는 값이다. 이 문서의 JSON 예시에는 아직 넣지 않았다
 - `comparedCards[].noBenefitReason` · String|null · 금액이 확정 0원인 비교 카드의 사유. `CONFIRMED_NOT_MET`(K3 순서의 마지막)이며, 적용 서비스가 있으면 `null`
-- `comparedCards[].policyNotes[]` · 약관 근거 없는 사용자 결정을 적용했을 때의 표시. 예: 음수 전월 실적 판정의 "약관 근거 없음, 사용자 결정"(D-17), 원 미만을 절사한 경우의 "약관 근거 없음, 사용자 결정"(D-03)
+- `comparedCards[].policyNotes[]` · 약관 근거 없는 사용자 결정을 적용했을 때의 표시. 현재 엔진이 내는 값은 원 미만을 절사한 경우의 "원 미만 절사: 약관 근거 없음, 사용자 결정"(D-03) 하나입니다. 음수 전월 실적은 `확인 필요`로 처리되어 이 표시가 나오지 않습니다(D-17, D-22)
 - `fixedCardComparison` · Object|null · 대표 카드 고정일 때 월간 최적 카드와의 비교(PRD §4.1). `representativeUserCardId`, `optimalUserCardId`, `differenceWon`. 비교 카드가 없으면 `optimalUserCardId`가 `null`이고, 대표 카드 금액이 미확정이면 `differenceWon`이 `null`이다(D-22). 자동 추천이면 객체 자체가 `null`
 - `inputSnapshot` · 계산에 쓴 주문·대표 카드·월간 상태 스냅샷 시각. 같은 입력·규칙 버전의 재현을 확인하는 기록이다
 - `conditional=false`여도 비교 카드가 1장이면 "최적"이라고 표시하지 않는다
+- `notes[]` · String[] · 엔진의 `noteCodes`를 업무 API가 문구로 바꾼 값. 엔진은 코드만 내고 문구는 정하지 않는다
+  - `PLANNED_SPENDING_EXCLUDED`(항상) → "예정 소비는 이번 버전에서 월간 합계에 반영하지 않습니다(D-18 K4)."
+  - `CONDITIONAL_RECOMMENDATION`(`conditional=true`) → "비교에서 빠진 카드가 더 나을 수 있어 조건부 추천입니다."
+  - `NO_COMPARABLE_CARD`(`NOT_DETERMINED`) → "비교할 수 있는 카드가 없어 추천을 확정할 수 없습니다."
+  - `SINGLE_COMPARED_CARD`(비교 카드 1장) → 화면 문구 **미정**. 위 규칙("최적"이라고 표시하지 않음)만 정해져 있다
 - `pendingReasons[]` · 카드 금액을 확정하지 못한 사유(`NEEDS_CONFIRMATION`·`UNSUPPORTED`·`PERFORMANCE_POLICY`·`STACKING_UNRESOLVED`·`STACKING_CONFIRMED`·`STACKING_EXCEEDS_PAYMENT`(코드 `PendingReason.Kind`)). `STACKING_CONFIRMED`는 중복 허용이 확정됐지만 합산 예외(D-13 #35 8번) 조건을 만족하지 않는 쌍에만 남는다. `STACKING_EXCEEDS_PAYMENT`는 합산 조건을 만족했지만 기여액 합계가 결제 금액을 넘은 경우이며, 서비스는 합산 대상 전체다(같으면 확정)
 
 비교 가능한 카드가 0장인 응답:
@@ -250,6 +274,7 @@ X-BeONE-Demo-User: MY_CARDS
     "fixedCardComparison": null,
     "inputSnapshot": null,
     "notes": [
+      "예정 소비는 이번 버전에서 월간 합계에 반영하지 않습니다(D-18 K4).",
       "비교할 수 있는 카드가 없어 추천을 확정할 수 없습니다."
     ]
   }
@@ -268,6 +293,9 @@ X-BeONE-Demo-User: MY_CARDS
 ### 명세 단계 미정
 
 - 카드 사유 순서는 화면 문구 확인 뒤 다시 볼 수 있습니다(D-18 K3).
+- `SINGLE_COMPARED_CARD`의 화면 문구.
+- `policyEvidence`를 `CONFIRMED_ABSENT`·`PRESENT`로 판정할 업무 API 기준. 정해지기 전에는 `UNDETERMINED`.
+- D-23 #1의 "기준일이 승인일이 아닌 카드를 `notes`에 표시"에 해당하는 `noteCodes`는 엔진에 없습니다. 업무 API가 만들지 엔진에 둘지는 정하지 않았습니다.
 
 ### 근거
 
