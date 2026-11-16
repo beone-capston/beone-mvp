@@ -9,6 +9,7 @@
 - [android/](../android/): Kotlin Android 앱. 제품에서는 React 화면을 표시할 WebView 셸과 기기 인증을 담당합니다. 기기 인증과 60초 활성 상태의 네이티브 기반은 [Android 기기 인증 안내](android/auth-session.md)에 있습니다. 인증 요청을 동시에 하나로 제한하고 앱 이탈로 취소한 요청의 최종 결과를 기다리는 요청 단계 관리(`AuthRequestGate`)는 검증용 구현입니다. 이 구조를 넣기 전 코드로 실기기 1~15번을 통과했고, 지금 코드는 같은 기기 한 대에서 주요 항목을 관측상 통과했습니다. 다만 `정리 중` 경로는 관측하지 못했고 16·17번은 미실행입니다([실기기 확인 목록](android/device-checklist.md)). 웹 ↔ 네이티브 브리지와 기기 인증 상태 전달은 아직 구현하지 않았습니다. debug 앱에 인증 점검 화면과 WebView 셸이 함께 있지만 서로 연결되어 있지 않습니다.
   - WebView 셸의 기본 구조(신뢰 origin 설정 분리, 탐색 제한, debug 개발 서버 로딩)는 [Android WebView 셸 안내](android/webview-shell.md)에 있으며, 실기기 관측은 끝나지 않았습니다. release는 주소를 설정하지 않아 아무 페이지도 불러오지 않습니다. 배포 앱이 서버 HTTPS 화면을 불러오는 방침은 [D-25](decisions.md#d-25-확정-정책)에 있으며, release 로딩 구현과 신뢰 origin 반영은 아직 하지 않았습니다. 브리지 공개 계약은 [D-21](decisions.md#d-21-확정-정책)의 후보입니다.
   - 위 두 문장은 `develop`(#88 병합 전) 기준입니다. #88 브랜치(PR #89)에서는 release 시작 주소를 `https://beonepay.site/`로 정하고, 같은 origin의 최상위 프레임에만 브리지 v1(`com.beone.app.bridge`, JS 객체 `BeoneBridge`)을 노출해 기기 인증 상태와 연결합니다. Android 부품 구현이며 HTTP API·frontend 연결 완성이 아니고, 로컬 단위 테스트만 했고 실기기는 확인하지 않았습니다([진행 기록](progress/android/88-android-bridge-local.md)).
+  - WebView 셸의 기본 구조(신뢰 origin 설정 분리, 탐색 제한, debug 개발 서버 로딩)는 [Android WebView 셸 안내](android/webview-shell.md)에 있으며, 실기기 관측은 끝나지 않았습니다. release는 주소를 설정하지 않아 아무 페이지도 불러오지 않습니다. 배포 앱이 서버 HTTPS 화면을 불러오는 방침은 [D-25](decisions.md#d-25-확정-정책)에 있습니다. 2026-11-16 사용자 결정으로 release 시작 주소 `https://beonepay.site/`와 신뢰 origin `https://beonepay.site`를 정했지만 코드에는 아직 반영하지 않았습니다. 브리지 공개 계약은 2026-11-16 [D-21](decisions.md#d-21-확정-정책) 보충으로 [v1 확정](android/bridge-contract-candidate.md)됐으며 구현은 아직 없습니다.
 - [frontend/](../frontend/): Vite·React·TypeScript 웹. 주문, 카드 상태, 추천 결과를 보여줄 화면 영역이며 현재는 초기 구성 단계입니다.
 - [backend/](../backend/): Java 21·Spring Boot API. 카드 규칙과 계산 입출력 모델, 공통 API 응답·예외 처리를 보유합니다. DB 마이그레이션은 Flyway로 관리합니다.
 - [docs/](./): 요구사항, 결정, 조사·평가 자료와 개발 안내.
@@ -31,6 +32,7 @@
 - [codef: CODEF 카드 응답 해석 경계](domains/codef.md)
   - 위치: `backend/src/main/java/com/beone/api/codef/`
   - 책임: 승인내역·보유카드·실적조회 응답 본문에서 결과 코드 분류와 비민감 필드만 해석. 빈 값·형식 오류를 0원이나 0건으로 바꾸지 않고, 민감 필드를 옮기지 않습니다. 해석된 KB 승인내역 한 건의 취소 표현 형태를 기술합니다(#45, 금액 계산·매칭 없음). 그 앞단 전송 단계(#43)는 입력받은 HTTP 상태를 200·401·그 밖으로 나누고, 200 본문만 URL 디코딩해 해석합니다. `codef.transport`(#62)는 토큰 발급·캐시, 상품 요청, 시간 초과, 호출 상한을 맡습니다. 키가 없어도 서버는 뜨고 CODEF 호출만 실패합니다.
+  - 하위 패키지 `codef.sync`(#82): 전송 계층의 세 조회 대상 호출 결과를 대상별로 판정(부분 실패)하고 보유카드 후보(`UNMAPPED`)·승인 행 형태 분류·실적 참고값(계산 미사용)으로 옮깁니다. 카드 연결·짝짓기·중복 키·후보 상품·날짜 해석·원장 연결은 하지 않습니다.
   - 범위 밖: 자동 재시도, 계정 연결(connectedId)·RSA 암호화·추가 인증 요청, 이 패키지를 호출하는 엔드포인트, DB 저장, BeONE 상태값으로의 변환. `benefit`·`common.web`에 의존하지 않습니다.
 
 도메인이 아닌 공통 웹 기반 코드:

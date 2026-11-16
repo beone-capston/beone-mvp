@@ -25,11 +25,13 @@
 - [#25](https://github.com/beone-capston/beone-mvp/issues/25) WebView 셸 기초 — [PR #26](https://github.com/beone-capston/beone-mvp/pull/26)으로 `develop`에 squash 병합(`5a0065f6f7f86f655cb417ccca3db07817737e09`). 작업 브랜치와 워크트리는 보존 중입니다. 실기기는 W1·W2·W5(debug) 관측상 통과, W6 부분 관측이며 나머지 항목은 미실행입니다 — [확인 기록](../../android/webview-shell.md#확인-기록-2026-11-06-fixture) ([단계 기록](25-webview-shell.md))
 - [#88](https://github.com/beone-capston/beone-mvp/issues/88) 브리지 v1 로컬 구현 — [PR #89](https://github.com/beone-capston/beone-mvp/pull/89)(미병합, 계약 문서는 PR #87 미병합). 이 문서의 다른 절은 #88 이전 `develop` 기준이며 아래는 #88 브랜치 기준입니다. release 시작 주소 `https://beonepay.site/`, 신뢰 origin 1개에만 `window.BeoneBridge` 노출, 기기 인증과 연결(대기 시간 120초·10초는 근거 없는 잠정값). 로컬 단위 테스트 166건만 실행, 실기기·설치 미확인 ([단계 기록](88-android-bridge-local.md))
 - [#27](https://github.com/yim0327/beone-mvp/issues/27) 브리지 계약 초안(후보) — [PR #72](https://github.com/beone-capston/beone-mvp/pull/72)로 병합(PR #28을 대체). 공개 계약은 후보이고 구현은 없습니다
+- [#27](https://github.com/yim0327/beone-mvp/issues/27) 브리지 계약 초안(후보) — [PR #72](https://github.com/beone-capston/beone-mvp/pull/72)로 병합(PR #28을 대체). 당시 공개 계약은 후보였고 구현은 없습니다
+- [#86](https://github.com/beone-capston/beone-mvp/issues/86) 브리지 v1 계약 확정(문서) — 2026-11-16 사용자 결정 반영, PR 리뷰·병합 대기. 코드 반영은 별도 이슈입니다 ([단계 기록](86-bridge-contract-v1.md))
 
 ## 사용자 확인 사항
 
-1. **release 구현과 정확한 origin** — 사용자가 확인한 방향은 공개 HTTPS입니다. 구체적인 구현과 정확한 origin은 미정이며 별도 정책 PR에서 정합니다. 앱 에셋(`WebViewAssetLoader`) 권장안은 과거 이력입니다.
-2. **브리지 계약**(D-21 후보 B1~B6과, 리뷰·#22 대조에서 나온 활성 중 재인증 처리·하위 프레임 응답·`NO_RESPONSE`·요청 단계 표현) — 프런트엔드와 함께 정해야 합니다.
+1. **release 구현과 정확한 origin** — 사용자가 확인한 방향은 공개 HTTPS입니다. 구체적인 구현과 정확한 origin은 미정이며 별도 정책 PR에서 정합니다. 앱 에셋(`WebViewAssetLoader`) 권장안은 과거 이력입니다. (2026-11-16 보충) 사용자 결정으로 release 시작 주소 `https://beonepay.site/`와 신뢰 origin `https://beonepay.site`를 정했습니다(#86, 문서 확정). 코드 반영은 별도입니다.
+2. **브리지 계약**(D-21 후보 B1~B6과, 리뷰·#22 대조에서 나온 활성 중 재인증 처리·하위 프레임 응답·`NO_RESPONSE`·요청 단계 표현) — 프런트엔드와 함께 정해야 합니다. (2026-11-16 보충) 사용자 결정으로 v1 계약을 문서로 확정했습니다(#86). 구현은 별도입니다.
 3. **#22 운영 값** — 응답 대기 시간, 정지 뒤 복구 방식, 화면이 보일 때만 인증을 요청하는 조건(RESUMED).
 4. **실기기 시험 승인** — #22 16·17번(기기 보안 설정 변경), #25 W3 계열 실행 방식·release 시험용 서명(W4·W5(release))·실제 프런트 화면 기준 확인·W6 앱 안내 문구 확인과 콘솔 절차, 추가 관측을 위한 기기 설치·조작. 완료 범위: #25 W1·W2·W5(debug)는 2026-11-06 임시 fixture에서 사용자 직접 관측 기준 통과(W2는 `webview-shell.md`에 적힌 기준대로 회전 전후 주소·웹 기록 유지로 판정, JS 상태는 기록하지 않음), W6는 부분 관측(지정 관측 구간에서 수신기에 B 기록 없음, 앱 안내 문구 미확인, 콘솔 절차 미실행) — [확인 기록](../../android/webview-shell.md#확인-기록-2026-11-06-fixture).
 5. **리뷰** — #25는 `21652b2`에 CodeRabbit 리뷰 1건이 있고 지적 4건에 대응했습니다. 보완 커밋 리뷰는 아직 없습니다. 자동 리뷰는 사람 승인이 아닙니다.
