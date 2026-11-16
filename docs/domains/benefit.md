@@ -4,7 +4,7 @@
 
 `benefit`은 카드 혜택 계산과 추천에 필요한 식별자, 금액, 상태, 입력, 약관 규칙, 결과를 정의합니다. 값만 담는 것이 아니라 잘못된 조합을 생성 시점에 차단하고, 모르는 정보는 확인 필요 상태로 유지합니다.
 
-현재는 도메인 모델과 규칙 선택·보조 검증 로직, 서비스 한 건의 산식·조건을 따로따로 판정하는 기본 함수(`primitive`), 그리고 이 함수들로 비선택형 서비스 하나의 후보(`ServiceCandidate`)를 만드는 판정기(`ServiceCandidateEvaluator`, #31), 규칙 선택 결과의 서비스들을 후보·확인 필요·지원 범위 밖으로 나눠 모으는 취합기(`CardServiceCandidateCollector`, #33), 취합 결과로 카드 한 장·주문 한 건의 서비스별 채택·기여액과 카드 금액을 정하는 결정기(`OrderBenefitDecider`, #35), 호출자가 정한 판정일로 규칙 선택부터 결정까지 잇는 진입점(`OrderBenefitResolver`, #38)이 구현되어 있습니다. 한도 서비스는 입력 사용액으로 판정하고(D-18 K1), 신규 유예 기간도 등록일과 주문일로 판정합니다(D-20, #65). 선택형 서비스는 그 거래에 적용되지 않음이 확정될 때만 카드 금액을 막지 않습니다. 카드 간 비교(`CardBenefit`·`Recommendation` 연결), 모의 승인 뒤 사용액 반영, 선택 서비스 금액 계산, 월간 최적화, 추천 API, CODEF 호출은 아직 구현되지 않았습니다. 중복 허용 서비스의 합산은 D-13 #35 8번 조건을 만족하는 경우만 구현되어 있습니다(#67).
+현재는 도메인 모델과 규칙 선택·보조 검증 로직, 서비스 한 건의 산식·조건을 따로따로 판정하는 기본 함수(`primitive`), 그리고 이 함수들로 비선택형 서비스 하나의 후보(`ServiceCandidate`)를 만드는 판정기(`ServiceCandidateEvaluator`, #31), 규칙 선택 결과의 서비스들을 후보·확인 필요·지원 범위 밖으로 나눠 모으는 취합기(`CardServiceCandidateCollector`, #33), 취합 결과로 카드 한 장·주문 한 건의 서비스별 채택·기여액과 카드 금액을 정하는 결정기(`OrderBenefitDecider`, #35), 호출자가 정한 판정일로 규칙 선택부터 결정까지 잇는 진입점(`OrderBenefitResolver`, #38), 보유 카드 전체를 계산해 D-12 순서로 카드를 고르는 엔진 구현체(`DefaultRecommendationEngine`, #80)가 구현되어 있습니다. 한도 서비스는 입력 사용액으로 판정하고(D-18 K1), 신규 유예 기간도 등록일과 주문일로 판정합니다(D-20, #65). 선택형 서비스는 그 거래에 적용되지 않음이 확정될 때만 카드 금액을 막지 않습니다. 엔진은 승인했을 때의 버킷 차감액(`usageEffects`)까지만 내며, 모의 승인 뒤 사용액 저장·합산, 선택 서비스 금액 계산, 월간 최적화, 추천 API, CODEF 호출은 아직 구현되지 않았습니다. 중복 허용 서비스의 합산은 D-13 #35 8번 조건을 만족하는 경우만 구현되어 있습니다(#67).
 
 ## 핵심 용어
 
@@ -19,7 +19,7 @@
 
 ```text
 benefit/
-├── engine/  업무 API가 부르는 단일 입구와 입력·출력 타입(구현체 없음)
+├── engine/  업무 API가 부르는 단일 입구, 입력·출력 타입과 구현체(DefaultRecommendationEngine)
 ├── card/    식별자와 거래 분류
 ├── money/   원화와 혜택 금액
 ├── state/   값의 출처·기준 기간·갱신 시각
@@ -34,12 +34,13 @@ benefit/
 
 ### engine: 업무 API의 입구
 
-업무 API가 혜택 계산을 부르는 단일 입구입니다([D-22](../decisions.md#d-22-확정-정책)). **인터페이스와 입출력 타입, 생성 시 계약 검증만 있고 구현체와 Spring 빈(Spring이 생성·관리하는 객체)은 아직 없습니다.** 호출하는 쪽의 시험은 자기 가짜 구현을 씁니다.
+업무 API가 혜택 계산을 부르는 단일 입구입니다([D-22](../decisions.md#d-22-확정-정책)). 구현체 `DefaultRecommendationEngine`이 Spring 빈(Spring이 생성·관리하는 객체)으로 등록되어 있어, 업무 코드는 `RecommendationEngine`을 주입받아 씁니다(#80).
 
 - [RecommendationEngine](../../backend/src/main/java/com/beone/api/benefit/engine/RecommendationEngine.java): `EngineRequest`를 받아 `EngineResult`를 돌려줍니다.
 - 입력
   - [EngineRequest](../../backend/src/main/java/com/beone/api/benefit/engine/EngineRequest.java): 판정일(주문일과 같아야 함), 주문, 선택 방식, 대표 카드, 보유 카드. 같은 보유 카드 ID, 같은 규칙 카드 두 장, 보유하지 않은 대표 카드를 거부합니다.
-  - [HeldCardInput](../../backend/src/main/java/com/beone/api/benefit/engine/HeldCardInput.java): `userCardId`(해석하지 않고 돌려줌), 매핑 상태, 규칙 카드, 후보, 추천 제외, 월간 상태. 가상 포트폴리오 카드는 `SYNTHETIC`이고 매핑 상태가 null입니다.
+  - [HeldCardInput](../../backend/src/main/java/com/beone/api/benefit/engine/HeldCardInput.java): `userCardId`(해석하지 않고 돌려줌), 매핑 상태, 규칙 카드, 후보, 추천 제외, 월간 상태, 실적 정책 근거. 가상 포트폴리오 카드는 `SYNTHETIC`이고 매핑 상태가 null입니다.
+  - [PolicyEvidenceInput](../../backend/src/main/java/com/beone/api/benefit/engine/PolicyEvidenceInput.java): 실적 기간에 귀속될 수 있는 취소(`cancellation`)와 할인받은 매출(`benefitedSales`)이 있는지. `PRESENT`·`CONFIRMED_ABSENT`·`UNDETERMINED`(2026-11-16 사용자 결정). 규칙에 미확정 실적 정책 조건이 있으면 `CONFIRMED_ABSENT`일 때만 조건을 무시하고, 확인하지 못했으면 `UNDETERMINED`를 넘겨 실적에 의존하는 서비스를 `확인 필요`로 둡니다.
   - [MonthlyStateInput](../../backend/src/main/java/com/beone/api/benefit/engine/MonthlyStateInput.java)과 [StateInput](../../backend/src/main/java/com/beone/api/benefit/engine/StateInput.java): 값, 출처, 기준 기간, 시각, `usable`. `null`은 모름입니다.
 - 출력
   - [EngineResult](../../backend/src/main/java/com/beone/api/benefit/engine/EngineResult.java): 결과, 조건부, 선택 카드, 비교·제외 카드, 대표 카드 비교, 차감 정보. 결과 조합을 생성 때 검사합니다.
@@ -55,8 +56,27 @@ benefit/
 
 ```java
 EngineRequest request = new EngineRequest(order.date(), order, "AUTO_RECOMMEND", null, cards);
-EngineResult result = engine.recommend(request); // 구현은 후속 PR
+EngineResult result = engine.recommend(request); // engine은 주입받은 RecommendationEngine
 ```
+
+#### DefaultRecommendationEngine: 결과 연결과 카드 간 비교(#80)
+
+[DefaultRecommendationEngine](../../backend/src/main/java/com/beone/api/benefit/engine/DefaultRecommendationEngine.java)은 `RuleCatalog`를 받아 보유 카드마다 아래 순서로 처리합니다. 카드 ID로 분기하지 않고 규칙 데이터만 씁니다.
+
+1. 선별: 사용자 제외 → `USER_EXCLUDED`, `NOT_SUPPORTED` → `NO_SUPPORTED_RULE`, `UNMAPPED`·`CANDIDATE` → `MAPPING_UNCONFIRMED`(후보 포함). 이 카드들은 계산하지 않습니다.
+2. 입력 변환과 기간 판단([EngineInputs](../../backend/src/main/java/com/beone/api/benefit/engine/EngineInputs.java)): 전월 실적은 주문월의 전월 1일~말일, 버킷 사용액은 주문월 1일~말일, 사용 등록일은 등록일 하루와 기준 기간이 정확히 같아야 씁니다. 다르거나 `usable=false`이거나 값이 없으면 `UNKNOWN`입니다. 음수 전월 실적은 약관 근거가 없어 `UNKNOWN`(확인 필요)입니다(D-17). 입력에 없는 버킷 사용액도 `UNKNOWN`이며 0원이나 `otherBucketsUsed`로 대신하지 않습니다.
+3. 계산: `RuleCatalog.select`와 `OrderBenefitDecider.decide`를 그대로 씁니다. 규칙이 없으면 `RULE_UNAVAILABLE`로 제외합니다.
+4. 카드 평가([CardEvaluator](../../backend/src/main/java/com/beone/api/benefit/engine/CardEvaluator.java) → [CardEvaluation](../../backend/src/main/java/com/beone/api/benefit/engine/CardEvaluation.java)): 기존 `CardBenefit`을 채우고 API용 서비스 결과·한도 줄·차감액을 함께 만듭니다.
+   - 서비스 상태: 채택이면 적용 상태, 채택 미정·재확인·확인 필요·지원 범위 밖이면 `NEEDS_CONFIRMATION`, 미채택이면 미충족 조건 중 제외 > 대상 업종 > 택1 선택 > 실적 > 최소 금액 > 결제 방식(> 한도 소진)의 첫 값, 미충족 조건 없이 0원이면 `NO_CONTRIBUTION`입니다.
+   - 카드 상태: 금액 미확정이면 `NEEDS_CONFIRMATION`, 양수면 한도로 줄어든 채택 서비스가 있을 때 `APPLIED_CAP_REMAINING`, 0원이면 ① 특정 업종 대상이면서 업종이 맞은 서비스의 사유(한도 소진 > 실적 > 택1 선택 > 최소 금액 > 결제 방식 > `NO_CONTRIBUTION`) ② 없으면 제외 > 대상 업종 ③ 없으면 전 가맹점 서비스의 나머지 사유입니다.
+   - 남은 한도: 버킷별 `구간 한도 − 입력 사용액 − 이 주문의 채택 기여액 중 체인에 그 버킷이 있는 서비스의 합`. 구간이나 사용액을 모르거나, 사용액이 한도보다 크거나, 그 버킷을 체인에 둔 서비스의 기여액이 `확인 필요`이면 `null`입니다. 구간은 취합기와 같은 신규 유예 판정으로 고르며([LimitTierPerformance](../../backend/src/main/java/com/beone/api/benefit/primitive/LimitTierPerformance.java)), 유예 정의가 미확정이면 비워 둡니다. `CardBenefit.remainingLimits`의 키는 규칙의 버킷 전체입니다.
+   - 차감액(`usageEffects`): 채택 기여액이 있는 버킷은 그 합, 기여액이 `확인 필요`인 체인의 버킷은 `null`입니다. 차감이 없는 버킷은 넣지 않습니다. 계산한 카드(비교 카드와 금액 미확정 제외 카드)만 냅니다.
+5. 비교: 금액이 확정된 카드끼리 월간 합계 → 현재 주문 혜택 → 대표 카드 → 카드 ID 오름차순(D-12). 월간 합계는 현재 주문 혜택과 같습니다(D-18 K4). 금액 미확정 카드는 사유가 `UNSUPPORTED`뿐이면 `UNSUPPORTED`, 그 밖은 `NEEDS_CONFIRMATION`으로 제외합니다. 비교 카드가 0장이면 `NOT_DETERMINED`, 1장이면 `decidedBy`·`gapToRunnerUpWon`이 `null`입니다. 사용자 제외를 뺀 제외 카드가 있으면 `conditional=true`입니다.
+6. 대표 카드 고정: `selected`는 그대로 D-12 최적 카드이고, `fixedComparison.differenceWon`은 대표 카드가 비교 카드일 때만 최적 카드와의 월간 합계 차이입니다.
+
+`noteCodes`는 `PLANNED_SPENDING_EXCLUDED`(항상), `NO_COMPARABLE_CARD`, `CONDITIONAL_RECOMMENDATION`, `SINGLE_COMPARED_CARD`이며 문구는 업무 API가 정합니다. 원 미만을 버린 서비스가 있으면 `policyNotes`에 "원 미만 절사: 약관 근거 없음, 사용자 결정"을 남깁니다.
+
+하지 않는 일: 예정 소비·원장·모의 취소 되돌림, 스냅샷 뒤 승인 합산(업무 API), 선택형 서비스 금액 계산, 사용자 제외·매핑 미확정 카드의 차감액 계산. 제외 카드의 금액 상한을 증명하지 않으므로 조건부 추천을 "달라지지 않음"으로 바꾸지 않습니다.
 
 ### card: 식별자와 거래 분류
 
@@ -281,7 +301,7 @@ if (result instanceof OrderBenefit.Decided decided) {
 
 - [ServiceBenefit](../../backend/src/main/java/com/beone/api/benefit/result/ServiceBenefit.java): 서비스별 상태와 현재 주문 혜택.
 - [CardBenefit](../../backend/src/main/java/com/beone/api/benefit/result/CardBenefit.java): 카드별 적용 규칙, 현재 주문 혜택, 예상 월 총혜택, 서비스 내역, 주문 이후 잔여 한도.
-- [ApplicationStatus](../../backend/src/main/java/com/beone/api/benefit/result/ApplicationStatus.java): 적용·한도 소진·업종/실적/금액/결제 방식 미충족·규칙 부재·확인 필요 등 결과 사유. 금액 형태와 상태의 일관성을 검사합니다.
+- [ApplicationStatus](../../backend/src/main/java/com/beone/api/benefit/result/ApplicationStatus.java): 적용·한도 소진·업종/실적/금액/결제 방식 미충족·규칙 부재·확인 필요 등 결과 사유. 금액 형태와 상태의 일관성을 검사합니다. `NO_CONTRIBUTION`은 미충족 사유 없이 기여액이 확정 0원인 경우(원 미만 절사로 0원, 다른 서비스에 밀려 미채택)이며 후보의 미충족 조건으로는 쓰지 않습니다(2026-11-16 사용자 결정).
 - [ServiceCandidate](../../backend/src/main/java/com/beone/api/benefit/result/ServiceCandidate.java): 서비스 하나만 고른다고 할 때의 후보 판정(D-13). 후보 금액 `standaloneAmount`와 확인된 미충족 사유 집합을 담습니다. 한도 서비스는 양수 금액을 줄일 남은 한도(`remainingLimit`), 판정하지 못한 사유(`limitReason`), 절사 여부를 함께 담습니다. 미충족 사유는 `NOT_APPLICABLE_*` 6종과 `LIMIT_EXHAUSTED`만 명시적으로 허용하고, 사유가 하나라도 있으면 후보 금액은 확정 0원이어야 합니다. 사유 순서는 계약이 아닙니다.
 - [Adoption](../../backend/src/main/java/com/beone/api/benefit/result/Adoption.java): 후보를 카드의 최종 금액에 넣었는지. `ADOPTED`(채택)·`NOT_ADOPTED`(채택하지 않음)·`UNDETERMINED`(정할 수 없음).
 - [OrderServiceBenefit](../../backend/src/main/java/com/beone/api/benefit/result/OrderServiceBenefit.java): 단일 주문에서 서비스 하나의 후보·채택·실제 기여액 `contribution`을 나눠 담습니다. 미충족 후보는 `NOT_ADOPTED`만, `NOT_ADOPTED`와 확정 0원 후보의 기여액은 확정 0원만, 후보와 기여액이 모두 확정이면 기여액 ≤ 후보 금액만 허용합니다. `UNDETERMINED`는 미채택(0원)일 수도 있으므로 기여액은 확정 0원이나 확인 필요만 허용합니다. `appliedStatus()`는 채택된 양수 기여액의 적용 상태(`APPLIED`, 남은 한도로 줄였으면 `APPLIED_CAP_REMAINING`)입니다. 이 조건들은 결과 표현의 논리적 일관성이며, 실제 채택·기여액을 정하는 근거는 계산기의 책임입니다.
@@ -296,7 +316,7 @@ if (result instanceof OrderBenefit.Decided decided) {
 - [PerformanceRecheck](../../backend/src/main/java/com/beone/api/benefit/result/PerformanceRecheck.java): 실적 정책 조건 때문에 최종 채택·기여액을 정하지 못한 원본 후보와 사유. 후보는 실적 미충족만 있는 확정 0원이거나 미충족 사유 없는 확정 0원이어야 하며, 그 0원은 최종 기여액이 아닙니다.
 - [PendingReason](../../backend/src/main/java/com/beone/api/benefit/result/PendingReason.java): 카드 금액을 확정하지 못한 사유 `(kind, services, detail)`. 종류는 `NEEDS_CONFIRMATION`·`UNSUPPORTED`·`PERFORMANCE_POLICY`(서비스 1개), `STACKING_UNRESOLVED`·`STACKING_CONFIRMED`(서비스 쌍), `STACKING_EXCEEDS_PAYMENT`(서비스 2개 이상)이며, 서비스 ID 오름차순·공백 없는 설명을 생성 시 확인합니다.
 
-`ServiceCandidate`·`OrderServiceBenefit`은 기존 `ServiceBenefit`과 별개입니다. `ServiceCandidate`는 `ServiceCandidateEvaluator`가 만들고 `CardServiceCandidateCollector`가 모을 수 있지만, 채택 여부와 기여액은 `OrderBenefitDecider`가 정해 `OrderBenefit`에 담습니다. 이 타입들 자체는 채택·기여액을 계산·추론하지 않고, 아직 `CardBenefit`에 연결되지 않았습니다. 미확정 금액을 0원으로 바꾸는 경로도 없습니다.
+`ServiceCandidate`·`OrderServiceBenefit`은 기존 `ServiceBenefit`과 별개입니다. `ServiceCandidate`는 `ServiceCandidateEvaluator`가 만들고 `CardServiceCandidateCollector`가 모을 수 있지만, 채택 여부와 기여액은 `OrderBenefitDecider`가 정해 `OrderBenefit`에 담습니다. 이 타입들 자체는 채택·기여액을 계산·추론하지 않습니다. `CardBenefit`은 엔진의 `CardEvaluator`가 `OrderBenefit`에서 채웁니다(#80). 미확정 금액을 0원으로 바꾸는 경로도 없습니다.
 
 ```java
 ServiceCandidate candidate = new ServiceCandidate(ServiceId.of("SYN-SVC"), BenefitAmount.confirmed(1_000), Set.of());
@@ -317,16 +337,16 @@ new OrderServiceBenefit(candidate, Adoption.NOT_ADOPTED, BenefitAmount.confirmed
 OrderBenefit result = OrderBenefitResolver.resolve(catalog, cardId, decisionDate, order, state, registeredAt, evidence);
 ```
 
-여러 카드를 비교하거나 `CardBenefit`·`Recommendation`을 만들지 않습니다.
+여러 카드를 비교하거나 `CardBenefit`을 만들지 않습니다. 그 일은 엔진 구현체가 합니다(#80).
 
-결과 모델은 실제로 카드를 비교·선택하는 알고리즘이 아닙니다. 조건부 추천 여부를 판단하는 것도 후속 계산 로직의 책임입니다.
+결과 모델은 실제로 카드를 비교·선택하는 알고리즘이 아닙니다. 카드 비교·선택과 조건부 추천 판단은 엔진 구현체(`DefaultRecommendationEngine`)가 하며, 엔진은 `Recommendation`·`RecommendationOutcome`을 만들지 않고 `EngineResult`로 직접 냅니다.
 
 ## 데이터·처리 흐름
 
 1. Order, HeldCard, Ledger, CardMonthlyState 등을 RecommendationInput으로 묶습니다.
 2. 서버 시작 때 로더가 규칙 JSON으로 RuleCatalog를 만들고, RuleCatalog가 판단 날짜에 적용 가능한 검증 규칙을 선택합니다. 카드 한 장·주문 한 건은 `OrderBenefitResolver`가 이 선택과 아래 결정을 잇습니다(판정일은 호출자 입력).
-3. 미확정 약관과 입력 상태를 고려해 혜택을 계산하고 월간 후보를 비교합니다. 서비스 한 건의 산식·개별 조건 판정과 비선택형 서비스의 단일 후보 판정, 규칙 선택 결과의 서비스 후보 취합(`CardServiceCandidateCollector`), 카드 한 장·주문 한 건의 채택·카드 금액 결정(`OrderBenefitDecider`)은 `primitive`에 있지만, 카드 간 비교·월간 최적화로 추천을 내는 **엔진은 후속 구현입니다.**
-4. 계산 로직이 ServiceBenefit(또는 후보·채택·기여액을 나눈 ServiceCandidate·OrderServiceBenefit·OrderBenefit), CardBenefit, Recommendation을 구성합니다. 현재 `OrderBenefit`까지는 결정기가 만들고, `CardBenefit`·`Recommendation`은 결과를 담는 모델과 일관성 검사만 있습니다.
+3. 미확정 약관과 입력 상태를 고려해 혜택을 계산하고 월간 후보를 비교합니다. 서비스 한 건의 산식·개별 조건 판정과 비선택형 서비스의 단일 후보 판정, 규칙 선택 결과의 서비스 후보 취합(`CardServiceCandidateCollector`), 카드 한 장·주문 한 건의 채택·카드 금액 결정(`OrderBenefitDecider`)은 `primitive`에 있고, 보유 카드를 모두 계산해 D-12 순서로 고르는 엔진은 `engine.DefaultRecommendationEngine`입니다(#80). 월간 최적화는 하지 않습니다.
+4. 계산 로직이 ServiceBenefit(또는 후보·채택·기여액을 나눈 ServiceCandidate·OrderServiceBenefit·OrderBenefit), CardBenefit, Recommendation을 구성합니다. 현재 `OrderBenefit`까지는 결정기가 만들고, `CardBenefit`과 입구 출력 `EngineResult`는 엔진이 만듭니다. `Recommendation`은 결과를 담는 모델과 일관성 검사만 있고 엔진이 쓰지 않습니다.
 
 ## 짧은 코드 예시
 
@@ -358,7 +378,7 @@ RuleTerm<FractionalWonPolicy> rounding = RuleTerm.unresolved("공식 근거 확�
 
 ## 현재 구현 범위와 관련 문서
 
-구현된 범위는 위 모델, 규칙 JSON 로더, 생성 시 일관성 검사, 규칙 선택, 일부 기간·취소 증거 보조 로직, 서비스 한 건의 산식·개별 조건 판정, 비선택형 서비스의 단일 후보 판정(한도 체인 포함), 신규 유예 판정, 카드 한 장의 서비스 후보 취합, 카드 한 장·주문 한 건의 혜택 결정(#35, #65)과 규칙 선택부터 결정까지의 연결(#38, 판정일은 호출자 입력), 서비스 후보·취합·채택·기여액·주문 혜택 결과 타입입니다. 카드 간 비교·추천, 선택 서비스 금액 계산, D-13 #35 8번 밖의 합산, 최적화 엔진과 외부 연동은 별도 구현이 필요합니다. `primitive` 테스트 일부는 가상 업종·서비스의 합성 값이고, `LimitSelectionGraceTest`, `Stacking09174Test`와 평가 실행기는 규칙 JSON을 쓰지만 약관 전체 검증을 뜻하지 않습니다.
+구현된 범위는 위 모델, 규칙 JSON 로더, 생성 시 일관성 검사, 규칙 선택, 일부 기간·취소 증거 보조 로직, 서비스 한 건의 산식·개별 조건 판정, 비선택형 서비스의 단일 후보 판정(한도 체인 포함), 신규 유예 판정, 카드 한 장의 서비스 후보 취합, 카드 한 장·주문 한 건의 혜택 결정(#35, #65)과 규칙 선택부터 결정까지의 연결(#38, 판정일은 호출자 입력), 서비스 후보·취합·채택·기여액·주문 혜택 결과 타입, 엔진 입구의 구현체(#80: 결과 연결, 카드 상태, 남은 한도·차감액, 선별·조건부, D-12 선택, 대표 카드 비교)입니다. 선택 서비스 금액 계산, D-13 #35 8번 밖의 합산, 최적화 엔진과 외부 연동은 별도 구현이 필요합니다. `primitive` 테스트 일부는 가상 업종·서비스의 합성 값이고, `LimitSelectionGraceTest`, `Stacking09174Test`, 평가 실행기(`EvaluationCaseRunnerTest`, 입구를 거치는 `EngineEvaluationRunnerTest`)와 `DefaultRecommendationEngineTest`는 규칙 JSON을 쓰지만 약관 전체 검증을 뜻하지 않습니다.
 
 테스트는 [benefit 테스트 디렉터리](../../backend/src/test/java/com/beone/api/benefit/)에서 확인합니다. fixture 매핑 테스트를 계산 결과 검증으로 혼동하지 않습니다. 계산 결과는 평가 실행기가 비교합니다.
 
