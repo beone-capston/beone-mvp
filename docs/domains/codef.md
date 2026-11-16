@@ -52,7 +52,7 @@ codef/
 1. 본문이 JSON 객체가 아니면 예외를 던지지 않고 결과는 미분류, `data`는 형식 오류입니다. 파서 예외 문구에 본문 일부가 들어갈 수 있어 전달하지 않습니다.
 2. `result.code`·`transactionId`만 보관하고 [CodefResultCategory](../../backend/src/main/java/com/beone/api/codef/CodefResultCategory.java)로 분류합니다. `message`·`extraMessage`는 기관 문구가 그대로 담길 수 있어 보관하지 않습니다.
 3. `data`는 [CodefList](../../backend/src/main/java/com/beone/api/codef/CodefList.java)로 읽습니다. 객체 → 1건, 배열 → N건(빈 배열은 0건), 키 누락 → 값 없음(`Missing`), null·원시값·객체가 아닌 배열 원소 → 형식 오류(`Malformed`). 실적조회의 중첩 목록도 같은 규칙이며, 중첩 목록의 빈 문자열은 "미제공시 빈칸"으로 보고 값 없음입니다(최상위 `data`의 빈 문자열은 형식 오류).
-4. 결과 코드 분류와 `data` 해석은 독립입니다. 성공 분류여도 `data`의 누락·형식 오류·빈 값·해석 못 한 금액·목록 밖 코드 값은 그대로 남고, 0원·0건·검증 완료로 바뀌지 않습니다. 두 값을 합쳐 "사용 가능"을 판정하는 메서드는 없으며, `data` 항목을 계산에 쓸지는 호출자가 결과 코드와 항목 값을 따로 보고 판단합니다. 예를 들어 추가 인증 응답의 `data`도 형식상 객체 1건으로 읽힙니다.
+4. 결과 코드 분류와 `data` 해석은 독립입니다. 성공 분류여도 `data`의 누락·형식 오류·빈 값·해석 못 한 금액·목록 밖 코드 값은 그대로 남고, 0원·0건·검증 완료로 바뀌지 않습니다. 해석기에는 두 값을 합쳐 "사용 가능"을 판정하는 메서드가 없으며, 그 판정은 하위 패키지 [`codef.sync`](#오프라인-동기화-변환-82)가 조회 대상별로 합니다. 판정을 통과해도 항목 값의 빈 값·미해석은 그대로입니다. 예를 들어 추가 인증 응답의 `data`도 형식상 객체 1건으로 읽힙니다.
 
 필드 값 규칙([CodefFields](../../backend/src/main/java/com/beone/api/codef/CodefFields.java)):
 
@@ -171,6 +171,42 @@ if (response.data() instanceof CodefList.Items<CodefApproval> items) {
 	items.items(); // 0건 이상. 결과 코드와 별개로 해석된 값
 }
 ```
+
+## 오프라인 동기화 변환 (#82)
+
+`codef.sync`는 전송 계층이 돌려준 세 조회 대상(보유카드·승인내역·실적조회)의 호출 결과를 받아, 대상마다 "쓸 수 있는지"를 판정하고 2차 동기화(D-16)에 필요한 중간 값으로 옮기는 **오프라인 변환**입니다. CODEF를 호출하지 않고, 저장하지 않으며, 엔진 입력이나 도메인 원장을 만들지 않습니다. 테스트는 공식 시트 셀을 근거로 만든 합성 응답만 쓰며 실계정 관측이 아닙니다.
+
+```text
+codef/sync/
+├── CodefSyncSnapshot        세 대상 결과 묶음. 기관 코드·조회 시각(주입받은 Clock에서 한 번 읽음)
+├── CodefTargetOutcome       대상 하나의 판정: Usable(결과·형태·항목) / Unusable(이유)
+├── CodefUnusableReason      쓸 수 없는 이유(중립값): 호출 실패·HTTP 401·그 밖의 HTTP 상태·본문은 받았지만 쓸 수 없음
+├── CodefHeldCardCandidate   보유카드 → 매핑 전 후보(보유 출처 CODEF, 매핑 상태 UNMAPPED)
+├── CodefApprovalRowView     승인 행 → 취소 표현 형태·원화 금액 가능 여부·승인번호 유무
+└── CodefPerformanceReference 실적조회 → 카드사 조회 실적(참고), 계산 미사용 고정
+```
+
+처리 흐름:
+
+1. 판정([CodefTargetOutcome](../../backend/src/main/java/com/beone/api/codef/sync/CodefTargetOutcome.java)): 쓸 수 있는 경우는 응답을 받았고(`Answered`) HTTP 200 본문을 해석했으며(`Interpreted`) 결과가 성공(`CF-00000`)이고 `data`가 항목 목록(`Items`, 0건 포함)일 때뿐입니다. 그 밖에는 [CodefUnusableReason](../../backend/src/main/java/com/beone/api/codef/sync/CodefUnusableReason.java)에 전송 실패 단계·이유, HTTP 상태, 결과 코드·트랜잭션 아이디·분류, `data` 상태(누락·형식 오류와 고정 사유)를 보존합니다. 추가 인증 필요(`CF-03002` + `continue2Way` 불리언 `true`)는 2차 요청이 범위 밖이라 쓸 수 없음으로 두되 `additionalAuthenticationRequired()`로 드러냅니다. 이 이유를 공개 오류 코드로 바꾸는 일은 HTTP 계층(팀원 담당)에 남깁니다.
+2. 부분 실패: 세 대상은 따로 판정합니다. 하나가 실패해도 나머지 결과는 바뀌지 않습니다.
+3. 보유카드([CodefHeldCardCandidate](../../backend/src/main/java/com/beone/api/codef/sync/CodefHeldCardCandidate.java)): 카드명(나누지 않음)·휴면 여부(휴면도 목록에 남김)·카드구분·발급일자·상태를 그대로 옮깁니다. 보유 출처 `CODEF`, 매핑 상태 `UNMAPPED`는 엔진 입력 `HeldCardInput`의 같은 이름 토큰과 같지만, 이 타입은 `benefit`에 의존하지 않습니다. 등록일은 발급일로 추정하지 않아 항상 미확인입니다.
+4. 승인내역([CodefApprovalRowView](../../backend/src/main/java/com/beone/api/codef/sync/CodefApprovalRowView.java)): 기존 [취소 표현 기술](codef-kb.md#취소-표현-구분) 결과, 원화 금액을 만들 수 있는지(통화가 정확히 `KRW`, 국내, 이용금액 해석 모두 맞을 때만. KB 원화금액은 미제공이라 환산하지 않음), 승인번호가 있는지만 담습니다. 원문 승인번호와 금액은 담지 않고, 사용일자·사용일시는 원문 문자열 그대로입니다.
+5. 실적조회([CodefPerformanceReference](../../backend/src/main/java/com/beone/api/codef/sync/CodefPerformanceReference.java)): 혜택·실적현황을 모두 담고 하나를 고르지 않습니다. 금액·날짜는 값 또는 미확인 이유(`ABSENT`·`UNPARSED`) 중 정확히 하나이며, 미확인을 0원으로 바꾸지 않습니다. 반영기간은 정확히 8자리 yyyyMMdd이고 실제 있는 날짜일 때만 읽고, 당월 종료일(조회일 전날)을 말일로 바꾸지 않습니다. `usedInCalculation()`은 항상 거짓이며 `StateInput`·`StateValue`로 바꾸는 메서드가 없습니다(공개 API 검사 테스트).
+
+```java
+// 합성 예시: 전송 계층의 세 호출 결과를 판정·변환만 한다
+CodefSyncSnapshot snapshot = CodefSyncSnapshot.assemble("0301", clock, heldCards, approvals, performances);
+if (snapshot.approvals() instanceof CodefTargetOutcome.Unusable<CodefApprovalRowView> unusable) {
+	unusable.reason(); // 중립 이유. 보유카드·실적 결과는 그대로이고 수동 입력 경로는 유지한다
+}
+```
+
+구현하지 않은 것(사용자 결정 대기 또는 다른 담당):
+
+- 승인·실적 행을 어느 보유카드에 붙일지(R1), Type2 짝짓기와 재조회 중복 판단 키(R2), 카드명 → 후보 상품(`candidateCardProductId`) 산출(R3), 승인 일자·시각 해석(R4), 공개 오류 코드 대응(R5, 팀원).
+- CODEF 원장 행·불완전 사유·완전 선언, 도메인 `Ledger`/`LedgerTransaction` 연결(R7·R8), 엔진 입력 생성, 저장, 엔드포인트.
+- 실제 KB 응답이 시트의 `O`·`△` 필드를 주는지는 실계정 관측 전까지 미확인입니다.
 
 ## 제약과 후속 작업
 

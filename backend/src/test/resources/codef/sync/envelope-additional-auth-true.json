@@ -1,0 +1,5 @@
+{
+  "_fixture": {"synthetic": true, "basis": "카드 API 추가인증 출력부: CF-03002, continue2Way 불리언 true", "observed": false},
+  "result": {"code": "CF-03002", "transactionId": "SYN-TX-ENV-0004"},
+  "data": {"continue2Way": true, "jti": "SYN-JTI-0000", "jobIndex": 0, "threadIndex": 0, "twoWayTimestamp": 0}
+}
