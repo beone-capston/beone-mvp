@@ -218,5 +218,5 @@ G 뒤 H는 앱 재실행 없이 같은 프로세스에서 버튼으로 보낸 �
 
 ## 이 목록 밖의 항목
 
-- WebView 화면 표시와 웹으로 상태 전달: WebView 셸은 [별도 문서](webview-shell.md)에서 다루며 실기기 관측 전입니다. 브리지는 구현하지 않았고 공개 계약은 D-21의 후보입니다. release 로딩과 정확한 origin은 별도 정책 PR에서 다룹니다.
+- WebView 화면 표시와 웹으로 상태 전달: WebView 셸은 [별도 문서](webview-shell.md)에서 다루며, 2026-11-06 임시 fixture 화면으로 일부 항목만 관측했습니다. 브리지 v1 계약은 D-21 보충으로 확정됐고, Android 로컬 구현(#88, PR #89 병합)은 단위 테스트만 실행했으며 실기기 미확인입니다. release는 `https://beonepay.site/`를 열고 신뢰 origin은 `https://beonepay.site` 하나이며, release 실기기 확인은 하지 않았습니다.
 - 실제 `가상 주문서 결제` 버튼과 모의 승인 흐름: React 화면·브리지 연결 뒤 확인합니다.

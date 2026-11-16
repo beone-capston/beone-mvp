@@ -1,6 +1,6 @@
 # Android WebView 브리지 계약
 
-> **상태: 확정(v1, 2026-11-16 사용자 결정), 구현 전.** 2026-11-04 사용자의 설계 방향 결정([D-21](../decisions.md#d-21-확정-정책))과 2026-11-16 사용자 결정(D-21·[D-25](../decisions.md#d-25-확정-정책)의 2026-11-16 보충)으로 이 문서의 공개 브리지 계약을 `v=1`로 확정했습니다. 다른 문서의 링크가 깨지지 않도록 파일 이름(`bridge-contract-candidate.md`)은 그대로 둡니다. 이름에 `candidate`가 남아 있어도 이 문서의 계약은 후보가 아니라 확정입니다. 확정한 것은 문서상의 계약입니다. 브리지 코드와 release 설정 반영은 별도 이슈이며 아직 하지 않았고, 실기기 확인은 별도 승인을 받아야 합니다. 이 계약을 바꾸려면 사용자 결정이 필요합니다([운영 규칙](../development/autonomous-workflow.md#스스로-정할-것과-사용자에게-물을-것)). 인증 대기 120초·정리 대기 10초는 이 계약의 확정값이 아닙니다. `auth.request` 연결에 기존 `AuthRequestGate` 값을 잠정 사용하는 근거 없는 제안값이며, 실기기 관측 전 미확정입니다(7절).
+> **상태: 확정(v1, 2026-11-16 사용자 결정). Android 로컬 구현 있음(#88), 프런트엔드·실기기 미확인.** 2026-11-04 사용자의 설계 방향 결정([D-21](../decisions.md#d-21-확정-정책))과 2026-11-16 사용자 결정(D-21·[D-25](../decisions.md#d-25-확정-정책)의 2026-11-16 보충)으로 이 문서의 공개 브리지 계약을 `v=1`로 확정했습니다. 다른 문서의 링크가 깨지지 않도록 파일 이름(`bridge-contract-candidate.md`)은 그대로 둡니다. 이름에 `candidate`가 남아 있어도 이 문서의 계약은 후보가 아니라 확정입니다. 확정한 것은 문서상의 계약입니다. Android 쪽 브리지 코드와 release 설정은 #88(PR #89로 `develop` 병합)에서 로컬 구현하고 단위 테스트만 실행했습니다([진행 기록](../progress/android/88-android-bridge-local.md)). 프런트엔드 연결과 실기기 확인은 아직 없으며, 실기기 확인은 별도 승인을 받아야 합니다. 이 계약을 바꾸려면 사용자 결정이 필요합니다([운영 규칙](../development/autonomous-workflow.md#스스로-정할-것과-사용자에게-물을-것)). 인증 대기 120초·정리 대기 10초는 이 계약의 확정값이 아닙니다. `auth.request` 연결에 기존 `AuthRequestGate` 값을 잠정 사용하는 근거 없는 제안값이며, 실기기 관측 전 미확정입니다(7절).
 
 근거: [PRD §4.3·FR-06](../PRD.md), [D-08](../decisions.md#d-08-확정-정책), [실기기 PoC](../d08-biometrics-poc.md)(PoC에서 `addWebMessageListener`로 성공·취소·불일치·잠금 상태 전달과 복귀 시 동기화를 확인).
 
@@ -10,7 +10,7 @@
 - **필요한 값만 보냅니다.** 생체 정보, PIN, 시스템 오류 메시지 원문, 기기 식별자는 보내지 않습니다. 인증 수단은 `BIOMETRIC`·`DEVICE_CREDENTIAL` 구분까지만 보냅니다.
 - **트리거일 뿐입니다.** 인증 결과는 앱 안의 가상 결제 화면을 여는 데만 씁니다. 웹이 이 값을 서버에 결제 승인 근거로 보내지 않고, 서버도 신뢰하지 않습니다(PRD FR-06).
 - **신뢰 origin에만 노출합니다.** origin은 스킴·호스트·포트의 묶음입니다. `https://beonepay.site`, `https://www.beonepay.site`, `http://beonepay.site`는 서로 다른 origin입니다. 허용 origin 목록은 빌드 변형별로 따로 둡니다. debug 목록은 개발 서버 `http://localhost:5173`이고, 테스트 origin은 계측 테스트 코드가 주입하며 debug 목록에 넣지 않습니다. release는 시작 주소 `https://beonepay.site/`를 열고, 탐색과 브리지의 신뢰 origin은 정확히 `https://beonepay.site` 하나입니다. release 목록에는 `www` 같은 다른 호스트, debug·테스트 origin, 평문 HTTP(`http://`) origin을 넣지 않습니다. 와일드카드를 쓰지 않습니다. 모든 변형에 공통으로 쓰는 전역 목록은 두지 않습니다.
-- **최상위 프레임만 처리합니다.** 브리지 구현은 허용 origin이라도 iframe 등 하위 프레임에서 온 메시지(`WebMessageListener`의 `isMainFrame`이 `false`)를 처리하지 않아야 합니다. 인증 창을 띄우거나 상태를 바꾸지 않고, 그 프레임에 `state`·`error`를 포함한 어떤 응답도 보내지 않습니다(무시). 브리지가 아직 없으므로 현재 동작이 아니라 구현이 지켜야 할 계약과 시험 요구입니다.
+- **최상위 프레임만 처리합니다.** 브리지 구현은 허용 origin이라도 iframe 등 하위 프레임에서 온 메시지(`WebMessageListener`의 `isMainFrame`이 `false`)를 처리하지 않아야 합니다. 인증 창을 띄우거나 상태를 바꾸지 않고, 그 프레임에 `state`·`error`를 포함한 어떤 응답도 보내지 않습니다(무시). #88 Android 구현은 이 규칙을 따르며 로컬 단위 테스트로만 확인했습니다. 실기기에서는 확인하지 않았습니다.
 
 ## 2. 전달 방식
 
@@ -85,7 +85,7 @@ window.BeoneBridge.postMessage(JSON.stringify({ v: 1, type: "state.get" }));
 - 오류가 겹치면 위 검사 순서(크기, JSON 형식, `v`, `type`)에서 먼저 걸린 코드를 보냅니다. `UNKNOWN_TYPE`은 `v`가 숫자 `1`일 때만 나옵니다. 예: `{"type":"unknown"}`은 `INVALID_MESSAGE`, `{"v":2,"type":"unknown"}`은 `UNSUPPORTED_VERSION`입니다.
 - 신뢰하지 않는 origin과 하위 프레임 메시지는 이 규칙과 무관하게 무시하며 `error`도 보내지 않습니다(검사 순서 1단계).
 
-버전 협상 기능은 두지 않습니다. 이 규칙은 확정된 v1 계약이며, 구현은 아직 없습니다.
+버전 협상 기능은 두지 않습니다. 이 규칙은 확정된 v1 계약이며, Android 로컬 구현(#88)은 단위 테스트로만 확인했습니다. 프런트엔드와 실기기에서는 확인하지 않았습니다.
 
 예시:
 
@@ -137,11 +137,13 @@ window.BeoneBridge.postMessage(JSON.stringify({ v: 1, type: "state.get" }));
 
 ## 6. 구현 전 확인할 것
 
+아래는 구현 전에 정한 확인 항목입니다. #88에서 Android 로컬 단위 테스트로 반영했고(구현과 테스트 목록은 [진행 기록](../progress/android/88-android-bridge-local.md)), 실기기 WebView 지원과 release 실기기 동작은 확인하지 않았습니다.
+
 - `androidx.webkit` 안정판 버전과 `WebViewFeature.WEB_MESSAGE_LISTENER` 지원 확인(실기기 WebView 154에서는 PoC로 확인)
 - 구현 테스트: 신뢰하지 않는 origin과 하위 프레임 메시지(`isMainFrame=false`)를 처리하지 않고 어떤 응답도 보내지 않는지(1절, 검사 순서 1단계)
 - 구현 테스트: 모르는 `type`, 지원하지 않는 `v`, `v` 누락, 형식 오류가 인증 상태를 바꾸지 않고 해당 `code`의 `error`를 보내는지, 오류가 겹칠 때 검사 순서를 따르는지(3절)
 - 구현 테스트(크기 경계): 길이 4096인 메시지는 크기 검사를 통과하고, 4097인 메시지는 JSON을 해석하지 않고 인증 상태를 바꾸지 않은 채 `INVALID_MESSAGE`를 받는지. 한글·보충 문자가 섞인 메시지도 UTF-16 코드 단위로 세는지
-- release 설정 반영(별도 이슈): 현재 코드의 release `WEB_START_URL`은 빈 문자열이라 아무 페이지도 열지 않습니다. 반영할 때 시작 주소는 `https://beonepay.site/`이고, 신뢰 origin은 `https://beonepay.site` 하나여야 합니다(현재 `WebNavigationPolicy`는 시작 주소의 origin을 신뢰 origin으로 씁니다)
+- release 설정 반영: #88에서 release `WEB_START_URL`을 `https://beonepay.site/`로 바꿨습니다(이전에는 빈 문자열이라 아무 페이지도 열지 않음). 신뢰 origin은 `WebNavigationPolicy`가 시작 주소에서 얻은 `https://beonepay.site` 하나이고, 브리지도 같은 origin을 씁니다(`BridgeOrigins`)
 - release 빌드의 허용 origin 목록에 `www`·debug·테스트·`http://` origin과 와일드카드가 없는지
 
 ## 7. 계약 밖이거나 정하지 않은 것

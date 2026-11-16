@@ -12,16 +12,16 @@ React 화면을 Android 앱 안에서 보여줄 WebView의 기본 구조입니�
 | SSL 오류 시 연결 취소 | 구현 |
 | debug만 원격 디버깅·로컬 개발 서버 평문 HTTP 허용 | 구현. 소스 설정(네트워크 보안 설정·Manifest)은 단위 테스트, release 값은 빌드 산출물로 확인 |
 | 시스템 바·디스플레이 컷아웃 inset 적용 | 구현 |
-| release 로딩과 정확한 origin | **미구현** — release는 주소를 설정하지 않아 아무 페이지도 불러오지 않음. 별도 정책 PR에서 개정([아래](#release-로딩-이력과-현재-방향)) |
-| 웹 ↔ 네이티브 브리지 | #88 브랜치(미병합)에서 v1 구현·단위 테스트: release 시작 주소 `https://beonepay.site/`, 그 origin의 최상위 프레임에만 `window.BeoneBridge` 노출, 기기 인증 상태와 연결. 계약 문서는 PR #87(미병합). 실기기 미확인([진행 기록](../progress/android/88-android-bridge-local.md)). 이 표의 다른 행은 #88 이전 기준 |
-| 기기 인증(#22)과의 연결 | 미구현. debug 앱에 인증 점검 화면과 WebView 셸이 함께 있지만 서로 연결되어 있지 않음 |
-| 실기기·계측 테스트 | 미실행 |
+| release 로딩과 정확한 origin | 구현(#88, PR #89 병합). release 시작 주소 `https://beonepay.site/`, 신뢰 origin `https://beonepay.site` 하나. 빌드 설정 단위 테스트만 실행, 실기기 미확인([아래](#release-로딩-이력과-현재-방향)) |
+| 웹 ↔ 네이티브 브리지 | 구현(#88, PR #89 병합), 단위 테스트: 신뢰 origin의 최상위 프레임에만 `window.BeoneBridge` 노출([v1 계약](bridge-contract-candidate.md), PR #87 병합). `WEB_MESSAGE_LISTENER`를 지원하지 않는 WebView에서는 브리지를 붙이지 않으며, 그때의 안내·차단은 계약 밖·미정. 실제 프런트엔드·실기기 미확인([진행 기록](../progress/android/88-android-bridge-local.md)) |
+| 기기 인증(#22)과의 연결 | 구현(#88), 단위 테스트. WebView 셸 화면(`MainActivity`)이 브리지를 통해 `VirtualCardActivationViewModel`과 연결됨. 대기 시간 120초·10초는 근거 없는 잠정값이며 실기기 관측 전 미확정. debug 인증 점검 화면은 브리지와 연결되지 않은 별도 화면 |
+| 실기기·계측 테스트 | 계측 테스트 미실행. 실기기는 2026-11-06 임시 fixture 화면으로 일부만 관측([아래 표](#실기기에서-확인할-항목)), #88 브리지·release는 미확인 |
 
 ## 빌드별 설정
 
 | 항목 | debug | release |
 | --- | --- | --- |
-| `WEB_START_URL` | `http://localhost:5173/` (Gradle 속성 `beone.devServerUrl`로 변경) | `""` (설정 없음 → "웹 화면 주소가 설정되지 않았습니다") |
+| `WEB_START_URL` | `http://localhost:5173/` (Gradle 속성 `beone.devServerUrl`로 변경) | `https://beonepay.site/` (#88. 그 전에는 `""`로 "웹 화면 주소가 설정되지 않았습니다" 표시) |
 | 평문 HTTP | `localhost`, `127.0.0.1`, `10.0.2.2`만 허용 | 허용하지 않음 |
 | 원격 디버깅(`chrome://inspect`) | 켬 | 끔 |
 
@@ -84,9 +84,10 @@ SSL 오류 → 연결 취소
 
 ## release 로딩 이력과 현재 방향
 
-현재 release 구현은 주소 미설정입니다. 아무 페이지도 불러오지 않습니다.
+현재 release는 시작 주소 `https://beonepay.site/`를 엽니다. 탐색과 브리지의 신뢰 origin은 `https://beonepay.site` 하나이며 `www`·와일드카드·평문 HTTP는 넣지 않습니다(2026-11-16 사용자 결정, [D-25](../decisions.md#d-25-확정-정책) 보충, #88 구현). 빌드 설정은 단위 테스트로만 확인했고 release 실기기 동작은 확인하지 않았습니다.
 
-- **현재 방향:** 사용자가 확인한 방향은 공개 HTTPS 화면을 여는 것입니다. 구체적인 release 구현과 정확한 origin은 미정이며 별도 정책 PR에서 개정합니다.
+- **현재 방향:** 공개 HTTPS 화면을 엽니다. 시작 경로 `/`는 프런트 배포 뒤 바뀔 수 있고 origin은 그대로입니다([브리지 계약 7절](bridge-contract-candidate.md)).
+- **이력:** #25·#26 병합 당시에는 release 주소를 설정하지 않아 아무 페이지도 불러오지 않았습니다.
 - **이력(현재 방침 아님):** 앱 에셋(`WebViewAssetLoader`, `https://appassets.androidplatform.net`)은 과거 권장안으로, 2026-11-04 D-21 당시 release 설계로 정했습니다. 그때 2026-11-16 시연은 debug 빌드, 개발 서버, `adb reverse`(5173, 8080)로 하기로 했습니다.
 
 ## 실기기에서 확인할 항목
@@ -100,7 +101,7 @@ SSL 오류 → 연결 취소
 | W3 | 다른 origin으로 가는 링크 | 열리지 않고 안내 문구 | 미실행(지금 React 화면에 링크 없음) |
 | W3a | 입력란을 눌러 키보드 표시 | 입력란이 키보드에 가려지지 않음 | 미실행(지금 React 화면에 입력란 없음) |
 | W3b | 웹 안에서 페이지 이동 후 뒤로 가기, 첫 화면에서 뒤로 가기 후 앱 복귀, 다시 이동·뒤로 가기 | 웹 기록이 있으면 웹 이전 페이지, 없으면 앱이 백그라운드로. 복귀 후에도 웹 뒤로 가기가 동작 | 미실행(지금 React 화면에 페이지 이동 없음) |
-| W4 | release 앱 실행 | "웹 화면 주소가 설정되지 않았습니다" | 미확인. 로컬 debug 키 서명본 허용(커밋·배포 안 함, D-21). 11/14 전에 해도 됩니다 |
+| W4 | release 앱 실행 | "웹 화면 주소가 설정되지 않았습니다" | 미확인. 이 기대 결과는 #88 이전 기준입니다. #88 뒤 release는 `https://beonepay.site/`를 열므로, 실기기 시험 승인 때 기대 결과를 다시 정합니다. 로컬 debug 키 서명본 허용(커밋·배포 안 함, D-21). 11/14 전에 해도 됩니다 |
 | W5 | debug 앱에서 `chrome://inspect` | WebView가 보임. release 앱은 보이지 않음 | debug 부분 관측상 통과(2026-11-06, 사용자 관측), release 부분 미확인(W4와 같음) — [확인 기록](#확인-기록-2026-11-06-fixture) |
 | W6 | 외부 메인 프레임 POST와 같은 origin POST | 외부 POST가 수신기에 도착하지 않고 안내 문구 표시. 같은 origin POST는 안내 문구 없이 진행 | 부분 관측(2026-11-06, fixture 절차): 관측 구간에서 수신기에 외부 POST 기록 없음, 같은 origin POST 도착. 앱 안내 문구 표시 여부는 미확인이라 기대 결과 전체의 통과로 적지 않습니다. 콘솔 [절차](#w6-post-차단-관측-절차-미실행-별도-승인)는 미실행 — [확인 기록](#확인-기록-2026-11-06-fixture) |
 
@@ -267,8 +268,8 @@ C0 두 건은 전용 PC run `pc-c0-20261106T050003Z`로 기록됐습니다. 기�
 
 ## 아직 하지 않은 것
 
-- release 로딩 구현과 정확한 origin 결정(별도 정책 PR)
-- 브리지 구현과 기기 인증 상태 전달(공개 계약은 D-21의 후보)
+- release 로딩(`https://beonepay.site/`)의 실기기 확인. 구현과 origin 결정은 #88·2026-11-16 사용자 결정으로 끝났습니다.
+- 브리지와 기기 인증 상태 전달의 실제 프런트엔드·실기기 확인. Android 로컬 구현은 #88(v1 계약)입니다.
 - 계측 테스트(`androidTest`의 테스트용 HTML). 승인된 기기·에뮬레이터가 없어 이번에는 작성·실행하지 않았습니다.
 - 파일 업로드·다운로드·권한 요청 처리. 현재 화면 요구사항에 없어 기본 동작(처리 안 함)으로 둡니다.
 - iframe 로드 자체와 이미지·스크립트·fetch 같은 하위 리소스의 origin 제한. 하위 프레임의 이동은 메인 프레임과 같이 `shouldOverrideUrlLoading`에서 신뢰 origin 밖이면 막고, 안내는 메인 프레임일 때만 띄웁니다(D-21, 현행 차단 유지). 이 콜백이 모든 하위 프레임 이동에 불리는지는 공식 문서로 확인하지 못했으므로 브리지의 최상위 프레임 필터(`isMainFrame`)를 실제 방어선으로 봅니다. 하위 요청에 대한 `shouldInterceptRequest` 사용과 CSP는 브리지 구현과 실제 프런트 연동 때 정합니다.
