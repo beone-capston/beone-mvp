@@ -19,3 +19,8 @@
 - 바꾸지 않은 것: `docs/domains/benefit.md`는 이미 코드와 같아 고치지 않았습니다. 예시 JSON의 금액·`VERIFIED`는 합성 예시이며 확정값으로 바꾸지 않았습니다. 제품 코드·테스트·규칙·fixture는 바꾸지 않았습니다.
 - Notion 사본과 차이, 미반영: Notion 명세 사본(2026-11-16 수집, Notion 원문 직접 확인 아님)에는 월간 상태의 `PERIOD_MISMATCH` 저장, `serviceSelectionStatus`·`otherBucketsUsedWon` 누락, 추천 응답의 enum 이름·`monthlyTotalBenefit` 예시 차이, 월간 상태 쓰기의 409 `PORTFOLIO_READ_ONLY` 등 저장소 문서와 다른 내용이 있습니다. 저장소 문서를 바꾸는 근거로 쓰지 않았고 Notion도 고치지 않았습니다.
 - 검증: 문서만 바뀌어 Gradle·npm은 실행하지 않았습니다. `git diff --check`, 바뀐 문서의 제목 구조·상대 링크, 문서의 클래스·필드·상태값 이름과 `origin/develop` 코드 대조(`git grep`), `git diff --name-only origin/develop`가 `docs/`만인지 확인했습니다.
+
+## 2026-11-16 · 백엔드 진행 README의 #80 병합 상태 정합 (범위 추가)
+- 출처: PR #83(#82)의 CodeRabbit 리뷰 스레드(`docs/progress/backend/README.md`, 미해결)가 지적한 내용을 관리자가 이 작업 범위에 추가했습니다.
+- 내용: `docs/progress/backend/README.md`에서 PR #81을 "PR #81 브랜치 코드 기준, `develop` 미병합·병합 승인 대기"로 적은 #80 관련 문장(머리 기준 설명, 결과 연결 줄, 현재 작업과 PR의 #80 줄, 다음 작업의 "(미병합)" 세 곳)을 "`develop` 반영(PR #81, `5885454`)"으로 고쳤습니다. 날짜가 붙은 과거 기록은 그대로 두었고, 원장·예정 소비 저장·모의 취소·선택형·공유 한도 배분·API·화면은 계속 미지원으로 적었습니다.
+- PR #83이 같은 파일의 #80 줄 바로 아래에 줄 하나를 추가하므로, 이 작업 기록의 링크는 새 줄로 넣지 않고 #80 줄 끝에 붙였습니다. #80 줄 자체는 고쳐야 해서 PR #83과 인접 줄 충돌이 생길 수 있습니다.
