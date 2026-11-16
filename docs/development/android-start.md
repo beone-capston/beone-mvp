@@ -25,6 +25,7 @@ BeONE 저장소(`beone-capston/beone-mvp`)의 **Android 작업선**을 장기 �
     - #24(이슈 #22, draft): 생체인증·기기 PIN 대체 인증과 60초 활성화 상태. 운영 대기 시간·정지 후 복구 등 남은 결정과 실기기 확인이 있다.
     - #26(이슈 #25, draft): WebView 셸. release 로딩 방식과 신뢰 origin은 미결이다.
     - #28(이슈 #27): 브리지 계약 `후보` 문서. 공개 계약으로 확정되지 않았다.
+  - (이력 보충, 2026-11-16) 위 목록은 2026-10-31 당시 상태다. 이후 #24·#26·#72(#28 대체)·#87(브리지 v1 계약)·#89(브리지 v1 Android 로컬 구현, release 시작 주소 `https://beonepay.site/`)가 `develop`에 병합됐다. 현재 상태는 `docs/progress/android/README.md`에서 확인한다.
   - 미병합 PR의 구현을 이어서 고칠 때는 그 PR의 브랜치와 worktree에서 한다. 미병합 PR에 의존하는 새 작업을 `develop` 기준 브랜치에 쌓지 않는다(운영 규칙 5절).
 - 시작·재개 시 운영 규칙 4절의 점검을 한 뒤, 진행 중인 Android PR의 리뷰 의견과 검증 상태부터 처리하고 아래 대기열로 넘어간다.
 
@@ -42,7 +43,7 @@ BeONE 저장소(`beone-capston/beone-mvp`)의 **Android 작업선**을 장기 �
    - 회전·폴드·테마 변경처럼 화면 구성만 바뀌는 경우는 앱 이탈로 보지 않는다. 화면 재생성 중 인증 결과가 유실되지 않게 한다.
    - 시간·생명주기 로직은 단위 테스트로 검증한다.
 3. **WebView**
-   - 아직 정하지 않은 것: release 빌드에서 React 화면을 불러오는 방식(앱 번들 에셋 또는 원격 주소)과 신뢰할 origin. 사용자 결정이 필요하다.
+   - release 빌드에서 React 화면을 불러오는 방식과 신뢰할 origin: 2026-11-16 사용자 결정으로 원격 주소 `https://beonepay.site/`를 열고 신뢰 origin은 `https://beonepay.site` 하나로 정했으며, #89에서 구현했다. (이력: 2026-10-31 작성 당시에는 앱 번들 에셋 또는 원격 주소 중 미결이라 사용자 결정이 필요했다.)
      - 이 결정 전에는 origin을 설정값으로 분리해 둔다. debug에서는 개발 서버 주소, 테스트에서는 계측 테스트용 HTML로만 검증한다.
      - PoC의 `WebViewAssetLoader`·`appassets.androidplatform.net` 방식은 `docs/android/`에 `후보`로만 기록한다.
      - 프런트엔드 빌드(`npm ci`, `npm run build`)를 실행하거나 그 산출물을 복사하지 않는다.

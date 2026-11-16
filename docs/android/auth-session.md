@@ -18,7 +18,7 @@
 | debug 전용 실기기 점검 화면 | 구현 (release 미포함) |
 | debug 전용 인증 상태 관측 로그(`BeoneAuthTrace`) | 구현, 단위 테스트. release에서는 기록하지 않음 — [관측 기록](#관측-기록-debug-전용) |
 | 실제 기기에서의 동작 확인 | 1~15번 통과(2026-10-29, SM-S942N Android 17)는 단일 요청·정리 대기 구조를 넣기 **전** 코드(`0b1cc3f`, Android 코드는 `4374d43`과 같음) 기준입니다. 단일 요청·정리 대기 구조를 넣은 코드(`08ee320`에 커밋됨)는 2026-10-29~30에 같은 기기에서 R1~R4·R6~R9와 1~6·8~11·13번(15번은 R1로 대응)을 관측상 통과했습니다(로그 보강 전 APK는 사용자 관측만, 로그 보강 후 APK는 사용자 관측과 debug 로그 대조). R5·R10(정리 중)은 관측 못 함, 7·12·14 단독·16·17번은 **미실행** — [실기기 확인 목록](device-checklist.md#확인-기록-2026-10-2930-지금-코드-커밋-전) 2026-11-04 `42b1dcc`의 관측은 [2026-11-04 기록](device-checklist.md#확인-기록-2026-11-04-42b1dcc)에 따로 적습니다 |
-| WebView 화면 연결, 웹에 상태 전달(브리지) | **미구현** — 공개 계약은 D-21의 후보이고 확정이 아님, 구현은 #24·#26 병합 뒤 |
+| WebView 화면 연결, 웹에 상태 전달(브리지) | **Android 로컬 구현**(#88, PR #89 병합) — [v1 계약](bridge-contract-candidate.md)에 따라 `MainActivity`의 WebView에 `window.BeoneBridge`를 붙이고 `VirtualCardActivationViewModel`과 연결. 로컬 단위 테스트만 실행했고 실제 프런트엔드·실기기는 미확인. 대기 시간 120초·10초는 근거 없는 잠정값이며 실기기 관측 전 미확정 ([진행 기록](../progress/android/88-android-bridge-local.md)) |
 
 ## 용어
 
@@ -147,7 +147,7 @@ val canRequest = viewModel.requestPhase == AuthRequestPhase.Idle // 인증 버�
 | 기록 호출 | `AuthRequestGate`, `VirtualCardActivationViewModel`, `BiometricDeviceAuthenticator` | 생성자의 `trace` 인자(기본값 `AuthTracer.NONE`)로 받아, 전이가 끝난 뒤에만 기록합니다 |
 | `DebugAuthTrace` | [DebugAuthTrace.kt](../../android/app/src/debug/java/com/beone/app/auth/DebugAuthTrace.kt) (debug 소스셋) | `Log.i("BeoneAuthTrace", …)`로 출력하는 유일한 구현. 화면이 다시 만들어져도 순번이 이어지도록 프로세스에 하나만 둡니다. 점검 화면이 이 tracer를 주입하고 Activity 수명주기도 기록합니다 |
 
-- release에서 기록하지 않는 근거: logcat 출력 구현은 debug 소스셋에만 있고, main의 기본값은 무동작입니다. 인증 클래스를 만드는 곳도 debug 점검 화면뿐입니다. 2026-10-30 빌드에서는 release APK dex에 `BeoneAuthTrace`·`DebugAuthTrace` 문자열이 없는 것을 확인했습니다.
+- release에서 기록하지 않는 근거: logcat 출력 구현은 debug 소스셋에만 있고, main의 기본값은 무동작입니다. 인증 클래스를 만드는 곳은 debug 점검 화면(`DeviceAuthCheckActivity`)과 main의 `MainActivity`(#88)입니다. `MainActivity`는 trace 인자를 넘기지 않아 기본값 `AuthTracer.NONE`(무동작)을 쓰므로 기록하지 않습니다. 2026-10-30 빌드에서는 release APK dex에 `BeoneAuthTrace`·`DebugAuthTrace` 문자열이 없는 것을 확인했습니다.
 - 한 줄 형식: `t=<elapsedRealtime ms> seq=<순번> ev=<사건> from=<단계> to=<단계> req=<앱 내부 순번> <키=값>...`
 - 주요 사건:
   - `LIFECYCLE`: onCreate 최초·재생성, onStart, onResume, onPause, onStop, onDestroy와 구성 변경 여부
@@ -184,7 +184,7 @@ BiometricDeviceAuthenticator(this, DebugAuthTrace.tracer) { outcome -> viewModel
 
 ## 아직 하지 않은 것
 
-- 웹으로 인증 상태 전달. 브리지 공개 계약은 D-21의 후보이고, release 로딩 방식은 별도 정책 PR에서 개정합니다. 구현은 #24·#26 병합 뒤에 합니다. WebView 셸은 [별도 문서](webview-shell.md)에서 다루며, 인증 점검 화면과 연결되어 있지 않습니다.
+- 웹으로 인증 상태 전달의 실제 프런트엔드·실기기 확인. Android 쪽 브리지 v1은 #88(PR #89 병합)에서 로컬 구현하고 단위 테스트만 실행했습니다. release는 `https://beonepay.site/`를 엽니다. WebView 셸은 [별도 문서](webview-shell.md)에서 다루며, debug 인증 점검 화면은 브리지와 연결되지 않은 별도 화면입니다.
 - 실제 기기 확인 중 16·17번(지문 없이 PIN만, 화면 잠금 없음). 기기 보안 설정을 바꿔야 해 [실기기 확인 목록](device-checklist.md)에 남아 있으며 단위 테스트·에뮬레이터 결과로 대신하지 않습니다.
 - 지금 코드(단일 요청·정리 대기·정지)의 남은 실기기 확인: `정리 중` 진입 경로(R5·R10), 앱 취소 뒤 최종 결과 순서, 인증 창이 사라진 정지, 최종 결과가 아직 오지 않은 정지 상태의 재실행 복구, 7번([확인 목록](device-checklist.md#관측-못-함미실행으로-남은-것), [2026-11-04 기록](device-checklist.md#확인-기록-2026-11-04-42b1dcc)). 지금까지의 관측은 한 기기의 관측 결과이며 안전한 최종안이나 출시 가능 판정이 아닙니다.
 - 화면이 RESUMED 상태일 때만 인증을 요청하는 조건은 두지 않고, 앱 복귀 때 자동 인증도 하지 않습니다(D-21). 이 기기 로그에서 최초 자동 요청은 `ON_START`·`ON_RESUME`보다 먼저 전달됐고 창은 정상적으로 떴습니다.

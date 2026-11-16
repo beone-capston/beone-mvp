@@ -5,6 +5,7 @@
 - 계약: PR #87(브랜치 `docs/86-bridge-contract-v1`, head `9c10e03`, **미병합**)의 `docs/android/bridge-contract-candidate.md`. 이 브랜치에는 PR #87을 merge하지 않았으므로, 이 브랜치의 같은 파일은 아직 이전(후보) 문구입니다.
 - 성격: Android 부품 구현이며 HTTP API·frontend 연결 완성이 아닙니다. Notion 진행상황은 관리자가 별도 원고로 처리합니다.
 - PR: [#89](https://github.com/beone-capston/beone-mvp/pull/89)
+- 병합 상태(2026-11-16 갱신): 계약 PR #87은 `73d7f045b5166594d7851944353e5ecde0eab37e`, 이 작업의 PR #89는 `77fe2e3d17fc9a97ff1cc84e13f86b371e2975bb`로 `develop`에 squash 병합됐습니다. 병합된 계약 문서에는 JS 객체 이름 `BeoneBridge`와 호출 예시가 들어 있습니다. 아래 "미병합"·"PR 대기"·"보충할 예정" 문구는 작업 당시 기록이며, "범위 밖으로 남긴 것"의 문서 문장은 #94에서 정리합니다. 병합은 실기기·설치·실제 프런트엔드 통합 확인을 뜻하지 않습니다.
 - 근거 결정: 2026-11-16 사용자 결정(브리지 v1 채택, release 시작 주소·신뢰 origin, 검사 순서, 크기 상한 4096 UTF-16 코드 단위), [D-21](../../decisions.md#d-21-확정-정책), [D-25](../../decisions.md#d-25-확정-정책)
 
 ## 2026-11-16 · 브리지 v1 구현·release origin·기기 인증 연결 · PR 대기
