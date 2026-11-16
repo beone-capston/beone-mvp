@@ -231,6 +231,7 @@ G 뒤 H는 앱 재실행 없이 같은 프로세스에서 버튼으로 보낸 �
   - 입력한 문자열을 그대로 `window.BeoneBridge.postMessage(문자열)`로 보내고, 보낸 문자열의 JavaScript `length`를 표시(JavaScript `length`와 Kotlin `String.length`는 둘 다 UTF-16 코드 단위입니다)
   - `BeoneBridge`로 받은 메시지를 받은 시각과 함께 화면에 차례로 기록
   - BR19·BR20용으로 같은 origin iframe과 다른 origin iframe을 넣고, iframe 안에서도 위 표시와 전송을 할 수 있어야 함
+  - 준비한 T(2026-11-17 사용자 결정, #101): frontend 밖 정적 페이지 [`tools/bridge-test/`](../../tools/bridge-test/README.md)(debug 서빙·`adb reverse` 방법 포함, 시험 전용). release(BR22~BR24)용 서버 배치·제거 절차는 [브리지 시험 페이지 서버 적용 절차](../deployment/bridge-test-page.md)(사용자 실행, 미검증)입니다. 페이지 동작은 코드 리뷰로만 확인했습니다.
 - **관측 수단:** T의 화면 기록이 기본입니다. debug에서는 `chrome://inspect`의 원격 디버깅 콘솔로 T의 기록을 함께 볼 수 있습니다(W5). release는 원격 디버깅이 꺼져 있어 T의 화면 기록만 씁니다. debug 관측 로그 `BeoneAuthTrace`는 `MainActivity`가 기록기를 넘기지 않으므로(기본값 무동작) 이 화면에서는 남지 않습니다. 인증 창 표시 여부는 사용자가 화면으로 확인합니다.
 - **기록:** 항목마다 판정(통과·실패·관측 못 함·미실행), 받은 메시지 원문, 기기 모델·OS 버전, 확인 날짜, 시험한 커밋 SHA를 적습니다. 기기 일련번호 같은 식별 정보, 생체·PIN 값, 개인 정보가 보이는 화면은 적지 않습니다.
 - **용어:** 아래에서 "응답"은 보낸 메시지에 바로 돌아오는 메시지, "밀어 보냄"은 웹 요청 없이 네이티브가 보내는 `state`입니다. 밀어 보냄은 같은 화면에서 신뢰 판정을 통과한 메시지를 한 번 받은 뒤에만 그 최상위 프레임으로 갑니다. 그래서 각 시험은 `state.get`을 먼저 보내고 시작합니다.
