@@ -6,7 +6,7 @@ BeONE 업무 API의 구현 기준 명세입니다. 공통 규약은 [`docs/api.m
 - **기준:** [결정 기록](../decisions.md)의 D-09·D-12~D-19·D-22·D-23과 `backend`의 `benefit` 도메인 모델입니다. 문서와 코드가 다르면 이 폴더를 임의로 맞추지 말고 충돌을 알립니다.
 - **예시 JSON:** 합성 값입니다. 실제 API 실행, 약관 검증, CODEF 응답 관측의 결과가 아닙니다.
 - **규칙 데이터:** 4종 규칙은 `backend/src/main/resources/rules/`에 `VERIFIED` 상태로 있고 서버 시작 때 `RuleCatalog`로 읽습니다. 공식 SKU·약관 버전 일치는 D-01 미결입니다.
-- **엔진 입구:** 업무 코드는 `com.beone.api.benefit.engine`만 씁니다(D-22). 입구 타입만 있고 구현은 후속입니다.
+- **엔진 입구:** 업무 코드는 `com.beone.api.benefit.engine`만 씁니다(D-22). 입구 타입(#71)과 계산 연결(#81)이 `develop`에 구현돼 있습니다. 이 엔진을 부르는 업무 API는 구현 전입니다. 업무 API가 엔진에 넘기는 값 중 HTTP 요청으로 받지 않는 `policyEvidence`는 [추천](recommendations.md#엔진-입력-중-요청으로-받지-않는-값)에 적었습니다.
 
 ## API 목록 (28개: 1차 23개, 2차 초안 5개)
 

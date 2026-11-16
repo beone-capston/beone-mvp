@@ -1,0 +1,5 @@
+{
+  "_fixture": {"synthetic": true, "basis": "공통 REST result/data 구조, CF-00000 성공 별첨. data가 null", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "SYN-TX-ENV-0002"},
+  "data": null
+}
