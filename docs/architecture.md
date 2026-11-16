@@ -33,28 +33,33 @@
   - 하위 패키지 `codef.sync`(#82·#92): 전송 계층의 세 조회 대상 호출 결과를 대상별로 판정(부분 실패)하고 보유카드 후보(`UNMAPPED`)·승인 행 형태 분류·실적 참고값(계산 미사용)으로 옮깁니다. #92에서 카드명 정확 일치 카드 연결, 승인 날짜·시각 해석, 승인번호 지문(주입) 기반 중복 키·재조회 대조, D-17 Type2 짝짓기로 원장 후보 행과 불완전 사유를 판정하는 순수 함수를 더했습니다. 후보 상품 산출·완전 선언·도메인 원장 연결·저장은 하지 않습니다.
   - 범위 밖: 자동 재시도, 계정 연결(connectedId)·RSA 암호화·추가 인증 요청, 이 패키지를 호출하는 엔드포인트, DB 저장, BeONE 상태값으로의 변환. `benefit`·`common.web`에 의존하지 않습니다.
 
+- [user: 현재 사용자 결정 지점과 시연 사용자](domains/user.md)
+  - 위치: `backend/src/main/java/com/beone/api/user/` (`web`, `application`, `persistence`)
+  - 책임: `X-BeONE-Demo-User` 헤더로 현재 사용자를 정하는 `CurrentUserResolver`(D-09 한 곳), 시연 사용자 테이블 `users`와 시드 2명(Flyway `V2`), `GET /api/v1/demo-users`. `local`·`demo` 프로필에서만 등록됩니다.
+  - 범위 밖: `GET /api/v1/me`(보유 카드 작업과 함께 구현), 회원 인증(D-24).
+
 도메인이 아닌 공통 웹 기반 코드:
 
 - `common.web`: 공통 API 응답 형식과 예외 처리
   - 위치: `backend/src/main/java/com/beone/api/common/web/`
-  - 책임: 성공·실패 응답 형식, 공통 오류 코드, 요청 오류·예상하지 못한 오류의 HTTP 응답 변환과 안전한 로그.
+  - 책임: 성공·실패 응답 형식, 공통 오류 코드, 요청 오류·예상하지 못한 오류의 HTTP 응답 변환과 안전한 로그, `local`·`demo` 프로필의 CORS 허용 목록(`LocalDemoCorsConfiguration`, D-23 11항).
   - 의존 방향: 컨트롤러·예외 처리기 같은 웹 경계에서만 사용합니다. 도메인 코드는 이 패키지에 의존하지 않습니다.
   - 설명 문서: [API 공통 응답·오류 처리](api.md)
 
-## 사용자 식별과 업무 API (결정만, 미구현)
+## 사용자 식별과 업무 API
 
-- 사용자 식별은 [D-09](decisions.md#d-09d-14-확정-정책)에 따라 MVP 한정으로 고정 시연 사용자 2명(내 카드·가상 포트폴리오)을 씁니다. 로그인은 없고, 현재 사용자는 서버의 한 곳에서만 정합니다. 사용자 데이터는 `user_id`로 나눠 저장합니다. 이는 `local`·`demo` 환경의 문서 계약이며(프로필과 현재 사용자 결정 지점은 아직 구현되지 않음), 공개 회원 환경은 [D-24](decisions.md#d-24-확정-정책)(구현 전)를 따릅니다.
+- 사용자 식별은 [D-09](decisions.md#d-09d-14-확정-정책)에 따라 MVP 한정으로 고정 시연 사용자 2명(내 카드·가상 포트폴리오)을 씁니다. 로그인은 없고, 현재 사용자는 서버의 한 곳에서만 정합니다. 사용자 데이터는 `user_id`로 나눠 저장합니다. 이는 `local`·`demo` 환경의 계약이며(현재 사용자 결정 지점은 #100에서 [user](domains/user.md)에 구현), 공개 회원 환경은 [D-24](decisions.md#d-24-확정-정책)(구현 전)를 따릅니다.
 - 업무 API는 [D-14](decisions.md#d-09d-14-확정-정책)에 따라 `/api/v1/me/...` 형태로 둡니다. 1차는 수동 입력·가상 포트폴리오, 2차는 CODEF 연결·조회입니다.
 - 개별 API 명세는 [`docs/api/`](api/README.md)에 있습니다(2026-11-03, 구현 전).
-- 2026-11-04 기준 업무 API·DB 테이블·인증 계층은 없습니다.
+- 업무 API는 `GET /api/v1/demo-users`(#100)만 구현됐고, DB 업무 테이블은 시연 사용자 `users`뿐입니다. 인증 계층은 없습니다.
 
 ## 업무 API 패키지 구조 (D-23, 미구현)
 
-[D-23](decisions.md#d-23-확정-정책)이 정한 구조입니다. 패키지는 아직 없습니다.
+[D-23](decisions.md#d-23-확정-정책)이 정한 구조입니다. `user`만 구현됐고(#100, [user 안내](domains/user.md)) 나머지 패키지는 아직 없습니다.
 
 ```text
 com.beone.api
-├── user            # CurrentUserResolver, 시연 사용자
+├── user            # CurrentUserResolver, 시연 사용자 [구현, #100]
 ├── card            # 보유 카드, 매핑, 상품 조회
 ├── preference      # 결제 전 설정
 ├── monthlystate    # 월간 상태
