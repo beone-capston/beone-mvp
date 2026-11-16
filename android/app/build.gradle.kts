@@ -26,8 +26,9 @@ android {
             buildConfigField("String", "WEB_START_URL", "\"$escapedUrl\"")
         }
         release {
-            // release 로딩 방식과 신뢰 origin은 미확정이다. 정해지기 전까지 비워 두어 아무 페이지도 불러오지 않는다.
-            buildConfigField("String", "WEB_START_URL", "\"\"")
+            // D-25·브리지 계약 v1(2026-11-16 사용자 결정): 서버 HTTPS 화면을 연다.
+            // 탐색·브리지 신뢰 origin은 이 주소의 origin `https://beonepay.site` 하나다. www·HTTP·와일드카드는 넣지 않는다.
+            buildConfigField("String", "WEB_START_URL", "\"https://beonepay.site/\"")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -59,5 +60,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.biometric)
+    implementation(libs.androidx.webkit)
     testImplementation(libs.junit)
 }
