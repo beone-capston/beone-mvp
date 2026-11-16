@@ -123,7 +123,7 @@ CODEF·수동 입력·추론 값에는 갱신 시각이 필요합니다. 추론 
 ### rule: 약관 규칙
 
 - [CardRuleVersion](../../backend/src/main/java/com/beone/api/benefit/rule/CardRuleVersion.java): 카드별 규칙 버전의 최상위 모델. 출처·정책·서비스·한도를 묶고 중복 ID, 없는 참조, 한도 부모 순환 등을 검사합니다. blockingReasons()는 계산을 막는 규칙 사유를, limitChain()은 상위 통합 한도까지 반환합니다.
-- [RuleCatalog](../../backend/src/main/java/com/beone/api/benefit/rule/RuleCatalog.java): 카드와 판단 날짜에 맞는 VERIFIED 규칙만 선택합니다. 검증 규칙의 기간 중첩을 차단합니다.
+- [RuleCatalog](../../backend/src/main/java/com/beone/api/benefit/rule/RuleCatalog.java): 카드와 판단 날짜에 맞는 VERIFIED 규칙만 선택합니다. 검증 규칙의 기간 중첩을 차단합니다. 읽기 전용 `cardIds()`는 규칙 버전이 하나라도 있는 카드 ID를 문자열 오름차순으로 돌려주며 판정에는 쓰지 않습니다(카드 상품 조회용, #105).
 - [RuleSelection](../../backend/src/main/java/com/beone/api/benefit/rule/RuleSelection.java): 규칙 선택 성공 Selected와 사용 불가 Unavailable. 성공 시에도 규칙상 계산 가능한 서비스와 확인 필요 서비스를 구분합니다.
 - [RuleVersionRef](../../backend/src/main/java/com/beone/api/benefit/rule/RuleVersionRef.java): 카드 ID와 규칙 버전 참조.
 - [ValidityPeriod](../../backend/src/main/java/com/beone/api/benefit/rule/ValidityPeriod.java): 규칙 유효 기간과 포함·중첩 검사. 종료일 미지정은 알려진 종료일이 없음을 뜻합니다.
@@ -162,7 +162,7 @@ RuleCatalog.select()는 규칙 없음 → NO_VERIFIED_RULE, 날짜 불일치 →
 
 규칙 데이터(`backend/src/main/resources/rules/<cardId>/<ruleVersion>.json`)를 읽어 모델을 만듭니다. 형식은 [규칙 데이터 안내](../rules/README.md)를 봅니다.
 
-- [RuleCatalogConfiguration](../../backend/src/main/java/com/beone/api/benefit/rule/loading/RuleCatalogConfiguration.java): 서버 시작 때 `RuleCatalog` 빈을 만듭니다. 규칙 데이터가 잘못되면 서버가 뜨지 않습니다. 이 빈을 주입받는 업무 코드는 아직 없습니다.
+- [RuleCatalogConfiguration](../../backend/src/main/java/com/beone/api/benefit/rule/loading/RuleCatalogConfiguration.java): 서버 시작 때 `RuleCatalog` 빈을 만듭니다. 규칙 데이터가 잘못되면 서버가 뜨지 않습니다. 카드 상품 조회(`CardProductService`, #105)가 이 빈을 주입받습니다.
 - [RuleCatalogLoader](../../backend/src/main/java/com/beone/api/benefit/rule/loading/RuleCatalogLoader.java): 클래스패스의 규칙 파일과 허용 목록을 읽습니다. 폴더·파일 이름이 `cardId`·`ruleVersion`과 다르면 거부합니다.
 - [RuleJsonReader](../../backend/src/main/java/com/beone/api/benefit/rule/loading/RuleJsonReader.java): JSON 한 개를 `CardRuleVersion`으로 바꿉니다. 모르는 키, 빠진 필수 키, 중복 키, 잘못된 타입, 허용 목록 밖의 코드를 거부하고 기본값을 채우지 않습니다.
 - [MerchantClassAllowlist](../../backend/src/main/java/com/beone/api/benefit/rule/loading/MerchantClassAllowlist.java): 허용 업종 코드 파일을 읽습니다. 오타가 "대상 불일치"로 조용히 처리되는 것을 막습니다.
