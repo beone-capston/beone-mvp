@@ -10,3 +10,9 @@
 - 검증: 공백 검사(`git diff --check`), 바뀐 문서의 제목 구조·상대 링크·앵커, 변경 파일이 `docs/`만인지, 문서 속 이름(`WebOrigin`, `WebNavigationPolicy`, `WEB_START_URL`, `InactiveReason`)을 코드와 대조했습니다. 문서만 바뀌어 Gradle은 실행하지 않았습니다.
 - 남은 제한: 브리지 구현과 release 설정 반영은 별도 이슈입니다. 실기기 확인은 별도 승인입니다. `WEB_MESSAGE_LISTENER` 미지원 WebView 처리와 앱 화면의 실제 시작 경로는 정하지 않았습니다.
 - 다음: 이 PR 병합 뒤 Android 브리지 로컬 구현(별도 이슈)
+
+## 2026-11-16 · 브리지 객체 이름과 인증 대기 시간 보충 · 완료(리뷰·병합 대기)
+- 한 일: 2026-11-16 사용자 결정(관리 기록 「API 장기 연속 개발 첫 결정 묶음」 D절, #88 작업 중 질문에 대한 답)을 반영했습니다. 계약 문서 2절에 브리지 전역 객체 이름 `BeoneBridge`(`addWebMessageListener`의 `jsObjectName`, 대소문자 동일)와 웹 호출 예시 `window.BeoneBridge.postMessage(JSON 문자열)`을 더했습니다. 인증 대기 120초·정리 대기 10초는 기존 `AuthRequestGate` 값을 `auth.request` 연결에 잠정 사용하는 근거 없는 제안값이며 실기기 관측 전 미확정이라고 머리말과 7절에 적었습니다.
+- 서비스에서 달라진 점: 없음. 코드와 설정은 바꾸지 않았습니다. origin·최상위 프레임·메시지 검증 규칙도 그대로입니다.
+- 검증: 공백 검사(`git diff --check`), 바뀐 문서의 상대 링크·앵커, 변경 파일이 `docs/`뿐인지, `AuthRequestGate`·`AuthResponseTimeouts`의 기본값(120000·10000밀리초)을 `origin/develop` 코드와 대조했습니다. Gradle은 문서만 바뀌어 실행하지 않았습니다.
+- 남은 제한: 시간값은 확정값이 아닙니다. 브리지 구현, 실기기 관측, 실제 frontend 연결은 별도입니다.
