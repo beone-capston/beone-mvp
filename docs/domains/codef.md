@@ -202,11 +202,63 @@ if (snapshot.approvals() instanceof CodefTargetOutcome.Unusable<CodefApprovalRow
 }
 ```
 
-구현하지 않은 것(사용자 결정 대기 또는 다른 담당):
+1단계에서 구현하지 않은 것: 카드 연결(R1), Type2 짝짓기와 재조회 중복 판단 키(R2), 승인 일자·시각 해석(R4), CODEF 원장 행·불완전 사유는 아래 [2단계](#원장-후보-행짝짓기재조회-대조-92)에서 구현했습니다. 카드명 → 후보 상품(`candidateCardProductId`) 산출(R3, 보류), 공개 오류 코드 대응(R5, 팀원), 완전 선언·도메인 `Ledger`/`LedgerTransaction` 연결(R7·R8), 엔진 입력 생성, 저장, 엔드포인트는 여전히 없습니다. 실제 KB 응답이 시트의 `O`·`△` 필드를 주는지는 실계정 관측 전까지 미확인입니다.
 
-- 승인·실적 행을 어느 보유카드에 붙일지(R1), Type2 짝짓기와 재조회 중복 판단 키(R2), 카드명 → 후보 상품(`candidateCardProductId`) 산출(R3), 승인 일자·시각 해석(R4), 공개 오류 코드 대응(R5, 팀원).
-- CODEF 원장 행·불완전 사유·완전 선언, 도메인 `Ledger`/`LedgerTransaction` 연결(R7·R8), 엔진 입력 생성, 저장, 엔드포인트.
-- 실제 KB 응답이 시트의 `O`·`△` 필드를 주는지는 실계정 관측 전까지 미확인입니다.
+## 원장 후보 행·짝짓기·재조회 대조 (#92)
+
+2026-11-16 사용자 결정(R1·R2·R4를 "관측 전 후보 처리" 제한 아래 추천안대로 채택, R3 보류)과 D-17을 따라, 승인내역 응답 하나를 **CODEF 원장 후보 행**으로 판정하는 순수 함수입니다. 같은 입력이면 같은 결과를 돌려주고 저장·로그·네트워크가 없습니다. 테스트는 합성 응답과 테스트 코드 안의 합성 키만 쓰며 실계정·실키 관측이 아닙니다. 이 판정은 도메인 원장(`LedgerTransaction`)이 아니고 HTTP API 완성도 아닙니다.
+
+```text
+codef/sync/
+├── CodefCardLinker / CodefCardLink      R1 카드 연결: 같은 동기화 보유카드와 카드명 정확 일치 1장일 때만 Linked
+├── CodefPerformanceLink                 실적 참고값 + 카드 연결 결과(미연결이면 카드 미연결)
+├── CodefUsedDateTime                    R4 사용일자·사용일시 해석(제안 형식, 실패는 추정 없이 UNPARSED·ABSENT)
+├── CodefApprovalFingerprinter           승인번호 → 지문(HMAC) 함수 인터페이스. 주입받기만 함
+├── CodefApprovalFingerprint             지문 값
+├── CodefApprovalKey                     R2 중복 판단 키(카드명, 지문, 사용일자, 사용일시, 부호 포함 금액)
+├── CodefLedgerCandidateBuilder          판정 순수 함수(행 판정 → 같은 키 → 재조회 대조 → Type2 짝짓기)
+├── CodefLedgerCandidates                결과: 행 목록, 불완전 표시 범위, 받아들인 키·종류
+├── CodefLedgerCandidateRow              행 하나: 위치, 카드 연결, 날짜·시각, 취소 표현 형태, Accepted / Incomplete
+├── CodefLedgerRowKind                   APPROVAL / APPROVAL_FULLY_CANCELED(Type1) / CANCELLATION(Type2)
+├── CodefRecheck                         NEW / ALREADY_RECORDED / CANCELED_SINCE_RECORDED
+├── CodefIncompleteReason                불완전 사유 5종(원장 조회 명세 사본과 같음)
+├── CodefIncompleteMark                  연결된 카드·그 행 날짜에만 붙는 불완전 표시
+└── CodefAttributionMonth                취소 귀속월 NEEDS_CONFIRMATION
+```
+
+용어:
+
+- **지문(HMAC)**: 비밀키로 만든 되돌릴 수 없는 값입니다. 원문 승인번호를 남기지 않고 같은 번호인지만 비교합니다. 승인번호는 자릿수가 짧아 평문 해시(SHA-256 등)는 전수 대입으로 원문을 되찾을 수 있으므로 키가 있는 HMAC을 씁니다. 키가 바뀌면 지문도 바뀌어 이전 기록과 비교가 끊깁니다.
+- **원장 후보 행**: 원장에 넣어도 되는지 판정만 한 행입니다. 저장은 호출자(업무 서비스, 팀원 담당)가 합니다.
+
+처리 흐름([CodefLedgerCandidateBuilder](../../backend/src/main/java/com/beone/api/codef/sync/CodefLedgerCandidateBuilder.java)). 행마다 처음 걸린 사유 하나만 남깁니다.
+
+1. 카드 연결(R1, [CodefCardLinker](../../backend/src/main/java/com/beone/api/codef/sync/CodefCardLinker.java)): 행 카드명과 문자열로 정확히 같은 보유카드가 정확히 한 장일 때만 연결합니다. 공백·대소문자·`카드명|발급사` 분리 같은 정규화는 하지 않습니다. 0장·2장 이상·카드명 없음·보유카드 조회 실패면 연결하지 않고 그 행은 `UNDETERMINED_ROW`, 실적은 카드 미연결입니다. 연결은 같은 실물 카드나 공식 상품의 입증이 아닙니다.
+2. 형태: 기존 [취소 표현 기술](codef-kb.md#취소-표현-구분)을 씁니다. 부분취소 코드(`"2"`)와 Type1 취소금액 불일치는 `PARTIAL_CANCELLATION_SUSPECTED`, 그 밖의 판단 불가 형태(거절 `"3"`, 음수 금액의 정상 코드 등)와 KB 밖 기관은 `UNDETERMINED_ROW`입니다. 원화 금액을 만들 수 없는 행(통화가 `KRW`가 아니거나 비었음, 해외)도 `UNDETERMINED_ROW`입니다.
+3. 키 재료(R2·R4): 승인번호 또는 사용일자가 없으면 `DUPLICATE_KEY_AMBIGUOUS`입니다. 사용일자가 정확히 8자리 yyyyMMdd의 실제 날짜가 아니거나, 사용일시가 없거나 정확히 6자리 HHmmss의 유효 시각(00:00:00~23:59:59)이 아니면 `UNDETERMINED_ROW`입니다([CodefUsedDateTime](../../backend/src/main/java/com/beone/api/codef/sync/CodefUsedDateTime.java), `ResolverStyle.STRICT`). 형식은 제안이며 관측 전입니다.
+4. 한 응답 안 같은 키: 키(카드명, 지문, 사용일자, 사용일시, 부호 포함 금액)가 같은 행이 둘 이상이면 모두 `DUPLICATE_KEY_AMBIGUOUS`입니다. 취소여부는 키에 넣지 않습니다.
+5. 재조회 대조: 이전 기록(키 → 종류 맵)을 입력으로 받습니다. 없던 키는 `NEW`, 같은 종류면 `ALREADY_RECORDED`(다시 넣지 않음), 정상으로 기록된 키가 Type1 전액 취소로 바뀌면 `CANCELED_SINCE_RECORDED`(같은 승인에 연결된 취소)입니다. 그 밖의 종류 변화(예: Type1 → 정상)는 모순으로 보고 `UNDETERMINED_ROW`입니다.
+6. Type2 짝짓기(D-17): 같은 카드·같은 지문의 정상 행이 **이 응답 안에** 정확히 하나이고 금액 절댓값이 같을 때만 받아들입니다. 없으면 `NO_MATCHING_APPROVAL`(조회 기간을 넓히지 않음, 승인번호를 공유하지 않는 기관도 여기로 떨어짐), 여럿이면 `MULTIPLE_MATCHING_APPROVALS`, 취소가 작으면 `PARTIAL_CANCELLATION_SUSPECTED`, 취소가 크거나 짝 정상 행이 받아들여지지 않았거나 정상 행 하나를 취소 행 여럿이 가리키면 `UNDETERMINED_ROW`입니다. 이전 기록으로 짝을 대신하지 않습니다.
+7. 결과([CodefLedgerCandidates](../../backend/src/main/java/com/beone/api/codef/sync/CodefLedgerCandidates.java)): Type1·Type2 행의 취소 귀속월은 항상 `NEEDS_CONFIRMATION`입니다. `incompleteMarks()`는 R1로 연결된 카드의 그 행 사용일자에만 불완전을 표시하고(날짜를 해석하지 못했으면 기간 미확인), 카드 미연결 행은 어느 카드에도 표시하지 않습니다. `acceptedKinds()`는 다음 재조회의 이전 기록으로 쓸 수 있는 키·종류입니다. 원장이 "완전"하다고 선언하지 않습니다(R7).
+
+```java
+// 합성 예시: 같은 동기화의 보유카드로 연결기를 만들고, 승인내역을 판정만 한다
+CodefCardLinker linker = CodefCardLinker.of(snapshot.heldCards());
+CodefLedgerCandidates candidates = CodefLedgerCandidateBuilder.build("0301", linker, approvals,
+		fingerprinter /* 주입. 운영 구현은 미결 */, previousKinds /* 처음이면 Map.of() */);
+candidates.incompleteMarks(); // 연결된 카드·그 날짜에만 붙는 불완전 표시
+candidates.acceptedKinds();   // 저장은 호출자가 한다
+```
+
+보안: 원문 승인번호는 지문 함수에 넘기기만 하고 결과 필드·`toString`·예외 문구·로그에 남기지 않습니다. 지문 함수가 원문을 그대로 돌려주면 `IllegalStateException`(문구에 원문 없음)으로 거부합니다. 결과 타입은 `CodefApproval`을 담지 않습니다(테스트로 확인).
+
+구현하지 않은 것:
+
+- HMAC 운영 구현체, 키 이름·보관 위치·공급 방식(환경 변수·사용자 입력 등)·회전: 미결입니다. 설정 키·환경 변수·Spring Bean도 만들지 않았습니다. 테스트는 테스트 코드 안 합성 키만 씁니다.
+- 카드명 → 후보 상품 산출(R3, 보류): 새 후보는 `UNMAPPED`이고, `USER_CONFIRMED`를 만들거나 바꾸지 않습니다.
+- 원장 완전 선언(R7), 도메인 `Ledger`/`LedgerTransaction` 연결(R8), 저장·영속·HTTP·DB.
+- 실계정 미확인: 승인번호를 승인 행과 취소 행이 공유하는지, Type1 행이 재조회 때 같은 행 그대로 정상에서 취소로 바뀌는지, 사용일자·사용일시 실제 형식.
+- 조회 기간이 달라진 재조회에서 이미 짝지어 기록한 Type2 취소의 원 승인이 기간 밖으로 빠지면, 그 취소 행은 다시 `NO_MATCHING_APPROVAL`로 표시됩니다(이전 기록으로 짝을 대신하지 않는 보수적 처리).
 
 ## 제약과 후속 작업
 
