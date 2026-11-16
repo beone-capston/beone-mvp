@@ -2,12 +2,12 @@
 
 브랜치 `feat/92-codef-ledger-candidate`, 시작 기준 `origin/develop` `73d7f04`(PR #83 1단계 병합 `dc107da` 포함).
 
-## 2026-11-16 · `codef.sync` 2단계 · 완료(PR 전)
+## 2026-11-16 · `codef.sync` 2단계 · PR #93(`develop` 대상, 병합 전)
 - 근거: 2026-11-16 사용자 결정(관리 기록 결정 20 C절: R1·R2·R4를 "관측 전 후보 처리" 제한 아래 추천안 채택, R3 보류), [D-15·D-16·D-17](../../decisions.md), 관리 측 계약 감사(2026-11-16) ④ R1·R2·R4·R7·R8과 ⑤ 후보 2, [KB 조회 조건](../../domains/codef-kb.md)의 시트 셀. 실계정·샌드박스 호출, 실키 사용, 실제 응답 관측은 없습니다.
 - 한 일:
   - `backend/src/main/java/com/beone/api/codef/sync/`: 카드 연결(`CodefCardLinker`·`CodefCardLink`·`CodefPerformanceLink`), 날짜·시각 해석(`CodefUsedDateTime`), 지문 주입(`CodefApprovalFingerprinter`·`CodefApprovalFingerprint`), 중복 키(`CodefApprovalKey`), 판정 순수 함수(`CodefLedgerCandidateBuilder`)와 결과 타입(`CodefLedgerCandidates`·`CodefLedgerCandidateRow`·`CodefIncompleteMark`·`CodefLedgerRowKind`·`CodefRecheck`·`CodefIncompleteReason`·`CodefAttributionMonth`).
   - 합성 fixture 8개(`backend/src/test/resources/codef/sync/ledger-*.json`, `_fixture` 표시·`SYN` 값).
-  - 단위 테스트 54개(새 테스트 클래스 4개와 테스트 전용 HMAC 지문 함수). 테스트 키는 테스트 코드 안의 `SYN-TEST-HMAC-KEY-…-NOT-A-SECRET` 합성 값입니다. 기대값은 결정 C·D-17 문장에서 구현 전에 정했고, 구현 뒤 바꾸지 않았습니다.
+  - 단위 테스트 57개(새 테스트 클래스 4개와 테스트 전용 HMAC 지문 함수). 테스트 키는 테스트 코드 안의 `SYN-TEST-HMAC-KEY-…-NOT-A-SECRET` 합성 값입니다. 기대값은 결정 C·D-17 문장에서 구현 전에 정했고, 구현 뒤 바꾸지 않았습니다.
 - 서비스에서 달라진 점: 같은 동기화의 보유카드·승인내역을 받아 행마다 "원장 후보로 받아들임(종류·키·재조회 결과·Type2 짝 위치)" 또는 "불완전(사유 5종)"을 판정합니다. 불완전은 연결된 카드의 그 행 날짜에만 표시하고, 다음 재조회에 쓸 키·종류를 돌려줍니다. 저장·HTTP·DB 연결은 없습니다.
 - 결정 기록(구현 판단, 새 정책 아님. 사유 5종 안에서의 대응):
   - 한 행에 여러 문제가 있으면 카드 미연결 → 형태 → 원화 금액 → 키 재료(승인번호·사용일자 없음) → 날짜·시각 해석 → 같은 키 → 재조회 모순 → Type2 짝짓기 순으로 처음 걸린 사유 하나만 남깁니다.

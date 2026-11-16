@@ -70,6 +70,15 @@ class CodefUsedDateTimeTest {
 		assertThat(parsed.time()).isEmpty();
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = { "", " ", "\t" })
+	void blankValuesAreAbsentNotUnparsed(String blank) {
+		CodefUsedDateTime parsed = parse(blank, blank);
+
+		assertThat(parsed.dateState()).isEqualTo(ParseState.ABSENT);
+		assertThat(parsed.timeState()).isEqualTo(ParseState.ABSENT);
+	}
+
 	@Test
 	void rowsWithUnparsedDateOrTimeAreIncomplete() {
 		CodefLedgerCandidates candidates = LedgerFixture.build("ledger-approvals-dates.json");

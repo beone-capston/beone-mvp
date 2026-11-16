@@ -92,7 +92,8 @@ public record CodefUsedDateTime(Optional<LocalDate> date, ParseState dateState, 
 	}
 
 	private static ParseState state(Optional<String> text, Optional<?> parsed) {
-		if (text.isEmpty()) {
+		// 기존 해석기(CodefFields.text)와 같이 공백뿐인 문자열도 값 없음으로 본다.
+		if (text.isEmpty() || text.get().isBlank()) {
 			return ParseState.ABSENT;
 		}
 		return parsed.isPresent() ? ParseState.PARSED : ParseState.UNPARSED;
@@ -104,7 +105,7 @@ public record CodefUsedDateTime(Optional<LocalDate> date, ParseState dateState, 
 		/** 제안 형식으로 읽혔다. */
 		PARSED,
 
-		/** 키 누락·빈 문자열. */
+		/** 키 누락·빈 문자열·공백뿐인 문자열. */
 		ABSENT,
 
 		/** 값은 있지만 제안 형식이 아니거나 실제 있는 날짜·시각이 아니다. 추정하지 않는다. */
