@@ -13,7 +13,7 @@ React 화면을 Android 앱 안에서 보여줄 WebView의 기본 구조입니�
 | debug만 원격 디버깅·로컬 개발 서버 평문 HTTP 허용 | 구현. 소스 설정(네트워크 보안 설정·Manifest)은 단위 테스트, release 값은 빌드 산출물로 확인 |
 | 시스템 바·디스플레이 컷아웃 inset 적용 | 구현 |
 | release 로딩과 정확한 origin | **미구현** — release는 주소를 설정하지 않아 아무 페이지도 불러오지 않음. 별도 정책 PR에서 개정([아래](#release-로딩-이력과-현재-방향)) |
-| 웹 ↔ 네이티브 브리지 | **미구현** — 공개 계약은 [D-21](../decisions.md#d-21-확정-정책)의 [후보](bridge-contract-candidate.md)이며 확정이 아님. 어떤 origin에도 노출하지 않음 |
+| 웹 ↔ 네이티브 브리지 | #88 브랜치(미병합)에서 v1 구현·단위 테스트: release 시작 주소 `https://beonepay.site/`, 그 origin의 최상위 프레임에만 `window.BeoneBridge` 노출, 기기 인증 상태와 연결. 계약 문서는 PR #87(미병합). 실기기 미확인([진행 기록](../progress/android/88-android-bridge-local.md)). 이 표의 다른 행은 #88 이전 기준 |
 | 기기 인증(#22)과의 연결 | 미구현. debug 앱에 인증 점검 화면과 WebView 셸이 함께 있지만 서로 연결되어 있지 않음 |
 | 실기기·계측 테스트 | 미실행 |
 

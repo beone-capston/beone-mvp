@@ -23,6 +23,7 @@
 
 - [#22](https://github.com/beone-capston/beone-mvp/issues/22) 기기 인증과 60초 활성 — [PR #24](https://github.com/beone-capston/beone-mvp/pull/24)로 병합. 미해결 스레드 2건(복구 조건, 세션·콜백 귀속 한계)은 브리지 연결 전 다시 검토할 조건입니다. 남은 실기기 항목·정책 결정 대기 ([단계 기록](22-auth-session.md))
 - [#25](https://github.com/beone-capston/beone-mvp/issues/25) WebView 셸 기초 — [PR #26](https://github.com/beone-capston/beone-mvp/pull/26)으로 `develop`에 squash 병합(`5a0065f6f7f86f655cb417ccca3db07817737e09`). 작업 브랜치와 워크트리는 보존 중입니다. 실기기는 W1·W2·W5(debug) 관측상 통과, W6 부분 관측이며 나머지 항목은 미실행입니다 — [확인 기록](../../android/webview-shell.md#확인-기록-2026-11-06-fixture) ([단계 기록](25-webview-shell.md))
+- [#88](https://github.com/beone-capston/beone-mvp/issues/88) 브리지 v1 로컬 구현 — 브랜치 `feat/88-android-bridge-local`, PR 생성 예정(계약 문서는 PR #87, 미병합). release 시작 주소 `https://beonepay.site/`, 신뢰 origin 1개에만 `window.BeoneBridge` 노출, 기기 인증과 연결(대기 시간 120초·10초는 근거 없는 잠정값). 로컬 단위 테스트 164건만 실행, 실기기·설치 미확인 ([단계 기록](88-android-bridge-local.md))
 - [#27](https://github.com/yim0327/beone-mvp/issues/27) 브리지 계약 초안(후보) — [PR #72](https://github.com/beone-capston/beone-mvp/pull/72)로 병합(PR #28을 대체). 공개 계약은 후보이고 구현은 없습니다
 
 ## 사용자 확인 사항

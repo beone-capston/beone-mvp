@@ -1,8 +1,8 @@
 package com.beone.app.web
 
 /**
- * WebView 안에서 열어도 되는 주소를 판정한다. 신뢰 origin은 빌드 설정값에서 받으며,
- * release의 로딩 방식·origin이 정해지기 전까지 release에는 값이 없다.
+ * WebView 안에서 열어도 되는 주소를 판정한다. 신뢰 origin은 빌드 설정값(시작 주소)의 origin 하나이며,
+ * 브리지 허용 origin도 같은 값을 쓴다. release는 `https://beonepay.site`다.
  */
 class WebNavigationPolicy(startUrl: String) {
 
