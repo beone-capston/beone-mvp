@@ -37,10 +37,11 @@ com.beone.api.order
 │   ├── OrderController · PlannedSpendController   API 4개, local·demo 프로필
 │   ├── CreateOrderRequest · PlannedSpendsRequest  요청 본문과 Bean Validation
 │   ├── CreatedOrderResponse · OrderDetailResponse · PlannedSpendsResponse  응답 data
-│   ├── StrictWonDeserializer · StrictDateDeserializer · StrictTimeDeserializer  필드 단위 엄격 역직렬화
+│   ├── StrictWonDeserializer · StrictDateDeserializer · StrictTimeDeserializer · StrictPaymentMethodDeserializer  필드 단위 엄격 역직렬화
 │   ├── AllowedMerchantClass(+Validator) · InCurrentMonth(+Validator)  허용 목록·이번 달 제약
 │   ├── OrderValueFormats                          응답 날짜·시각 문자열
-│   └── OrderErrorCode · OrderExceptionHandler      ORDER_NOT_FOUND 404 (@Order 최우선)
+│   ├── OrderErrorCode · OrderExceptionHandler      ORDER_NOT_FOUND 404 (@Order 최우선)
+│   └── PlannedSpendExceptionHandler               검증 뒤 달이 바뀐 예정 소비 → 400 INVALID_REQUEST
 ├── application/
 │   ├── OrderService · PlannedSpendService         생성·조회·교체(사용자 ID 기준)
 │   ├── OrderClock                                 order 전용 시계(Asia/Seoul)
@@ -48,7 +49,8 @@ com.beone.api.order
 │   ├── OrderId · PlannedSpendId                   외부 ID 표현
 │   ├── NewOrder · NewPlannedSpend · OrderDetail · PlannedSpendDetail  입력·결과 타입
 │   ├── OrderStatus · PaymentMethod                열거형
-│   └── OrderNotFoundException                     없거나 다른 사용자의 주문
+│   ├── OrderNotFoundException                     없거나 다른 사용자의 주문
+│   └── PlannedDateOutOfMonthException             교체 직전 재확인에서 이번 달 밖
 └── persistence/
     ├── OrderEntity · OrderRepository              orders 테이블
     └── PlannedSpendEntity · PlannedSpendRepository planned_spends 테이블
@@ -73,7 +75,8 @@ GET /api/v1/me/orders/{orderId}
 
 PUT /api/v1/me/planned-spends
 → 검증: items 필수·0~5건, 각 항목 필수 필드·금액·형식·허용 목록, plannedDate가 이번 달
-→ PlannedSpendService.replace: 사용자의 기존 예정 소비 전체(지난달 것 포함) 삭제 → 요청 순서대로 저장
+→ PlannedSpendService.replace: 이번 달을 다시 확인(그 사이 달이 바뀌면 지우지 않고 400 INVALID_REQUEST, errors items)
+   → 사용자의 기존 예정 소비 전체(지난달 것 포함) 삭제 → 요청 순서대로 저장
 → 이번 달 목록 반환, usedInRecommendation=false
 ```
 
@@ -97,12 +100,13 @@ LocalDate judgmentDate = order.orderDate(); // D-23 1항: 판정일은 주문일
 - **이번 달 판정 시계**: Asia/Seoul 연-월([값 형식](../api.md#값-형식)). 공유 `Clock` 빈을 만들지 않고 `OrderClock`만 주입해 다른 기능 패키지와 빈이 겹치지 않게 했습니다. 테스트는 고정 시계로 바꿉니다.
 - **조회·교체 범위**: GET은 계약 문구 "조회 범위와 같으며"에 따라 이번 달 `plannedDate`만 돌려주고, PUT은 사용자의 기존 예정 소비 전체를 지운 뒤 교체합니다.
 - **허용 밖 `merchantClass`**: 계약의 "허용 값은 merchant-classes.txt 기준", "입력 검증은 업무 API가 한다"에 따라 400 `INVALID_REQUEST`입니다(필드 오류 `허용된 가맹점 분류가 아닙니다.`). 목록은 새 파서를 만들지 않고 규칙 로더와 같은 공개 파서 `benefit.rule.loading.MerchantClassAllowlist.parse`를 읽기 전용으로 써서 해석 규칙이 갈라지지 않게 했습니다. `benefit` 코드는 바꾸지 않았습니다.
-- **엄격 역직렬화**: Jackson 기본 설정은 `"10000"`·`10000.5`를 숫자로 바꿔 받고, 날짜에 시각이 붙어도 받습니다. 공유 Jackson 설정을 바꾸지 않고 order DTO 필드에만 역직렬화기를 붙여 계약의 "소수·문자열 금액은 400"과 값 형식을 지킵니다. 이 경로의 400은 `errors: []`입니다(공통 처리기의 역직렬화 실패 처리).
+- **엄격 역직렬화**: Jackson 기본 설정은 `"10000"`·`10000.5`를 숫자로 바꿔 받고, 날짜에 시각이 붙어도 받습니다. 공유 Jackson 설정을 바꾸지 않고 order DTO 필드에만 역직렬화기를 붙여 계약의 "소수·문자열 금액은 400"과 값 형식을 지킵니다. `paymentMethod`도 이름 문자열만 받습니다(Jackson 기본은 숫자를 열거 순번으로 받을 수 있음, PR #107 리뷰). 이 경로의 400은 `errors: []`입니다(공통 처리기의 역직렬화 실패 처리).
+- **달 경계**: 웹 검증과 서비스가 "이번 달"을 각각 읽으므로 서울 기준 말일 자정 직전 요청은 검증 통과 뒤 달이 바뀔 수 있습니다. 서비스가 교체 직전에 다시 확인해 기존 값을 지우지 않고 400 `INVALID_REQUEST`(`{"field":"items","message":"이번 달 날짜여야 합니다."}`)로 끝냅니다(PR #107 리뷰).
 - **응답 문자열 형식**: Jackson의 ISO 출력은 초가 0이면 초를 생략하므로(`10:40`), 시각·생성 시각은 `HH:mm:ss`·`+09:00` 형식 문자열로 직접 만듭니다.
 
 ## 테스트
 
-- `test`: [`OrderIdTest`](../../backend/src/test/java/com/beone/api/order/application/OrderIdTest.java)(ID 형식), [`OrderClockTest`](../../backend/src/test/java/com/beone/api/order/application/OrderClockTest.java)(서울 기준 달 경계), [`MerchantClassCatalogTest`](../../backend/src/test/java/com/beone/api/order/application/MerchantClassCatalogTest.java)(계약 예시 코드 허용, 대소문자·공백 거부), [`StrictDeserializerTest`](../../backend/src/test/java/com/beone/api/order/web/StrictDeserializerTest.java), [`OrderValueFormatsTest`](../../backend/src/test/java/com/beone/api/order/web/OrderValueFormatsTest.java)
+- `test`: [`OrderIdTest`](../../backend/src/test/java/com/beone/api/order/application/OrderIdTest.java)(ID 형식), [`OrderClockTest`](../../backend/src/test/java/com/beone/api/order/application/OrderClockTest.java)(서울 기준 달 경계), [`PlannedSpendServiceTest`](../../backend/src/test/java/com/beone/api/order/application/PlannedSpendServiceTest.java)(교체 직전 달 재확인), [`MerchantClassCatalogTest`](../../backend/src/test/java/com/beone/api/order/application/MerchantClassCatalogTest.java)(계약 예시 코드 허용, 대소문자·공백 거부), [`StrictDeserializerTest`](../../backend/src/test/java/com/beone/api/order/web/StrictDeserializerTest.java), [`OrderValueFormatsTest`](../../backend/src/test/java/com/beone/api/order/web/OrderValueFormatsTest.java)
 - `webTest`: [`OrderApiWebTest`](../../backend/src/test/java/com/beone/api/order/web/OrderApiWebTest.java)(계약 예시 응답, 계약 실패 목록 전부, 허용 밖 분류, 50자, 이번 달 경계, 시연 사용자 헤더 없음·잘못된 값)
 - `integrationTest`: [`OrderIntegrationTest`](../../backend/src/test/java/com/beone/api/order/OrderIntegrationTest.java)(V3 적용과 `ddl-auto: validate`, 실제 HTTP 저장·조회, 다른 시연 사용자 주문 404, 예정 소비 사용자별 분리·요청 순서·교체·지난달 행 처리, 거부된 PUT은 기존 값 유지)
 

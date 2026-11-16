@@ -28,6 +28,7 @@ import com.beone.api.order.application.OrderNotFoundException;
 import com.beone.api.order.application.OrderService;
 import com.beone.api.order.application.OrderStatus;
 import com.beone.api.order.application.PaymentMethod;
+import com.beone.api.order.application.PlannedDateOutOfMonthException;
 import com.beone.api.order.application.PlannedSpendDetail;
 import com.beone.api.order.application.PlannedSpendService;
 import com.beone.api.support.WebSliceTest;
@@ -233,10 +234,10 @@ class OrderApiWebTest {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "CARD", "direct", "" })
+	@ValueSource(strings = { "\"CARD\"", "\"direct\"", "\"\"", "0", "2" })
 	void createOrderUnknownPaymentMethodIsInvalidRequest(String method) throws Exception {
 		MvcResult result = perform(
-				postJson(ORDERS, CONTRACT_ORDER_REQUEST.replace("\"DIRECT\"", "\"" + method + "\""))
+				postJson(ORDERS, CONTRACT_ORDER_REQUEST.replace("\"DIRECT\"", method))
 					.header(HEADER, "MY_CARDS"));
 
 		assertThat(result.getResponse().getStatus()).isEqualTo(400);
@@ -462,6 +463,27 @@ class OrderApiWebTest {
 		assertFieldError(classResult, "items[0].merchantClass", "허용된 가맹점 분류가 아닙니다.");
 		assertThat(timeResult.getResponse().getStatus()).isEqualTo(400);
 		assertJson(timeResult, INVALID_REQUEST_EMPTY);
+	}
+
+	@Test
+	void replacePlannedSpendsNumericPaymentMethodIsInvalidRequest() throws Exception {
+		MvcResult result = perform(putJson(PLANNED,
+				"{\"items\":[" + item("2026-11-20", 1, "").replace("\"DIRECT\"", "0") + "]}")
+			.header(HEADER, "MY_CARDS"));
+
+		assertThat(result.getResponse().getStatus()).isEqualTo(400);
+		assertJson(result, INVALID_REQUEST_EMPTY);
+		verify(this.plannedSpendService, never()).replace(any(), any());
+	}
+
+	@Test
+	void monthRolloverInsideServiceIsInvalidRequest() throws Exception {
+		given(this.plannedSpendService.replace(any(), any())).willThrow(new PlannedDateOutOfMonthException());
+
+		MvcResult result = perform(putJson(PLANNED, "{\"items\":[" + item("2026-11-30", 1, "") + "]}")
+			.header(HEADER, "MY_CARDS"));
+
+		assertFieldError(result, "items", "이번 달 날짜여야 합니다.");
 	}
 
 	@Test

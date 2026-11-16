@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
+import com.beone.api.order.application.PaymentMethod;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -62,6 +63,22 @@ class StrictDeserializerTest {
 			"\"10:40:00+09:00\"", "[10,40,0]", "37200", "\"\"" })
 	void rejectsNonClockTime(String time) {
 		assertThatThrownBy(() -> read(body("10000", "\"2026-11-03\"", time))).isInstanceOf(DatabindException.class);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "0", "1", "2", "\"direct\"", "\" DIRECT\"", "\"CARD\"", "\"\"", "true", "[\"DIRECT\"]" })
+	void rejectsNonNamePaymentMethod(String method) {
+		String json = body("10000", "\"2026-11-03\"", null).replace("\"DIRECT\"", method);
+
+		assertThatThrownBy(() -> read(json)).isInstanceOf(DatabindException.class);
+	}
+
+	@Test
+	void acceptsEachPaymentMethodName() {
+		for (PaymentMethod method : PaymentMethod.values()) {
+			String json = body("10000", "\"2026-11-03\"", null).replace("DIRECT", method.name());
+			assertThat(read(json).paymentMethod()).isEqualTo(method);
+		}
 	}
 
 	private CreateOrderRequest read(String json) {

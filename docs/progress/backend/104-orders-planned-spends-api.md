@@ -20,3 +20,8 @@
 - 작은 구현 결정: 응답 시각은 Jackson ISO 출력이 초 0을 생략하므로 `HH:mm:ss`·`+09:00` 문자열로 직접 만듭니다. 생성 시각은 서울 기준 초 단위로 저장합니다. 역직렬화 실패(소수·문자열 금액, 날짜·시각 형식, 허용 밖 결제 방식)의 400은 `errors: []`이고, Bean Validation 실패는 필드 오류를 담습니다. `PaymentMethod`는 엔진 타입을 쓰지 않고 업무 입력 모델로 따로 둡니다.
 - 검증: `./gradlew test webTest integrationTest build javadoc --rerun-tasks` 결과는 PR 본문에 기록합니다.
 - 남은 제한: `PAID`·`CANCELLED` 전이와 `simulatedPaymentId`·`latestRecommendationId` 채우기(모의 결제·추천 작업), 같은 사용자의 동시 PUT 직렬화 없음, 빈 `merchantName` 처리(계약에 규칙 없음), Flyway 번호 확정. 서버 DB 적용·배포, frontend 변경은 하지 않았습니다.
+
+## 2026-11-17 · CodeRabbit 리뷰 반영(head `147e9e8` 리뷰)
+- 반영: 예정 소비 교체에서 웹 검증 뒤 달이 바뀌면 500이던 경로를 `PlannedDateOutOfMonthException` → `PlannedSpendExceptionHandler` 400 `INVALID_REQUEST`(errors `items`)로 바꿨습니다. 기존 값은 지우지 않습니다(`PlannedSpendServiceTest`, `OrderApiWebTest`).
+- 반영: `paymentMethod`를 `StrictPaymentMethodDeserializer`로 이름 문자열만 받게 했습니다. 숫자(열거 순번)는 400입니다.
+- 보류(관리자 순서 지시): `docs/architecture.md` 54·56·58행 구현 현황 문장은 A1(PR #106)이 먼저 고치므로, #106 병합 뒤 최신 `develop`을 merge하고 order 사실을 덧붙입니다.

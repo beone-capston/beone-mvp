@@ -18,7 +18,10 @@ import jakarta.validation.Payload;
 @Constraint(validatedBy = InCurrentMonthValidator.class)
 public @interface InCurrentMonth {
 
-	String message() default "이번 달 날짜여야 합니다.";
+	/** 기본 오류 문구. 서비스 단계의 같은 오류에도 쓴다. */
+	String MESSAGE = "이번 달 날짜여야 합니다.";
+
+	String message() default MESSAGE;
 
 	Class<?>[] groups() default {};
 

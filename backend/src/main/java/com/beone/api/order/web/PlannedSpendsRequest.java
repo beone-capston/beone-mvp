@@ -42,7 +42,8 @@ public record PlannedSpendsRequest(@NotNull(message = "필수 값입니다.")
 			@NotNull(message = "필수 값입니다.") @Min(value = 1, message = "1 이상이어야 합니다.")
 			@JsonDeserialize(using = StrictWonDeserializer.class) Long amountWon,
 			@NotNull(message = "필수 값입니다.") @AllowedMerchantClass String merchantClass,
-			@NotNull(message = "필수 값입니다.") PaymentMethod paymentMethod,
+			@NotNull(message = "필수 값입니다.")
+			@JsonDeserialize(using = StrictPaymentMethodDeserializer.class) PaymentMethod paymentMethod,
 			@Size(max = 50, message = "50자 이하여야 합니다.") String merchantName,
 			@JsonDeserialize(using = StrictTimeDeserializer.class) LocalTime plannedTime) {
 

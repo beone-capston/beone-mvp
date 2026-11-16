@@ -27,7 +27,8 @@ public record CreateOrderRequest(
 		@JsonDeserialize(using = StrictTimeDeserializer.class) LocalTime orderTime,
 		@Size(max = 50, message = "50자 이하여야 합니다.") String merchantName,
 		@NotNull(message = "필수 값입니다.") @AllowedMerchantClass String merchantClass,
-		@NotNull(message = "필수 값입니다.") PaymentMethod paymentMethod) {
+		@NotNull(message = "필수 값입니다.")
+		@JsonDeserialize(using = StrictPaymentMethodDeserializer.class) PaymentMethod paymentMethod) {
 
 	NewOrder toNewOrder() {
 		return new NewOrder(this.amountWon, this.orderDate, this.orderTime, this.merchantName, this.merchantClass,

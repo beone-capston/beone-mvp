@@ -38,7 +38,8 @@ public class PlannedSpendService {
 
 	/**
 	 * 현재 사용자의 예정 소비를 통째로 교체한다. 빈 목록이면 모두 지운다.
-	 * @throws IllegalArgumentException 5건을 넘거나 이번 달 밖 날짜가 있을 때. 웹 경계에서 먼저 400으로 걸러지므로 여기서는 불변식 위반이다
+	 * @throws PlannedDateOutOfMonthException 이번 달 밖 날짜가 있을 때. 웹 검증 뒤 달이 바뀐 경우이며 웹 처리기가 400으로 바꾼다
+	 * @throws IllegalArgumentException 5건을 넘을 때. 웹 경계에서 먼저 400으로 걸러지므로 여기서는 불변식 위반이다
 	 */
 	@Transactional
 	public List<PlannedSpendDetail> replace(CurrentUser user, List<NewPlannedSpend> items) {
@@ -47,7 +48,7 @@ public class PlannedSpendService {
 			throw new IllegalArgumentException("too many planned spends");
 		}
 		if (items.stream().anyMatch(item -> !YearMonth.from(item.plannedDate()).equals(month))) {
-			throw new IllegalArgumentException("planned date is outside the current month");
+			throw new PlannedDateOutOfMonthException();
 		}
 		this.plannedSpendRepository.deleteAllOfUser(user.userId());
 		this.plannedSpendRepository.saveAllAndFlush(items.stream()
