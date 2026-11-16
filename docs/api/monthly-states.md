@@ -312,8 +312,10 @@ registeredOn
 
 ### 구현 시 주의
 
-- D-17의 음수 전월 실적 판정은 구현 전이며, 현재 판정기는 음수를 거부합니다. 판정기 변경이 이 API 구현의 선행 작업입니다.
-- 코드 `CardMonthlyState`에는 선택 없음을 담을 곳이 없습니다(`ServiceSelection`은 서비스가 필수). 구현 때 입력 모델에 추가해야 합니다.
+- 엔진 입구는 음수 전월 실적을 받아 `확인 필요`로 처리합니다(D-22). D-17의 음수 구간 판정 규칙은 구현 전이며 판정기(`PerformanceTiers`)는 음수를 계속 거부하지만, 엔진이 그 전에 `UNKNOWN`으로 바꿉니다. 이 API는 음수를 그대로 저장하고 엔진에 넘깁니다.
+- 엔진 입구는 `serviceSelectionStatus=NONE`과 서비스가 없는 선택 항목 하나로 선택 없음을 받습니다(`MonthlyStateInput`). 미입력은 `UNKNOWN`과 빈 목록입니다.
+- `otherBucketsUsedWon`은 미입력이어도 엔진 입력에서 생략할 수 없습니다. 미입력이면 `StateInput.notEntered()`로 넘깁니다.
+- `period`가 맞지 않다고 `usable=false`·`reason=PERIOD_MISMATCH`로 저장하거나 엔진에 넘기지 않습니다. 기간 판단은 엔진이 하며, 엔진은 `PERIOD_MISMATCH`를 받으면 계약 위반으로 예외를 던집니다(D-22).
 - 모의 승인은 스냅샷 뒤 사용액으로 체인 안 모든 버킷에 더합니다. 모의 원장 기준이며 실제 카드사 차감 시점이 아닙니다.
 
 ### 근거
