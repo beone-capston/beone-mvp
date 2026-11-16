@@ -47,7 +47,7 @@ import com.beone.api.benefit.state.StateValue;
  * <li>카드 상태: 금액 미확정이면 {@code NEEDS_CONFIRMATION}, 양수면 한도로 줄어든 채택 서비스가 있을 때 {@code APPLIED_CAP_REMAINING}, 0원이면
  * {@link #zeroStatus}의 순서다.</li>
  * <li>남은 한도: 버킷별 {@code 구간 한도 − 입력 사용액 − 이 주문의 채택 기여액 중 체인에 그 버킷이 있는 서비스의 합}. 구간·사용액을 모르거나 사용액이
- * 한도보다 크거나, 그 버킷을 체인에 둔 서비스의 기여액이 확인 필요이면 null이다.</li>
+ * 한도보다 크거나, 그 버킷을 체인에 둔 서비스의 기여액이 확인 필요이거나, 서비스마다 구간이 달라 결과가 음수이면 null이다.</li>
  * </ul>
  * 카드 ID로 분기하지 않고 규칙 데이터만 쓴다.
  */
@@ -197,7 +197,14 @@ final class CardEvaluator {
 		return new ServiceOutcome(status, candidate, decided.contribution(), decided.adoption(), unmet);
 	}
 
-	private static ServiceLimitLine limitLine(LimitBucket bucket, Optional<Won> performance, StateValue<Won> used,
+	/**
+	 * 서비스 하나의 체인 버킷 한 줄. 구간은 그 서비스의 실적으로 고르고 차감액은 버킷 전체 기준이다.
+	 *
+	 * <p>
+	 * 같은 버킷을 쓰는 서비스끼리 실적이 다르면(예: 신규 유예 간주 실적은 일부 서비스에만 적용) 다른 서비스의 기여액이 이 서비스 구간의 한도를 넘어 음수가 될 수 있다.
+	 * 버킷 구간 기준이 약관으로 정해지지 않았으므로 이때는 0원이나 음수로 바꾸지 않고 null(확인 필요)로 둔다.
+	 */
+	static ServiceLimitLine limitLine(LimitBucket bucket, Optional<Won> performance, StateValue<Won> used,
 			boolean deductionUnknown, long deduction) {
 		Long limit = performance.flatMap(won -> PerformanceTiers.limitTier(bucket, won))
 			.map(LimitTier::monthlyCap)
@@ -207,11 +214,8 @@ final class CardEvaluator {
 		String usedSource = used == null ? StateSource.UNKNOWN.name() : used.source().name();
 		Long remaining = null;
 		if (limit != null && usedBefore != null && usedBefore <= limit && !deductionUnknown) {
-			remaining = limit - usedBefore - deduction;
-			if (remaining < 0) {
-				// 채택 기여액은 체인의 남은 한도로 줄인 값이라 음수가 될 수 없다.
-				throw new IllegalStateException("limit bucket " + bucket.id() + " remaining would be negative: " + remaining);
-			}
+			long computed = limit - usedBefore - deduction;
+			remaining = computed < 0 ? null : computed;
 		}
 		return new ServiceLimitLine(bucket.id().value(), bucket.parent().map(LimitBucketId::value).orElse(null), limit,
 				usedBefore, usedSource, remaining);

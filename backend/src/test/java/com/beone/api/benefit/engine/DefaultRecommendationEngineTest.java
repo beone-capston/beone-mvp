@@ -9,12 +9,19 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import com.beone.api.benefit.card.CardId;
+import com.beone.api.benefit.card.LimitBucketId;
+import com.beone.api.benefit.money.Won;
+import com.beone.api.benefit.rule.LimitBucket;
+import com.beone.api.benefit.rule.LimitTier;
+import com.beone.api.benefit.state.BasisPeriod;
+import com.beone.api.benefit.state.StateValue;
 import com.beone.api.benefit.rule.RuleCatalog;
 import com.beone.api.benefit.rule.RuleSelection;
 import com.beone.api.benefit.rule.loading.RuleCatalogLoader;
@@ -100,6 +107,34 @@ class DefaultRecommendationEngineTest {
 			assertThat(card.appliedRule()).isNotNull();
 			assertThat(card.pendingReasons()).extracting(PendingReasonOutput::kind).containsExactly("NEEDS_CONFIRMATION");
 			assertThat(result.usageEffects()).containsExactly(new BucketUsageEffect("uc-09174", "GREAT", null));
+		}
+
+	}
+
+	@Nested
+	class LimitLine {
+
+		private final LimitBucket common = new LimitBucket(LimitBucketId.of("COMMON"),
+				List.of(new LimitTier(Won.of(200_000), Won.of(10_000)), new LimitTier(Won.of(300_000), Won.of(20_000))),
+				Optional.empty());
+
+		private final StateValue<Won> used = StateValue.synthetic(Won.of(5_000),
+				BasisPeriod.month(YearMonth.from(DATE)));
+
+		@Test
+		void deductionWithinTheTierLeavesTheRest() {
+			assertThat(CardEvaluator.limitLine(common, Optional.of(Won.of(300_000)), used, false, 3_000).remainingAfterWon())
+				.isEqualTo(12_000L);
+		}
+
+		@Test
+		void deductionAboveThisServiceTierIsUnknownNotNegative() {
+			// 다른 서비스가 더 높은 구간(예: 신규 유예 간주 실적)으로 6,000원을 차감했는데 이 서비스 구간 한도는 10,000원
+			ServiceLimitLine line = CardEvaluator.limitLine(common, Optional.of(Won.of(200_000)), used, false, 6_000);
+
+			assertThat(line.limitWon()).isEqualTo(10_000L);
+			assertThat(line.usedBeforeWon()).isEqualTo(5_000L);
+			assertThat(line.remainingAfterWon()).isNull();
 		}
 
 	}
