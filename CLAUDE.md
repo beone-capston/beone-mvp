@@ -39,7 +39,7 @@
 - 사용자가 세션의 작업 지시로 장기 연속 개발 모드의 시작·재개를 명시적으로 요청한 경우에만 적용한다. `docs/development/backend-start.md` 또는 `docs/development/android-start.md`의 시작 프롬프트를 작업 지시로 전달받은 경우가 여기에 해당한다. 이 문서들을 읽거나 검토·수정하라는 요청은 모드 시작이 아니다.
 - 이 모드에서는 작업 전에 [장기 연속 개발 운영 규칙](docs/development/autonomous-workflow.md)을 읽고 따른다. 그 문서가 허용하는 커밋, 자기 feature 브랜치의 일반 push, `develop` 대상 PR 생성·갱신은 모드 시작 요청을 작업 원칙 6의 사용자 요청으로 본다. 허용 범위는 해당 작업선의 담당 경로와 운영 규칙 3절이 허용한 공용 문서의 자기 모듈 절로 한정한다.
 - 이 모드를 요청하지 않은 일반 작업에는 적용하지 않는다. 일반 작업의 커밋·push·PR은 작업 원칙 6에 따라 사용자가 요청한 경우에만 한다.
-- 이 모드에서도 PR을 `develop`·`main`에 병합하는 것은 자동 권한에 포함되지 않는다. `develop`·`main` 직접 수정·push, 강제 push, 이미 만든 커밋의 이력 변경(rebase·reset·amend), 훅 우회도 하지 않는다.
+- 사용자가 관리측 장기 개발 범위의 조건부 `develop` 병합을 명시적으로 승인한 세션에서는 [운영 규칙 2-1절](docs/development/autonomous-workflow.md)의 검증·리뷰·충돌·보호 조건을 모두 충족한 PR만 Squash 병합하고 다음 준비 작업을 계속한다. 그 외 PR과 `main` 병합은 자동 권한이 아니다. `develop`·`main` 직접 수정·push, 강제 push, 이미 만든 커밋의 이력 변경(rebase·reset·amend), 훅 우회는 계속 금지한다.
 - 충돌 해결을 위해 최신 `origin/develop`을 자기 feature 브랜치에 merge하는 것은 운영 규칙에 따라 허용된다. 이것은 PR 병합이 아니다.
 
 ## 도메인·구조 문서 유지
