@@ -18,7 +18,8 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * {@code orders} 테이블 한 행(Flyway {@code V3__orders_planned_spends.sql}). 주문은 만든 뒤 입력값을 고치지 않는다.
+ * {@code orders} 테이블 한 행(Flyway {@code V3__orders_planned_spends.sql}, 결제 ID 열은 {@code V8}). 주문은 만든 뒤 입력값을
+ * 고치지 않고, 모의 결제가 상태와 결제 ID만 바꾼다.
  *
  * <p>사용자는 {@code user_id} 값으로만 참조하고 {@code user} 패키지 엔티티에 연관을 두지 않는다.
  */
@@ -62,6 +63,9 @@ public class OrderEntity {
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private LocalDateTime createdAt;
 
+	@Column(name = "simulated_payment_id", length = 32)
+	private String simulatedPaymentId;
+
 	protected OrderEntity() {
 	}
 
@@ -76,6 +80,26 @@ public class OrderEntity {
 		this.paymentMethod = paymentMethod;
 		this.status = status;
 		this.createdAt = createdAt;
+	}
+
+	/**
+	 * 모의 승인됐다고 표시한다. {@code CREATED}에서만 바꾼다.
+	 * @param simulatedPaymentId 승인한 결제의 외부 ID
+	 */
+	public void markPaid(String simulatedPaymentId) {
+		if (this.status != OrderStatus.CREATED) {
+			throw new IllegalStateException("only a created order can be paid");
+		}
+		this.status = OrderStatus.PAID;
+		this.simulatedPaymentId = simulatedPaymentId;
+	}
+
+	/** 모의 승인을 전액 취소했다고 표시한다. {@code PAID}에서만 바꾼다. */
+	public void markCancelled() {
+		if (this.status != OrderStatus.PAID) {
+			throw new IllegalStateException("only a paid order can be cancelled");
+		}
+		this.status = OrderStatus.CANCELLED;
 	}
 
 	public Long getOrderId() {
@@ -116,6 +140,10 @@ public class OrderEntity {
 
 	public LocalDateTime getCreatedAt() {
 		return this.createdAt;
+	}
+
+	public String getSimulatedPaymentId() {
+		return this.simulatedPaymentId;
 	}
 
 }

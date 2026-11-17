@@ -16,9 +16,17 @@ import java.time.LocalTime;
  * @param paymentMethod 결제 방식
  * @param status 주문 상태
  * @param createdAt 생성 시각(Asia/Seoul)
+ * @param simulatedPaymentId 모의 승인한 결제 ID({@code pay-…}). 승인 전이거나 실패만 있으면 {@code null}
  */
 public record OrderDetail(String orderId, long amountWon, LocalDate orderDate, LocalTime orderTime,
 		String merchantName, String merchantClass, PaymentMethod paymentMethod, OrderStatus status,
-		LocalDateTime createdAt) {
+		LocalDateTime createdAt, String simulatedPaymentId) {
+
+	/** 모의 승인 전 주문. 결제 ID가 없다. */
+	public OrderDetail(String orderId, long amountWon, LocalDate orderDate, LocalTime orderTime, String merchantName,
+			String merchantClass, PaymentMethod paymentMethod, OrderStatus status, LocalDateTime createdAt) {
+		this(orderId, amountWon, orderDate, orderTime, merchantName, merchantClass, paymentMethod, status, createdAt,
+				null);
+	}
 
 }
