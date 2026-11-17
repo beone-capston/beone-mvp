@@ -80,7 +80,7 @@ class UserCardController {
 
 	@GetMapping
 	ApiResponse<UserCardsResponse> list(CurrentUser currentUser) {
-		return ApiResponse.of(userCardService.list(currentUser.userId()));
+		return ApiResponse.of(userCardService.list(currentUser));
 	}
 }
 ```
