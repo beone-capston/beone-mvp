@@ -43,6 +43,8 @@ BeONE 업무 API의 구현 기준 명세입니다. 공통 규약은 [`docs/api.m
 | 2차 | POST | `/api/v1/me/codef/syncs` | CODEF 조회·동기화 | [codef](codef.md) |
 | 2차 | PUT | `/api/v1/me/cards/{userCardId}/monthly-states/{month}/source-selections` | 출처 충돌 계산 기준 선택 | [monthly-states](monthly-states.md) |
 
+회원 인증 API 9개(`/api/v1/auth/*`, D-24)는 [auth](auth.md)에 있습니다. 출처는 저장소 밖 Notion 인증 명세의 고정 사본이며, `GET /api/v1/auth/csrf`만 구현됐습니다(#124, `local`·`demo` 전용).
+
 ## 확인 상태 값
 
 D-14가 명세 단계로 넘긴 값 목록입니다. 2026-11-03 사용자 지시로 정했습니다. "제안"은 아직 확인받지 않은 값입니다.
