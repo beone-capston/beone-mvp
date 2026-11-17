@@ -82,8 +82,10 @@ public class LedgerQueryService {
 	}
 
 	/**
-	 * 한 카드의 월간 상태 스냅샷 뒤 활동(#120, D-16). 거래일이 그 달이고 기록 시각이 {@code snapshotAt}보다 뒤인 행을 행 ID
-	 * 오름차순으로 돌려준다. 같은 초에 기록된 행은 스냅샷에 들어 있을 수 있으므로 넣지 않는다. 카드 소유 확인은 호출자가 한다.
+	 * 한 카드의 월간 상태 스냅샷 뒤 활동(#120, D-16). 기록 시각이 {@code snapshotAt}보다 뒤인 행 중 승인은 자기 거래일이, 취소는
+	 * 원 승인 행의 거래일이 그 달인 행을 행 ID 오름차순으로 돌려준다. 취소를 원 승인의 달에 귀속하므로 11월 승인을 12월에 취소하면
+	 * 11월 활동에 들어가고, 10월 승인의 11월 취소는 11월 활동에 들어가지 않는다(D-17, 관리자 승인 규칙). 같은 초에 기록된 행은
+	 * 스냅샷에 들어 있을 수 있으므로 넣지 않는다. 카드 소유 확인은 호출자가 한다.
 	 * @param user 현재 사용자
 	 * @param userCardId 보유 카드 ID. 형식이 틀리면 빈 목록
 	 * @param month 월간 상태의 달
@@ -96,8 +98,8 @@ public class LedgerQueryService {
 		Objects.requireNonNull(snapshotAt, "snapshotAt");
 		return UserCardId.parse(userCardId)
 			.map(cardId -> this.transactionRepository
-				.findByUserIdAndUserCardIdAndTransactionDateBetweenAndRecordedAtAfterOrderByLedgerIdAsc(user.userId(),
-						cardId, month.atDay(1), month.atEndOfMonth(), snapshotAt)
+				.findActivityAfter(user.userId(), cardId, month.atDay(1), month.atEndOfMonth(), snapshotAt,
+						LedgerEntryType.APPROVAL, LedgerEntryType.CANCELLATION)
 				.stream()
 				.map(row -> new LedgerActivity(row.getEntryType(), row.getAmountWon(),
 						effectsOf((row.getEntryType() == LedgerEntryType.CANCELLATION) ? row.getOriginalLedgerId()

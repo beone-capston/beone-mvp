@@ -124,8 +124,8 @@ class LedgerQueryServiceTest {
 	void activityAfterTheSnapshotCarriesTheOriginalApprovalDeductionsOnCancellations() {
 		// 취소 행은 차감액이 없으므로 원 승인 행의 버킷 차감액을 붙여 추천 입력이 그 버킷을 판단하게 한다(#120)
 		LocalDateTime snapshot = LocalDateTime.of(2026, 11, 3, 9, 0);
-		given(this.repository.findByUserIdAndUserCardIdAndTransactionDateBetweenAndRecordedAtAfterOrderByLedgerIdAsc(1L,
-				1001L, LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30), snapshot))
+		given(this.repository.findActivityAfter(1L, 1001L, LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30),
+				snapshot, LedgerEntryType.APPROVAL, LedgerEntryType.CANCELLATION))
 			.willReturn(List.of(approval(9001, 1001), cancellation(9002, 1001, 8000)));
 		given(this.effects.findByLedgerIdOrderByUsageEffectIdAsc(9001L))
 			.willReturn(List.of(new LedgerUsageEffectEntity(9001L, "STORE", 500L)));

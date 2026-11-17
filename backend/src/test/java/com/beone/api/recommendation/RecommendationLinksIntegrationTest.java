@@ -160,6 +160,36 @@ class RecommendationLinksIntegrationTest {
 				Map.of("approvalCount", 0, "approvedAmountWon", 0, "cancellationCount", 0));
 	}
 
+	@Test
+	void aCancellationBelongsToTheMonthOfItsOriginalApproval() {
+		// 관리자 승인 규칙(monthly-states.md 218행, D-17): 취소는 원 승인 행의 거래일 월에 귀속한다. 11월 승인을 12월에 취소하면
+		// 11월 요약에 들어가고(그 달 버킷은 확인 필요), 12월 요약에는 들어가지 않는다
+		String card = registerWithC01State();
+		String order = createOrder("MY_CARDS");
+		NOW.set(START.plusSeconds(60));
+		String payment = (String) data(send("POST", "/api/v1/me/orders/" + order + "/simulated-payments", "MY_CARDS",
+				"key-a", null).getBody()).get("simulatedPaymentId");
+		String december = "/api/v1/me/cards/" + card + "/monthly-states/2026-12";
+		NOW.set(Instant.parse("2026-11-30T16:00:00Z"));
+		assertThat(send("PUT", december, "MY_CARDS", null, """
+				{"previousMonthPerformanceWon":{"value":100000,"period":{"from":"2026-11-01","to":"2026-11-30"}}}
+				""").getStatusCode().value()).isEqualTo(200);
+		NOW.set(Instant.parse("2026-12-02T01:00:00Z"));
+
+		ResponseEntity<String> cancelled = send("POST", "/api/v1/me/simulated-payments/" + payment + "/cancellations",
+				"MY_CARDS", "key-c", "{\"amountWon\":40000}");
+
+		assertThat(cancelled.getStatusCode().value()).isEqualTo(201);
+		assertThat(this.jdbcTemplate.queryForObject(
+				"SELECT transaction_date FROM ledger_transactions WHERE entry_type = 'CANCELLATION'", java.sql.Date.class))
+			.isEqualTo(java.sql.Date.valueOf("2026-12-02"));
+		assertThat(data(send("GET", "/api/v1/me/cards/" + card + "/monthly-states/2026-11", "MY_CARDS", null, null)
+			.getBody())).containsEntry("afterSnapshot",
+					Map.of("approvalCount", 1, "approvedAmountWon", 100000, "cancellationCount", 1));
+		assertThat(data(send("GET", december, "MY_CARDS", null, null).getBody())).containsEntry("afterSnapshot",
+				Map.of("approvalCount", 0, "approvedAmountWon", 0, "cancellationCount", 0));
+	}
+
 	private String recommend(String order) {
 		ResponseEntity<String> created = send("POST", "/api/v1/me/orders/" + order + "/recommendations", "MY_CARDS",
 				null, null);
