@@ -4,6 +4,8 @@
 
 `codef`는 CODEF 카드 API 응답 본문을 BeONE이 쓸 수 있는 비민감 값으로 해석하는 **응답 해석 경계**입니다(#41). CODEF(금융기관 데이터를 대신 조회해 주는 외부 API)의 요청 전송, OAuth 토큰(접근 권한을 토큰으로 위임하는 인증 방식의 발급값), 암호화, 계정 연결(connectedId: CODEF가 연결된 금융기관 계정을 가리키는 식별값)과는 분리되어 있으며, 이 패키지는 응답 문자열을 받아 결과 코드 분류와 `data` 항목만 돌려줍니다. 그 앞단의 전송 단계 해석(#43)은 HTTP 상태 코드와 응답 본문을 받아 상태를 구분하고 본문을 URL 디코딩합니다. 실제 HTTP 호출은 하지 않습니다.
 
+[CODEF 연결 API](#codef-연결-api-126)(#126)는 연결 상태 조회·계정 연결·연결 해제를 local·demo에서 가짜 게이트웨이로만 처리합니다. 아래 "구현하지 않았습니다"는 해석·전송 계층 기준이며, 실 계정 연결·RSA 암호화는 여전히 없습니다.
+
 구현된 범위는 승인내역·보유카드·실적조회 응답의 해석, 공통 결과 코드의 분류, 빈 값·금액·코드 값의 보수적 해석, 그리고 그 앞단의 [전송 계층](#전송-계층)(토큰 발급·캐시, 상품 요청, 시간 초과, 호출 상한)입니다. 계정 연결, RSA 암호화, 추가 인증 2차 요청, DB 저장, 엔드포인트, BeONE 상태값(`StateValue`: 값과 출처·기준 기간을 함께 담는 `benefit` 도메인 타입)으로의 변환은 구현하지 않았습니다. 이 패키지의 테스트는 합성 응답만 쓰며 실제 응답 검증이 아닙니다.
 
 CODEF 결과를 쓸 수 없는 경우(오류 분류, 미분류, 형식 오류, 값 없음)에도 수동 입력 경로는 유지해야 합니다(CLAUDE.md 제품 경계). 이 패키지는 그 판단 재료만 제공하며 수동 입력 API는 없습니다.
@@ -259,6 +261,53 @@ candidates.acceptedKinds();   // 저장은 호출자가 한다
 - 원장 완전 선언(R7), 도메인 `Ledger`/`LedgerTransaction` 연결(R8), 저장·영속·HTTP·DB.
 - 실계정 미확인: 승인번호를 승인 행과 취소 행이 공유하는지, Type1 행이 재조회 때 같은 행 그대로 정상에서 취소로 바뀌는지, 사용일자·사용일시 실제 형식.
 - 조회 기간이 달라진 재조회에서 이미 짝지어 기록한 Type2 취소의 원 승인이 기간 밖으로 빠지면, 그 취소 행은 다시 `NO_MATCHING_APPROVAL`로 표시됩니다(이전 기록으로 짝을 대신하지 않는 보수적 처리).
+
+## CODEF 연결 API (#126)
+
+`/api/v1/me/codef/connection`의 GET(연결 상태)·POST(계정 연결)·DELETE(연결 해제)입니다([계약](../api/codef.md)). 결정 30에 따라 **fixture·가짜 구현·로컬 HTTP·테스트 영속까지**이며 실 CODEF·실키·실계정은 쓰지 않습니다. 해제 범위(P4)와 connectedId 암호화(P5)는 2026-11-18 사용자 직접 결정입니다.
+
+```text
+codef/
+├── application/
+│   ├── CodefConnectionService   연결 조회·등록·해제. 게이트웨이 호출은 트랜잭션 밖, 저장만 짧은 트랜잭션
+│   ├── ConnectedIdCipher        connectedId AES-256-GCM 암호화(패키지 내부)
+│   ├── ConnectedIdKeySource     암호화 키 공급. 운영 구현 EnvironmentConnectedIdKeySource(환경 변수)
+│   ├── CodefGateway             CODEF 계정 등록·정리 경계(인터페이스)
+│   ├── FakeCodefGateway         local·demo용 가짜. 합성 아이디로 실패 재현, 그 밖은 합성 connectedId
+│   ├── CodefRegistration        등록 결과: Registered·LoginRejected·CardVerificationRequired·Unavailable
+│   ├── CodefRegistrations       결과 코드 분류 → 등록 결과 대응표
+│   └── CodefConnectionView·CodefConnectionStatus·CodefConnectResult, 예외 5종
+├── persistence/                 codef_connections 엔티티·저장소(Flyway V10, 임시 번호)
+└── web/                         컨트롤러, 요청·응답, 오류 코드, 기능별 처리기
+```
+
+- **연결 상태**: 행이 없으면 `NOT_CONNECTED`(`connectedAt`·`lastSyncedAt` `null`). 행은 `CONNECTED` 또는 `RECONNECT_REQUIRED`이고 `reconnectRequired`는 후자일 때만 참입니다. 가상 포트폴리오 사용자는 연결할 수 없어 항상 `NOT_CONNECTED`입니다.
+- **최초 연결 201, 재연결 200**: 연결 행이 있으면(상태와 무관) 재연결입니다. 재연결 성공이면 connectedId를 새 값으로 바꾸고 `connectedAt`을 재연결 시각으로 바꾸며 `lastSyncedAt`은 그대로 둡니다. 이전 connectedId는 커밋 뒤 게이트웨이에 정리를 요청합니다. 재연결이 실패하면 기존 연결을 그대로 둡니다(관리자 판단 P3). 저장이 실패하면 방금 받은 connectedId를 정리합니다. 정리 실패는 BeONE 상태를 바꾸지 않고 예외 클래스 이름만 로그에 남깁니다.
+- **검사 순서**: 요청 형식 400(필수 4필드, `organization`은 `0301`, `loginType`은 `ID`만, 문자열이 아닌 값은 `errors: []`) → 가상 포트폴리오 409 `PORTFOLIO_READ_ONLY` → 암호화 키·게이트웨이가 없으면 게이트웨이를 부르지 않고 502 `CODEF_UNAVAILABLE` → 게이트웨이 결과. local·demo 밖에서는 컨트롤러가 등록되지 않아 404입니다.
+- **연결 해제(DELETE, 2026-11-18 사용자 직접 결정 P4)**: 204, 본문 없음. 연결 행(암호화한 connectedId)을 지우고 추가 수집을 멈춥니다. 커밋 뒤 CODEF 쪽 connectedId 정리를 요청합니다(키가 없거나 복호화에 실패하면 정리만 건너뜀). **해제는 데이터 완전 삭제가 아닙니다.** CODEF로 들어온 보유 카드·codef 승인 행·사용자가 확인한 매핑은 보존하며 카드는 보유 카드 해제로 따로 지웁니다. 보존 기간, 탈퇴·완전 삭제 정책은 미결입니다. 연결이 없으면 409 `CODEF_NOT_CONNECTED`. 가상 포트폴리오는 409 `PORTFOLIO_READ_ONLY`입니다. [docs/api.md](../api.md#업무-오류-코드)의 "가상 포트폴리오의 CODEF 쓰기 요청" 규칙에 따른 것이며 계약 DELETE 실패 목록에도 반영했습니다.
+- **결과 → 오류 코드**(관리자 판단 P1·P2, [`CodefRegistrations`](../../backend/src/main/java/com/beone/api/codef/application/CodefRegistrations.java)):
+
+| 결과 분류 | 등록 결과 | 응답 |
+| --- | --- | --- |
+| `SUCCESS`이고 connectedId가 있음 | 등록 | 201·200 |
+| `SUCCESS`인데 connectedId가 비어 있음 | 사용 불가 | 502 `CODEF_UNAVAILABLE` |
+| `CARD_VERIFICATION_NOT_SUPPORTED`(`CF-12108`) | 카드소지확인 필요 | 409 `CODEF_CARD_VERIFICATION_NOT_SUPPORTED` |
+| 추가 인증 필요(2-way 범위 밖), 토큰·인증서·통신·요청 형식·도메인·IP·연결 계정 오류, 미분류 | 사용 불가 | 502 `CODEF_UNAVAILABLE` |
+
+  **실코드 대응이 없는 것**: 결과 분류에 로그인 실패 분류가 없으므로(#47에서 `CF-12401`·`CF-12834`를 미분류로 정정) 400 `CODEF_LOGIN_FAILED`로 가는 실 결과 코드는 없습니다. 이 응답은 가짜 게이트웨이의 로그인 거절로만 나옵니다. `RECONNECT_REQUIRED`로 바꾸는 실 결과 코드도 없습니다. 근거 있는 코드가 확인되면 별도 결정으로 더합니다. 시간 초과를 504로 나누지 않습니다.
+- **민감 정보**: 비밀번호는 `char[]`로 받아 게이트웨이에 넘긴 뒤 지우고 저장하지 않습니다. 아이디도 저장하지 않습니다. 요청 객체·등록 결과·엔티티의 문자열 표현에 아이디·비밀번호·connectedId를 넣지 않습니다. 가짜 게이트웨이는 RSA 암호화를 하지 않습니다(관리자 판단 P7). 실 구현은 받은 즉시 CODEF 공개키로 암호화해 보내야 합니다(D-14 원칙 9).
+- **가짜 게이트웨이 합성 아이디**: `fake-login-rejected`(로그인 거절), `fake-card-verification`(카드소지확인), `fake-unavailable`(사용 불가). 그 밖의 아이디는 성공이며 `fake-cid-` 접두어의 무작위 connectedId를 줍니다. 실계정 아이디를 넣어도 CODEF로 보내지 않습니다.
+- **저장**: `codef_connections`(사용자당 한 행, 아이디·비밀번호 컬럼 없음). 동시 연결·해제는 사용자 행을 먼저 잠가 차례로 처리합니다.
+- **connectedId 암호화(2026-11-18 사용자 직접 결정 P5)**: AES-256-GCM, 저장 형식 `v1:` + Base64(무작위 12바이트 IV ‖ 암호문 ‖ 16바이트 태그), 사용자 ID를 추가 인증 데이터로 묶어 다른 사용자 행으로 옮긴 값은 복호화되지 않습니다. 키는 프로세스 환경 변수 `BEONE_CODEF_CONNECTED_ID_KEY`(Base64로 적은 32바이트)에서 읽고 `application*.yml`에는 두지 않습니다. local·demo에도 고정 기본값이 없으며, 키가 없거나 형식이 틀리면 연결 POST가 502 `CODEF_UNAVAILABLE`로 실패하고 평문으로 대신 저장하지 않습니다. 테스트는 합성 키를 주입합니다. 운영 키 공급·설정과 키 회전은 별도 승인이며 구현하지 않았습니다. 키 값은 저장소·로그에 남기지 않습니다.
+
+```bash
+# local 프로필 서버에서. 아이디·비밀번호는 합성 값이며 CODEF로 보내지 않는다
+curl -X POST "http://localhost:8080/api/v1/me/codef/connection" \
+  -H "X-BeONE-Demo-User: MY_CARDS" -H "Content-Type: application/json" \
+  -d '{"organization":"0301","loginType":"ID","loginId":"demo-user","password":"demo-pass"}'
+```
+
+테스트: 단위 `CodefRegistrationsTest`(분류 전부), `FakeCodefGatewayTest`, `ConnectedIdCipherTest`(왕복·IV·다른 사용자·변조·다른 키), `EnvironmentConnectedIdKeySourceTest`, `CodefConnectionServiceTest`(최초·재연결 교체·실패 시 유지·저장 실패 정리·비밀번호 지움·키 없음·해제), 웹 `CodefConnectionApiWebTest`(계약 예시 JSON, 실패 응답 전부, 검증 400, 헤더), `CodefConnectionProfileOffWebTest`(프로필 밖 404), 통합 `CodefConnectionIntegrationTest`(V10, 최초 201·재연결 200과 connectedId 교체·정리, 암호문 저장, 해제 204와 보유 카드 보존, 실패 시 유지, 포트폴리오 409, 사용자 분리, 자격 증명 컬럼 없음), `CodefConnectionWithoutKeyIntegrationTest`(키 없음 502, 저장 없음).
 
 ## 제약과 후속 작업
 
