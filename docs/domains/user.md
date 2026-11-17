@@ -79,8 +79,8 @@ InvalidDemoUserHeaderException
 class UserCardController {
 
 	@GetMapping
-	ApiResponse<UserCardsResponse> list(CurrentUser currentUser) {
-		return ApiResponse.of(userCardService.list(currentUser));
+	ApiResponse<UserCardResponses.ItemList> list(CurrentUser currentUser) {
+		return ApiResponse.of(UserCardResponses.ItemList.from(userCardService.list(currentUser)));
 	}
 }
 ```
