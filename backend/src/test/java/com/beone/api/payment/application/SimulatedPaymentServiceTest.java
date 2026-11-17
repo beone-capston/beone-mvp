@@ -243,6 +243,13 @@ class SimulatedPaymentServiceTest {
 				LocalDate.of(2026, 11, 3), null, "STARBUCKS_STORE", "DIRECT", "스타벅스 송도점", 9001L, 7001L,
 				YearMonth.of(2026, 11), AttributionStatus.CONFIRMED, LocalDateTime.of(2026, 11, 3, 11, 0, 0)));
 		verify(this.orders, never()).markCancelled(any(), anyString());
+		assertThat(this.saved.getStatus()).isEqualTo(PaymentStatus.PARTIALLY_CANCELLED);
+		assertThat(this.saved.cancellableWon()).isEqualTo(6000);
+		ArgumentCaptor<PaymentCancellationEntity> line = ArgumentCaptor.forClass(PaymentCancellationEntity.class);
+		verify(this.cancellations).save(line.capture());
+		assertThat(line.getValue().getSimulatedPaymentId()).isEqualTo(7001L);
+		assertThat(line.getValue().getAmountWon()).isEqualTo(4000L);
+		assertThat(line.getValue().getLedgerId()).isEqualTo(9002L);
 	}
 
 	@Test
@@ -259,6 +266,8 @@ class SimulatedPaymentServiceTest {
 				"uc-1001", "2026-11", null, null, -10000L, "RECEIPT_MONTH", null));
 		assertThat(document.impact().needsConfirmation()).isEmpty();
 		verify(this.orders).markCancelled(ME, "ord-5001");
+		assertThat(this.saved.getStatus()).isEqualTo(PaymentStatus.CANCELLED);
+		assertThat(this.saved.cancellableWon()).isZero();
 	}
 
 	@Test
