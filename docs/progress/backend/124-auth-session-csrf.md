@@ -32,3 +32,8 @@
   - 시각은 `Clock` 빈이 하나 있으면 그것을, 없으면 시스템 시계를 쓰고 Asia/Seoul 초 단위로 저장합니다(다른 기능과 같은 방식).
 - 검증: `./gradlew test webTest integrationTest build javadoc --rerun-tasks` 결과는 PR 본문에 기록합니다.
 - 남은 제한: 가입·인증메일·이메일 인증(U2), 로그인·로그아웃·세션 조회(U3, 회원 세션 열 추가), 비밀번호 재설정(U4), 익명 세션 수명과 로그인 429 기준의 사용자 결정, 공개 프로필·CORS, Flyway 번호 확정. 서버 DB 적용·배포, frontend 변경은 하지 않았습니다.
+
+## 2026-11-18 · CodeRabbit 리뷰 반영(head `17b8d2c` 리뷰)
+- 리뷰 상태: 제출 리뷰 1건(head `17b8d2c`, 인라인 2건, 모두 Minor). 사람 승인 없음. 그 사이 head `bc60960`(익명 세션 수명 결정 반영)을 올렸고, 두 지적은 `bc60960`에도 그대로 해당해 함께 고쳤습니다.
+- 반영 1(동시 요청의 세션 삭제): `use`가 잠금 없이 읽은 옛 만료 값으로, 다른 요청이 방금 연장한 세션을 지울 수 있었습니다. `AuthSessionRepository.findBySessionHash`에 `PESSIMISTIC_WRITE` 잠금을 걸었습니다. 이 메서드는 트랜잭션인 `use`에서만 부릅니다. `AuthSessionIntegrationTest#concurrentUseWaitsForExtensionAndDoesNotDeleteExtendedSession`은 테스트 트랜잭션이 행을 잠그고 연장하는 동안 CSRF 조회가 잠금을 기다리는지 `performance_schema.data_lock_waits`로 확인한 뒤 커밋합니다. 잠금을 빼고 돌리면 연장된 세션을 지우고 새 쿠키를 심어 실패하고, 잠금이 있으면 통과합니다(되돌린 코드는 커밋하지 않음).
+- 반영 2(404·405의 `no-store`): 인터셉터는 핸들러가 정해진 요청에서만 돌아, `POST /api/v1/auth/csrf`(405)와 없는 인증 경로(404)에 `Cache-Control: no-store`가 빠졌습니다. 헤더는 서블릿 필터 `AuthNoStoreFilter`(`/api/v1/auth/*`)로 옮기고, CSRF 검사는 인터셉터에 남겼습니다. 웹 테스트와 통합 테스트에 405·404의 헤더 검사를 더했습니다.

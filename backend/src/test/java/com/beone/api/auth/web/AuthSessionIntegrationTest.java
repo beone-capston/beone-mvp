@@ -4,6 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -12,6 +17,10 @@ import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import com.beone.api.common.web.ApiResponse;
 import com.beone.api.support.IntegrationTest;
@@ -32,9 +41,12 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.json.JsonAssert;
 import org.springframework.test.json.JsonCompareMode;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
+import org.testcontainers.mysql.MySQLContainer;
 
 /**
  * 세션 쿠키·CSRF 기반을 실제 HTTP·MySQL로 확인한다. Flyway {@code V9} 적용({@code ddl-auto: validate}), 세션 ID 해시 저장,
@@ -67,6 +79,12 @@ class AuthSessionIntegrationTest {
 
 	@Autowired
 	MutableClock clock;
+
+	@Autowired
+	PlatformTransactionManager transactionManager;
+
+	@Autowired
+	MySQLContainer mysql;
 
 	@BeforeEach
 	@AfterEach
@@ -172,6 +190,80 @@ class AuthSessionIntegrationTest {
 		ResponseEntity<String> expired = post(sessionId, token);
 		assertBody(expired, 403, CSRF_INVALID);
 		assertThat(expired.getHeaders().getCacheControl()).isEqualTo("no-store");
+	}
+
+	@Test
+	void methodMismatchAndUnknownAuthPathsAreNoStore() {
+		ResponseEntity<String> notAllowed = client().post().uri(CSRF_PATH).retrieve().toEntity(String.class);
+		assertThat(notAllowed.getStatusCode().value()).isEqualTo(405);
+		assertThat(notAllowed.getHeaders().getCacheControl()).isEqualTo("no-store");
+
+		ResponseEntity<String> notFound = client().get().uri("/api/v1/auth/unknown").retrieve().toEntity(String.class);
+		assertThat(notFound.getStatusCode().value()).isEqualTo(404);
+		assertThat(notFound.getHeaders().getCacheControl()).isEqualTo("no-store");
+	}
+
+	@Test
+	void concurrentUseWaitsForExtensionAndDoesNotDeleteExtendedSession() throws Exception {
+		String sessionId = cookieValue(get(null).getHeaders().getFirst(HttpHeaders.SET_COOKIE));
+		String hash = sha256Hex(sessionId);
+		// 저장된 미사용 만료(11:00)에 도달했다. 다른 요청이 같은 순간 이 세션을 연장하고 있다.
+		this.clock.advance(Duration.ofHours(1));
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		try {
+			CompletableFuture<ResponseEntity<String>> concurrent = new CompletableFuture<>();
+			new TransactionTemplate(this.transactionManager).executeWithoutResult(status -> {
+				this.jdbcTemplate.queryForObject("SELECT auth_session_id FROM auth_sessions WHERE session_hash = ? FOR UPDATE",
+						Long.class, hash);
+				this.jdbcTemplate.update(
+						"UPDATE auth_sessions SET last_used_at = '2026-11-18 10:59:59', idle_expires_at = '2026-11-18 11:59:59' "
+								+ "WHERE session_hash = ?",
+						hash);
+				long connection = this.jdbcTemplate.queryForObject("SELECT CONNECTION_ID()", Long.class);
+				executor.submit(() -> concurrent.complete(get(sessionId)));
+				awaitLockWaitOnSessions(connection);
+			});
+
+			ResponseEntity<String> response = concurrent.get(20, TimeUnit.SECONDS);
+			// 잠금 없이 옛 만료 값으로 판정하면 연장된 세션을 지우고 새 쿠키를 심는다.
+			assertThat(response.getHeaders().get(HttpHeaders.SET_COOKIE)).isNull();
+			assertThat(this.jdbcTemplate.queryForList("SELECT session_hash FROM auth_sessions", String.class))
+				.containsExactly(hash);
+		}
+		finally {
+			executor.shutdownNow();
+		}
+	}
+
+	// 이 테스트 트랜잭션(blockingConnection)이 잠근 auth_sessions 행을 다른 세션이 기다리기 시작할 때까지 최대 10초 기다린다.
+	// 잠금 대기 표(performance_schema)는 전역 권한이 필요해 컨테이너의 root 계정으로 읽는다(PaymentPreferenceIntegrationTest와 같음).
+	private void awaitLockWaitOnSessions(long blockingConnection) {
+		String query = "SELECT COUNT(*) FROM performance_schema.data_lock_waits w "
+				+ "JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID "
+				+ "JOIN performance_schema.threads t ON t.THREAD_ID = w.BLOCKING_THREAD_ID "
+				+ "WHERE l.OBJECT_NAME = 'auth_sessions' AND t.PROCESSLIST_ID = ?";
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		try (Connection connection = DriverManager.getConnection(this.mysql.getJdbcUrl(), "root",
+				this.mysql.getPassword()); PreparedStatement statement = connection.prepareStatement(query)) {
+			statement.setLong(1, blockingConnection);
+			while (System.nanoTime() < deadline) {
+				try (ResultSet result = statement.executeQuery()) {
+					result.next();
+					if (result.getLong(1) > 0) {
+						return;
+					}
+				}
+				Thread.sleep(50);
+			}
+		}
+		catch (SQLException ex) {
+			throw new IllegalStateException(ex);
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException(ex);
+		}
+		throw new AssertionError("CSRF 토큰 조회 요청이 10초 안에 테스트가 잠근 세션 행의 잠금 대기에 들어가지 않았습니다.");
 	}
 
 	private ResponseEntity<String> get(String sessionId) {

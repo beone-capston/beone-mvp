@@ -36,8 +36,9 @@ com.beone.api.auth
 │   ├── AuthCsrfController        GET /api/v1/auth/csrf, local·demo
 │   ├── CsrfTokenResponse         응답 data(headerName, token)
 │   ├── SessionCookie             쿠키 이름, 읽기, Set-Cookie 문자열
-│   ├── AuthRequestInterceptor    /api/v1/auth/** 공통 처리: no-store, POST CSRF 검사
-│   ├── AuthWebConfiguration      위 인터셉터 등록, local·demo
+│   ├── AuthRequestInterceptor    /api/v1/auth/** POST CSRF 검사
+│   ├── AuthNoStoreFilter         /api/v1/auth/** 모든 응답(404·405 포함)에 no-store
+│   ├── AuthWebConfiguration      위 인터셉터·필터 등록, local·demo
 │   ├── CsrfInvalidException      CSRF 실패(토큰 값을 담지 않음)
 │   ├── AuthErrorCode             인증 오류 코드(U1은 CSRF_INVALID만)
 │   └── AuthExceptionHandler      auth.web 컨트롤러의 기능별 처리기(@Order 최우선)
@@ -49,18 +50,18 @@ com.beone.api.auth
 │   └── ActiveSession·IssuedSession 결과 타입(toString에서 원문 숨김)
 └── persistence/
     ├── AuthSessionEntity         auth_sessions 한 행
-    └── AuthSessionRepository     해시로 세션 찾기
+    └── AuthSessionRepository     해시로 세션 찾기(쓰기 잠금)
 ```
 
 소스: [web](../../backend/src/main/java/com/beone/api/auth/web/), [application](../../backend/src/main/java/com/beone/api/auth/application/), [persistence](../../backend/src/main/java/com/beone/api/auth/persistence/), [마이그레이션](../../backend/src/main/resources/db/migration/V9__auth_sessions.sql).
 
 ## 주요 클래스의 역할과 관계
 
-- `AuthSessionService`는 쿠키 값으로 세션을 찾고(`use`), 익명 세션을 발급합니다(`issueAnonymous`). 세션은 미사용 만료와 절대 만료 중 먼저 오는 시각에 끝납니다. 같은 시각이 되면 이미 만료입니다. 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료를 넘기지 않습니다. 만료한 행은 찾을 때 지웁니다.
+- `AuthSessionService`는 쿠키 값으로 세션을 찾고(`use`), 익명 세션을 발급합니다(`issueAnonymous`). 세션은 미사용 만료와 절대 만료 중 먼저 오는 시각에 끝납니다. 같은 시각이 되면 이미 만료입니다. 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료를 넘기지 않습니다. 만료한 행은 찾을 때 지웁니다. 조회에 쓰기 잠금(`PESSIMISTIC_WRITE`)을 걸어, 같은 세션을 쓰는 동시 요청이 옛 만료 값으로 판정해 다른 요청이 방금 연장한 세션을 지우지 않게 합니다.
 - `SessionTokens`는 상태가 없는 부품입니다.
   - 세션 ID: `SecureRandom` 32바이트를 패딩 없는 Base64URL로 쓴 43자입니다. DB에는 SHA-256 해시(16진수 64자)만 저장합니다.
   - CSRF 토큰: 세션 ID에 고정 접두어를 붙여 SHA-256으로 유도한 43자입니다. 서버는 토큰을 따로 저장하지 않고, 요청 쿠키에서 다시 계산해 상수 시간(`MessageDigest.isEqual`)으로 비교합니다. 쿠키가 `HttpOnly`라 다른 사이트의 스크립트는 세션 ID를 읽어 토큰을 만들 수 없습니다. 세션 ID가 바뀌면(로그인·로그아웃, U3) 토큰도 바뀝니다.
-- `AuthRequestInterceptor`는 핸들러가 정해진 `/api/v1/auth/**` 요청에서 실행됩니다. 그래서 CSRF 실패(403)가 본문 검증(400)보다 먼저 납니다. 없는 경로(404)·지원하지 않는 메서드(405)는 공통 처리를 따릅니다. 세션 서비스는 `ObjectProvider`로 요청 때 꺼냅니다. 다른 기능의 웹 슬라이스 테스트에 이 설정이 함께 올라와도 세션 서비스 빈이 필요 없게 하려는 것입니다.
+- `AuthRequestInterceptor`는 핸들러가 정해진 `/api/v1/auth/**` 요청에서 실행됩니다. 그래서 CSRF 실패(403)가 본문 검증(400)보다 먼저 납니다. 없는 경로(404)·지원하지 않는 메서드(405)는 공통 처리를 따릅니다. `Cache-Control: no-store`는 핸들러 조회 전에 도는 서블릿 필터 `AuthNoStoreFilter`가 붙이므로 404·405에도 들어갑니다. 세션 서비스는 `ObjectProvider`로 요청 때 꺼냅니다. 다른 기능의 웹 슬라이스 테스트에 이 설정이 함께 올라와도 세션 서비스 빈이 필요 없게 하려는 것입니다.
 - `AuthExceptionHandler`는 `auth.web` 패키지의 컨트롤러에만 적용합니다. 인터셉터가 던진 예외도 그 요청의 핸들러 기준으로 이 처리기가 받습니다.
 - 인증 부품은 `X-BeONE-Demo-User` 헤더와 `CurrentUserResolver`를 쓰지 않습니다. `user` 패키지와 의존 관계가 없습니다.
 
@@ -68,16 +69,17 @@ com.beone.api.auth
 
 ```text
 GET /api/v1/auth/csrf
-→ AuthRequestInterceptor: Cache-Control: no-store
+→ AuthNoStoreFilter: Cache-Control: no-store
 → AuthCsrfController
    → SessionCookie.read: __Host-BEONE_SESSION 값(같은 이름이 여럿이면 첫 번째)
-   → AuthSessionService.use: 형식 검사 → 해시로 조회 → 만료면 행 삭제 → 유효하면 사용 시각 갱신
+   → AuthSessionService.use: 형식 검사 → 해시로 조회(쓰기 잠금) → 만료면 행 삭제 → 유효하면 사용 시각 갱신
    → 유효: 200 {headerName, token}. 쿠키를 다시 심지 않음
    → 없음·만료: issueAnonymous → 200 {headerName, token}
                 + Set-Cookie: __Host-BEONE_SESSION=<ID>; Path=/; Max-Age=<절대 수명 초>; Secure; HttpOnly; SameSite=Lax
 
 POST /api/v1/auth/... (U2 이후 API)
-→ AuthRequestInterceptor: no-store → 쿠키로 세션 조회 → X-CSRF-TOKEN 비교
+→ AuthNoStoreFilter: no-store
+→ AuthRequestInterceptor: 쿠키로 세션 조회 → X-CSRF-TOKEN 비교
    → 실패: CsrfInvalidException → AuthExceptionHandler → 403 CSRF_INVALID
    → 통과: 본문 검증과 컨트롤러 처리
 ```

@@ -148,6 +148,15 @@ class AuthCsrfApiWebTest {
 		MvcResult result = this.mockMvc.perform(post(CSRF_PATH)).andReturn();
 
 		assertBody(result, 405, "{\"code\":\"METHOD_NOT_ALLOWED\",\"message\":\"지원하지 않는 요청 방식입니다.\",\"errors\":[]}");
+		assertThat(result.getResponse().getHeader("Cache-Control")).isEqualTo("no-store");
+	}
+
+	@Test
+	void unknownAuthPathIsNotFoundWithNoStore() throws Exception {
+		MvcResult result = this.mockMvc.perform(get("/api/v1/auth/unknown")).andReturn();
+
+		assertBody(result, 404, "{\"code\":\"NOT_FOUND\",\"message\":\"요청한 리소스를 찾을 수 없습니다.\",\"errors\":[]}");
+		assertThat(result.getResponse().getHeader("Cache-Control")).isEqualTo("no-store");
 	}
 
 	// 인증 POST의 CSRF 검사
