@@ -38,7 +38,8 @@
 - #116 → PR: 모의 승인·조회·취소 API(`payment` 패키지, `ledger`는 쓰기만, 주문 `PAID`·`CANCELLED` 최소 전이, recommendation 공개 메서드 1개 추가, Flyway `V8__simulated_payments_ledger.sql` 임시 번호, `Idempotency-Key`, 스냅샷 뒤 합산·추천 ID 연결은 B2f). `develop`에 병합 완료(`ca60dda`). [작업 기록](116-simulated-payments-api.md)
 - #118 → PR: 모의 원장 조회 API(`ledger` 패키지 조회 쪽, 거래일 기준 달, 1차 CODEF coverage는 `complete=false`·사유 없음, Flyway 없음, 페이지 나눔 없음). `develop`에 병합 완료(`9d26194`). [작업 기록](118-ledger-transactions-api.md)
 - #120 → PR: 추천 무효화·최근 추천·스냅샷 뒤 사용액 연결(새 API 없음, recommendation·monthlystate→ledger 읽기, card·order는 받는 쪽 조회 포트·구현 recommendation, 확인 필요 버킷은 엔진 입구 `NOT_ENTERED`(사유 추가 후보), Flyway 없음). `develop`에 병합 완료(`c02409c`). [작업 기록](120-recommendation-usage-links.md)
-- #122 → PR: 같은 카드 동시 모의 승인 한도 경합 방지(승인이 `CREATED` 주문이면 주문 행 다음 보유 카드 행 전부를 ID 오름차순 잠금, 첫 일반 읽기 전, 재생은 잠금 없음, card 잠금 메서드 1개, 취소는 카드 잠금 없음, 새 API·Flyway 없음). `develop` 대상, 병합 전. [작업 기록](122-simulated-payment-card-lock.md)
+- #122 → PR: 같은 카드 동시 모의 승인 한도 경합 방지(승인이 `CREATED` 주문이면 주문 행 다음 보유 카드 행 전부를 ID 오름차순 잠금, 첫 일반 읽기 전, 재생은 잠금 없음, card 잠금 메서드 1개, 취소는 카드 잠금 없음, 새 API·Flyway 없음). `develop`에 병합 완료(`c3ce45e`). [작업 기록](122-simulated-payment-card-lock.md)
+- #126 → PR: CODEF 연결 상태 조회·계정 연결·해제 API(C2, `codef.application`·`persistence`·`web` 신규, 게이트웨이 인터페이스와 local·demo 가짜 구현만, 실 CODEF·실키 없음, connectedId AES-GCM 암호화·키 환경 변수, 해제는 연결 행만 삭제, Flyway `V10__codef_connections.sql` 임시 번호). `develop` 대상, 병합 전. [작업 기록](126-codef-connection.md)
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.
