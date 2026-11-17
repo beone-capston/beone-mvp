@@ -11,10 +11,10 @@
 - 헤더가 없거나 잘못됐을 때 400 `INVALID_REQUEST`를 돌려주는 기능별 예외 처리기
 - `GET /api/v1/demo-users` 시연 사용자 목록 API([명세](../api/cards.md#get-apiv1demo-users--시연-사용자-목록-조회))
 - `local`·`demo` 프로필의 CORS 허용 목록(`common.web.LocalDemoCorsConfiguration`, D-23 11항)
+- `GET /api/v1/me`는 보유 카드 수가 필요해 `card` 패키지(`CurrentUserController`, #108)에 있고, 이 패키지의 `CurrentUser`·`DemoUserService`를 읽기만 합니다([card 안내](card.md#보유-카드)).
 
 구현하지 않은 범위:
 
-- `GET /api/v1/me`: 응답의 `cardCount`(등록 해제되지 않은 보유 카드 수)가 보유 카드 저장소에 의존하므로 보유 카드(`card`) 작업과 함께 구현합니다. 그 전까지 이 경로는 없습니다(404).
 - 회원 가입·로그인·세션([D-24](../decisions.md#d-24-확정-정책), 구현 전), `UNAUTHENTICATED`·`FORBIDDEN` 오류 코드(자리만 예약)
 - `local`·`demo` 밖의 현재 사용자 결정. 그 환경에서는 아래 부품이 등록되지 않습니다.
 

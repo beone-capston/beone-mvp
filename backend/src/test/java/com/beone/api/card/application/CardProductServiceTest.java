@@ -170,6 +170,19 @@ class CardProductServiceTest {
 	}
 
 	@Test
+	void requireSupportedAcceptsOnlyExactTableIds() {
+		CardProductService service = productService(simpleRule("09174", "B-1", from("2026-01-01")),
+				simpleRule("01664", "A-1", from("2026-01-01")), simpleRule("01914", "C-1", from("2026-01-01")));
+
+		service.requireSupported("09174");
+		service.requireSupported("01664");
+		for (String id : List.of("9174", "009174", "09175", "", " 09174")) {
+			assertThatThrownBy(() -> service.requireSupported(id)).isInstanceOf(CardProductNotFoundException.class);
+		}
+		assertThatThrownBy(() -> service.requireSupported(null)).isInstanceOf(CardProductNotFoundException.class);
+	}
+
+	@Test
 	void todayIsSeoulDateEvenWhenClockIsUtc() {
 		CardProductService service = productService(simpleRule("09174", "B-1", from("2026-01-01")),
 				simpleRule("01664", "A-1", from("2026-01-01")), simpleRule("01914", "C-1", from("2026-01-01")));
