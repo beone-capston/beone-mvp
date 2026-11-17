@@ -56,3 +56,8 @@
   - ③ `AuthSessionIntegrationTest#cookieMaxAgeIsRefreshedOnEachValidUseAndMatchesServerIdleExpiry`: 발급, GET csrf, CSRF를 통과한 POST마다 `Max-Age=7200` 헤더 원문과 서버 `idle_expires_at - last_used_at = 7200초`가 맞습니다. CSRF 실패에는 쿠키가 없습니다.
   - 단위·웹 테스트: `AuthSessionServiceTest`(절대 만료 `NULL` 저장, 40일 전 발급이어도 유효, 절대 만료가 있는 세션의 상한과 쿠키 수명), `AuthCsrfApiWebTest`(GET csrf와 POST의 쿠키 갱신, 403에는 쿠키 없음), `AnonymousSessionPropertiesTest`.
   - ④ 로그인 교체 검증은 U3 병합 조건으로 이월(로그인 API 미존재). 로그인 때 세션 ID·CSRF 교체와 익명 세션 폐기는 U3(login) PR에서 시험합니다. U1에는 테스트만을 위한 교체 메서드를 넣지 않습니다(관리자 판단 결정 28, 질문 `msg_445468a45949` → 답 `msg_05e6695fdc35`).
+
+## 2026-11-18 · CodeRabbit 리뷰 반영(head `8ec56ac` 리뷰)
+- 리뷰 상태: 제출 리뷰 1건(head `8ec56ac`, 인라인 2건, 모두 Minor, 문서). 두 지적 모두 `0d04dc6`에도 해당해 함께 고쳤습니다.
+- 반영 1(CSRF 현재 동작과 계약 구분): `docs/api/auth.md` 공통 사항을 「CSRF(계약)」과 「CSRF(현재 구현, U1)」로 나눴습니다. 지금은 인증 POST API가 없어 `POST /api/v1/auth/sign-up` 같은 요청은 쿠키가 없어도 404(메서드가 다르면 405)이며, 각 POST API가 구현되는 U2~U4부터 403이 납니다.
+- 반영 2(가짜 메일 발송기 상태): 공통 사항과 「미정」의 두 문장을 '가짜 발송기도 아직 구현하지 않음(U2 이후)'으로 고쳐 도메인 문서와 맞췄습니다.
