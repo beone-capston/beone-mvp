@@ -133,6 +133,7 @@ class MonthlyStateServiceTest {
 			.isInstanceOf(MonthlyStateCardNotFoundException.class);
 		assertThatThrownBy(() -> this.service.replace(ME, "uc-12", NOVEMBER, previousOnly(-1000)))
 			.isInstanceOf(MonthlyStateCardNotFoundException.class);
+		verify(this.states, never()).insertIfAbsent(any(), any(), any(), any());
 		verify(this.states, never()).saveAndFlush(any());
 	}
 
@@ -167,6 +168,7 @@ class MonthlyStateServiceTest {
 		assertThat(view.registeredOn())
 			.isEqualTo(StateValue.manual(registered, new DatePeriod(registered, registered), NOW));
 		assertThat(view.afterSnapshot()).isNull();
+		verify(this.states).insertIfAbsent(1L, 11L, "2026-11", NOW);
 		verify(this.usages).deleteByMonthlyStateId(77L);
 		verify(this.selections).deleteByMonthlyStateId(77L);
 	}
@@ -334,8 +336,10 @@ class MonthlyStateServiceTest {
 	private void holds(UserCardView... cards) {
 		given(this.userCards.list(ME)).willReturn(List.of(cards));
 		given(this.userCards.list(new CurrentUser(2L, DemoUser.VIRTUAL_PORTFOLIO))).willReturn(List.of(cards));
+		// insertIfAbsent가 만든 빈 행을 잠가 읽는 상황
 		given(this.states.findForUpdateByUserIdAndUserCardIdAndStateMonth(anyLong(), anyLong(), anyString()))
-			.willReturn(Optional.empty());
+			.willAnswer(invocation -> Optional.of(new MonthlyStateEntity(invocation.getArgument(0),
+					invocation.getArgument(1), invocation.getArgument(2))));
 	}
 
 	private static MonthlyStateInput previousOnly(long value) {

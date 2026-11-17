@@ -51,7 +51,7 @@ PUT 한 번의 흐름입니다. 각 단계에서 실패하면 그 자리에서 �
 2. 현재 사용자의 해제하지 않은 보유 카드 중에서 `userCardId`를 찾습니다. 없거나 다른 사용자의 카드이면 404 `USER_CARD_NOT_FOUND`입니다.
 3. 본문에 버킷 사용액·`selectedServices`·`noServiceSelection`이 있는데 규칙 상품이 없으면 409 `USER_CARD_MAPPING_REQUIRED`입니다. 전월 실적·나머지 버킷·등록일만 보낸 경우는 매핑 없이도 저장합니다.
 4. 버킷·서비스 ID를 그 달 규칙과 대조합니다. 맞지 않으면 400이고 `errors`에 `limitBucketUsages[1].limitBucketId`처럼 위치를 적습니다.
-5. 그 카드·그 달의 행을 쓰기 잠금으로 읽거나 새로 만들고, 값 전체와 규칙 상품 ID, 저장 시각을 덮어씁니다. 자식 행은 지운 뒤 요청 순서대로 다시 넣습니다.
+5. 그 카드·그 달의 행이 없으면 먼저 빈 행을 넣고(`INSERT … ON DUPLICATE KEY UPDATE`), 그 행을 쓰기 잠금으로 읽어 값 전체와 규칙 상품 ID, 저장 시각을 덮어씁니다. 같은 달의 첫 저장 요청이 동시에 와도 유니크 제약 위반 없이 차례로 처리됩니다. 자식 행은 지운 뒤 요청 순서대로 다시 넣습니다.
 
 ```java
 // 서비스 사용 예: 전월 실적만 입력하면 나머지 항목은 모두 미입력(UNKNOWN)이 된다
@@ -79,10 +79,10 @@ view.otherBucketsUsedWon().source();          // UNKNOWN
 
 - 단위 [`MonthlyStateServiceTest`](../../backend/src/test/java/com/beone/api/monthlystate/application/MonthlyStateServiceTest.java): 실제 규칙 파일(카드 4종)로 ID 검사, 매핑 409, 교체·생략, 매핑 변경 뒤 숨김을 확인합니다.
 - 웹 [`MonthlyStateApiWebTest`](../../backend/src/test/java/com/beone/api/monthlystate/web/MonthlyStateApiWebTest.java): `@WebSliceTest(controllers = MonthlyStateController.class)`로 계약 JSON, 형식 400, 오류 코드를 확인합니다.
-- 통합 [`MonthlyStateIntegrationTest`](../../backend/src/test/java/com/beone/api/monthlystate/MonthlyStateIntegrationTest.java): Testcontainers MySQL에서 V5 적용, 저장·조회, 달별·사용자별 분리, 해제 카드 404를 확인합니다. 보유 카드 테스트가 수동 카드 행을 지우므로 이 테스트는 자기가 만든 월간 상태 행을 앞뒤로 지웁니다.
+- 통합 [`MonthlyStateIntegrationTest`](../../backend/src/test/java/com/beone/api/monthlystate/MonthlyStateIntegrationTest.java): Testcontainers MySQL에서 V5 적용, 저장·조회, 같은 달 첫 저장 동시 요청, 달별·사용자별 분리, 해제 카드 404를 확인합니다. 보유 카드 테스트가 수동 카드 행을 지우므로 이 테스트는 자기가 만든 월간 상태 행을 앞뒤로 지웁니다.
 
 ## 제약과 남은 위험
 
-- 같은 카드·같은 달을 처음 저장하는 요청 두 개가 동시에 오면 유니크 제약 `uk_monthly_states_card_month` 위반으로 한쪽이 실패할 수 있습니다. 이미 행이 있으면 쓰기 잠금으로 차례로 처리됩니다.
+- 같은 카드·같은 달의 동시 저장은 행 확보 뒤 쓰기 잠금으로 차례로 처리합니다. 마지막에 커밋한 요청의 값이 남습니다. 요청이 아주 많이 몰리면 MySQL이 교착을 감지해 한 요청을 실패시킬 수 있고, 재시도는 하지 않습니다.
 - 버킷 사용액이 한도를 넘어도 저장합니다(계약). 넘는지는 엔진이 판단합니다.
 - 다른 테스트나 작업이 `user_cards` 행을 지우려면 먼저 그 카드의 `monthly_states` 행을 지워야 합니다(외래 키).

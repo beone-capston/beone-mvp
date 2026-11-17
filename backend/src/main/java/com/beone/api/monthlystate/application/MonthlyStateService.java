@@ -118,10 +118,12 @@ public class MonthlyStateService {
 			checkAgainstRule(productId, month, input);
 		}
 		long cardId = UserCardId.parse(card.userCardId()).orElseThrow();
+		LocalDateTime now = LocalDateTime.now(this.clock).truncatedTo(ChronoUnit.SECONDS);
+		// 행을 먼저 확보한 뒤 잠가 같은 카드·같은 달의 교체를 첫 저장부터 차례로 처리한다.
+		this.monthlyStateRepository.insertIfAbsent(user.userId(), cardId, month.toString(), now);
 		MonthlyStateEntity state = this.monthlyStateRepository
 			.findForUpdateByUserIdAndUserCardIdAndStateMonth(user.userId(), cardId, month.toString())
-			.orElseGet(() -> new MonthlyStateEntity(user.userId(), cardId, month.toString()));
-		LocalDateTime now = LocalDateTime.now(this.clock).truncatedTo(ChronoUnit.SECONDS);
+			.orElseThrow(() -> new IllegalStateException("monthly state row must exist after insertIfAbsent"));
 		MonthlyStateInput.Amount previous = input.previousMonthPerformanceWon();
 		MonthlyStateInput.Amount other = input.otherBucketsUsedWon();
 		state.replace(productId, now, (previous == null) ? null : previous.valueWon(),

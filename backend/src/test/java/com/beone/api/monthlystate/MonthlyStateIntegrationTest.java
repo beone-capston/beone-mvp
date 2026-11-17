@@ -7,6 +7,10 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.IntStream;
 
 import com.beone.api.support.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
@@ -138,11 +142,15 @@ class MonthlyStateIntegrationTest {
 	void replaceClearsOmittedItemsAndSwitchesToNoSelection() {
 		String card = register("{\"displayName\":\"올라운드\",\"cardProductId\":\"09271\"}");
 		String path = CARDS + "/" + card + "/monthly-states/2026-11";
-		send("PUT", path, "MY_CARDS", """
+		ResponseEntity<String> initial = send("PUT", path, "MY_CARDS", """
 				{"limitBucketUsages":[{"limitBucketId":"FUEL","value":4000,%s}],
 				 "selectedServices":[{"serviceId":"STORE","effectiveFrom":"2026-10-15"}],
 				 "registeredOn":{"value":"2026-10-02","period":{"from":"2026-10-02","to":"2026-10-02"}}}
 				""".formatted(NOVEMBER));
+		assertThat(initial.getStatusCode().value()).isEqualTo(200);
+		Map<String, Object> before = data(send("GET", path, "MY_CARDS", null).getBody());
+		assertThat((List<?>) before.get("limitBucketUsages")).hasSize(1);
+		assertThat((List<?>) before.get("selectedServices")).hasSize(1);
 
 		ResponseEntity<String> replaced = send("PUT", path, "MY_CARDS",
 				"{\"noServiceSelection\":{\"effectiveFrom\":\"2026-11-01\"}}");
@@ -164,6 +172,28 @@ class MonthlyStateIntegrationTest {
 		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM monthly_state_service_selections",
 				Integer.class))
 			.isZero();
+	}
+
+	@Test
+	void concurrentFirstSavesOfTheSameMonthAllSucceedWithOneRow() {
+		String card = register("{\"displayName\":\"올라운드\",\"cardProductId\":\"09271\"}");
+		String path = CARDS + "/" + card + "/monthly-states/2026-11";
+		ExecutorService executor = Executors.newFixedThreadPool(6);
+		try {
+			List<CompletableFuture<ResponseEntity<String>>> futures = IntStream.range(0, 6)
+				.mapToObj(i -> CompletableFuture.supplyAsync(() -> send("PUT", path, "MY_CARDS",
+						"{\"limitBucketUsages\":[{\"limitBucketId\":\"FUEL\",\"value\":" + i + "," + NOVEMBER + "}]}"),
+						executor))
+				.toList();
+
+			assertThat(futures).allSatisfy(future -> assertThat(future.join().getStatusCode().value()).isEqualTo(200));
+		}
+		finally {
+			executor.shutdown();
+		}
+		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM monthly_states", Integer.class)).isEqualTo(1);
+		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM monthly_state_bucket_usages", Integer.class))
+			.isEqualTo(1);
 	}
 
 	@Test
