@@ -1,11 +1,14 @@
 package com.beone.api.auth.web;
 
+import com.beone.api.auth.application.AuthTokenInvalidException;
+import com.beone.api.auth.application.MailRateLimitedException;
 import com.beone.api.common.web.ApiErrorCode;
 import com.beone.api.common.web.ApiErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -25,6 +28,22 @@ class AuthExceptionHandler {
 	@ExceptionHandler(CsrfInvalidException.class)
 	ResponseEntity<ApiErrorResponse> handleCsrfInvalid(CsrfInvalidException ex) {
 		return respond(AuthErrorCode.CSRF_INVALID, ex);
+	}
+
+	@ExceptionHandler(AuthTokenInvalidException.class)
+	ResponseEntity<ApiErrorResponse> handleTokenInvalid(AuthTokenInvalidException ex) {
+		return respond(AuthErrorCode.AUTH_TOKEN_INVALID, ex);
+	}
+
+	/** 429와 남은 초({@code Retry-After}). */
+	@ExceptionHandler(MailRateLimitedException.class)
+	ResponseEntity<ApiErrorResponse> handleRateLimited(MailRateLimitedException ex) {
+		log.debug("API error code={} status={} exception={}", AuthErrorCode.RATE_LIMITED.code(),
+				AuthErrorCode.RATE_LIMITED.status().value(), ex.getClass().getName());
+		return ResponseEntity.status(AuthErrorCode.RATE_LIMITED.status())
+			.header(HttpHeaders.RETRY_AFTER, Long.toString(ex.retryAfter().toSeconds()))
+			.contentType(MediaType.APPLICATION_JSON)
+			.body(ApiErrorResponse.of(AuthErrorCode.RATE_LIMITED));
 	}
 
 	private static ResponseEntity<ApiErrorResponse> respond(ApiErrorCode errorCode, Exception ex) {
