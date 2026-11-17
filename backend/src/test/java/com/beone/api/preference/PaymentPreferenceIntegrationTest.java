@@ -3,6 +3,11 @@ package com.beone.api.preference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -34,6 +39,7 @@ import org.springframework.test.json.JsonCompareMode;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
+import org.testcontainers.mysql.MySQLContainer;
 
 /**
  * 결제 전 설정 API와 대표 카드 보호를 실제 HTTP·MySQL로 확인한다. Flyway 적용({@code ddl-auto: validate}), 저장·조회, 사용자별
@@ -69,6 +75,9 @@ class PaymentPreferenceIntegrationTest {
 
 	@Autowired
 	PlatformTransactionManager transactionManager;
+
+	@Autowired
+	MySQLContainer mysql;
 
 	@BeforeEach
 	@AfterEach
@@ -185,12 +194,14 @@ class PaymentPreferenceIntegrationTest {
 		ExecutorService executor = Executors.newSingleThreadExecutor();
 		try {
 			CompletableFuture<ResponseEntity<String>> put = new CompletableFuture<>();
-			// 보유 카드 변경과 같은 순서로 잠근다: 카드 행 → (설정 저장 요청 시작) → 사용자 행. 설정 저장이 사용자 행을 먼저 잡으면 교착이다.
+			// 보유 카드 변경과 같은 순서로 잠근다: 카드 행 → (설정 저장 요청이 카드 행 잠금을 기다리는 것을 확인) → 사용자 행.
+			// 설정 저장이 사용자 행을 먼저 잡는 구현이면 그 요청도 저장 단계의 외래 키 검사로 카드 행을 기다리게 되고, 여기서 사용자 행을
+			// 잠그는 순간 교착이 된다.
 			new TransactionTemplate(this.transactionManager).executeWithoutResult(status -> {
 				this.jdbcTemplate.queryForObject("SELECT user_card_id FROM user_cards WHERE user_card_id = ? FOR UPDATE",
 						Long.class, cardId);
 				executor.submit(() -> put.complete(send("PUT", PATH, "MY_CARDS", body("FIXED_REPRESENTATIVE", card))));
-				pause();
+				awaitLockWaitOnUserCards();
 				this.jdbcTemplate.queryForObject("SELECT user_id FROM users WHERE user_id = ? FOR UPDATE", Long.class,
 						userId);
 			});
@@ -219,15 +230,34 @@ class PaymentPreferenceIntegrationTest {
 			.hasMessageContaining("ck_payment_preferences_mode");
 	}
 
-	// 설정 저장 요청이 카드 행 잠금에서 기다리기 시작할 시간을 준다. 잠금 순서가 틀리면 이 사이에 사용자 행을 먼저 잡는다.
-	private static void pause() {
-		try {
-			Thread.sleep(1000);
+	// 다른 세션이 user_cards 행 잠금을 기다리기 시작할 때까지 최대 10초 기다린다. 확인하지 못하면 실패한다. 잠금 대기 표
+	// (performance_schema)는 전역 권한이 필요해 컨테이너의 root 계정으로 읽는다(Testcontainers MySQL은 root 비밀번호를 같은
+	// 비밀번호로 둔다).
+	private void awaitLockWaitOnUserCards() {
+		String query = "SELECT COUNT(*) FROM performance_schema.data_lock_waits w "
+				+ "JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID "
+				+ "WHERE l.OBJECT_NAME = 'user_cards'";
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		try (Connection connection = DriverManager.getConnection(this.mysql.getJdbcUrl(), "root",
+				this.mysql.getPassword()); Statement statement = connection.createStatement()) {
+			while (System.nanoTime() < deadline) {
+				try (ResultSet result = statement.executeQuery(query)) {
+					result.next();
+					if (result.getLong(1) > 0) {
+						return;
+					}
+				}
+				Thread.sleep(50);
+			}
+		}
+		catch (SQLException ex) {
+			throw new IllegalStateException(ex);
 		}
 		catch (InterruptedException ex) {
 			Thread.currentThread().interrupt();
 			throw new IllegalStateException(ex);
 		}
+		throw new AssertionError("설정 저장 요청이 10초 안에 보유 카드 행 잠금 대기에 들어가지 않았습니다.");
 	}
 
 	private String registerConfirmed(String cardProductId) {
