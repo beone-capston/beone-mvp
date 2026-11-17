@@ -1,0 +1,23 @@
+package com.beone.api.auth.persistence;
+
+import java.util.Optional;
+
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+
+/**
+ * 서버 세션 저장소. 세션은 해시로만 찾는다.
+ */
+public interface AuthSessionRepository extends JpaRepository<AuthSessionEntity, Long> {
+
+	/**
+	 * 세션 ID 해시로 세션 행을 찾고 쓰기 잠금을 건다. 같은 세션을 쓰는 동시 요청이 만료 판정과 갱신·삭제를 겹쳐, 다른 요청이 방금
+	 * 연장한 세션을 지우지 않게 한다. 트랜잭션 안에서만 호출한다.
+	 * @param sessionHash 세션 ID의 SHA-256 해시
+	 * @return 세션 행, 없으면 빈 값
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	Optional<AuthSessionEntity> findBySessionHash(String sessionHash);
+
+}
