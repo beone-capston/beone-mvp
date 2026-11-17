@@ -35,7 +35,8 @@
 - #104 → PR: 주문 생성·조회와 예정 소비 API(`order` 패키지, Flyway `V3`(#105 병합 뒤 번호 확인), 예정 소비는 저장만 D-18 K4). `develop` 대상, 병합 전. [작업 기록](104-orders-planned-spends-api.md)
 - #111 → PR: 결제 전 설정 조회·변경 API와 대표 카드 보호(`preference` 패키지, Flyway `V6__payment_preferences.sql` 임시 번호, card는 409 연결 최소 변경, 추천·모의 승인 사용은 B2·B3). `develop` 대상, 병합 전. [작업 기록](111-payment-preference-api.md)
 - #114 → PR: 추천 계산·조회 API(`recommendation` 패키지, 엔진 입구만 호출, Flyway `V7__recommendations.sql` 임시 번호, 조회 때 지연 무효화, card·order 쪽 추천 연결과 모의 승인 연동은 후속). `develop` 대상, 병합 전. [작업 기록](114-recommendations-api.md)
-- #116 → PR: 모의 승인·조회·취소 API(`payment` 패키지, `ledger`는 쓰기만, 주문 `PAID`·`CANCELLED` 최소 전이, recommendation 공개 메서드 1개 추가, Flyway `V8__simulated_payments_ledger.sql` 임시 번호, `Idempotency-Key`, 스냅샷 뒤 합산·추천 ID 연결은 B2f). `develop` 대상, 병합 전. [작업 기록](116-simulated-payments-api.md)
+- #116 → PR: 모의 승인·조회·취소 API(`payment` 패키지, `ledger`는 쓰기만, 주문 `PAID`·`CANCELLED` 최소 전이, recommendation 공개 메서드 1개 추가, Flyway `V8__simulated_payments_ledger.sql` 임시 번호, `Idempotency-Key`, 스냅샷 뒤 합산·추천 ID 연결은 B2f). `develop`에 병합 완료(`ca60dda`). [작업 기록](116-simulated-payments-api.md)
+- #118 → PR: 모의 원장 조회 API(`ledger` 패키지 조회 쪽, 거래일 기준 달, 1차 CODEF coverage는 `complete=false`·사유 없음, Flyway 없음, 페이지 나눔 없음). `develop` 대상, 병합 전. [작업 기록](118-ledger-transactions-api.md)
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.

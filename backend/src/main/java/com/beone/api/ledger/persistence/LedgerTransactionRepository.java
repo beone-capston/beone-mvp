@@ -1,10 +1,19 @@
 package com.beone.api.ledger.persistence;
 
+import java.time.LocalDate;
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /**
- * 원장 행 저장소. 이 작업은 저장만 한다. 사용자·기간·카드 조건 조회는 원장 조회 API(B4)가 더한다(D-09 사용자별 조회).
+ * 원장 행 저장소. 조회는 항상 사용자 ID와 함께 한다(D-09).
  */
 public interface LedgerTransactionRepository extends JpaRepository<LedgerTransactionEntity, Long> {
+
+	/**
+	 * 이 사용자의 거래일이 기간 안인 행을 거래일·행 ID 오름차순으로 찾는다. 카드·출처 조건은 호출자가 거른다(한 달 단위라 건수가 작다).
+	 */
+	List<LedgerTransactionEntity> findByUserIdAndTransactionDateBetweenOrderByTransactionDateAscLedgerIdAsc(Long userId,
+			LocalDate from, LocalDate to);
 
 }
