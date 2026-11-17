@@ -40,8 +40,8 @@ import org.springframework.web.client.RestClient;
  * 세션 쿠키·CSRF 기반을 실제 HTTP·MySQL로 확인한다. Flyway {@code V9} 적용({@code ddl-auto: validate}), 세션 ID 해시 저장,
  * 쿠키 헤더 원문, 미사용·절대 만료, 인증 POST의 CSRF 검사를 본다.
  *
- * <p>기대값은 docs/api/auth.md(인증 명세 사본 반영)와 D-24다. 익명 세션 수명은 사용자 결정 대기이므로 미사용 1시간·최대 3시간을
- * 명시해 주입한다. 시계는 서울 2026-11-18 10:00에서 시작해 테스트가 앞으로 돌린다. U1에는 인증 POST API가 없으므로 테스트 전용
+ * <p>기대값은 docs/api/auth.md(인증 명세 사본 반영)와 D-24다. 만료 경계를 짧게 시험하려고 익명 세션 수명을 미사용 1시간·최대
+ * 3시간으로 명시해 주입한다(기본값은 미사용 2시간, AnonymousSessionPropertiesTest). 시계는 서울 2026-11-18 10:00에서 시작해 테스트가 앞으로 돌린다. U1에는 인증 POST API가 없으므로 테스트 전용
  * POST 경로로 검사기를 확인한다.
  */
 @IntegrationTest

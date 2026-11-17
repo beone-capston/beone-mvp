@@ -22,7 +22,7 @@
 ## 핵심 용어
 
 - **서버 세션:** 서버 DB(MySQL)에 저장한 로그인 상태입니다. 브라우저는 세션 ID만 쿠키로 들고 있습니다. Redis는 쓰지 않습니다.
-- **익명 세션:** 회원 로그인 전에 CSRF 토큰을 받으려고 만드는 세션입니다. 회원 로그인이 아닙니다. 수명은 사용자 결정을 기다리고 있어 설정값으로 받습니다.
+- **익명 세션:** 회원 로그인 전에 CSRF 토큰을 받으려고 만드는 세션입니다. 회원 로그인이 아닙니다. 미사용 2시간에 만료하고(2026-11-18 사용자 직접 결정) 회원 동시 세션 5개 계산에 넣지 않습니다.
 - **CSRF(교차 사이트 요청 위조):** 다른 사이트가 사용자의 브라우저를 이용해 쿠키가 붙은 요청을 몰래 보내는 공격입니다. 서버는 쿠키와 함께 그 세션의 토큰을 헤더(`X-CSRF-TOKEN`)로 받아, 다른 사이트가 알 수 없는 값이 있는지 확인합니다.
 - **`__Host-` 쿠키:** 브라우저가 `Secure`·`Path=/`·`Domain` 없음일 때만 받아 주는 이름 접두어입니다. 하위 도메인이 쿠키를 덮어쓰지 못하게 합니다.
 
@@ -44,7 +44,7 @@ com.beone.api.auth
 ├── application/
 │   ├── AuthSessionService        세션 발급·조회·만료 판정, local·demo
 │   ├── SessionTokens             세션 ID·CSRF 토큰 생성, SHA-256 해시, 상수 시간 비교
-│   ├── AnonymousSessionProperties 익명 세션 수명 설정값(사용자 결정 대기)
+│   ├── AnonymousSessionProperties 익명 세션 수명 설정값(미사용·절대 모두 2시간)
 │   ├── AuthConfiguration         설정값 등록, local·demo
 │   └── ActiveSession·IssuedSession 결과 타입(toString에서 원문 숨김)
 └── persistence/
@@ -88,7 +88,7 @@ POST /api/v1/auth/... (U2 이후 API)
 # 1. 토큰과 익명 세션 쿠키 받기
 curl -i http://localhost:8080/api/v1/auth/csrf
 # HTTP/1.1 200
-# Set-Cookie: __Host-BEONE_SESSION=<세션 ID>; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax
+# Set-Cookie: __Host-BEONE_SESSION=<세션 ID>; Path=/; Max-Age=7200; Secure; HttpOnly; SameSite=Lax
 # Cache-Control: no-store
 # {"data":{"headerName":"X-CSRF-TOKEN","token":"<토큰>"}}
 
@@ -102,8 +102,8 @@ curl -X POST http://localhost:8080/api/v1/auth/sign-up \
 
 | 키 | 의미 | 기본값 |
 | --- | --- | --- |
-| `beone.auth.anonymous-session.idle-timeout` | 익명 세션 미사용 만료 | `P7D` (사용자 결정 대기) |
-| `beone.auth.anonymous-session.absolute-timeout` | 익명 세션 절대 만료, 쿠키 `Max-Age` | `P30D` (사용자 결정 대기) |
+| `beone.auth.anonymous-session.idle-timeout` | 익명 세션 미사용 만료 | `PT2H` (2026-11-18 사용자 직접 결정) |
+| `beone.auth.anonymous-session.absolute-timeout` | 익명 세션 절대 만료, 쿠키 `Max-Age` | `PT2H` (관리자 판단, 사용자 보고 대상) |
 
 미사용 만료는 절대 만료보다 길 수 없고, 둘 다 1초 이상이어야 합니다. 어기면 서버가 시작하지 않습니다. `application*.yml`에는 값을 넣지 않았고, 테스트는 값을 명시해 주입합니다.
 
