@@ -8,7 +8,7 @@ import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 /**
- * 익명 세션 수명 설정값의 기본값과 검증을 확인한다. 미사용 2시간은 2026-11-18 사용자 직접 결정, 절대 상한 2시간은 관리자 판단이다.
+ * 익명 세션 수명 설정값의 기본값과 검증을 확인한다. 미사용 2시간은 2026-11-18 사용자 직접 결정, 절대 상한은 미결이며 기본 2시간은 확정 전 임시값이다.
  */
 class AnonymousSessionPropertiesTest {
 

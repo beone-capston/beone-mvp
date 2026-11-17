@@ -57,12 +57,13 @@ com.beone.api.auth
 
 ## 주요 클래스의 역할과 관계
 
-- `AuthSessionService`는 쿠키 값으로 세션을 찾고(`use`), 익명 세션을 발급합니다(`issueAnonymous`). 세션은 미사용 만료와 절대 만료 중 먼저 오는 시각에 끝납니다. 같은 시각이 되면 이미 만료입니다. 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료를 넘기지 않습니다. 만료한 행은 찾을 때 지웁니다. 조회에 쓰기 잠금(`PESSIMISTIC_WRITE`)을 걸어, 같은 세션을 쓰는 동시 요청이 옛 만료 값으로 판정해 다른 요청이 방금 연장한 세션을 지우지 않게 합니다.
-- `SessionTokens`는 상태가 없는 부품입니다.
+- [`AuthSessionService`](../../backend/src/main/java/com/beone/api/auth/application/AuthSessionService.java)는 쿠키 값으로 세션을 찾고(`use`), 익명 세션을 발급합니다(`issueAnonymous`). 세션은 미사용 만료와 절대 만료 중 먼저 오는 시각에 끝납니다. 같은 시각이 되면 이미 만료입니다. 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료를 넘기지 않습니다. 만료한 행은 찾을 때 지웁니다. 조회에 쓰기 잠금(`PESSIMISTIC_WRITE`)을 걸어, 같은 세션을 쓰는 동시 요청이 옛 만료 값으로 판정해 다른 요청이 방금 연장한 세션을 지우지 않게 합니다.
+- [`SessionTokens`](../../backend/src/main/java/com/beone/api/auth/application/SessionTokens.java)는 상태가 없는 부품입니다.
   - 세션 ID: `SecureRandom` 32바이트를 패딩 없는 Base64URL로 쓴 43자입니다. DB에는 SHA-256 해시(16진수 64자)만 저장합니다.
   - CSRF 토큰: 세션 ID에 고정 접두어를 붙여 SHA-256으로 유도한 43자입니다. 서버는 토큰을 따로 저장하지 않고, 요청 쿠키에서 다시 계산해 상수 시간(`MessageDigest.isEqual`)으로 비교합니다. 쿠키가 `HttpOnly`라 다른 사이트의 스크립트는 세션 ID를 읽어 토큰을 만들 수 없습니다. 세션 ID가 바뀌면(로그인·로그아웃, U3) 토큰도 바뀝니다.
-- `AuthRequestInterceptor`는 핸들러가 정해진 `/api/v1/auth/**` 요청에서 실행됩니다. 그래서 CSRF 실패(403)가 본문 검증(400)보다 먼저 납니다. 없는 경로(404)·지원하지 않는 메서드(405)는 공통 처리를 따릅니다. `Cache-Control: no-store`는 핸들러 조회 전에 도는 서블릿 필터 `AuthNoStoreFilter`가 붙이므로 404·405에도 들어갑니다. 세션 서비스는 `ObjectProvider`로 요청 때 꺼냅니다. 다른 기능의 웹 슬라이스 테스트에 이 설정이 함께 올라와도 세션 서비스 빈이 필요 없게 하려는 것입니다.
-- `AuthExceptionHandler`는 `auth.web` 패키지의 컨트롤러에만 적용합니다. 인터셉터가 던진 예외도 그 요청의 핸들러 기준으로 이 처리기가 받습니다.
+- [`AuthRequestInterceptor`](../../backend/src/main/java/com/beone/api/auth/web/AuthRequestInterceptor.java)는 핸들러가 정해진 `/api/v1/auth/**` 요청에서 실행됩니다. 그래서 CSRF 실패(403)가 본문 검증(400)보다 먼저 납니다. 없는 경로(404)·지원하지 않는 메서드(405)는 공통 처리를 따릅니다. `Cache-Control: no-store`는 핸들러 조회 전에 도는 서블릿 필터 [`AuthNoStoreFilter`](../../backend/src/main/java/com/beone/api/auth/web/AuthNoStoreFilter.java)가 붙이므로 404·405에도 들어갑니다. 세션 서비스는 `ObjectProvider`로 요청 때 꺼냅니다. 다른 기능의 웹 슬라이스 테스트에 이 설정이 함께 올라와도 세션 서비스 빈이 필요 없게 하려는 것입니다.
+- [`AuthExceptionHandler`](../../backend/src/main/java/com/beone/api/auth/web/AuthExceptionHandler.java)는 `auth.web` 패키지의 컨트롤러에만 적용합니다. 인터셉터가 던진 예외도 그 요청의 핸들러 기준으로 이 처리기가 받습니다.
+- 요청 진입점은 [`AuthCsrfController`](../../backend/src/main/java/com/beone/api/auth/web/AuthCsrfController.java), 쿠키 문자열은 [`SessionCookie`](../../backend/src/main/java/com/beone/api/auth/web/SessionCookie.java), 인터셉터·필터 등록은 [`AuthWebConfiguration`](../../backend/src/main/java/com/beone/api/auth/web/AuthWebConfiguration.java), 익명 세션 수명은 [`AnonymousSessionProperties`](../../backend/src/main/java/com/beone/api/auth/application/AnonymousSessionProperties.java), 저장은 [`AuthSessionEntity`](../../backend/src/main/java/com/beone/api/auth/persistence/AuthSessionEntity.java)·[`AuthSessionRepository`](../../backend/src/main/java/com/beone/api/auth/persistence/AuthSessionRepository.java)입니다.
 - 인증 부품은 `X-BeONE-Demo-User` 헤더와 `CurrentUserResolver`를 쓰지 않습니다. `user` 패키지와 의존 관계가 없습니다.
 
 ## 처리 흐름
@@ -105,7 +106,7 @@ curl -X POST http://localhost:8080/api/v1/auth/sign-up \
 | 키 | 의미 | 기본값 |
 | --- | --- | --- |
 | `beone.auth.anonymous-session.idle-timeout` | 익명 세션 미사용 만료 | `PT2H` (2026-11-18 사용자 직접 결정) |
-| `beone.auth.anonymous-session.absolute-timeout` | 익명 세션 절대 만료, 쿠키 `Max-Age` | `PT2H` (관리자 판단, 사용자 보고 대상) |
+| `beone.auth.anonymous-session.absolute-timeout` | 익명 세션 절대 만료, 쿠키 `Max-Age` | `PT2H` (미결, 확정 전 임시값) |
 
 미사용 만료는 절대 만료보다 길 수 없고, 둘 다 1초 이상이어야 합니다. 어기면 서버가 시작하지 않습니다. `application*.yml`에는 값을 넣지 않았고, 테스트는 값을 명시해 주입합니다.
 
