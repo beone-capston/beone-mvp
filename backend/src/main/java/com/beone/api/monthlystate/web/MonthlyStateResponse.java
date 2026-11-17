@@ -58,6 +58,18 @@ public record MonthlyStateResponse(String userCardId, String month, String snaps
 
 	/**
 	 * 입력 응답. 조회 응답에서 {@code afterSnapshot}만 뺀 모양이다.
+	 *
+	 * @param userCardId 보유 카드 ID
+	 * @param month {@code YYYY-MM}
+	 * @param snapshotAt 수동 입력 시각(저장 시각)
+	 * @param previousMonthPerformanceWon 전월 실적
+	 * @param limitBucketUsages 한도 묶음 사용액
+	 * @param otherBucketsUsedWon 나머지 한도 묶음 사용액
+	 * @param selectedServices 고른 택1 서비스
+	 * @param serviceSelectionStatus 택1 입력 상태
+	 * @param noServiceSelection 선택 없음
+	 * @param registeredOn 카드 사용 등록일
+	 * @param conflicts 출처 충돌. 1차는 항상 빈 목록
 	 */
 	public record Saved(String userCardId, String month, String snapshotAt,
 			PreviousMonthState previousMonthPerformanceWon, List<BucketUsageState> limitBucketUsages,
