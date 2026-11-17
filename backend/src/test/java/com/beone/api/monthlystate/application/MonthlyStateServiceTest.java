@@ -19,6 +19,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.beone.api.benefit.rule.loading.RuleCatalogLoader;
 import com.beone.api.card.application.CardProductService;
@@ -176,6 +177,7 @@ class MonthlyStateServiceTest {
 	@Test
 	void saveTimeIsReadAfterTheRowLockIsAcquired() {
 		// 읽을 때마다 1초씩 가는 시계: 첫 읽기는 행 확보, 둘째 읽기가 잠금 뒤 저장 시각이어야 한다.
+		AtomicInteger clockReads = new AtomicInteger();
 		Clock ticking = new Clock() {
 
 			private Instant next = Instant.parse("2026-11-17T01:30:00Z");
@@ -192,6 +194,7 @@ class MonthlyStateServiceTest {
 
 			@Override
 			public Instant instant() {
+				clockReads.incrementAndGet();
 				Instant current = this.next;
 				this.next = current.plusSeconds(1);
 				return current;
@@ -203,8 +206,17 @@ class MonthlyStateServiceTest {
 						new StaticListableBeanFactory().getBeanProvider(Clock.class)),
 				ticking);
 		holds(confirmed("uc-11", "09271"));
+		AtomicInteger readsWhenLocking = new AtomicInteger(-1);
+		given(this.states.findForUpdateByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11")).willAnswer(invocation -> {
+			readsWhenLocking.set(clockReads.get());
+			return Optional.of(new MonthlyStateEntity(1L, 11L, "2026-11"));
+		});
 
 		MonthlyStateView view = service.replace(ME, "uc-11", NOVEMBER, previousOnly(1000));
+
+		// 잠금 조회 시점에는 행 확보용 한 번만 읽었고, 저장 시각은 그 뒤에 읽었다.
+		assertThat(readsWhenLocking.get()).isEqualTo(1);
+		assertThat(clockReads.get()).isEqualTo(2);
 
 		// Clock.withZone이 자기 자신을 돌려주므로 UTC 그대로 읽힌다(서울 변환은 다른 테스트가 확인).
 		verify(this.states).insertIfAbsent(1L, 11L, "2026-11", LocalDateTime.of(2026, 11, 17, 1, 30, 0));
