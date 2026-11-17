@@ -118,12 +118,13 @@ public class MonthlyStateService {
 			checkAgainstRule(productId, month, input);
 		}
 		long cardId = UserCardId.parse(card.userCardId()).orElseThrow();
-		LocalDateTime now = LocalDateTime.now(this.clock).truncatedTo(ChronoUnit.SECONDS);
 		// 행을 먼저 확보한 뒤 잠가 같은 카드·같은 달의 교체를 첫 저장부터 차례로 처리한다.
-		this.monthlyStateRepository.insertIfAbsent(user.userId(), cardId, month.toString(), now);
+		this.monthlyStateRepository.insertIfAbsent(user.userId(), cardId, month.toString(), now());
 		MonthlyStateEntity state = this.monthlyStateRepository
 			.findForUpdateByUserIdAndUserCardIdAndStateMonth(user.userId(), cardId, month.toString())
 			.orElseThrow(() -> new IllegalStateException("monthly state row must exist after insertIfAbsent"));
+		// 저장 시각은 잠금을 얻은 뒤에 읽는다. 앞선 요청을 기다린 요청의 snapshotAt이 그 요청보다 앞서지 않게 한다.
+		LocalDateTime now = now();
 		MonthlyStateInput.Amount previous = input.previousMonthPerformanceWon();
 		MonthlyStateInput.Amount other = input.otherBucketsUsedWon();
 		state.replace(productId, now, (previous == null) ? null : previous.valueWon(),
@@ -134,6 +135,10 @@ public class MonthlyStateService {
 		MonthlyStateEntity saved = this.monthlyStateRepository.saveAndFlush(state);
 		replaceChildren(saved.getMonthlyStateId(), input);
 		return toView(card, month, saved, productId, false);
+	}
+
+	private LocalDateTime now() {
+		return LocalDateTime.now(this.clock).truncatedTo(ChronoUnit.SECONDS);
 	}
 
 	private void replaceChildren(long stateId, MonthlyStateInput input) {

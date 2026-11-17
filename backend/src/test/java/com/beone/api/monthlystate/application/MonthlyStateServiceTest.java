@@ -174,6 +174,44 @@ class MonthlyStateServiceTest {
 	}
 
 	@Test
+	void saveTimeIsReadAfterTheRowLockIsAcquired() {
+		// 읽을 때마다 1초씩 가는 시계: 첫 읽기는 행 확보, 둘째 읽기가 잠금 뒤 저장 시각이어야 한다.
+		Clock ticking = new Clock() {
+
+			private Instant next = Instant.parse("2026-11-17T01:30:00Z");
+
+			@Override
+			public ZoneOffset getZone() {
+				return ZoneOffset.UTC;
+			}
+
+			@Override
+			public Clock withZone(java.time.ZoneId zone) {
+				return this;
+			}
+
+			@Override
+			public Instant instant() {
+				Instant current = this.next;
+				this.next = current.plusSeconds(1);
+				return current;
+			}
+
+		};
+		MonthlyStateService service = new MonthlyStateService(this.states, this.usages, this.selections,
+				this.userCards, new CardProductService(RuleCatalogLoader.load(),
+						new StaticListableBeanFactory().getBeanProvider(Clock.class)),
+				ticking);
+		holds(confirmed("uc-11", "09271"));
+
+		MonthlyStateView view = service.replace(ME, "uc-11", NOVEMBER, previousOnly(1000));
+
+		// Clock.withZone이 자기 자신을 돌려주므로 UTC 그대로 읽힌다(서울 변환은 다른 테스트가 확인).
+		verify(this.states).insertIfAbsent(1L, 11L, "2026-11", LocalDateTime.of(2026, 11, 17, 1, 30, 0));
+		assertThat(view.snapshotAt()).isEqualTo(LocalDateTime.of(2026, 11, 17, 1, 30, 1));
+	}
+
+	@Test
 	void omittedItemsBecomeUnknownOnReplace() {
 		holds(confirmed("uc-11", "09271"));
 		MonthlyStateEntity existing = new MonthlyStateEntity(1L, 11L, "2026-11");
