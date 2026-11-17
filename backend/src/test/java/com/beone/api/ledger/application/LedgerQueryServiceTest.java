@@ -20,6 +20,8 @@ import com.beone.api.card.application.UserCardService;
 import com.beone.api.card.application.UserCardView;
 import com.beone.api.ledger.persistence.LedgerTransactionEntity;
 import com.beone.api.ledger.persistence.LedgerTransactionRepository;
+import com.beone.api.ledger.persistence.LedgerUsageEffectEntity;
+import com.beone.api.ledger.persistence.LedgerUsageEffectRepository;
 import com.beone.api.user.application.CurrentUser;
 import com.beone.api.user.application.DemoUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +44,9 @@ class LedgerQueryServiceTest {
 
 	private final UserCardService cards = mock(UserCardService.class);
 
-	private final LedgerQueryService service = new LedgerQueryService(this.repository, this.cards);
+	private final LedgerUsageEffectRepository effects = mock(LedgerUsageEffectRepository.class);
+
+	private final LedgerQueryService service = new LedgerQueryService(this.repository, this.effects, this.cards);
 
 	@BeforeEach
 	void setUp() {
@@ -114,6 +118,30 @@ class LedgerQueryServiceTest {
 			assertThatThrownBy(() -> this.service.find(ME, NOV, id, null)).as(id)
 				.isInstanceOf(LedgerCardNotFoundException.class);
 		}
+	}
+
+	@Test
+	void activityAfterTheSnapshotCarriesTheOriginalApprovalDeductionsOnCancellations() {
+		// 취소 행은 차감액이 없으므로 원 승인 행의 버킷 차감액을 붙여 추천 입력이 그 버킷을 판단하게 한다(#120)
+		LocalDateTime snapshot = LocalDateTime.of(2026, 11, 3, 9, 0);
+		given(this.repository.findByUserIdAndUserCardIdAndTransactionDateBetweenAndRecordedAtAfterOrderByLedgerIdAsc(1L,
+				1001L, LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30), snapshot))
+			.willReturn(List.of(approval(9001, 1001), cancellation(9002, 1001, 8000)));
+		given(this.effects.findByLedgerIdOrderByUsageEffectIdAsc(9001L))
+			.willReturn(List.of(new LedgerUsageEffectEntity(9001L, "STORE", 500L)));
+		given(this.effects.findByLedgerIdOrderByUsageEffectIdAsc(8000L))
+			.willReturn(List.of(new LedgerUsageEffectEntity(8000L, "FUEL", null)));
+
+		List<LedgerActivity> activity = this.service.activityAfter(ME, "uc-1001", NOV, snapshot);
+
+		assertThat(activity).containsExactly(
+				new LedgerActivity(LedgerEntryType.APPROVAL, 10000, List.of(new LedgerUsageEffect("STORE", 500L))),
+				new LedgerActivity(LedgerEntryType.CANCELLATION, -4000, List.of(new LedgerUsageEffect("FUEL", null))));
+	}
+
+	@Test
+	void activityOfAMalformedCardIdIsEmpty() {
+		assertThat(this.service.activityAfter(ME, "uc-x", NOV, AT)).isEmpty();
 	}
 
 	private static LedgerTransactionEntity approval(long id, long card) {

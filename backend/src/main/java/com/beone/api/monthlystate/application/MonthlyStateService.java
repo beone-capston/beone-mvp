@@ -19,6 +19,9 @@ import com.beone.api.card.application.MappingStatus;
 import com.beone.api.card.application.UserCardId;
 import com.beone.api.card.application.UserCardService;
 import com.beone.api.card.application.UserCardView;
+import com.beone.api.ledger.application.LedgerActivity;
+import com.beone.api.ledger.application.LedgerEntryType;
+import com.beone.api.ledger.application.LedgerQueryService;
 import com.beone.api.monthlystate.persistence.BucketUsageEntity;
 import com.beone.api.monthlystate.persistence.BucketUsageRepository;
 import com.beone.api.monthlystate.persistence.MonthlyStateEntity;
@@ -55,6 +58,8 @@ public class MonthlyStateService {
 
 	private final CardProductService cardProductService;
 
+	private final LedgerQueryService ledgerQueryService;
+
 	private final Clock clock;
 
 	/**
@@ -64,25 +69,28 @@ public class MonthlyStateService {
 	 * @param serviceSelectionRepository 택1 선택 저장소
 	 * @param userCardService 보유 카드 조회(소유·매핑)
 	 * @param cardProductService 카드 규칙 요약(한도 묶음·서비스 ID)
+	 * @param ledgerQueryService 스냅샷 뒤 모의 승인·취소 요약(#120)
 	 * @param clock 입력 시각을 정할 시계
 	 */
 	@Autowired
 	public MonthlyStateService(MonthlyStateRepository monthlyStateRepository,
 			BucketUsageRepository bucketUsageRepository, ServiceSelectionRepository serviceSelectionRepository,
-			UserCardService userCardService, CardProductService cardProductService, ObjectProvider<Clock> clock) {
+			UserCardService userCardService, CardProductService cardProductService,
+			LedgerQueryService ledgerQueryService, ObjectProvider<Clock> clock) {
 		this(monthlyStateRepository, bucketUsageRepository, serviceSelectionRepository, userCardService,
-				cardProductService, clock.getIfUnique(Clock::systemUTC));
+				cardProductService, ledgerQueryService, clock.getIfUnique(Clock::systemUTC));
 	}
 
 	MonthlyStateService(MonthlyStateRepository monthlyStateRepository, BucketUsageRepository bucketUsageRepository,
 			ServiceSelectionRepository serviceSelectionRepository, UserCardService userCardService,
-			CardProductService cardProductService, Clock clock) {
+			CardProductService cardProductService, LedgerQueryService ledgerQueryService, Clock clock) {
 		this.monthlyStateRepository = Objects.requireNonNull(monthlyStateRepository, "monthlyStateRepository");
 		this.bucketUsageRepository = Objects.requireNonNull(bucketUsageRepository, "bucketUsageRepository");
 		this.serviceSelectionRepository = Objects.requireNonNull(serviceSelectionRepository,
 				"serviceSelectionRepository");
 		this.userCardService = Objects.requireNonNull(userCardService, "userCardService");
 		this.cardProductService = Objects.requireNonNull(cardProductService, "cardProductService");
+		this.ledgerQueryService = Objects.requireNonNull(ledgerQueryService, "ledgerQueryService");
 		this.clock = Objects.requireNonNull(clock, "clock").withZone(SEOUL);
 	}
 
@@ -96,7 +104,7 @@ public class MonthlyStateService {
 		long cardId = UserCardId.parse(card.userCardId()).orElseThrow();
 		return this.monthlyStateRepository
 			.findByUserIdAndUserCardIdAndStateMonth(user.userId(), cardId, month.toString())
-			.map(state -> toView(card, month, state, ruleProductOf(card), true))
+			.map(state -> toView(user, card, month, state, ruleProductOf(card), true))
 			.orElseGet(() -> emptyView(card.userCardId(), month));
 	}
 
@@ -134,7 +142,7 @@ public class MonthlyStateService {
 				(input.noServiceSelection() == null) ? null : input.noServiceSelection().effectiveFrom());
 		MonthlyStateEntity saved = this.monthlyStateRepository.saveAndFlush(state);
 		replaceChildren(saved.getMonthlyStateId(), input);
-		return toView(card, month, saved, productId, false);
+		return toView(user, card, month, saved, productId, false);
 	}
 
 	private LocalDateTime now() {
@@ -215,7 +223,7 @@ public class MonthlyStateService {
 		return null;
 	}
 
-	private MonthlyStateView toView(UserCardView card, YearMonth month, MonthlyStateEntity state,
+	private MonthlyStateView toView(CurrentUser user, UserCardView card, YearMonth month, MonthlyStateEntity state,
 			String currentProductId, boolean withAfterSnapshot) {
 		LocalDateTime at = state.getSnapshotAt();
 		// 저장 때와 지금의 규칙 상품이 다르면 그 버킷·서비스 ID는 지금 규칙의 것이 아니므로 미입력으로 보여 준다(결정 27 A3-7).
@@ -242,7 +250,26 @@ public class MonthlyStateService {
 				(state.getRegisteredOn() == null) ? StateValue.unknown()
 						: StateValue.manual(state.getRegisteredOn(),
 								new DatePeriod(state.getRegisteredOn(), state.getRegisteredOn()), at),
-				withAfterSnapshot ? MonthlyStateView.AfterSnapshot.NO_SIMULATED_PAYMENTS : null);
+				withAfterSnapshot ? afterSnapshot(user, card.userCardId(), month, at) : null);
+	}
+
+	// 스냅샷 뒤 모의 승인·취소 요약(docs/api/monthly-states.md afterSnapshot, #120). 화면 표시용이며 상태값을 덮어쓰지 않는다.
+	// 승인 금액은 승인 행 합계이고 취소는 건수로만 센다.
+	private MonthlyStateView.AfterSnapshot afterSnapshot(CurrentUser user, String userCardId, YearMonth month,
+			LocalDateTime snapshotAt) {
+		int approvals = 0;
+		long approvedWon = 0;
+		int cancellations = 0;
+		for (LedgerActivity activity : this.ledgerQueryService.activityAfter(user, userCardId, month, snapshotAt)) {
+			if (activity.entryType() == LedgerEntryType.APPROVAL) {
+				approvals++;
+				approvedWon += activity.amountWon();
+			}
+			else {
+				cancellations++;
+			}
+		}
+		return new MonthlyStateView.AfterSnapshot(approvals, approvedWon, cancellations);
 	}
 
 	private static StateValue<Long> amount(Long value, LocalDate from, LocalDate to,

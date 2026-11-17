@@ -155,7 +155,7 @@ POST /api/v1/me/cards {"displayName":"청춘대로 톡톡","cardProductId":"0917
 | `recommendationEligibility` | 사용자 제외 → `USER_EXCLUDED`, 그다음 `UNMAPPED`·`CANDIDATE` → `MAPPING_UNCONFIRMED`, `NOT_SUPPORTED` → `NO_SUPPORTED_RULE`, `USER_CONFIRMED`·`SYNTHETIC` → 대상. 규칙 만료·월간 상태·설정은 보지 않음 | A2-3 |
 | 최상위 `cardProductId` | `SYNTHETIC` 항목에만 있음. `MANUAL` 항목은 매핑 안에만 있음 | A2-4, D-15 |
 | 매핑 변경 응답 | 계약 예시 모양 그대로(`registeredAt` 없음, `invalidatedRecommendationIds` 있음) | A2-5 |
-| `invalidatedRecommendationIds` | 추천(B2)이 아직 없어 항상 `[]`. 표시 이름·제외 변경은 제외 값이 실제로 바뀔 때만 담음 | A2-6, 계약 |
+| `invalidatedRecommendationIds` | 변경 직전 지연 판정으로 유효했고 이 카드 변경으로 `MAPPING_CHANGED`가 된 이 사용자의 추천, ID 오름차순(#120). 매핑 변경은 늘 담고(없으면 `[]`), 표시 이름·제외 변경은 제외 값이 실제로 바뀔 때만 담음 | A2-6, 계약, 결정 28 보충 |
 | `confirmationMethod` | `USER_CONFIRMED`는 필수, `NOT_SUPPORTED`는 생략 또는 `MANUAL_SELECTION`(저장은 `MANUAL_SELECTION`), `UNMAPPED`는 보내면 400(저장 시 확인 방법·시각 `null`). `CODEF_CANDIDATE`는 후보가 없어 항상 400 | A2-7 |
 | 같은 카드 재확인 | 자기 자신은 중복이 아님. 200이고 확인 시각만 바뀜 | A2-8 |
 | 표시 이름 | 앞뒤 공백을 뗀 뒤 1~30자(유니코드 문자 기준). 공백만이면 400 | A2-9, 계약 |
@@ -177,7 +177,7 @@ POST /api/v1/me/cards {"displayName":"청춘대로 톡톡","cardProductId":"0917
 
 ### 아직 하지 않는 것(한계)
 
-- **추천 무효화(B2)**: 매핑을 바꾸거나 추천 제외를 바꾸면 그 카드의 이전 추천을 다시 계산하거나 `확인 필요`로 되돌려야 합니다(D-15). 추천 저장이 없어 지금은 아무것도 무효화하지 않고 `invalidatedRecommendationIds: []`입니다. B2가 추천을 저장하면 `UserCardService.changeMapping`·`update`에서 무효화 대상을 채우도록 연결해야 합니다.
+- **추천 무효화 목록(#120)**: 무효화 자체는 추천 조회 때의 지연 판정이 합니다. 보유 카드 응답의 목록은 recommendation이 card를 읽으므로 순환을 피하려고 조회 포트 [`RecommendationInvalidationLookup`](../../backend/src/main/java/com/beone/api/card/application/RecommendationInvalidationLookup.java)을 card에 두고 구현은 recommendation의 `RecommendationLinks`가 합니다. `UserCardService`는 변경 저장 전에 `validUsing`(이 카드를 근거로 쓰고 지금 유효한 추천)을, 저장 뒤 `invalidatedByMapping`(그중 이제 `MAPPING_CHANGED`인 추천)을 같은 트랜잭션에서 부릅니다. 이미 무효였던 추천(승인된 주문, 다른 카드·월간 상태 변경)은 담지 않으므로, 제외했다가 되돌리면 되돌린 응답은 `[]`입니다. 포트는 부를 때 찾고 구현 빈이 없으면 `[]`입니다. 카드 해제(`DELETE`)는 응답 본문이 없어 목록을 돌려주지 않습니다.
 - **CODEF(2차)**: `CODEF` 출처 카드와 `CANDIDATE` 매핑은 만들지 않습니다. 후보 열이 없으므로 CODEF 작업이 새 마이그레이션으로 후보 상품·근거 열을 더하고 `CODEF_CANDIDATE` 확인을 구현해야 합니다.
 - `USER_CARD_MAPPING_REQUIRED`(409)는 이 작업의 API가 쓰지 않습니다.
 - `V4`는 임시 번호입니다. 병합 직전 관리자가 다른 작업선과 순서를 정하면 번호를 올릴 수 있습니다(D-23 12항).

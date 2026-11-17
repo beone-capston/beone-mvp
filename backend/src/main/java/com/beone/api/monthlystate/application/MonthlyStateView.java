@@ -112,7 +112,8 @@ public record MonthlyStateView(String userCardId, YearMonth month, LocalDateTime
 	/**
 	 * 스냅샷 뒤 모의 승인·취소 요약. 화면 표시용이며 상태값을 덮어쓰지 않는다.
 	 *
-	 * <p>모의 결제(B3)가 아직 없어 스냅샷 뒤 승인이 실제로 0건이다. B3에서 실제 합산을 연결해야 한다(결정 27 A3-1).
+	 * <p>같은 카드·거래일이 그 달·기록 시각이 스냅샷보다 뒤인 자체 모의 원장 행으로 센다(#120). 승인 금액은 승인 행 합계이고 취소는 빼지
+	 * 않고 건수로만 센다.
 	 *
 	 * @param approvalCount 승인 건수
 	 * @param approvedAmountWon 승인 금액 합
@@ -120,7 +121,7 @@ public record MonthlyStateView(String userCardId, YearMonth month, LocalDateTime
 	 */
 	public record AfterSnapshot(int approvalCount, long approvedAmountWon, int cancellationCount) {
 
-		/** 모의 결제가 없는 지금의 요약. */
+		/** 스냅샷 뒤 모의 승인·취소가 없을 때의 요약. */
 		public static final AfterSnapshot NO_SIMULATED_PAYMENTS = new AfterSnapshot(0, 0, 0);
 
 	}

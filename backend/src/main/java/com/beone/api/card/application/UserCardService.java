@@ -6,6 +6,7 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 import com.beone.api.card.persistence.UserCardEntity;
 import com.beone.api.card.persistence.UserCardRepository;
@@ -40,6 +41,8 @@ public class UserCardService {
 
 	private final RepresentativeCardGuard representativeCardGuard;
 
+	private final Supplier<RecommendationInvalidationLookup> invalidationLookup;
+
 	private final Clock clock;
 
 	/**
@@ -48,23 +51,27 @@ public class UserCardService {
 	 * @param cardProductService 상품 존재 확인
 	 * @param demoUserService 시연 사용자 표시 정보·읽기 전용 여부
 	 * @param representativeCardGuard 결제 전 설정(A4)의 대표 카드 검사
+	 * @param invalidationLookup 무효화된 추천 조회 포트. 추천이 보유 카드에 의존하므로 순환을 피하려고 부를 때 찾는다(#120)
 	 * @param clock 등록·확인·해제 시각을 정할 시계
 	 */
 	@Autowired
 	public UserCardService(UserCardRepository userCardRepository, CardProductService cardProductService,
 			DemoUserService demoUserService, ObjectProvider<RepresentativeCardGuard> representativeCardGuard,
-			ObjectProvider<Clock> clock) {
+			ObjectProvider<RecommendationInvalidationLookup> invalidationLookup, ObjectProvider<Clock> clock) {
 		this(userCardRepository, cardProductService, demoUserService,
 				representativeCardGuard.getIfAvailable(() -> RepresentativeCardGuard.NONE),
+				() -> invalidationLookup.getIfAvailable(() -> RecommendationInvalidationLookup.NONE),
 				clock.getIfUnique(Clock::systemUTC));
 	}
 
 	UserCardService(UserCardRepository userCardRepository, CardProductService cardProductService,
-			DemoUserService demoUserService, RepresentativeCardGuard representativeCardGuard, Clock clock) {
+			DemoUserService demoUserService, RepresentativeCardGuard representativeCardGuard,
+			Supplier<RecommendationInvalidationLookup> invalidationLookup, Clock clock) {
 		this.userCardRepository = Objects.requireNonNull(userCardRepository, "userCardRepository");
 		this.cardProductService = Objects.requireNonNull(cardProductService, "cardProductService");
 		this.demoUserService = Objects.requireNonNull(demoUserService, "demoUserService");
 		this.representativeCardGuard = Objects.requireNonNull(representativeCardGuard, "representativeCardGuard");
+		this.invalidationLookup = Objects.requireNonNull(invalidationLookup, "invalidationLookup");
 		this.clock = Objects.requireNonNull(clock, "clock").withZone(SEOUL);
 	}
 
@@ -132,8 +139,11 @@ public class UserCardService {
 			}
 		}
 		LocalDateTime confirmedAt = (change.status() == MappingStatus.UNMAPPED) ? null : now();
+		RecommendationInvalidationLookup lookup = this.invalidationLookup.get();
+		List<String> candidates = lookup.validUsing(user, entity.getUserCardId());
 		entity.changeMapping(change.status(), change.cardProductId(), change.confirmationMethod(), confirmedAt);
-		return new UserCardChangeResult(toView(saveGuardingDuplicate(entity)), List.of());
+		UserCardView saved = toView(saveGuardingDuplicate(entity));
+		return new UserCardChangeResult(saved, lookup.invalidatedByMapping(user, candidates));
 	}
 
 	/**
@@ -150,14 +160,16 @@ public class UserCardService {
 		if (exclusionChanged && change.excludedFromRecommendation()) {
 			this.representativeCardGuard.beforeExclusion(user, entity.getUserCardId());
 		}
+		RecommendationInvalidationLookup lookup = this.invalidationLookup.get();
+		List<String> candidates = exclusionChanged ? lookup.validUsing(user, entity.getUserCardId()) : List.of();
 		if (change.displayName() != null) {
 			entity.rename(change.displayName());
 		}
 		if (exclusionChanged) {
 			entity.changeExclusion(change.excludedFromRecommendation());
 		}
-		return new UserCardChangeResult(toView(this.userCardRepository.saveAndFlush(entity)),
-				exclusionChanged ? List.of() : null);
+		UserCardView saved = toView(this.userCardRepository.saveAndFlush(entity));
+		return new UserCardChangeResult(saved, exclusionChanged ? lookup.invalidatedByMapping(user, candidates) : null);
 	}
 
 	/**
