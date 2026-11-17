@@ -5,9 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -200,8 +200,9 @@ class PaymentPreferenceIntegrationTest {
 			new TransactionTemplate(this.transactionManager).executeWithoutResult(status -> {
 				this.jdbcTemplate.queryForObject("SELECT user_card_id FROM user_cards WHERE user_card_id = ? FOR UPDATE",
 						Long.class, cardId);
+				Long blockingConnection = this.jdbcTemplate.queryForObject("SELECT CONNECTION_ID()", Long.class);
 				executor.submit(() -> put.complete(send("PUT", PATH, "MY_CARDS", body("FIXED_REPRESENTATIVE", card))));
-				awaitLockWaitOnUserCards();
+				awaitLockWaitOnCard(blockingConnection, cardId);
 				this.jdbcTemplate.queryForObject("SELECT user_id FROM users WHERE user_id = ? FOR UPDATE", Long.class,
 						userId);
 			});
@@ -230,18 +231,21 @@ class PaymentPreferenceIntegrationTest {
 			.hasMessageContaining("ck_payment_preferences_mode");
 	}
 
-	// 다른 세션이 user_cards 행 잠금을 기다리기 시작할 때까지 최대 10초 기다린다. 확인하지 못하면 실패한다. 잠금 대기 표
-	// (performance_schema)는 전역 권한이 필요해 컨테이너의 root 계정으로 읽는다(Testcontainers MySQL은 root 비밀번호를 같은
-	// 비밀번호로 둔다).
-	private void awaitLockWaitOnUserCards() {
+	// 이 테스트 트랜잭션(blockingConnection)이 잠근 카드 행(cardId)을 다른 세션이 기다리기 시작할 때까지 최대 10초 기다린다.
+	// 확인하지 못하면 실패한다. 잠금 대기 표(performance_schema)는 전역 권한이 필요해 컨테이너의 root 계정으로 읽는다
+	// (Testcontainers MySQL은 root 비밀번호를 같은 비밀번호로 둔다).
+	private void awaitLockWaitOnCard(long blockingConnection, long cardId) {
 		String query = "SELECT COUNT(*) FROM performance_schema.data_lock_waits w "
 				+ "JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID "
-				+ "WHERE l.OBJECT_NAME = 'user_cards'";
+				+ "JOIN performance_schema.threads t ON t.THREAD_ID = w.BLOCKING_THREAD_ID "
+				+ "WHERE l.OBJECT_NAME = 'user_cards' AND l.LOCK_DATA = ? AND t.PROCESSLIST_ID = ?";
 		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
 		try (Connection connection = DriverManager.getConnection(this.mysql.getJdbcUrl(), "root",
-				this.mysql.getPassword()); Statement statement = connection.createStatement()) {
+				this.mysql.getPassword()); PreparedStatement statement = connection.prepareStatement(query)) {
+			statement.setString(1, String.valueOf(cardId));
+			statement.setLong(2, blockingConnection);
 			while (System.nanoTime() < deadline) {
-				try (ResultSet result = statement.executeQuery(query)) {
+				try (ResultSet result = statement.executeQuery()) {
 					result.next();
 					if (result.getLong(1) > 0) {
 						return;
@@ -257,7 +261,7 @@ class PaymentPreferenceIntegrationTest {
 			Thread.currentThread().interrupt();
 			throw new IllegalStateException(ex);
 		}
-		throw new AssertionError("설정 저장 요청이 10초 안에 보유 카드 행 잠금 대기에 들어가지 않았습니다.");
+		throw new AssertionError("설정 저장 요청이 10초 안에 테스트가 잠근 보유 카드 행의 잠금 대기에 들어가지 않았습니다.");
 	}
 
 	private String registerConfirmed(String cardProductId) {
