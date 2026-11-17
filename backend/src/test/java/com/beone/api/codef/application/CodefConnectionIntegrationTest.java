@@ -1,4 +1,4 @@
-package com.beone.api.codef;
+package com.beone.api.codef.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -11,8 +11,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.beone.api.codef.application.ConnectedIdKeySource;
-import com.beone.api.codef.application.FakeCodefGateway;
 import com.beone.api.support.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +34,8 @@ import org.springframework.web.client.RestClient;
 /**
  * CODEF 연결 GET·POST를 Testcontainers MySQL(V10 적용, {@code ddl-auto: validate})과 가짜 게이트웨이로 확인한다.
  *
- * <p>connectedId 암호화 키는 테스트 설정의 합성 키다(2026-11-18 사용자 직접 결정 P5). 기대값은 docs/api/codef.md(최초 201·재연결 200·해제 204, connectedId·아이디·비밀번호는 응답에 없음, 연결 없으면
+ * <p>패키지 전용 {@link ConnectedIdCipher}로 저장값을 복호화해 가짜 게이트웨이가 발급한 값과 비교하려고 이 패키지에 둔다. connectedId 암호화
+ * 키는 테스트 설정의 합성 키다(2026-11-18 사용자 직접 결정 P5). 기대값은 docs/api/codef.md(최초 201·재연결 200·해제 204, connectedId·아이디·비밀번호는 응답에 없음, 연결 없으면
  * NOT_CONNECTED, 해제 뒤 409 CODEF_NOT_CONNECTED)와 관리자 판단·사용자 결정(재연결 성공 시 교체·실패 시 기존 유지, 해제는 연결 행만 삭제,
  * 가상 포트폴리오는 쓰기 409, 사용자별 분리 D-09)에서 썼다. 실 CODEF는 부르지 않는다.
  */
@@ -48,6 +47,8 @@ class CodefConnectionIntegrationTest {
 	private static final String PATH = "/api/v1/me/codef/connection";
 
 	private static final Instant START = Instant.parse("2026-11-04T00:00:00Z");
+
+	private static final byte[] KEY = new byte[32];
 
 	private static final AtomicReference<Instant> NOW = new AtomicReference<>(START);
 
@@ -91,8 +92,11 @@ class CodefConnectionIntegrationTest {
 				{"data":{"organization":"0301","status":"CONNECTED","connectedAt":"2026-11-04T09:00:00+09:00",
 				 "lastSyncedAt":null,"reconnectRequired":false}}
 				""", 201);
-		String firstId = storedConnectedId();
-		assertThat(firstId).startsWith("v1:").doesNotContain("fake-cid-");
+		String firstStored = storedConnectedId();
+		assertThat(firstStored).startsWith("v1:").doesNotContain("fake-cid-");
+		String firstId = decrypt(firstStored);
+		assertThat(firstId).startsWith("fake-cid-");
+		assertThat(this.gateway.isActive(firstId)).isTrue();
 		assertThat(first.getBody()).doesNotContain("fake-cid-").doesNotContain("kbuser01").doesNotContain("p@ss-word-9");
 		assertThat(this.gateway.activeCount()).isEqualTo(active + 1);
 		assertJson(send("GET", "MY_CARDS", null), first.getBody(), 200);
@@ -104,8 +108,11 @@ class CodefConnectionIntegrationTest {
 				{"data":{"organization":"0301","status":"CONNECTED","connectedAt":"2026-11-04T10:00:00+09:00",
 				 "lastSyncedAt":null,"reconnectRequired":false}}
 				""", 200);
-		assertThat(storedConnectedId()).startsWith("v1:").isNotEqualTo(firstId);
-		// 이전 connectedId는 정리되고 새 값만 남는다
+		// 저장값이 가짜 게이트웨이가 새로 발급한 connectedId로 바뀌고, 이전 값은 정리된다
+		String secondId = decrypt(storedConnectedId());
+		assertThat(secondId).startsWith("fake-cid-").isNotEqualTo(firstId);
+		assertThat(this.gateway.isActive(secondId)).isTrue();
+		assertThat(this.gateway.isActive(firstId)).isFalse();
 		assertThat(this.gateway.activeCount()).isEqualTo(active + 1);
 		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM codef_connections", Integer.class))
 			.isEqualTo(1);
@@ -115,12 +122,14 @@ class CodefConnectionIntegrationTest {
 	void disconnectRemovesOnlyTheConnectionAndReleasesItThenReportsNotConnected() {
 		int active = this.gateway.activeCount();
 		send("POST", "MY_CARDS", body("kbuser01", "pw"));
+		String connectedId = decrypt(storedConnectedId());
 		int cards = this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM user_cards", Integer.class);
 
 		ResponseEntity<String> deleted = send("DELETE", "MY_CARDS", null);
 
 		assertThat(deleted.getStatusCode().value()).isEqualTo(204);
 		assertThat(deleted.getBody()).isNull();
+		assertThat(this.gateway.isActive(connectedId)).isFalse();
 		assertThat(this.gateway.activeCount()).isEqualTo(active);
 		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM codef_connections", Integer.class)).isZero();
 		// 해제는 데이터 완전 삭제가 아니다. 보유 카드 등 다른 행은 그대로다(P4)
@@ -135,7 +144,8 @@ class CodefConnectionIntegrationTest {
 	void failedReconnectionsKeepTheExistingConnection() {
 		send("POST", "MY_CARDS", body("kbuser01", "pw"));
 		String connected = send("GET", "MY_CARDS", null).getBody();
-		String connectedId = storedConnectedId();
+		String stored = storedConnectedId();
+		String connectedId = decrypt(stored);
 		int active = this.gateway.activeCount();
 
 		assertJson(send("POST", "MY_CARDS", body(FakeCodefGateway.LOGIN_REJECTED_ID, "pw")),
@@ -148,7 +158,8 @@ class CodefConnectionIntegrationTest {
 				{"code":"CODEF_UNAVAILABLE","message":"CODEF 응답을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.","errors":[]}
 				""", 502);
 
-		assertThat(storedConnectedId()).isEqualTo(connectedId);
+		assertThat(storedConnectedId()).isEqualTo(stored);
+		assertThat(this.gateway.isActive(connectedId)).isTrue();
 		assertThat(this.gateway.activeCount()).isEqualTo(active);
 		assertJson(send("GET", "MY_CARDS", null), connected, 200);
 	}
@@ -173,6 +184,11 @@ class CodefConnectionIntegrationTest {
 		List<Map<String, Object>> rows = this.jdbcTemplate.queryForList(
 				"SELECT u.demo_user FROM codef_connections c JOIN users u ON u.user_id = c.user_id");
 		assertThat(rows).extracting(row -> row.get("demo_user")).containsExactly("MY_CARDS");
+	}
+
+	private String decrypt(String stored) {
+		long userId = this.jdbcTemplate.queryForObject("SELECT user_id FROM codef_connections", Long.class);
+		return new ConnectedIdCipher(KEY).decrypt(userId, stored);
 	}
 
 	private String storedConnectedId() {
@@ -212,7 +228,7 @@ class CodefConnectionIntegrationTest {
 		@Bean
 		@Primary
 		ConnectedIdKeySource syntheticConnectedIdKey() {
-			return () -> Optional.of(new byte[32]);
+			return () -> Optional.of(KEY.clone());
 		}
 
 		@Bean

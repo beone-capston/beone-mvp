@@ -19,3 +19,4 @@
 - 서비스에서 달라진 점: local·demo 서버에서 CODEF 연결 상태를 보고 합성 아이디로 연결·재연결을 시연할 수 있습니다. 실제 카드사 계정은 연결되지 않습니다. frontend 변경 없음.
 - 검증: `./gradlew test webTest integrationTest build javadoc --rerun-tasks` 결과는 PR 본문에 기록합니다.
 - 로컬·테스트 DB만 사용했고 서버 DB 적용·배포는 하지 않았습니다.
+- PR #127 CodeRabbit(`07ffbd7`) 반영: ① 키 없음 통합 시험이 실행 셸의 `BEONE_CODEF_CONNECTED_ID_KEY`에 따라 실패할 수 있다는 지적 → 공유 빌드 파일(`build.gradle`)을 고치는 제안 대신 시험이 키 없는 공급을 직접 주입하도록 바꿨습니다(환경과 무관). ② `docs/architecture.md`의 codef 범위 밖 설명을 해석·전송 계층과 연결 계층으로 나누고, 구현 목록에 연결 API·`codef_connections`를 더했습니다. ③ 재연결 시험이 저장값을 복호화해 새로 발급된 connectedId인지, 이전 값이 정리됐는지 직접 확인하도록 보강했습니다(시험을 `codef.application` 패키지로 옮김).

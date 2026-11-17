@@ -2,13 +2,19 @@ package com.beone.api.codef;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.beone.api.codef.application.EnvironmentConnectedIdKeySource;
+import java.util.Optional;
+
+import com.beone.api.codef.application.ConnectedIdKeySource;
 import com.beone.api.codef.application.FakeCodefGateway;
 import com.beone.api.support.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -20,10 +26,12 @@ import org.springframework.web.client.RestClient;
 
 /**
  * connectedId 암호화 키가 없으면 연결이 안전하게 실패한다(2026-11-18 사용자 직접 결정 P5: 평문 저장 대체 금지, 502
- * {@code CODEF_UNAVAILABLE}). 키 환경 변수가 없는 테스트 프로세스에서 기본 키 공급을 그대로 쓴다.
+ * {@code CODEF_UNAVAILABLE}). 실행 셸의 환경 변수와 무관하게 키가 없는 공급을 주입한다(키 해석 규칙은
+ * {@code EnvironmentConnectedIdKeySourceTest}).
  */
 @IntegrationTest
 @ActiveProfiles("local")
+@Import(CodefConnectionWithoutKeyIntegrationTest.NoKeyConfiguration.class)
 class CodefConnectionWithoutKeyIntegrationTest {
 
 	@LocalServerPort
@@ -42,7 +50,6 @@ class CodefConnectionWithoutKeyIntegrationTest {
 
 	@Test
 	void connectionFailsWithoutCallingCodefAndStoresNothing() {
-		assertThat(System.getenv(EnvironmentConnectedIdKeySource.VARIABLE)).isNull();
 		int active = this.gateway.activeCount();
 
 		ResponseEntity<String> response = RestClient.builder()
@@ -64,6 +71,18 @@ class CodefConnectionWithoutKeyIntegrationTest {
 				""", response.getBody());
 		assertThat(this.gateway.activeCount()).isEqualTo(active);
 		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM codef_connections", Integer.class)).isZero();
+	}
+
+	/** 키가 없는 공급. */
+	@TestConfiguration(proxyBeanMethods = false)
+	static class NoKeyConfiguration {
+
+		@Bean
+		@Primary
+		ConnectedIdKeySource noConnectedIdKey() {
+			return Optional::empty;
+		}
+
 	}
 
 }
