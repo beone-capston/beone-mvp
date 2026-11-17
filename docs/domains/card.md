@@ -139,6 +139,7 @@ POST /api/v1/me/cards {"displayName":"청춘대로 톡톡","cardProductId":"0917
 - 해제(`DELETE`)는 행을 지우지 않고 `released_at`을 채웁니다. 목록·`cardCount`·조회는 해제한 카드를 보지 않습니다. 이미 만든 모의 결제·원장 기록이 이 행을 가리킬 수 있기 때문입니다.
 - 같은 사용자·같은 상품의 `USER_CONFIRMED` 중복 금지(D-23 2항)는 두 곳에서 지킵니다. 서비스가 저장 전에 검사해 409로 답하고, DB는 생성 열 `active_product_id`(해제 안 된 `USER_CONFIRMED`·`SYNTHETIC` 카드만 상품 ID를 가짐)와 유니크 인덱스 `uk_user_cards_active_product`로 동시 요청까지 막습니다. 이 유니크 제약 위반만 409로 바꾸고 다른 제약 위반은 그대로 둡니다(500). `UNMAPPED`·`NOT_SUPPORTED`는 검사하지 않습니다.
 - 엔티티는 바뀐 열만 갱신합니다(`@DynamicUpdate`). 이름 변경과 해제가 동시에 일어나도 이름 변경이 해제 시각을 지워 카드가 되살아나지 않습니다.
+- 쓰기 API(매핑·이름/제외·해제)는 카드 행에 쓰기 잠금(`PESSIMISTIC_WRITE`)을 걸고 읽습니다. 같은 카드를 바꾸는 요청은 차례로 처리되고, 뒤 요청은 앞 요청이 커밋한 상태를 읽고 검사합니다.
 - 체크 제약: 가상 포트폴리오 카드는 매핑 없이 상품 ID를 갖고, 그 밖의 카드는 매핑 상태가 있으며, 상품 ID는 `USER_CONFIRMED`·`SYNTHETIC`만 갖습니다.
 - 가상 포트폴리오 시드는 규칙 카드 4종 전부입니다(결정 27 A2-1, 사용자 결정). 표시 이름은 상품 조회의 `cardName`과 같고, 등록 시각은 마이그레이션을 적용한 서울 시각입니다. 시드 내용과 `SupportedCardProducts`의 일치는 통합 테스트가 확인합니다.
 

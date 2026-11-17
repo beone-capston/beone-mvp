@@ -10,8 +10,13 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import com.beone.api.card.application.CardProductProfile;
+import com.beone.api.card.application.MappingStatus;
 import com.beone.api.card.application.SupportedCardProducts;
 import com.beone.api.card.persistence.UserCardEntity;
 import com.beone.api.card.persistence.UserCardRepository;
@@ -250,6 +255,44 @@ class UserCardIntegrationTest {
 		assertThat(row.get("display_name")).isEqualTo("새 이름");
 		assertThat(row.get("released_at")).isNotNull();
 		assertThat(items(send("GET", CARDS, "MY_CARDS", null).getBody())).isEmpty();
+	}
+
+	@Test
+	void concurrentMappingChangeWaitsForTheFirstAndReadsItsCommittedState() throws Exception {
+		String id = (String) data(send("POST", CARDS, "MY_CARDS",
+				"{\"displayName\":\"카드\",\"cardProductId\":\"09174\"}").getBody()).get("userCardId");
+		long cardId = Long.parseLong(id.substring(3));
+		long myCards = userId(DemoUser.MY_CARDS);
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		try {
+			CompletableFuture<ResponseEntity<String>> second = new CompletableFuture<>();
+			// 첫 요청과 같은 쓰기용 조회로 행을 잠근 채, 두 번째 요청(01914로 확인)을 보낸다.
+			new TransactionTemplate(this.transactionManager).executeWithoutResult(status -> {
+				UserCardEntity first = this.userCardRepository.findByUserCardIdAndUserIdAndReleasedAtIsNull(cardId, myCards)
+					.orElseThrow();
+				executor.submit(() -> second.complete(send("PATCH", CARDS + "/" + id + "/mapping", "MY_CARDS",
+						"{\"status\":\"USER_CONFIRMED\",\"cardProductId\":\"01914\",\"confirmationMethod\":\"MANUAL_SELECTION\"}")));
+				try {
+					Thread.sleep(1500);
+				}
+				catch (InterruptedException ex) {
+					Thread.currentThread().interrupt();
+					throw new IllegalStateException(ex);
+				}
+				assertThat(second).isNotDone();
+				first.changeMapping(MappingStatus.UNMAPPED, null, null, null);
+				this.userCardRepository.saveAndFlush(first);
+			});
+
+			ResponseEntity<String> response = second.get(30, TimeUnit.SECONDS);
+			assertThat(response.getStatusCode().value()).isEqualTo(200);
+			Map<String, Object> row = this.jdbcTemplate
+				.queryForMap("SELECT mapping_status, card_product_id FROM user_cards WHERE user_card_id = ?", cardId);
+			assertThat(row).containsEntry("mapping_status", "USER_CONFIRMED").containsEntry("card_product_id", "01914");
+		}
+		finally {
+			executor.shutdownNow();
+		}
 	}
 
 	@Test
