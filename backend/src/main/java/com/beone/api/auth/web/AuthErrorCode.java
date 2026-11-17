@@ -6,11 +6,15 @@ import org.springframework.http.HttpStatus;
 /**
  * 회원 인증 API의 오류 코드(docs/api.md 업무 오류 코드 「인증」, docs/api/auth.md). 문구는 인증 명세 사본과 같다.
  *
- * <p>U1에서는 CSRF 검사가 쓰는 코드만 둔다. 나머지 인증 코드는 그 코드를 쓰는 API와 함께 추가한다.
+ * <p>지금은 CSRF 검사(U1)와 가입·이메일 인증(U2)이 쓰는 코드만 둔다. 나머지 인증 코드는 그 코드를 쓰는 API와 함께 추가한다.
  */
 enum AuthErrorCode implements ApiErrorCode {
 
-	CSRF_INVALID("CSRF_INVALID", HttpStatus.FORBIDDEN, "요청을 확인할 수 없습니다. 화면을 새로고침한 후 다시 시도해 주세요.");
+	CSRF_INVALID("CSRF_INVALID", HttpStatus.FORBIDDEN, "요청을 확인할 수 없습니다. 화면을 새로고침한 후 다시 시도해 주세요."),
+
+	AUTH_TOKEN_INVALID("AUTH_TOKEN_INVALID", HttpStatus.BAD_REQUEST, "링크가 유효하지 않거나 만료되었습니다. 다시 요청해 주세요."),
+
+	RATE_LIMITED("RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.");
 
 	private final String code;
 

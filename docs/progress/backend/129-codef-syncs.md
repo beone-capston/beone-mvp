@@ -6,7 +6,7 @@
 - 근거: [`docs/api/codef.md`](../../api/codef.md) POST `/api/v1/me/codef/syncs`, D-09·D-15·D-16·D-17, 결정 20(R1·R2·R3)·22(R7·R8·#93·HMAC 1안)·30, C0 관리자 판단(K1 새 후보 `UNMAPPED`·상품 후보 없음, K2 codef 전용 테이블·원장 불변, K3 하위 패키지, P2 재연결 필요는 가짜만, P8 카드명+발급일자 정확히 하나, P9 기간, P11 동기), **2026-11-18 사용자 직접 결정** P6(HMAC 키 환경 변수 필수, 없으면 승인은 부분 실패·저장 없음, 원문 저장 금지), C3 착수 확인의 관리자 판단 Q1~Q8(결정 28).
 - 한 일:
   - `codef.application`: `CodefSyncService`, `CodefSyncGateway`(인터페이스, `FakeCodefGateway`가 함께 구현), `CodefSyncPeriod`·`CodefSyncPeriodException`, `CodefHeldCardMatcher`, `ApprovalFingerprintKeySource`·`EnvironmentApprovalFingerprintKeySource`(환경 변수 `BEONE_CODEF_APPROVAL_HMAC_KEY`, 고정 기본값 없음), `HmacApprovalFingerprinter`, `CodefSyncResult`·`CodefSyncTarget`, 예외 2종.
-  - `codef.persistence`: `codef_syncs`·`codef_held_cards`·`codef_approval_rows`·`codef_performance_references` 엔티티·저장소(Flyway `V12__codef_syncs.sql`, 임시 번호. V11은 인증 U2 예정). `CodefConnectionEntity`에 `markSynced`·`markReconnectRequired`.
+  - `codef.persistence`: `codef_syncs`·`codef_held_cards`·`codef_approval_rows`·`codef_performance_references` 엔티티·저장소(Flyway `V12__codef_syncs.sql`, 임시 번호. V11은 인증 U2 #130의 `V11__auth_members.sql`). `CodefConnectionEntity`에 `markSynced`·`markReconnectRequired`.
   - `codef.web`: `CodefSyncController`(local·demo만), 요청·응답, `CODEF_RECONNECT_REQUIRED` 409 추가, 기간 위반 400 처리, `StrictDateDeserializer`(monthlystate 것을 옮겨 옴).
   - `card`(관리자 판단 P8 최소 접근): `UserCardService.lockHeldCardsForCodefSync`·`registerCodefCard`, `UserCardEntity.codef`. 스키마 변경 없음.
   - 가짜 게이트웨이 합성 fixture `backend/src/main/resources/codef/fake/`(실제 카드명·승인번호 형식 복사 없음), 동기화 시나리오 아이디 `fake-sync-reconnect`·`fake-sync-unavailable`·`fake-sync-partial`.
@@ -26,3 +26,4 @@
 - 로컬·테스트 DB만 사용했고 서버 DB 적용·배포는 하지 않았습니다.
 - PR #131 CodeRabbit(`64491cf`) 반영: ① V12의 카드명·발급일자·지문 열 정렬 규칙을 `utf8mb4_bin`(PAD SPACE, 후행 공백 무시)에서 `utf8mb4_0900_bin`(NO PAD)으로 바꿔 후행 공백만 다른 카드명을 다른 키로 봅니다. 아직 병합 전 마이그레이션이라 같은 파일을 고쳤고, 통합 시험에 후행 공백 행은 들어가고 완전히 같은 키는 막히는지 더했습니다. ② 도메인 문서·`CodefSyncService` Javadoc의 검사 순서를 실제대로 요청 본문·날짜 형식 400이 가상 포트폴리오 409보다 먼저로 고쳤습니다. ③ `docs/api/codef.md` syncs 설명·처리 흐름과 `docs/domains/card.md` 핵심 용어에 남아 있던 "카드명으로 `CANDIDATE` 후보 제시" 설명을 `UNMAPPED`·후보 없음으로 정정했습니다.
 - CodeRabbit(`375af63`) 반영: `docs/domains/card.md` 보유 출처 용어의 `CODEF`(2차) 표시를 CODEF 동기화(#129)가 만드는 현재 출처로 고쳤습니다(문서만).
+- `develop` `098cd74`(U2 #130, `V11__auth_members.sql`) merge: 충돌은 `docs/architecture.md` 구현 API·테이블 줄과 진행 README의 자기 줄뿐이었고 양쪽 내용을 모두 남겼습니다. V12는 V11 뒤이며 V11의 `members`·`auth_tokens`·`auth_mail_throttles`와 겹치는 테이블이 없습니다.
