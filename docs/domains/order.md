@@ -12,10 +12,11 @@
 - `PUT /api/v1/me/planned-spends`: 예정 소비 0~5건을 통째로 교체
 - Flyway `V3__orders_planned_spends.sql`: `orders`·`planned_spends` 테이블. 시드는 없습니다. 번호는 병합 직전 다른 작업선과의 순서에 따라 바뀔 수 있습니다([D-23](../decisions.md#d-23-확정-정책) 12항).
 
+- 주문 상태 전이(#116): `CREATED → PAID → CANCELLED` 한 방향만 있습니다. 모의 승인(`payment`)이 성공하면 `PAID`가 되고 결제 ID(`simulatedPaymentId`, `pay-…`)를 함께 저장합니다. 전액 취소되면 `CANCELLED`입니다. 모의 실패(`FAILED`)와 부분취소는 주문 상태를 바꾸지 않습니다. 전이는 `payment`가 `OrderService.lockForPayment`·`markPaid`·`markCancelled`로만 하며, 셋 다 호출자 트랜잭션 안에서만 부를 수 있고(`MANDATORY`) 주문 행에 쓰기 잠금을 겁니다. 결제 ID는 문자열로 저장해 `order`가 `payment`를 참조하지 않습니다. 열은 Flyway `V8__simulated_payments_ledger.sql`이 더합니다.
+
 구현하지 않은 범위:
 
-- 주문 상태 `PAID`·`CANCELLED`로의 전이와 `ORDER_ALREADY_PAID`: 모의 결제(`payment`) 작업 몫입니다. 지금 `OrderStatus`에는 `CREATED`만 있습니다.
-- 주문 상세의 `simulatedPaymentId`·`latestRecommendationId`: 계약상 "모의 승인 전"·"계산한 추천 없음"이면 `null`인 필드입니다. 모의 결제·추천이 아직 없으므로 항상 `null`이며, 그 기능을 만드는 작업이 채웁니다.
+- 주문 상세의 `latestRecommendationId`: 계약상 "계산한 추천 없음"이면 `null`인 필드입니다. card·order와 recommendation이 서로 의존하지 않게 별도 후속 작업(B2f)에서 채우므로 지금은 항상 `null`입니다.
 - 예정 소비의 추천 반영(D-18 K4). 응답의 `usedInRecommendation`은 항상 `false`입니다.
 - 주문 수정. 입력을 바꾸려면 새 주문을 만듭니다(계약).
 

@@ -42,6 +42,7 @@ recommendation
 │   ├── RecommendationNotes             # noteCode → 안내 문구(한 곳에 모음)
 │   ├── InvalidationReason              # ORDER_PAID > MAPPING_CHANGED > MONTHLY_STATE_CHANGED
 │   ├── RecommendationId                # rec- + 번호
+│   ├── RecommendationCalculation       # 모의 승인용 계산 결과(본문 + 카드별 한도 버킷 차감액, #116)
 │   └── OrderAlreadyPaidException, RecommendationNotFoundException
 └── persistence
     ├── RecommendationEntity / RecommendationRepository
@@ -67,7 +68,7 @@ recommendation
 ### 계산(POST)
 
 1. 주문을 읽습니다. 없거나 다른 사용자 것이면 order의 예외가 그대로 올라와 404 `ORDER_NOT_FOUND`가 됩니다.
-2. 주문 상태가 `CREATED`가 아니면 409 `ORDER_ALREADY_PAID`입니다. 지금 주문 상태는 `CREATED`뿐이라 실제로는 생기지 않고, 모의 승인(B3)이 상태를 더하면 동작합니다.
+2. 주문 상태가 `CREATED`가 아니면 409 `ORDER_ALREADY_PAID`입니다. 모의 승인(#116)으로 `PAID`·`CANCELLED`가 된 주문이 여기에 해당합니다.
 3. 해제하지 않은 보유 카드 전부와 각 카드의 **주문 월** 월간 상태를 읽어 `HeldCardInput`으로 바꿉니다. 추천에서 뺀 카드와 매핑 미확인 카드도 넘기며, 비교에서 빼는 판단은 엔진이 합니다.
 4. 결제 전 설정을 읽습니다. 설정이 없으면 `AUTO_RECOMMEND`입니다.
 5. 엔진을 한 번 호출합니다. 판정일은 주문일입니다([D-23](../decisions.md#d-23-확정-정책)).
@@ -129,7 +130,8 @@ EngineResult result = engine.recommend(new EngineRequest(order.orderDate(),
 ## 제약과 한계
 
 - **카드·주문 쪽 추천 연결 없음(B2-5).** 보유 카드 응답의 `invalidatedRecommendationIds`는 계속 `[]`, 주문의 `latestRecommendationId`는 계속 `null`입니다. card·order가 recommendation을 읽으면 서로 의존하게 되므로 별도 후속 작업에서 처리합니다.
-- **모의 승인된 주문 없음.** `ORDER_ALREADY_PAID`와 `ORDER_PAID` 무효화는 주문 상태가 `CREATED`뿐이라 아직 실제로 생기지 않습니다. 판정 함수는 단위 테스트로 확인했고, B3가 상태를 더하면 동작합니다.
+- **모의 승인(#116) 뒤 동작.** 주문 상태에 `PAID`·`CANCELLED`가 생겨 승인된 주문의 계산은 409 `ORDER_ALREADY_PAID`, 그 주문의 이전 추천 조회는 `ORDER_PAID` 무효화가 실제로 생깁니다(통합 테스트로 확인).
+- **#116에서 더한 공개 메서드는 `calculateForApproval` 하나뿐입니다.** 모의 승인([payment 안내](payment.md))이 승인 직전 재계산에 씁니다. 내부 계산은 `calculate`와 같고(같은 저장·같은 본문), 엔진 결과의 `usageEffects`(카드별 한도 버킷 차감액, 모르면 `null`)를 `RecommendationCalculation`에 함께 돌려줍니다. 원장이 승인 카드의 차감액을 저장할 때 씁니다. `calculate`의 동작·응답은 바꾸지 않았고 이 밖의 recommendation 변경은 없습니다.
 - **새 카드 등록은 무효화하지 않습니다.** 무효화는 계산 때 넘긴 카드만 비교합니다. 계산 뒤 새로 등록한 카드는 그 추천에 없었으므로 저장한 결과를 바꾸지 않습니다. 다시 계산하려면 POST를 다시 부릅니다.
 - **월간 상태 변경은 스냅샷 시각으로만 판정합니다.** 같은 초 안에 다시 입력하면 시각이 같아 변경으로 보지 않습니다. 월간 상태 시각이 초 단위이기 때문입니다.
 - **기준일 안내 noteCode 없음.** "기준일이 승인일이 아닌 카드" 안내([D-23](../decisions.md#d-23-확정-정책))는 엔진에 코드가 없고 계약도 정해지지 않아 만들지 않았습니다(결정 27 B2-2).
@@ -139,6 +141,6 @@ EngineResult result = engine.recommend(new EngineRequest(order.orderDate(),
 
 ## 테스트
 
-- 단위: `RecommendationIdTest`(형식), `RecommendationNotesTest`(문구·모르는 코드 실패), `EngineInputAssemblerTest`(입력 변환, 0 대체 없음), `RecommendationServiceTest`(실제 규칙 파일로 평가 자료 C01 계산, `NOT_DETERMINED` 스냅샷 `null`, 무효화 우선순위, 다른 사용자·형식 오류 404, 모의 승인 판정).
+- 단위: `RecommendationIdTest`(형식), `RecommendationNotesTest`(문구·모르는 코드 실패), `EngineInputAssemblerTest`(입력 변환, 0 대체 없음), `RecommendationServiceTest`(실제 규칙 파일로 평가 자료 C01 계산, `NOT_DETERMINED` 스냅샷 `null`, 무효화 우선순위, 다른 사용자·형식 오류 404, 모의 승인 판정, `calculateForApproval`이 같은 본문과 엔진 차감액을 `null` 그대로 돌려줌).
 - 웹(`controllers=` 한정): `RecommendationApiWebTest`(계약 예시 JSON, 404·409, 헤더 400), `RecommendationProfileOffWebTest`(프로필 밖 미등록).
 - 통합: `RecommendationIntegrationTest`(V7 적용, 계산·저장·조회, 사용자별 분리, 월간 상태 재입력·추천 제외·해제 무효화, 가상 포트폴리오의 `확인 필요`). 추천 행이 주문·보유 카드를 참조하므로 테스트 앞뒤로 지웁니다.

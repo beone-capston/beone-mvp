@@ -114,6 +114,21 @@ public class RecommendationService {
 	 */
 	@Transactional
 	public RecommendationDocument calculate(CurrentUser user, String orderId) {
+		return compute(user, orderId).document();
+	}
+
+	/**
+	 * 모의 승인 직전 재계산. {@link #calculate}와 같은 계산·저장을 하고, 엔진이 낸 카드별 한도 버킷 차감액을 함께 돌려준다.
+	 * 모의 결제(payment)가 승인 카드의 차감액을 원장에 남기는 데 쓴다. recommendation 패키지가 이 작업(#116)에서 더한 유일한 공개 메서드다.
+	 * @throws com.beone.api.order.application.OrderNotFoundException 없거나 다른 사용자의 주문
+	 * @throws OrderAlreadyPaidException 이미 모의 승인된 주문
+	 */
+	@Transactional
+	public RecommendationCalculation calculateForApproval(CurrentUser user, String orderId) {
+		return compute(user, orderId);
+	}
+
+	private RecommendationCalculation compute(CurrentUser user, String orderId) {
 		OrderDetail order = this.orderService.get(user, orderId);
 		if (isPaid(order)) {
 			throw new OrderAlreadyPaidException();
@@ -150,7 +165,12 @@ public class RecommendationService {
 		this.cardBasisRepository.saveAll(cards.stream()
 			.map(card -> basis(entity.getRecommendationId(), card, states.get(card.userCardId())))
 			.toList());
-		return document;
+		return new RecommendationCalculation(document,
+				result.usageEffects()
+					.stream()
+					.map(effect -> new RecommendationCalculation.BucketDeduction(effect.userCardId(),
+							effect.limitBucketId(), effect.deductionWon()))
+					.toList());
 	}
 
 	/**

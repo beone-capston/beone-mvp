@@ -299,6 +299,35 @@ class OrderApiWebTest {
 	}
 
 	@Test
+	void getPaidOrderShowsTheSimulatedPaymentId() throws Exception {
+		// 계약 예시 "simulatedPaymentId": "pay-7001", status PAID(모의 승인됨). latestRecommendationId는 B2f 전이라 null
+		given(this.orderService.get(MY_CARDS, "ord-5001")).willReturn(new OrderDetail("ord-5001", 10000,
+				LocalDate.of(2026, 11, 3), null, "스타벅스 송도점", "STARBUCKS_STORE", PaymentMethod.DIRECT, OrderStatus.PAID,
+				LocalDateTime.of(2026, 11, 3, 10, 40, 0), "pay-7001"));
+
+		MvcResult result = perform(get(ORDERS + "/ord-5001").header(HEADER, "MY_CARDS"));
+
+		assertThat(result.getResponse().getStatus()).isEqualTo(200);
+		assertJson(result, """
+				{
+				  "data": {
+				    "orderId": "ord-5001",
+				    "amountWon": 10000,
+				    "orderDate": "2026-11-03",
+				    "orderTime": null,
+				    "merchantName": "스타벅스 송도점",
+				    "merchantClass": "STARBUCKS_STORE",
+				    "paymentMethod": "DIRECT",
+				    "status": "PAID",
+				    "createdAt": "2026-11-03T10:40:00+09:00",
+				    "simulatedPaymentId": "pay-7001",
+				    "latestRecommendationId": null
+				  }
+				}
+				""");
+	}
+
+	@Test
 	void getMissingOrOtherUsersOrderIsOrderNotFound() throws Exception {
 		given(this.orderService.get(any(), anyString())).willThrow(new OrderNotFoundException());
 

@@ -20,7 +20,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import com.beone.api.benefit.engine.BenefitAmountOutput;
+import com.beone.api.benefit.engine.BucketUsageEffect;
 import com.beone.api.benefit.engine.DefaultRecommendationEngine;
+import com.beone.api.benefit.engine.EngineResult;
+import com.beone.api.benefit.engine.ExcludedCard;
+import com.beone.api.benefit.engine.RecommendationEngine;
 import com.beone.api.benefit.rule.loading.RuleCatalogLoader;
 import com.beone.api.card.application.MappingStatus;
 import com.beone.api.card.application.UserCardService;
@@ -243,6 +248,45 @@ class RecommendationServiceTest {
 		holds(EngineInputAssemblerTest.card("uc-11", MappingStatus.USER_CONFIRMED, "09271", false));
 		given(this.states.get(eq(ME), eq("uc-11"), eq(YearMonth.of(2026, 10)))).willReturn(c01State("uc-11"));
 		this.service.calculate(ME, "ord-5001");
+	}
+
+	@Test
+	void calculateForApprovalReturnsTheSameDocumentAndNoDeductionWithoutLimitedService() {
+		holds(EngineInputAssemblerTest.card("uc-11", MappingStatus.USER_CONFIRMED, "09271", false));
+		given(this.states.get(eq(ME), eq("uc-11"), eq(YearMonth.of(2026, 10)))).willReturn(c01State("uc-11"));
+
+		RecommendationCalculation calculation = this.service.calculateForApproval(ME, "ord-5001");
+
+		// C01은 한도가 없는 기본 적립(BASE)만 적용되므로 버킷 차감액이 없다
+		assertThat(calculation.document().recommendationId()).isEqualTo("rec-3001");
+		assertThat(calculation.document().comparedCards().get(0).currentOrderBenefit())
+			.isEqualTo(new RecommendationDocument.Amount(1000L, "CONFIRMED"));
+		assertThat(calculation.bucketDeductions()).isEmpty();
+		assertThat(this.saved.getDocumentJson()).contains("\"recommendationId\":\"rec-3001\"");
+	}
+
+	@Test
+	void calculateForApprovalCopiesEveryUsageEffectOfTheEngineKeepingUnknownAsNull() {
+		// 엔진 출력의 차감액을 옮기기만 하는지 본다. 모르는 차감액(null)은 0으로 바꾸지 않는다(D-18 K1, D-22)
+		RecommendationEngine stub = request -> new EngineResult(request.decisionDate(), "NOT_DETERMINED", false, null,
+				List.of(),
+				List.of(new ExcludedCard("uc-11", null, "MAPPING_UNCONFIRMED", "매핑 확인 필요", null,
+						BenefitAmountOutput.needsConfirmation(), null, null, List.of())),
+				null, List.of(), List.of(new BucketUsageEffect("uc-11", "STORE", 500L),
+						new BucketUsageEffect("uc-11", "FUEL", null)));
+		RecommendationService stubbed = new RecommendationService(this.recommendations, this.bases, this.orders,
+				this.cards, this.states, this.preferences, stub, JsonMapper.builder().build(),
+				Clock.fixed(Instant.parse("2026-10-15T01:41:00Z"), ZoneOffset.UTC));
+		holds(EngineInputAssemblerTest.card("uc-11", MappingStatus.UNMAPPED, null, false));
+		given(this.states.get(eq(ME), eq("uc-11"), eq(YearMonth.of(2026, 10)))).willReturn(c01State("uc-11"));
+
+		RecommendationCalculation calculation = stubbed.calculateForApproval(ME, "ord-5001");
+
+		assertThat(calculation.document().outcome()).isEqualTo("NOT_DETERMINED");
+		assertThat(calculation.deductionsOf("uc-11")).containsExactly(
+				new RecommendationCalculation.BucketDeduction("uc-11", "STORE", 500L),
+				new RecommendationCalculation.BucketDeduction("uc-11", "FUEL", null));
+		assertThat(calculation.deductionsOf("uc-99")).isEmpty();
 	}
 
 	private void holds(UserCardView... held) {
