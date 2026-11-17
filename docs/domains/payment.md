@@ -131,8 +131,8 @@ curl -X POST "http://localhost:8080/api/v1/me/orders/ord-5001/simulated-payments
 
 ## 제약과 한계
 
-- **스냅샷 뒤 승인·취소 합산은 후속(B2f)입니다.** 월간 상태 응답의 `afterSnapshot`은 아직 실제로 합산하지 않습니다(monthlystate 담당). 이 작업은 합산 원본(원장 행·버킷 차감액)을 저장만 합니다.
-- **주문 `latestRecommendationId`·보유 카드 `invalidatedRecommendationIds`는 후속(B2f)입니다.**
+- **스냅샷 뒤 합산은 이 패키지 밖에서 합니다(#120).** 이 패키지가 남긴 원장 행·버킷 차감액을 monthlystate가 `afterSnapshot` 요약에, recommendation이 추천 입력의 버킷 사용액에 씁니다. payment 코드는 바뀌지 않았습니다.
+- **주문 `latestRecommendationId`·보유 카드 `invalidatedRecommendationIds`는 #120에서 연결했습니다.** 승인 직전 재계산으로 만든 추천도 주문의 마지막 추천이 됩니다([order 안내](order.md)).
 - **선택형 서비스 차감액은 엔진 범위 밖이라 `null`로 저장됩니다**(D-18 K1). 그 버킷의 취소 영향은 `확인 필요`입니다.
 - 09174는 취소 귀속이 약관에서 확정되지 않아 실적 영향이 항상 `확인 필요`입니다.
 - 멱등 키 행은 24시간이 지나면 다음 같은 키 요청 때 지웁니다. 주기적 정리 작업은 없습니다.

@@ -16,6 +16,7 @@ import com.beone.api.benefit.engine.StateInput;
 import com.beone.api.card.application.HoldingSource;
 import com.beone.api.card.application.MappingStatus;
 import com.beone.api.card.application.UserCardView;
+import com.beone.api.ledger.application.LedgerActivity;
 import com.beone.api.monthlystate.application.MonthlyStateView;
 import com.beone.api.monthlystate.application.StateSource;
 import com.beone.api.monthlystate.application.StateValue;
@@ -45,11 +46,16 @@ final class EngineInputAssembler {
 	}
 
 	static HeldCardInput heldCard(UserCardView card, MonthlyStateView state) {
+		return heldCard(card, state, List.of());
+	}
+
+	/** 스냅샷 뒤 원장 활동을 한도 사용액에 반영해 카드 입력을 만든다(#120, {@link SnapshotUsage}). */
+	static HeldCardInput heldCard(UserCardView card, MonthlyStateView state, List<LedgerActivity> afterSnapshot) {
 		boolean synthetic = card.holdingSource() == HoldingSource.SYNTHETIC;
 		String mappingStatus = synthetic ? null : card.mapping().status().name();
 		return new HeldCardInput(card.userCardId(), mappingStatus, ruleProductOf(card), null,
 				card.excludedFromRecommendation(), card.holdingSource().name(), state(state.registeredOn()),
-				monthlyState(state), PolicyEvidenceInput.undetermined());
+				monthlyState(state, afterSnapshot), PolicyEvidenceInput.undetermined());
 	}
 
 	/** 계산 규칙의 상품: 가상 포트폴리오는 카드 상품, 그 밖에는 {@code USER_CONFIRMED} 매핑 상품. 없으면 {@code null}. */
@@ -61,6 +67,10 @@ final class EngineInputAssembler {
 	}
 
 	static MonthlyStateInput monthlyState(MonthlyStateView state) {
+		return monthlyState(state, List.of());
+	}
+
+	static MonthlyStateInput monthlyState(MonthlyStateView state, List<LedgerActivity> afterSnapshot) {
 		List<BucketUsageInput> usages = state.limitBucketUsages()
 			.stream()
 			.map(usage -> new BucketUsageInput(usage.limitBucketId(), state(usage.usage())))
@@ -75,8 +85,9 @@ final class EngineInputAssembler {
 			case NONE -> List.of(new ServiceSelectionInput(null, state.noServiceSelection().effectiveFrom(), "MANUAL",
 					seoul(state.noServiceSelection().updatedAt()), true, null));
 		};
-		return new MonthlyStateInput(state(state.previousMonthPerformanceWon()), usages,
-				state(state.otherBucketsUsedWon()), state.serviceSelectionStatus().name(), selections);
+		SnapshotUsage.Adjusted adjusted = SnapshotUsage.adjust(usages, state(state.otherBucketsUsedWon()), afterSnapshot);
+		return new MonthlyStateInput(state(state.previousMonthPerformanceWon()), adjusted.buckets(),
+				adjusted.otherBuckets(), state.serviceSelectionStatus().name(), selections);
 	}
 
 	static <T> StateInput<T> state(StateValue<T> value) {

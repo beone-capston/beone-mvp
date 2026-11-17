@@ -9,7 +9,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * {@code GET /api/v1/me/orders/{orderId}}의 {@code data}(docs/api/orders.md). 값이 없는 필드도 {@code null}로 쓴다.
  *
  * <p>{@code simulatedPaymentId}는 모의 승인한 결제 ID이고 승인 전·실패만 있으면 {@code null}이다. {@code latestRecommendationId}는
- * 추천 연결 후속 작업(B2f) 전이라 항상 {@code null}이다(계약상 "계산한 추천 없음"의 값).
+ * 이 주문으로 계산한 추천 중 가장 최근(ID가 가장 큰) 것이고, 계산한 추천이 없으면 {@code null}이다(#120). 승인 뒤에도 그대로 보여 준다.
  *
  * @param orderId 주문 ID({@code ord-…})
  * @param amountWon 결제 금액(원)
@@ -28,11 +28,11 @@ public record OrderDetailResponse(String orderId, long amountWon, String orderDa
 		String merchantName, String merchantClass, PaymentMethod paymentMethod, OrderStatus status, String createdAt,
 		String simulatedPaymentId, String latestRecommendationId) {
 
-	static OrderDetailResponse from(OrderDetail order) {
+	static OrderDetailResponse from(OrderDetail order, String latestRecommendationId) {
 		return new OrderDetailResponse(order.orderId(), order.amountWon(), OrderValueFormats.date(order.orderDate()),
 				OrderValueFormats.time(order.orderTime()), order.merchantName(), order.merchantClass(),
 				order.paymentMethod(), order.status(), OrderValueFormats.seoulInstant(order.createdAt()),
-				order.simulatedPaymentId(), null);
+				order.simulatedPaymentId(), latestRecommendationId);
 	}
 
 }

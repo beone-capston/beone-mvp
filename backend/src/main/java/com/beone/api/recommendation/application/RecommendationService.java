@@ -20,6 +20,8 @@ import com.beone.api.card.application.HoldingSource;
 import com.beone.api.card.application.UserCardId;
 import com.beone.api.card.application.UserCardService;
 import com.beone.api.card.application.UserCardView;
+import com.beone.api.ledger.application.LedgerActivity;
+import com.beone.api.ledger.application.LedgerQueryService;
 import com.beone.api.monthlystate.application.MonthlyStateService;
 import com.beone.api.monthlystate.application.MonthlyStateView;
 import com.beone.api.order.application.OrderDetail;
@@ -63,6 +65,8 @@ public class RecommendationService {
 
 	private final PaymentPreferenceService paymentPreferenceService;
 
+	private final LedgerQueryService ledgerQueryService;
+
 	private final RecommendationEngine engine;
 
 	private final JsonMapper jsonMapper;
@@ -77,6 +81,7 @@ public class RecommendationService {
 	 * @param userCardService 보유 카드 조회
 	 * @param monthlyStateService 월간 상태 조회
 	 * @param paymentPreferenceService 결제 전 설정 조회
+	 * @param ledgerQueryService 스냅샷 뒤 모의 승인·취소 조회(#120)
 	 * @param engine 엔진 입구
 	 * @param jsonMapper 응답 본문 저장용 JSON 변환기
 	 * @param clock 계산 시각을 정할 시계
@@ -85,23 +90,24 @@ public class RecommendationService {
 	public RecommendationService(RecommendationRepository recommendationRepository,
 			RecommendationCardBasisRepository cardBasisRepository, OrderService orderService,
 			UserCardService userCardService, MonthlyStateService monthlyStateService,
-			PaymentPreferenceService paymentPreferenceService, RecommendationEngine engine, JsonMapper jsonMapper,
-			ObjectProvider<Clock> clock) {
+			PaymentPreferenceService paymentPreferenceService, LedgerQueryService ledgerQueryService,
+			RecommendationEngine engine, JsonMapper jsonMapper, ObjectProvider<Clock> clock) {
 		this(recommendationRepository, cardBasisRepository, orderService, userCardService, monthlyStateService,
-				paymentPreferenceService, engine, jsonMapper, clock.getIfUnique(Clock::systemUTC));
+				paymentPreferenceService, ledgerQueryService, engine, jsonMapper, clock.getIfUnique(Clock::systemUTC));
 	}
 
 	RecommendationService(RecommendationRepository recommendationRepository,
 			RecommendationCardBasisRepository cardBasisRepository, OrderService orderService,
 			UserCardService userCardService, MonthlyStateService monthlyStateService,
-			PaymentPreferenceService paymentPreferenceService, RecommendationEngine engine, JsonMapper jsonMapper,
-			Clock clock) {
+			PaymentPreferenceService paymentPreferenceService, LedgerQueryService ledgerQueryService,
+			RecommendationEngine engine, JsonMapper jsonMapper, Clock clock) {
 		this.recommendationRepository = Objects.requireNonNull(recommendationRepository, "recommendationRepository");
 		this.cardBasisRepository = Objects.requireNonNull(cardBasisRepository, "cardBasisRepository");
 		this.orderService = Objects.requireNonNull(orderService, "orderService");
 		this.userCardService = Objects.requireNonNull(userCardService, "userCardService");
 		this.monthlyStateService = Objects.requireNonNull(monthlyStateService, "monthlyStateService");
 		this.paymentPreferenceService = Objects.requireNonNull(paymentPreferenceService, "paymentPreferenceService");
+		this.ledgerQueryService = Objects.requireNonNull(ledgerQueryService, "ledgerQueryService");
 		this.engine = Objects.requireNonNull(engine, "engine");
 		this.jsonMapper = Objects.requireNonNull(jsonMapper, "jsonMapper");
 		this.clock = Objects.requireNonNull(clock, "clock").withZone(SEOUL);
@@ -140,7 +146,10 @@ public class RecommendationService {
 		for (UserCardView card : cards) {
 			MonthlyStateView state = this.monthlyStateService.get(user, card.userCardId(), month);
 			states.put(card.userCardId(), state);
-			inputs.add(EngineInputAssembler.heldCard(card, state));
+			// 스냅샷 뒤 모의 승인 차감액을 사용액에 더한다. 스냅샷이 없으면 더할 기준 값이 없어 미입력 그대로다(#120).
+			List<LedgerActivity> after = (state.snapshotAt() == null) ? List.of()
+					: this.ledgerQueryService.activityAfter(user, card.userCardId(), month, state.snapshotAt());
+			inputs.add(EngineInputAssembler.heldCard(card, state, after));
 		}
 		PaymentPreferenceView preference = this.paymentPreferenceService.get(user);
 		String representative = heldOrNull(preference.representativeUserCardId(), cards);
@@ -186,6 +195,17 @@ public class RecommendationService {
 				RecommendationDocument.class);
 		Optional<InvalidationReason> reason = invalidation(user, entity, document.orderId());
 		return new RecommendationView(document, reason.isPresent(), reason.orElse(null));
+	}
+
+	/**
+	 * 저장한 추천 하나의 지금 무효화 사유. {@link #get}과 같은 지연 판정이다. 보유 카드 변경 응답의 무효화 목록에 쓴다(#120).
+	 * @param recommendationId 저장소 추천 번호
+	 * @return 무효화 사유. 유효하거나 이 사용자의 추천이 아니면 비어 있다
+	 */
+	@Transactional(readOnly = true)
+	public Optional<InvalidationReason> invalidationOf(CurrentUser user, long recommendationId) {
+		return this.recommendationRepository.findByRecommendationIdAndUserId(recommendationId, user.userId())
+			.flatMap(entity -> invalidation(user, entity, OrderId.format(entity.getOrderId())));
 	}
 
 	// 우선순위: ORDER_PAID > MAPPING_CHANGED > MONTHLY_STATE_CHANGED(결정 27 B2-4)

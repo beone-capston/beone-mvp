@@ -8,12 +8,12 @@
 
 - 쓰기(#116): 모의 승인 행(양수)과 모의 취소 행(음수, 원 승인 행 연결) 기록, 승인 행마다 엔진이 계산한 한도 버킷 차감액 저장(`ledger_usage_effects`, 모르는 차감액은 0이 아닌 `NULL`, D-18 K1).
 - 조회(#118): `GET /api/v1/me/ledger-transactions?month=YYYY-MM[&userCardId][&source]`. `local`·`demo` 프로필에서만 등록합니다. 페이지 나눔은 계약의 "명세 단계 미정"대로 없습니다.
+- 스냅샷 뒤 활동 읽기(#120): `LedgerQueryService.activityAfter(user, userCardId, month, snapshotAt)`는 같은 카드에서 기록 시각(`recorded_at`)이 `snapshotAt`보다 뒤인 행 중 승인은 자기 거래일이, 취소는 원 승인 행의 거래일이 그 달인 행을 행 ID 오름차순으로 돌려줍니다. 취소는 원 승인 행의 거래일 월에 귀속합니다. 11월 승인을 12월에 취소하면 11월 활동이고(그 달 버킷은 확인 필요), 10월 승인을 11월에 취소한 행은 11월 활동이 아닙니다([monthly-states.md](../api/monthly-states.md) 218행, [D-17](../decisions.md#d-15d-16d-17-확정-정책), 관리자 승인 규칙). 조회 API(`GET /ledger-transactions`)의 달 조건은 그대로 거래일입니다. 승인 행에는 그 행의 버킷 차감액, 취소 행에는 원 승인 행의 버킷 차감액을 붙입니다(모르는 차감액은 `null` 그대로). monthlystate의 `afterSnapshot`과 recommendation의 사용액 반영이 씁니다. 카드 소유 확인은 호출자가 합니다.
 - Flyway `V8__simulated_payments_ledger.sql`의 `ledger_transactions`·`ledger_usage_effects` 테이블. 조회는 새 마이그레이션이 없습니다.
 
 구현하지 않은 범위(후속):
 
 - CODEF 실제 조회 거래 행과 그 불완전 사유(`PARTIAL_CANCELLATION_SUSPECTED` 등 5종). 2차 CODEF 연결 작업이 행을 넣고 사유를 채웁니다. 실제 조회 거래와 자체 모의 원장은 `source`로 구분합니다(CLAUDE.md 보안).
-- 스냅샷 뒤 승인·취소의 월간 합산(`afterSnapshot`, B2f). B2f는 아래 `LedgerQueryService`를 다시 쓸 수 있습니다.
 - 원장에서 전월 실적·버킷 사용액을 자동으로 산출하는 기능(D-16에 따라 하지 않음).
 
 실패 응답:
@@ -47,6 +47,7 @@ ledger
 │   ├── NewLedgerEntry                # 기록할 행. 부호·원 승인 행 연결을 생성 때 검사
 │   ├── LedgerUsageEffect             # 버킷 ID + 차감액(모르면 null)
 │   ├── LedgerQueryService            # 조회: 한 달의 행과 카드·출처별 완전성(공개 부품)
+│   ├── LedgerActivity                # 스냅샷 뒤 행 한 건(종류·금액·버킷 차감액, #120)
 │   ├── LedgerMonthView               # 조회 결과(계약 응답 data 모양)
 │   ├── LedgerCardNotFoundException
 │   ├── LedgerTransactionId           # lt- + 번호

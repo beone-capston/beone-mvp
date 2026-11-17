@@ -1,11 +1,13 @@
 package com.beone.api.ledger.application;
 
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -15,6 +17,7 @@ import com.beone.api.card.application.UserCardService;
 import com.beone.api.card.application.UserCardView;
 import com.beone.api.ledger.persistence.LedgerTransactionEntity;
 import com.beone.api.ledger.persistence.LedgerTransactionRepository;
+import com.beone.api.ledger.persistence.LedgerUsageEffectRepository;
 import com.beone.api.user.application.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <li>완전성: 모의 승인·취소는 빠짐없이 기록하므로 {@code SIMULATION}은 완전하다. 1차는 CODEF 원장을 수집하지 않으므로
  * {@code CODEF}는 완전하다고 선언하지 않고({@code complete=false}) 사유는 비워 둔다. 사유는 2차 CODEF 연결 때 채운다.</li>
  * </ul>
- * 다른 패키지(추천·사용액 연결)가 다시 쓸 수 있게 공개한다.
+ * 다른 패키지가 다시 쓸 수 있게 공개한다. 월간 상태 요약과 추천 입력은 {@link #activityAfter}로 스냅샷 뒤 활동을 읽는다(#120).
  */
 @Service
 public class LedgerQueryService {
@@ -43,10 +46,14 @@ public class LedgerQueryService {
 
 	private final LedgerTransactionRepository transactionRepository;
 
+	private final LedgerUsageEffectRepository usageEffectRepository;
+
 	private final UserCardService userCardService;
 
-	public LedgerQueryService(LedgerTransactionRepository transactionRepository, UserCardService userCardService) {
+	public LedgerQueryService(LedgerTransactionRepository transactionRepository,
+			LedgerUsageEffectRepository usageEffectRepository, UserCardService userCardService) {
 		this.transactionRepository = transactionRepository;
+		this.usageEffectRepository = usageEffectRepository;
 		this.userCardService = userCardService;
 	}
 
@@ -72,6 +79,40 @@ public class LedgerQueryService {
 			.toList();
 		return new LedgerMonthView(month.toString(), rows.stream().map(LedgerQueryService::toItem).toList(),
 				coverage(cardIds, sources, month));
+	}
+
+	/**
+	 * 한 카드의 월간 상태 스냅샷 뒤 활동(#120, D-16). 기록 시각이 {@code snapshotAt}보다 뒤인 행 중 승인은 자기 거래일이, 취소는
+	 * 원 승인 행의 거래일이 그 달인 행을 행 ID 오름차순으로 돌려준다. 취소를 원 승인의 달에 귀속하므로 11월 승인을 12월에 취소하면
+	 * 11월 활동에 들어가고, 10월 승인의 11월 취소는 11월 활동에 들어가지 않는다(D-17, 관리자 승인 규칙). 같은 초에 기록된 행은
+	 * 스냅샷에 들어 있을 수 있으므로 넣지 않는다. 카드 소유 확인은 호출자가 한다.
+	 * @param user 현재 사용자
+	 * @param userCardId 보유 카드 ID. 형식이 틀리면 빈 목록
+	 * @param month 월간 상태의 달
+	 * @param snapshotAt 월간 상태 입력 시각(Asia/Seoul)
+	 * @return 스냅샷 뒤 행. 취소 행에는 원 승인 행의 버킷 차감액을 붙인다
+	 */
+	@Transactional(readOnly = true)
+	public List<LedgerActivity> activityAfter(CurrentUser user, String userCardId, YearMonth month,
+			LocalDateTime snapshotAt) {
+		Objects.requireNonNull(snapshotAt, "snapshotAt");
+		return UserCardId.parse(userCardId)
+			.map(cardId -> this.transactionRepository
+				.findActivityAfter(user.userId(), cardId, month.atDay(1), month.atEndOfMonth(), snapshotAt,
+						LedgerEntryType.APPROVAL, LedgerEntryType.CANCELLATION)
+				.stream()
+				.map(row -> new LedgerActivity(row.getEntryType(), row.getAmountWon(),
+						effectsOf((row.getEntryType() == LedgerEntryType.CANCELLATION) ? row.getOriginalLedgerId()
+								: row.getLedgerId())))
+				.toList())
+			.orElse(List.of());
+	}
+
+	private List<LedgerUsageEffect> effectsOf(Long ledgerId) {
+		return this.usageEffectRepository.findByLedgerIdOrderByUsageEffectIdAsc(ledgerId)
+			.stream()
+			.map(effect -> new LedgerUsageEffect(effect.getLimitBucketId(), effect.getDeductionWon()))
+			.toList();
 	}
 
 	private List<Long> targetCards(CurrentUser user, String userCardId) {

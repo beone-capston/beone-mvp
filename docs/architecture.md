@@ -82,7 +82,7 @@ com.beone.api
 
 ```text
 업무 API
-    → RecommendationEngine(benefit.engine) → DefaultRecommendationEngine [#80, 추천 API 연결 #114: 주문·보유 카드·월간 상태·결제 전 설정 입력, 거래 원장·예정 지출 입력은 후속]
+    → RecommendationEngine(benefit.engine) → DefaultRecommendationEngine [#80, 추천 API 연결 #114: 주문·보유 카드·월간 상태·결제 전 설정 입력, 스냅샷 뒤 모의 원장 승인 차감액 반영 #120, CODEF 거래·예정 지출 입력은 후속]
 주문·보유 카드·거래 원장·월별 상태·예정 지출
     → RecommendationInput
 카드 약관과 검증된 규칙 버전

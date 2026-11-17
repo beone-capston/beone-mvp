@@ -3,6 +3,7 @@ package com.beone.api.order.application;
 import com.beone.api.order.persistence.OrderEntity;
 import com.beone.api.order.persistence.OrderRepository;
 import com.beone.api.user.application.CurrentUser;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,9 +20,18 @@ public class OrderService {
 
 	private final OrderClock orderClock;
 
-	public OrderService(OrderRepository orderRepository, OrderClock orderClock) {
+	private final ObjectProvider<LatestRecommendationLookup> latestRecommendationLookup;
+
+	/**
+	 * @param orderRepository 주문 저장소
+	 * @param orderClock 생성 시각 시계
+	 * @param latestRecommendationLookup 마지막 추천 조회 포트. 추천이 주문에 의존하므로 순환을 피하려고 부를 때 찾는다(#120)
+	 */
+	public OrderService(OrderRepository orderRepository, OrderClock orderClock,
+			ObjectProvider<LatestRecommendationLookup> latestRecommendationLookup) {
 		this.orderRepository = orderRepository;
 		this.orderClock = orderClock;
+		this.latestRecommendationLookup = latestRecommendationLookup;
 	}
 
 	/** 현재 사용자의 주문을 {@link OrderStatus#CREATED} 상태로 만든다. */
@@ -43,6 +53,17 @@ public class OrderService {
 			.flatMap(id -> this.orderRepository.findByOrderIdAndUserId(id, user.userId()))
 			.map(OrderService::toDetail)
 			.orElseThrow(OrderNotFoundException::new);
+	}
+
+	/**
+	 * 이 주문으로 마지막에 계산한 추천 ID(docs/api/orders.md {@code latestRecommendationId}, #120). 주문 소유 확인은 {@link #get}이 한다.
+	 * @return 추천 외부 ID 또는 계산한 추천이 없으면 {@code null}
+	 */
+	@Transactional(readOnly = true)
+	public String latestRecommendationId(CurrentUser user, String orderId) {
+		LatestRecommendationLookup lookup = this.latestRecommendationLookup
+			.getIfAvailable(() -> LatestRecommendationLookup.NONE);
+		return OrderId.parse(orderId).flatMap(id -> lookup.latestRecommendationId(user, id)).orElse(null);
 	}
 
 	/**

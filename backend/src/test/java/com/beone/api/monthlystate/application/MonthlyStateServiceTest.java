@@ -30,6 +30,9 @@ import com.beone.api.card.application.RecommendationEligibility;
 import com.beone.api.card.application.UserCardMapping;
 import com.beone.api.card.application.UserCardService;
 import com.beone.api.card.application.UserCardView;
+import com.beone.api.ledger.application.LedgerActivity;
+import com.beone.api.ledger.application.LedgerEntryType;
+import com.beone.api.ledger.application.LedgerQueryService;
 import com.beone.api.monthlystate.persistence.BucketUsageEntity;
 import com.beone.api.monthlystate.persistence.BucketUsageRepository;
 import com.beone.api.monthlystate.persistence.MonthlyStateEntity;
@@ -70,6 +73,8 @@ class MonthlyStateServiceTest {
 
 	private final UserCardService userCards = mock(UserCardService.class);
 
+	private final LedgerQueryService ledger = mock(LedgerQueryService.class);
+
 	private final List<BucketUsageEntity> savedUsages = new ArrayList<>();
 
 	private final List<ServiceSelectionEntity> savedSelections = new ArrayList<>();
@@ -82,7 +87,7 @@ class MonthlyStateServiceTest {
 		CardProductService products = new CardProductService(RuleCatalogLoader.load(),
 				new StaticListableBeanFactory().getBeanProvider(Clock.class));
 		this.service = new MonthlyStateService(this.states, this.usages, this.selections, this.userCards, products,
-				clock);
+				this.ledger, clock);
 		given(this.states.saveAndFlush(any())).willAnswer(invocation -> {
 			MonthlyStateEntity entity = invocation.getArgument(0);
 			if (entity.getMonthlyStateId() == null) {
@@ -124,6 +129,25 @@ class MonthlyStateServiceTest {
 		assertThat(view.noServiceSelection()).isNull();
 		assertThat(view.registeredOn().source()).isEqualTo(StateSource.UNKNOWN);
 		assertThat(view.afterSnapshot()).isNull();
+	}
+
+	@Test
+	void afterSnapshotSummarizesLedgerActivityAfterTheSnapshotWithoutChangingStateValues() {
+		// docs/api/monthly-states.md 109행: 화면 표시용 요약. 승인 금액은 승인 합계이고 취소는 건수로만 센다(관리자 승인 규칙)
+		holds(confirmed("uc-11", "09271"));
+		MonthlyStateEntity existing = new MonthlyStateEntity(1L, 11L, "2026-11");
+		existing.replace("09271", NOW, 5000L, OCTOBER.from(), OCTOBER.to(), null, null, null, null, false, null);
+		ReflectionTestUtils.setField(existing, "monthlyStateId", 5L);
+		given(this.states.findByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11")).willReturn(Optional.of(existing));
+		given(this.ledger.activityAfter(ME, "uc-11", NOVEMBER, NOW)).willReturn(List.of(
+				new LedgerActivity(LedgerEntryType.APPROVAL, 30000, List.of()),
+				new LedgerActivity(LedgerEntryType.APPROVAL, 12000, List.of()),
+				new LedgerActivity(LedgerEntryType.CANCELLATION, -4000, List.of())));
+
+		MonthlyStateView view = this.service.get(ME, "uc-11", NOVEMBER);
+
+		assertThat(view.afterSnapshot()).isEqualTo(new MonthlyStateView.AfterSnapshot(2, 42000, 1));
+		assertThat(view.previousMonthPerformanceWon()).isEqualTo(StateValue.manual(5000L, OCTOBER, NOW));
 	}
 
 	@Test
@@ -204,7 +228,7 @@ class MonthlyStateServiceTest {
 		MonthlyStateService service = new MonthlyStateService(this.states, this.usages, this.selections,
 				this.userCards, new CardProductService(RuleCatalogLoader.load(),
 						new StaticListableBeanFactory().getBeanProvider(Clock.class)),
-				ticking);
+				this.ledger, ticking);
 		holds(confirmed("uc-11", "09271"));
 		AtomicInteger readsWhenLocking = new AtomicInteger(-1);
 		given(this.states.findForUpdateByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11")).willAnswer(invocation -> {

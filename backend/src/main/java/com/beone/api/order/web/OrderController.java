@@ -1,6 +1,7 @@
 package com.beone.api.order.web;
 
 import com.beone.api.common.web.ApiResponse;
+import com.beone.api.order.application.OrderDetail;
 import com.beone.api.order.application.OrderService;
 import com.beone.api.user.application.CurrentUser;
 import jakarta.validation.Valid;
@@ -39,7 +40,9 @@ public class OrderController {
 
 	@GetMapping("/{orderId}")
 	public ApiResponse<OrderDetailResponse> getOrder(CurrentUser currentUser, @PathVariable String orderId) {
-		return ApiResponse.of(OrderDetailResponse.from(this.orderService.get(currentUser, orderId)));
+		OrderDetail order = this.orderService.get(currentUser, orderId);
+		return ApiResponse.of(OrderDetailResponse.from(order,
+				this.orderService.latestRecommendationId(currentUser, order.orderId())));
 	}
 
 }

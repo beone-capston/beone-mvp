@@ -23,6 +23,7 @@ import java.util.Optional;
 import com.beone.api.benefit.engine.BenefitAmountOutput;
 import com.beone.api.benefit.engine.BucketUsageEffect;
 import com.beone.api.benefit.engine.DefaultRecommendationEngine;
+import com.beone.api.benefit.engine.EngineRequest;
 import com.beone.api.benefit.engine.EngineResult;
 import com.beone.api.benefit.engine.ExcludedCard;
 import com.beone.api.benefit.engine.RecommendationEngine;
@@ -30,6 +31,10 @@ import com.beone.api.benefit.rule.loading.RuleCatalogLoader;
 import com.beone.api.card.application.MappingStatus;
 import com.beone.api.card.application.UserCardService;
 import com.beone.api.card.application.UserCardView;
+import com.beone.api.ledger.application.LedgerActivity;
+import com.beone.api.ledger.application.LedgerEntryType;
+import com.beone.api.ledger.application.LedgerQueryService;
+import com.beone.api.ledger.application.LedgerUsageEffect;
 import com.beone.api.monthlystate.application.DatePeriod;
 import com.beone.api.monthlystate.application.MonthlyStateService;
 import com.beone.api.monthlystate.application.MonthlyStateView;
@@ -80,6 +85,8 @@ class RecommendationServiceTest {
 
 	private final PaymentPreferenceService preferences = mock(PaymentPreferenceService.class);
 
+	private final LedgerQueryService ledger = mock(LedgerQueryService.class);
+
 	private final List<RecommendationCardBasisEntity> savedBases = new ArrayList<>();
 
 	private RecommendationEntity saved;
@@ -89,7 +96,7 @@ class RecommendationServiceTest {
 	@BeforeEach
 	void setUp() {
 		this.service = new RecommendationService(this.recommendations, this.bases, this.orders, this.cards, this.states,
-				this.preferences, new DefaultRecommendationEngine(RuleCatalogLoader.load()), JsonMapper.builder().build(),
+				this.preferences, this.ledger, new DefaultRecommendationEngine(RuleCatalogLoader.load()), JsonMapper.builder().build(),
 				Clock.fixed(Instant.parse("2026-10-15T01:41:00Z"), ZoneOffset.UTC));
 		given(this.orders.get(ME, "ord-5001")).willReturn(C01_ORDER);
 		given(this.preferences.get(ME)).willReturn(PaymentPreferenceView.NOT_SET);
@@ -275,7 +282,7 @@ class RecommendationServiceTest {
 				null, List.of(), List.of(new BucketUsageEffect("uc-11", "STORE", 500L),
 						new BucketUsageEffect("uc-11", "FUEL", null)));
 		RecommendationService stubbed = new RecommendationService(this.recommendations, this.bases, this.orders,
-				this.cards, this.states, this.preferences, stub, JsonMapper.builder().build(),
+				this.cards, this.states, this.preferences, this.ledger, stub, JsonMapper.builder().build(),
 				Clock.fixed(Instant.parse("2026-10-15T01:41:00Z"), ZoneOffset.UTC));
 		holds(EngineInputAssemblerTest.card("uc-11", MappingStatus.UNMAPPED, null, false));
 		given(this.states.get(eq(ME), eq("uc-11"), eq(YearMonth.of(2026, 10)))).willReturn(c01State("uc-11"));
@@ -287,6 +294,45 @@ class RecommendationServiceTest {
 				new RecommendationCalculation.BucketDeduction("uc-11", "STORE", 500L),
 				new RecommendationCalculation.BucketDeduction("uc-11", "FUEL", null));
 		assertThat(calculation.deductionsOf("uc-99")).isEmpty();
+	}
+
+	@Test
+	void approvalsAfterTheSnapshotAreAddedToTheEngineBucketInputButNotWithoutASnapshot() {
+		// docs/api/monthly-states.md 97·132행: 스냅샷 뒤 모의 승인 차감액만 사용액에 더한다. 스냅샷이 없으면 원장을 읽지 않는다(#120)
+		List<EngineRequest> seen = new ArrayList<>();
+		RecommendationEngine stub = request -> {
+			seen.add(request);
+			return new EngineResult(request.decisionDate(), "NOT_DETERMINED", false, null, List.of(),
+					List.of(excluded("uc-11"), excluded("uc-12")), null, List.of(), List.of());
+		};
+		RecommendationService stubbed = new RecommendationService(this.recommendations, this.bases, this.orders,
+				this.cards, this.states, this.preferences, this.ledger, stub, JsonMapper.builder().build(),
+				Clock.fixed(Instant.parse("2026-10-15T01:41:00Z"), ZoneOffset.UTC));
+		holds(EngineInputAssemblerTest.card("uc-11", MappingStatus.USER_CONFIRMED, "09271", false),
+				EngineInputAssemblerTest.card("uc-12", MappingStatus.USER_CONFIRMED, "09174", false));
+		DatePeriod october = new DatePeriod(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31));
+		MonthlyStateView withStore = new MonthlyStateView("uc-11", YearMonth.of(2026, 10), SAVED_AT,
+				StateValue.manual(0L, new DatePeriod(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)), SAVED_AT),
+				List.of(new MonthlyStateView.BucketUsage("STORE", StateValue.manual(5000L, october, SAVED_AT))),
+				StateValue.unknown(), List.of(), ServiceSelectionStatus.UNKNOWN, null, StateValue.unknown(), null);
+		given(this.states.get(eq(ME), eq("uc-11"), eq(YearMonth.of(2026, 10)))).willReturn(withStore);
+		given(this.states.get(eq(ME), eq("uc-12"), eq(YearMonth.of(2026, 10)))).willReturn(emptyState("uc-12"));
+		given(this.ledger.activityAfter(ME, "uc-11", YearMonth.of(2026, 10), SAVED_AT)).willReturn(List.of(
+				new LedgerActivity(LedgerEntryType.APPROVAL, 20000, List.of(new LedgerUsageEffect("STORE", 1000L)))));
+
+		stubbed.calculate(ME, "ord-5001");
+
+		assertThat(seen).singleElement().satisfies(request -> {
+			assertThat(request.cards().get(0).monthlyState().limitBucketUsages()).singleElement()
+				.satisfies(usage -> assertThat(usage.usedWon().value()).isEqualTo(6000L));
+			assertThat(request.cards().get(1).monthlyState().limitBucketUsages()).isEmpty();
+		});
+		verify(this.ledger, never()).activityAfter(eq(ME), eq("uc-12"), any(), any());
+	}
+
+	private static ExcludedCard excluded(String userCardId) {
+		return new ExcludedCard(userCardId, null, "MAPPING_UNCONFIRMED", "매핑 확인 필요", null,
+				BenefitAmountOutput.needsConfirmation(), null, null, List.of());
 	}
 
 	private void holds(UserCardView... held) {

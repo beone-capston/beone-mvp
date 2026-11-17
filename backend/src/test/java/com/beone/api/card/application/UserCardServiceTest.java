@@ -56,6 +56,8 @@ class UserCardServiceTest {
 
 	private RepresentativeCardGuard guard;
 
+	private RecommendationInvalidationLookup invalidations;
+
 	private UserCardService service;
 
 	@BeforeEach
@@ -63,12 +65,14 @@ class UserCardServiceTest {
 		this.repository = mock(UserCardRepository.class);
 		this.cardProductService = mock(CardProductService.class);
 		this.guard = mock(RepresentativeCardGuard.class);
+		this.invalidations = mock(RecommendationInvalidationLookup.class);
 		DemoUserService demoUserService = mock(DemoUserService.class);
 		given(demoUserService.listDemoUsers()).willReturn(List.of(
 				new DemoUserProfile(DemoUser.MY_CARDS, "내 카드", PortfolioType.REAL, false),
 				new DemoUserProfile(DemoUser.VIRTUAL_PORTFOLIO, "가상 포트폴리오", PortfolioType.SYNTHETIC, true)));
 		given(this.repository.saveAndFlush(any())).willAnswer(invocation -> withId(invocation.getArgument(0), 1001L));
 		this.service = new UserCardService(this.repository, this.cardProductService, demoUserService, this.guard,
+				() -> this.invalidations,
 				Clock.fixed(Instant.parse("2026-11-17T01:30:00Z"), ZoneOffset.UTC));
 	}
 
@@ -305,6 +309,43 @@ class UserCardServiceTest {
 		assertThatThrownBy(() -> this.service.update(MY_CARDS, "uc-1001", new UserCardChange(null, true)))
 			.isInstanceOf(IllegalStateException.class);
 		verify(this.repository, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void mappingChangeListsRecommendationsThatWereValidBeforeAndAreNowInvalidated() {
+		// docs/api/cards.md 415행: 변경 전 유효 목록을 저장 전에 받고, 저장 뒤 그중 MAPPING_CHANGED가 된 것만 돌려준다(#120)
+		givenCard(unmappedCard(1001L));
+		given(this.invalidations.validUsing(MY_CARDS, 1001L)).willReturn(List.of("rec-1", "rec-2"));
+		given(this.invalidations.invalidatedByMapping(MY_CARDS, List.of("rec-1", "rec-2"))).willReturn(List.of("rec-2"));
+
+		UserCardChangeResult result = this.service.changeMapping(MY_CARDS, "uc-1001",
+				new MappingChange(MappingStatus.USER_CONFIRMED, "09174", ConfirmationMethod.MANUAL_SELECTION));
+
+		InOrder order = inOrder(this.invalidations, this.repository);
+		order.verify(this.invalidations).validUsing(MY_CARDS, 1001L);
+		order.verify(this.repository).saveAndFlush(any());
+		order.verify(this.invalidations).invalidatedByMapping(MY_CARDS, List.of("rec-1", "rec-2"));
+		assertThat(result.invalidatedRecommendationIds()).containsExactly("rec-2");
+	}
+
+	@Test
+	void actualExclusionChangeListsInvalidatedRecommendationsButRenameDoesNotAsk() {
+		givenCard(confirmedCard(1001L));
+		given(this.invalidations.validUsing(MY_CARDS, 1001L)).willReturn(List.of("rec-7"));
+		given(this.invalidations.invalidatedByMapping(MY_CARDS, List.of("rec-7"))).willReturn(List.of("rec-7"));
+
+		UserCardChangeResult rename = this.service.update(MY_CARDS, "uc-1001", new UserCardChange("새 이름", null));
+		verifyNoInteractions(this.invalidations);
+		UserCardChangeResult excluded = this.service.update(MY_CARDS, "uc-1001", new UserCardChange(null, true));
+
+		assertThat(rename.invalidatedRecommendationIds()).isNull();
+		assertThat(excluded.invalidatedRecommendationIds()).containsExactly("rec-7");
+	}
+
+	@Test
+	void defaultInvalidationLookupFindsNothing() {
+		assertThat(RecommendationInvalidationLookup.NONE.validUsing(MY_CARDS, 1001L)).isEmpty();
+		assertThat(RecommendationInvalidationLookup.NONE.invalidatedByMapping(MY_CARDS, List.of("rec-1"))).isEmpty();
 	}
 
 	// 해제
