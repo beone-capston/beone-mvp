@@ -34,6 +34,7 @@
 - #105 → PR #106: 카드 상품 목록·상세 API(`card` 패키지 상품 조회, `RuleCatalog` 읽기, 테이블·Flyway 없음, `RuleCatalog.cardIds()` 추가). `develop` 병합(`cda31ca`). [작업 기록](105-card-products-api.md)
 - #104 → PR: 주문 생성·조회와 예정 소비 API(`order` 패키지, Flyway `V3`(#105 병합 뒤 번호 확인), 예정 소비는 저장만 D-18 K4). `develop` 대상, 병합 전. [작업 기록](104-orders-planned-spends-api.md)
 - #111 → PR: 결제 전 설정 조회·변경 API와 대표 카드 보호(`preference` 패키지, Flyway `V6__payment_preferences.sql` 임시 번호, card는 409 연결 최소 변경, 추천·모의 승인 사용은 B2·B3). `develop` 대상, 병합 전. [작업 기록](111-payment-preference-api.md)
+- #114 → PR: 추천 계산·조회 API(`recommendation` 패키지, 엔진 입구만 호출, Flyway `V7__recommendations.sql` 임시 번호, 조회 때 지연 무효화, card·order 쪽 추천 연결과 모의 승인 연동은 후속). `develop` 대상, 병합 전. [작업 기록](114-recommendations-api.md)
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.
