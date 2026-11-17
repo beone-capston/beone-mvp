@@ -364,6 +364,16 @@ class UserCardServiceTest {
 	}
 
 	@Test
+	void paymentLockLocksEveryActiveCardOfTheUserInIdOrder() {
+		// #122: 모의 승인이 재계산 전에 이 사용자의 해제하지 않은 카드 행 전부를 ID 오름차순 잠금 조회로 잠근다
+		given(this.repository.lockActiveByUserIdOrderByUserCardId(1L))
+			.willReturn(List.of(confirmedCard(1001L), unmappedCard(1003L)));
+
+		assertThat(this.service.lockHeldCardsForPayment(MY_CARDS)).isEqualTo(2);
+		verify(this.repository).lockActiveByUserIdOrderByUserCardId(1L);
+	}
+
+	@Test
 	void defaultGuardBlocksNothing() {
 		RepresentativeCardGuard.NONE.beforeExclusion(MY_CARDS, 1L);
 		RepresentativeCardGuard.NONE.beforeRelease(MY_CARDS, 1L);
