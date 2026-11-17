@@ -4,7 +4,7 @@
 
 `codef`는 CODEF 카드 API 응답 본문을 BeONE이 쓸 수 있는 비민감 값으로 해석하는 **응답 해석 경계**입니다(#41). CODEF(금융기관 데이터를 대신 조회해 주는 외부 API)의 요청 전송, OAuth 토큰(접근 권한을 토큰으로 위임하는 인증 방식의 발급값), 암호화, 계정 연결(connectedId: CODEF가 연결된 금융기관 계정을 가리키는 식별값)과는 분리되어 있으며, 이 패키지는 응답 문자열을 받아 결과 코드 분류와 `data` 항목만 돌려줍니다. 그 앞단의 전송 단계 해석(#43)은 HTTP 상태 코드와 응답 본문을 받아 상태를 구분하고 본문을 URL 디코딩합니다. 실제 HTTP 호출은 하지 않습니다.
 
-[CODEF 연결 API](#codef-연결-api-126)(#126)는 연결 상태 조회·계정 연결·연결 해제를 local·demo에서 가짜 게이트웨이로만 처리합니다. 아래 "구현하지 않았습니다"는 해석·전송 계층 기준이며, 실 계정 연결·RSA 암호화는 여전히 없습니다.
+[CODEF 연결 API](#codef-연결-api-126)(#126)는 연결 상태 조회·계정 연결·연결 해제를, [CODEF 조회·동기화 API](#codef-조회동기화-api-129)(#129)는 보유카드·승인내역·실적 조회와 codef 전용 저장을 local·demo에서 가짜 게이트웨이로만 처리합니다. 아래 "구현하지 않았습니다"는 해석·전송 계층 기준이며, 실 계정 연결·실 조회·RSA 암호화는 여전히 없습니다.
 
 구현된 범위는 승인내역·보유카드·실적조회 응답의 해석, 공통 결과 코드의 분류, 빈 값·금액·코드 값의 보수적 해석, 그리고 그 앞단의 [전송 계층](#전송-계층)(토큰 발급·캐시, 상품 요청, 시간 초과, 호출 상한)입니다. 계정 연결, RSA 암호화, 추가 인증 2차 요청, DB 저장, 엔드포인트, BeONE 상태값(`StateValue`: 값과 출처·기준 기간을 함께 담는 `benefit` 도메인 타입)으로의 변환은 구현하지 않았습니다. 이 패키지의 테스트는 합성 응답만 쓰며 실제 응답 검증이 아닙니다.
 
@@ -308,6 +308,58 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/connection" \
 ```
 
 테스트: 단위 `CodefRegistrationsTest`(분류 전부), `FakeCodefGatewayTest`, `ConnectedIdCipherTest`(왕복·IV·다른 사용자·변조·다른 키), `EnvironmentConnectedIdKeySourceTest`, `CodefConnectionServiceTest`(최초·재연결 교체·실패 시 유지·저장 실패 정리·비밀번호 지움·키 없음·해제), 웹 `CodefConnectionApiWebTest`(계약 예시 JSON, 실패 응답 전부, 검증 400, 헤더), `CodefConnectionProfileOffWebTest`(프로필 밖 404), 통합 `CodefConnectionIntegrationTest`(V10, 최초 201·재연결 200과 connectedId 교체·정리, 암호문 저장, 해제 204와 보유 카드 보존, 실패 시 유지, 포트폴리오 409, 사용자 분리, 자격 증명 컬럼 없음), `CodefConnectionWithoutKeyIntegrationTest`(키 없음 502, 저장 없음).
+
+## CODEF 조회·동기화 API (#129)
+
+`POST /api/v1/me/codef/syncs`입니다([계약](../api/codef.md#post-apiv1mecodefsyncs--codef-조회동기화)). 연결 API와 같이 **fixture·가짜 구현·로컬 HTTP·테스트 영속까지**이며 실 CODEF·실키·실계정은 쓰지 않습니다. 보유카드·승인내역·실적을 조회해 각각 매핑 전 보유 카드, codef 전용 승인 행, 카드사 조회 실적(참고)으로 옮깁니다. 조회는 요청 안에서 동기로 끝납니다(관리자 판단 P11). 이 절의 관리자 판단 K1·K2·P2·P6·P8·P9·Q1~Q8은 2026-11-18 C0·C3 확인에서 정한 것이고, P6은 사용자 직접 결정입니다.
+
+```text
+codef/
+├── application/
+│   ├── CodefSyncService             검사 → 조회(트랜잭션 밖) → 판정 → 짧은 저장 트랜잭션
+│   ├── CodefSyncGateway             보유카드·승인내역·실적 조회 경계(인터페이스). FakeCodefGateway가 함께 구현
+│   ├── CodefSyncPeriod              조회 기간 규칙(P9). 위반은 CodefSyncPeriodException(400)
+│   ├── CodefHeldCardMatcher         CODEF 보유카드 ↔ 기존 CODEF 보유 카드 대조(P8·Q1·Q2, 순수 함수)
+│   ├── ApprovalFingerprintKeySource 승인번호 HMAC 키 공급. 운영 구현 EnvironmentApprovalFingerprintKeySource(환경 변수)
+│   ├── HmacApprovalFingerprinter    승인번호 → HMAC-SHA256 소문자 16진수 64자(패키지 내부)
+│   ├── CodefSyncResult·CodefSyncTarget 결과와 부분 실패 대상
+│   └── CodefConnectionInvalidException·CodefReconnectRequiredException
+├── persistence/                     codef_syncs·codef_held_cards·codef_approval_rows·codef_performance_references(Flyway V12, 임시 번호)
+└── web/                             CodefSyncController, 요청·응답, 기존 오류 코드·처리기 확장
+```
+
+처리 흐름과 검사 순서:
+
+```text
+요청 본문·날짜 형식 400 → 가상 포트폴리오 409 PORTFOLIO_READ_ONLY → 기간 규칙 400 → 연결 없음 409 CODEF_NOT_CONNECTED
+→ RECONNECT_REQUIRED 상태 409 CODEF_RECONNECT_REQUIRED → 게이트웨이·connectedId 키 없음 502 CODEF_UNAVAILABLE
+→ 보유카드·승인내역(HMAC 키가 있을 때만)·실적 조회 → codef.sync로 대상별 판정
+→ 세 대상 모두 실패면 502(아무것도 저장 안 함), 일부 실패면 200 + partialFailures
+→ 저장 트랜잭션: 보유 카드 행(ID 오름차순) → 사용자 행 → 연결 행 잠금, 연결이 그사이 해제·교체됐으면 409 CODEF_NOT_CONNECTED
+→ codef_syncs 1행 → 보유 카드 → 승인 행 → 실적 참고값 → last_synced_at 갱신
+```
+
+- **보유카드(관리자 판단 K1·P8·Q1~Q3)**: 새 카드는 `user_cards`에 `holdingSource=CODEF`, `UNMAPPED`, 상품 ID 없음으로 만듭니다. 카드명으로 상품 후보를 정하지 않습니다(결정 20 R3). 같은 카드 판단 정보(카드명 원문, 발급일자 원문)는 `codef_held_cards`에 둡니다. 같은 (카드명, 발급일자) 묶음이 응답에 n장, 해제하지 않은 기존 CODEF 카드에 m장일 때 m=0이면 n장 모두 새로 만들고, n=1·m=1이면 그 기존 카드이며, 그 밖은 같은 카드를 정할 수 없어 건너뜁니다(중복 누적 방지). 발급일자는 둘 다 없음도 같은 값입니다. KB는 보유카드 발급일자를 주지 않으므로(보유카드!H14) KB에서는 사실상 카드명만으로 대조합니다. 카드명이 없거나 앞뒤 공백을 뗀 표시 이름이 1~30자가 아니면 보유 카드로 만들지 않고 이름을 자르거나 지어내지 않습니다(Q2). 해제한 카드는 대조 대상이 아니라서 다시 동기화하면 새 카드가 생깁니다. 응답 `newCandidates`에는 이번에 새로 만든 카드만 담습니다.
+- **승인내역(관리자 판단 K2·Q4, 결정 20 R1·R2, 결정 22 R7·R8·#93)**: [`CodefLedgerCandidateBuilder`](../../backend/src/main/java/com/beone/api/codef/sync/CodefLedgerCandidateBuilder.java)로 판정해 받아들인 행(정상, Type1 전액 취소, 짝지은 Type2 취소)만 `codef_approval_rows`에 넣습니다. `ledger_transactions`와 원장 조회는 바꾸지 않습니다. 원장 조회 coverage에는 새 카드가 나오지만 CODEF는 지금처럼 `complete=false`입니다. 이전 기록은 이 사용자의 저장된 승인 행이며, 같은 키·같은 종류는 `skippedDuplicates`, 정상으로 기록된 키가 Type1 전액 취소로 바뀌면 그 행의 종류만 바꾸고 `imported`에 셉니다.
+- **불완전 행은 저장하지 않습니다.** 응답 `incompleteRows`에만 담고, 다음 동기화에서 그때의 응답으로 다시 판정합니다(결정 22의 "기간이 바뀐 재조회의 Type2 재표시" 보완은 하지 않았습니다). 보유 카드에 붙지 않은 행(카드 미연결, 건너뛴 카드의 행)도 숨기지 않고 `userCardId=null`로 담습니다. 건너뛴 카드에 붙은 행은 판정이 받아들여도 붙일 보유 카드가 없어 `UNDETERMINED_ROW`로 둡니다.
+- **승인번호 HMAC 키(2026-11-18 사용자 직접 결정 P6, 결정 22 1안)**: 프로세스 환경 변수 `BEONE_CODEF_APPROVAL_HMAC_KEY`(Base64로 적은 32바이트)에서 읽고 `application*.yml`에는 두지 않습니다. local·demo에도 고정 기본값이 없습니다. 키가 없으면 승인내역을 조회하지 않고(과금 회피) 저장하지 않으며 `partialFailures`에 `APPROVALS`·`CODEF_UNAVAILABLE`로 알리고 `imported`·`skippedDuplicates`는 `null`입니다. 성공이나 완전 수집으로 보이게 하지 않습니다. 승인번호 원문은 저장·로그·응답에 남기지 않고 지문만 저장하며, DB CHECK가 64자 소문자 16진수만 받습니다. 키가 바뀌면 이전 지문과 비교가 끊깁니다. 키 회전(이전 키 병행 비교)과 운영 키 공급은 별도 승인이며 구현하지 않았습니다. 테스트는 합성 키를 주입합니다.
+- **실적(D-16, 관리자 판단 Q5)**: 실적현황 하나당 `performances[]` 항목 하나이고 `label`은 "카드사 조회 실적(참고)", `usedInCalculation`은 항상 `false`입니다. 확인하지 못한 금액·날짜는 `null`이며 혜택·실적현황 목록이 누락·형식 오류면 값을 모르는 항목 하나를 남겨 0건과 구분합니다. `codef_performance_references`에 동기화마다 이력으로 저장하고 `monthly_states`에는 넣지 않습니다.
+- **부분 실패**: 실패한 대상은 `partialFailures[]`(`target`, `code`=`CODEF_UNAVAILABLE`, 공개 문구)에 담고, 그 대상의 건수는 `null`로 두어 0건과 구분합니다. 추가 인증 필요 등 연결 API에서 502로 묶은 분류도 같은 코드입니다(관리자 판단 P1).
+- **기간(관리자 판단 P9)**: 생략하면 서울 기준 이번 달 1일~오늘, `to`만 없으면 오늘, `from`만 없으면 `to`가 속한 달 1일입니다. `to`가 오늘보다 늦으면 400(`field`=`to`), `from`이 `to`보다 늦으면 400, `from < to.minusMonths(12).plusDays(1)`이면 400(관계 오류는 `field`=`null`)입니다. 짝을 맞추려고 기간을 넓히지 않습니다.
+- **재연결 필요(관리자 판단 P2)**: 게이트웨이가 연결 무효를 알리면 연결 상태를 `RECONNECT_REQUIRED`로 바꾸고 409입니다. 지금은 가짜 게이트웨이만 이 결과를 내며 실 CODEF 결과 코드와의 대응은 없습니다. 다음 연결 성공이 `CONNECTED`로 돌립니다.
+- **가상 포트폴리오(관리자 판단 Q7)**: 409 `PORTFOLIO_READ_ONLY`입니다. [docs/api.md](../api.md#업무-오류-코드)의 "가상 포트폴리오의 CODEF 쓰기 요청" 규칙에 따른 것이며 계약 syncs 실패 목록에도 반영했습니다.
+- **동시성(관리자 판단 Q8)**: CODEF 조회는 트랜잭션 밖입니다. 저장은 보유 카드 행 → 사용자 행 → 연결 행 순으로 잠급니다. 모의 승인(주문 → 보유 카드 → 원장 삽입의 사용자 행 공유 잠금)과 보유 카드 잠금 순서를 맞춰 교착을 피하고, 같은 사용자의 동시 동기화·카드 해제는 차례로 처리합니다. 중복 판단 키의 유니크 제약(`uk_codef_approval_rows_key`)이 마지막 방어선입니다. 카드명 칼럼은 응답 문자열을 그대로 비교하려고 후행 공백까지 구분하는 `utf8mb4_0900_bin`(NO PAD)입니다. `utf8mb4_bin`은 후행 공백을 무시해 쓰지 않았습니다.
+- **card 패키지 접근(관리자 판단 P8의 최소 접근)**: [`UserCardService`](../../backend/src/main/java/com/beone/api/card/application/UserCardService.java)의 `lockHeldCardsForCodefSync`(해제하지 않은 보유 카드 잠금, CODEF 카드 ID 반환)와 `registerCodefCard`(CODEF·UNMAPPED 카드 생성), [`UserCardEntity.codef`](../../backend/src/main/java/com/beone/api/card/persistence/UserCardEntity.java)만 더했습니다. `user_cards` 스키마는 바꾸지 않았습니다.
+- **가짜 게이트웨이 조회**: `classpath:codef/fake/`의 합성 fixture(실제 카드명·승인번호 형식을 복사하지 않음)를 전송 계층과 같은 해석기로 읽습니다. 기본 시나리오는 카드 3장(그중 1장은 30자를 넘어 건너뜀), 승인 5행(정상, Type2 짝, 부분취소 코드, 건너뛴 카드의 행), 카드 A의 전월 실적 1건입니다. 승인 사용일자는 요청 시작일, 실적 기간은 서울 기준 전월로 채웁니다. 연결 때 쓴 합성 아이디로 동기화 시나리오를 고릅니다: `fake-sync-reconnect`(연결 무효), `fake-sync-unavailable`(세 조회 모두 실패), `fake-sync-partial`(실적만 실패). 서버를 다시 띄워 모르는 connectedId는 기본 시나리오입니다.
+
+```bash
+# local 프로필 서버에서 연결한 뒤. 두 키 모두 합성 값을 직접 넣어 실행한다(저장소·로그에 실키를 남기지 않는다)
+curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
+  -H "X-BeONE-Demo-User: MY_CARDS" -H "Content-Type: application/json" \
+  -d '{"from":"2026-11-01","to":"2026-11-04"}'
+```
+
+테스트: 단위 `CodefSyncPeriodTest`(생략·한쪽 생략·오늘 이후·역순·12개월 경계·월말), `HmacApprovalFingerprinterTest`(Python으로 따로 계산한 값, 원문 미포함, 키 길이), `EnvironmentApprovalFingerprintKeySourceTest`, `CodefHeldCardMatcherTest`(새로·같은 카드·발급일자 구분·정확 비교·n·m 조합·이름 규칙·코드 포인트), `CodefSyncServiceHelpersTest`(실적 펼치기, 부분 실패 대상), `FakeCodefGatewayTest`(fixture 조회·시나리오), 웹 `CodefSyncApiWebTest`(계약 예시 JSON, 부분 실패·null 건수, 미연결 행 `userCardId=null`, 본문 생략, 날짜 형식 400, 기간 400, 실패 응답 전부, 헤더), `CodefSyncProfileOffWebTest`(프로필 밖 404), 통합 `CodefSyncIntegrationTest`(V12, 첫 동기화 저장 내용과 응답, 원장 불변, 승인번호 원문 없음, 재동기화 중복 없음, 해제 카드 재생성, 부분 실패, 전체 실패 502, 재연결 필요, 포트폴리오·미연결·기간 400, 요청 기간 전달, 사용자 분리), `CodefSyncRecheckIntegrationTest`(정상→Type1 갱신·이미 기록·Type1→정상 모순·취소금액 불일치·새 행, 같은 이름 2장 대조), `CodefSyncWithoutHmacKeyIntegrationTest`(HMAC 키 없음).
 
 ## 제약과 후속 작업
 

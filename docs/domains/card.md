@@ -20,7 +20,7 @@
 계획·미구현(자세한 내용은 [보유 카드](#보유-카드)의 "아직 하지 않는 것"):
 
 - 매핑·추천 제외 변경에 따른 이전 추천 무효화: 추천(B2)에서 연결합니다.
-- CODEF 보유카드(`holdingSource=CODEF`)와 후보 매핑(`CANDIDATE`): 2차 CODEF 작업입니다.
+- CODEF 후보 매핑(`CANDIDATE`): 카드명으로 상품 후보를 정하지 않기로 해(결정 20 R3) 만들지 않습니다. CODEF 보유카드(`holdingSource=CODEF`, `UNMAPPED`)는 CODEF 동기화(#129)가 만듭니다.
 
 ## 핵심 용어
 
@@ -30,8 +30,8 @@
 - **규칙 상태(`ruleStatus`)**: `VERIFIED`(판정일에 유효한 검증 규칙 있음), `RULE_EXPIRED`(규칙은 있지만 판정일을 포함하는 버전 없음), `NO_VERIFIED_RULE`(검증 규칙 없음). 판정 순서는 `RuleCatalog.select`를 그대로 따릅니다.
 - **지원 상태(`supportStatus`)**: 서비스 하나를 BeONE이 계산할 수 있는 범위인지([D-18](../decisions.md) K1). 범위 밖은 계산하지 않고 `확인 필요`로 둡니다.
 - **보유 카드(`userCardId`)**: 사용자가 가진 카드 한 장. ID는 `uc-` 뒤에 저장소 번호를 붙인 문자열입니다(예: `uc-1001`). 카드번호·끝 4자리·CVV·유효기간은 받지도 저장하지도 않습니다(D-14 ⑨).
-- **보유 출처(`holdingSource`)**: `MANUAL`(수동 등록), `CODEF`(2차), `SYNTHETIC`(가상 포트폴리오 시드).
-- **매핑(`mapping`)**: 보유 카드가 규칙 카드 4종 중 무엇인지 연결한 기록([D-15](../decisions.md#d-15d-16d-17-확정-정책)). 상태는 `UNMAPPED`(모름)·`CANDIDATE`(CODEF 후보, 2차)·`USER_CONFIRMED`(사용자 확인)·`NOT_SUPPORTED`(4종 아님)이고 계산에는 `USER_CONFIRMED`만 씁니다. 가상 포트폴리오 카드는 규칙 카드 자체라 매핑이 없습니다(`mapping: null`).
+- **보유 출처(`holdingSource`)**: `MANUAL`(수동 등록), `CODEF`(CODEF 동기화 #129가 만듦, local·demo 가짜 게이트웨이만), `SYNTHETIC`(가상 포트폴리오 시드).
+- **매핑(`mapping`)**: 보유 카드가 규칙 카드 4종 중 무엇인지 연결한 기록([D-15](../decisions.md#d-15d-16d-17-확정-정책)). 상태는 `UNMAPPED`(모름)·`CANDIDATE`(CODEF 후보)·`USER_CONFIRMED`(사용자 확인)·`NOT_SUPPORTED`(4종 아님)이고 계산에는 `USER_CONFIRMED`만 씁니다. `CANDIDATE`는 상태 값으로만 있고, 지금은 CODEF 카드도 `UNMAPPED`로 만들며 후보 상품·후보 매핑을 만들지 않습니다(결정 20 R3). 가상 포트폴리오 카드는 규칙 카드 자체라 매핑이 없습니다(`mapping: null`).
 - **추천 비교 대상(`recommendationEligibility`)**: 이 카드가 추천 비교에 들어갈 수 있는지와 빠지는 이유(`USER_EXCLUDED`·`MAPPING_UNCONFIRMED`·`NO_SUPPORTED_RULE`).
 
 ## 패키지 구조
@@ -179,7 +179,7 @@ POST /api/v1/me/cards {"displayName":"청춘대로 톡톡","cardProductId":"0917
 ### 아직 하지 않는 것(한계)
 
 - **추천 무효화 목록(#120)**: 무효화 자체는 추천 조회 때의 지연 판정이 합니다. 보유 카드 응답의 목록은 recommendation이 card를 읽으므로 순환을 피하려고 조회 포트 [`RecommendationInvalidationLookup`](../../backend/src/main/java/com/beone/api/card/application/RecommendationInvalidationLookup.java)을 card에 두고 구현은 recommendation의 `RecommendationLinks`가 합니다. `UserCardService`는 변경 저장 전에 `validUsing`(이 카드를 근거로 쓰고 지금 유효한 추천)을, 저장 뒤 `invalidatedByMapping`(그중 이제 `MAPPING_CHANGED`인 추천)을 같은 트랜잭션에서 부릅니다. 이미 무효였던 추천(승인된 주문, 다른 카드·월간 상태 변경)은 담지 않으므로, 제외했다가 되돌리면 되돌린 응답은 `[]`입니다. 포트는 부를 때 찾고 구현 빈이 없으면 `[]`입니다. 카드 해제(`DELETE`)는 응답 본문이 없어 목록을 돌려주지 않습니다.
-- **CODEF(2차)**: `CODEF` 출처 카드와 `CANDIDATE` 매핑은 만들지 않습니다. 후보 열이 없으므로 CODEF 작업이 새 마이그레이션으로 후보 상품·근거 열을 더하고 `CODEF_CANDIDATE` 확인을 구현해야 합니다.
+- **CODEF(2차)**: `CODEF` 출처 카드는 [CODEF 동기화](codef.md#codef-조회동기화-api-129)(#129)가 `UserCardService.registerCodefCard`(`UserCardEntity.codef`, `UNMAPPED`·상품 없음, 호출자 트랜잭션 필수)로만 만듭니다. 사용자는 수동 카드와 같은 매핑 변경으로 상품을 고릅니다. 동기화 저장 전 잠금은 `lockHeldCardsForCodefSync`(모의 승인과 같은 ID 오름차순 잠금, CODEF 카드 ID 반환)입니다. `CANDIDATE` 매핑과 `CODEF_CANDIDATE` 확인은 후보 상품을 정하지 않으므로(결정 20 R3) 만들지 않았고 후보 열도 없습니다.
 - `USER_CARD_MAPPING_REQUIRED`(409)는 이 작업의 API가 쓰지 않습니다.
 - `V4`는 임시 번호입니다. 병합 직전 관리자가 다른 작업선과 순서를 정하면 번호를 올릴 수 있습니다(D-23 12항).
 

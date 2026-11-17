@@ -1,0 +1,9 @@
+{
+  "_fixture": {"synthetic": true, "use": "local·demo 가짜 게이트웨이 전용. 실제 카드명·카드번호를 복사하지 않은 합성 값", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "FAKE-TX-HELD"},
+  "data": [
+    {"resCardName": "가짜KB 테스트카드 A", "resSleepYN": "N"},
+    {"resCardName": "가짜KB 테스트카드 B", "resSleepYN": "N"},
+    {"resCardName": "가짜KB 테스트카드 이름이 서른 글자를 넘도록 길게 지은 합성 카드", "resSleepYN": "N"}
+  ]
+}
