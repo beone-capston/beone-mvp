@@ -28,3 +28,7 @@
 - 반영 1(인증과 재발급의 잠금 순서): 이메일 인증은 토큰 → 회원, 재발급은 회원 → 토큰 순으로 잠가 동시에 실행되면 교착할 수 있었습니다. 인증이 토큰의 회원 ID를 잠금 없이 읽고 회원을 먼저 잠근 뒤 토큰을 잠가 다시 확인하도록 바꿨습니다(`MemberRepository.findLockedById`, `AuthTokenRepository.findMemberIdByTokenHash`). `MemberRegistrationIntegrationTest#verificationRacingReissueNeverFailsWithServerError`(인증과 재발급을 15회 동시 실행)는 고치기 전 교착 500으로 실패했고, 고친 뒤 4번 돌려 모두 통과했습니다.
 - 반영 2(이메일 비교 규칙): `members.email`이 기본 `utf8mb4_0900_ai_ci`(악센트 무시)를 받아, `jose@example.com` 가입 뒤 `josé@example.com` 가입이 첫 계정에 인증메일을 다시 보냈습니다. V11에서 `email` 열을 `utf8mb4_bin`으로 지정했습니다(V11은 미병합 자기 파일). 소문자 정규화는 그대로입니다. `#accentedAddressIsADifferentAccount`는 고치기 전 실패, 고친 뒤 통과입니다.
 - 반영 3(구조 문서): `docs/architecture.md` auth 항목의 범위 밖 목록에서 가입·인증메일을 빼고 U3·U4만 남겼습니다.
+
+## 2026-11-18 · 최신 `develop` 병합(`6f9a4c9`, CODEF #126)
+- PR이 충돌 상태라 `origin/develop`을 merge했습니다. 충돌은 `docs/architecture.md` 구현 현황 문장과 `docs/progress/backend/README.md` 목록으로, 양쪽 내용을 모두 살렸습니다.
+- `V10__codef_connections.sql`이 먼저 들어와 Flyway 순서는 V9 → V10 → V11이 됐습니다. 병합 뒤 전체 검증을 다시 했습니다(결과는 PR 본문).

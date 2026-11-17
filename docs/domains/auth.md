@@ -169,5 +169,5 @@ curl -i -X POST http://localhost:8080/api/v1/auth/sign-up \
 - 만료 세션은 조회할 때만 지웁니다. 주기적 정리는 없습니다.
 - 미인증 계정·만료 토큰·메일 제한 기록의 정리 기한은 미정이라 지우지 않습니다. 쓴 토큰과 재발급으로 무효가 된 토큰은 바로 지웁니다.
 - 가짜 발송기는 서버 메모리에만 메일을 두므로 로컬에서 실제로 인증을 끝까지 해 보려면 테스트를 써야 합니다. 링크 주소 형식은 미정입니다.
-- `V11`은 임시 번호입니다. `V10`이 나중에 병합되면 Flyway 순서를 관리자가 병합 직전에 조정합니다.
+- `V11`은 임시 번호입니다. `develop`에 `V10__codef_connections.sql`(#126)이 먼저 병합돼 지금 순서는 V9 → V10 → V11입니다. 최종 번호는 관리자가 병합 직전에 확인합니다.
 - 테스트: `SessionTokensTest`·`AnonymousSessionPropertiesTest`·`AuthSessionServiceTest`·`SessionCookieTest`(단위), `AuthCsrfApiWebTest`·`AuthCsrfProfileOffWebTest`(웹 슬라이스, 테스트 전용 POST 경로로 CSRF 검사), `AuthSessionIntegrationTest`(실제 HTTP·MySQL, V9 적용·해시 저장·만료). U2: `PasswordHasherTest`(Argon2 참조 구현 시험 벡터)·`EmailAddressesTest`·`MemberIdsTest`·`MailRequestThrottleTest`·`NewPasswordTest`(단위), `MemberRegistrationApiWebTest`(웹 슬라이스), `MemberRegistrationIntegrationTest`(실제 HTTP·MySQL, V11 적용·해시만 저장·계정 존재 비공개·토큰 30분·1회용·재발급 무효·60초 합산·동시 가입·인증과 재발급 경합·악센트 주소 구분·로그에 원문 없음).
