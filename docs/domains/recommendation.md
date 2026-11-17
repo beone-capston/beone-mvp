@@ -87,7 +87,7 @@ EngineResult result = engine.recommend(new EngineRequest(order.orderDate(),
    2. `MAPPING_CHANGED`: 계산 때 넘긴 카드 중 하나라도 해제됐거나, 매핑 상태·규칙 상품 ID·**추천 제외 여부**가 바뀜
    3. `MONTHLY_STATE_CHANGED`: 계산 때 넘긴 카드 중 하나라도 주문 월의 월간 상태 스냅샷 시각이 바뀜(새로 입력, 다시 입력, 비우기 포함)
 
-결제 전 설정(선택 방식·대표 카드) 변경은 무효화 사유가 아닙니다. 계약의 `invalidatedReason` 값에 설정 변경이 없기 때문입니다. 저장한 추천은 **계산 당시의 결제 전 설정에 대해서만 유효**하며, 그때 넘긴 대표 카드는 `inputSnapshot.representativeUserCardId`에 남습니다. 설정을 바꿨다면 POST로 다시 계산합니다.
+결제 전 설정(선택 방식·대표 카드) 변경은 무효화 사유가 아닙니다. 계약의 `invalidatedReason` 값에 설정 변경이 없기 때문입니다. 저장한 추천은 **계산 당시의 결제 전 설정에 대해서만 유효**하며, `SELECTED`면 그때 넘긴 대표 카드가 `inputSnapshot.representativeUserCardId`에 남고, `NOT_DETERMINED`면 `inputSnapshot` 자체가 `null`이라 남지 않습니다. 설정을 바꿨다면 POST로 다시 계산합니다.
 
 ## 엔진 입력으로 옮기는 규칙
 
