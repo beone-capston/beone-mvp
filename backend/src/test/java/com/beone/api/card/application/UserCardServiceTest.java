@@ -152,13 +152,27 @@ class UserCardServiceTest {
 	}
 
 	@Test
-	void registerTurnsUniqueIndexViolationIntoDuplicate() {
-		willThrow(new DataIntegrityViolationException("uk")).given(this.repository).saveAndFlush(any());
+	void registerTurnsOnlyActiveProductUniqueViolationIntoDuplicate() {
+		DataIntegrityViolationException unique = new DataIntegrityViolationException("insert failed",
+				new java.sql.SQLIntegrityConstraintViolationException(
+						"Duplicate entry for key 'user_cards.uk_user_cards_active_product'"));
+		willThrow(unique).given(this.repository).saveAndFlush(any());
 
 		assertThatThrownBy(() -> this.service.register(MY_CARDS, new NewUserCard("카드", "09174", false)))
-			.isInstanceOf(UserCardDuplicatedException.class);
+			.isInstanceOf(UserCardDuplicatedException.class)
+			.hasCause(unique);
+	}
+
+	@Test
+	void otherConstraintViolationsAreRethrownUnchanged() {
+		DataIntegrityViolationException foreignKey = new DataIntegrityViolationException("insert failed",
+				new java.sql.SQLIntegrityConstraintViolationException("foreign key constraint fk_user_cards_user fails"));
+		willThrow(foreignKey).given(this.repository).saveAndFlush(any());
+
+		assertThatThrownBy(() -> this.service.register(MY_CARDS, new NewUserCard("카드", "09174", false)))
+			.isSameAs(foreignKey);
 		assertThatThrownBy(() -> this.service.register(MY_CARDS, new NewUserCard("카드", null, false)))
-			.isInstanceOf(DataIntegrityViolationException.class);
+			.isSameAs(foreignKey);
 	}
 
 	@Test

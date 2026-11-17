@@ -13,4 +13,12 @@ public class UserCardDuplicatedException extends RuntimeException {
 		super(null, null, false, false);
 	}
 
+	/**
+	 * DB 유니크 제약 위반에서 바꿀 때 원래 예외를 원인으로 남긴다.
+	 * @param cause 원래 예외
+	 */
+	public UserCardDuplicatedException(Throwable cause) {
+		super(null, cause, false, false);
+	}
+
 }

@@ -13,6 +13,8 @@ import java.util.Map;
 
 import com.beone.api.card.application.CardProductProfile;
 import com.beone.api.card.application.SupportedCardProducts;
+import com.beone.api.card.persistence.UserCardEntity;
+import com.beone.api.card.persistence.UserCardRepository;
 import com.beone.api.support.IntegrationTest;
 import com.beone.api.user.application.DemoUser;
 import com.beone.api.user.persistence.UserRepository;
@@ -33,6 +35,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.json.JsonAssert;
 import org.springframework.test.json.JsonCompareMode;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -60,6 +65,12 @@ class UserCardIntegrationTest {
 
 	@Autowired
 	UserRepository userRepository;
+
+	@Autowired
+	UserCardRepository userCardRepository;
+
+	@Autowired
+	PlatformTransactionManager transactionManager;
 
 	@BeforeEach
 	void clearManualCards() {
@@ -215,6 +226,30 @@ class UserCardIntegrationTest {
 		assertThat(send("DELETE", CARDS + "/" + first, "MY_CARDS", null).getStatusCode().value()).isEqualTo(204);
 		assertThat(send("PATCH", CARDS + "/" + unmapped + "/mapping", "MY_CARDS", confirm).getStatusCode().value())
 			.isEqualTo(200);
+	}
+
+	@Test
+	void renameThatReadTheCardBeforeAConcurrentReleaseKeepsTheRelease() {
+		String id = (String) data(send("POST", CARDS, "MY_CARDS", "{\"displayName\":\"카드\"}").getBody())
+			.get("userCardId");
+		long cardId = Long.parseLong(id.substring(3));
+		TransactionTemplate later = new TransactionTemplate(this.transactionManager);
+		later.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+		// 이름 변경 트랜잭션이 카드를 읽은 뒤, 다른 트랜잭션이 해제를 커밋하고, 그다음 이름 변경이 저장된다.
+		new TransactionTemplate(this.transactionManager).executeWithoutResult(status -> {
+			UserCardEntity stale = this.userCardRepository.findById(cardId).orElseThrow();
+			later.executeWithoutResult(inner -> this.jdbcTemplate
+				.update("UPDATE user_cards SET released_at = NOW() WHERE user_card_id = ?", cardId));
+			stale.rename("새 이름");
+			this.userCardRepository.saveAndFlush(stale);
+		});
+
+		Map<String, Object> row = this.jdbcTemplate
+			.queryForMap("SELECT display_name, released_at FROM user_cards WHERE user_card_id = ?", cardId);
+		assertThat(row.get("display_name")).isEqualTo("새 이름");
+		assertThat(row.get("released_at")).isNotNull();
+		assertThat(items(send("GET", CARDS, "MY_CARDS", null).getBody())).isEmpty();
 	}
 
 	@Test

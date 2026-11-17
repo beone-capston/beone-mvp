@@ -29,6 +29,9 @@ public class UserCardService {
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
+	// V4__user_cards.sql의 같은 상품 중복 금지 유니크 인덱스 이름.
+	private static final String ACTIVE_PRODUCT_UNIQUE = "uk_user_cards_active_product";
+
 	private final UserCardRepository userCardRepository;
 
 	private final CardProductService cardProductService;
@@ -191,17 +194,23 @@ public class UserCardService {
 			.orElseThrow(UserCardNotFoundException::new);
 	}
 
-	// 서비스 검사와 저장 사이에 같은 상품이 먼저 저장되면 DB 유니크(uk_user_cards_active_product)가 막는다. 그때도 409로 답한다.
+	// 서비스 검사와 저장 사이에 같은 상품이 먼저 저장되면 DB 유니크(uk_user_cards_active_product)가 막는다. 그 제약 위반만 409로
+	// 바꾸고, 다른 제약 위반은 원래 예외 그대로 둔다(500).
 	private UserCardEntity saveGuardingDuplicate(UserCardEntity entity) {
 		try {
 			return this.userCardRepository.saveAndFlush(entity);
 		}
 		catch (DataIntegrityViolationException ex) {
-			if (entity.getMappingStatus() == MappingStatus.USER_CONFIRMED) {
-				throw new UserCardDuplicatedException();
+			if (violatesActiveProductUnique(ex)) {
+				throw new UserCardDuplicatedException(ex);
 			}
 			throw ex;
 		}
+	}
+
+	private static boolean violatesActiveProductUnique(DataIntegrityViolationException ex) {
+		String message = ex.getMostSpecificCause().getMessage();
+		return message != null && message.contains(ACTIVE_PRODUCT_UNIQUE);
 	}
 
 	private LocalDateTime now() {

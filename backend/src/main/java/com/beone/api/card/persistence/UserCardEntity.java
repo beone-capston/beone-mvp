@@ -13,6 +13,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -21,9 +22,13 @@ import org.hibernate.type.SqlTypes;
  *
  * <p>사용자는 {@code user_id} 값으로만 참조하고 {@code user} 패키지 엔티티에 연관을 두지 않는다. 같은 상품 중복을 막는 생성 열
  * {@code active_product_id}는 DB만 쓰므로 매핑하지 않는다.
+ *
+ * <p>바뀐 열만 갱신한다({@link DynamicUpdate}). 이름 변경과 해제가 겹쳐도 이름 변경이 읽어 둔 {@code released_at = NULL}로 해제를
+ * 덮어써 카드가 되살아나지 않게 한다.
  */
 @Entity
 @Table(name = "user_cards")
+@DynamicUpdate
 public class UserCardEntity {
 
 	@Id
