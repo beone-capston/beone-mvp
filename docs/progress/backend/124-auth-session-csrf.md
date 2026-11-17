@@ -63,5 +63,6 @@
 - 반영 2(가짜 메일 발송기 상태): 공통 사항과 「미정」의 두 문장을 '가짜 발송기도 아직 구현하지 않음(U2 이후)'으로 고쳐 도메인 문서와 맞췄습니다.
 
 ## 2026-11-18 · CodeRabbit 리뷰 반영(head `303d1d0` 리뷰)
-- 리뷰 상태: 제출 리뷰 1건(head `303d1d0`, 인라인 1건, Minor, 문서). CodeRabbit 검사 SUCCESS.
-- 반영: `docs/api/auth.md`의 쿠키 수명 문장 세 곳과 `docs/domains/auth.md` 예시가 `Max-Age=7200`을 고정값처럼 적고 있어, `idle-timeout` 초이며 7200은 기본 설정(`PT2H`)일 때의 값이라고 고쳤습니다.
+- 리뷰 상태: 제출 리뷰 1건(head `303d1d0`, 인라인 1건 Minor 문서, 그리고 diff 밖 지적 1건 Minor 코드). CodeRabbit 검사 SUCCESS. diff 밖 지적은 리뷰 본문에만 있어 처음에 놓쳤고, head `e020d2c` 리뷰 확인 때 찾아 반영했습니다.
+- 반영 1(문서): `docs/api/auth.md`의 쿠키 수명 문장 세 곳과 `docs/domains/auth.md` 예시가 `Max-Age=7200`을 고정값처럼 적고 있어, `idle-timeout` 초이며 7200은 기본 설정(`PT2H`)일 때의 값이라고 고쳤습니다.
+- 반영 2(코드, diff 밖 지적 `AuthRequestInterceptor.java:34`): 인터셉터가 `use()`로 세션을 갱신한 뒤 토큰을 비교해, 틀린 토큰으로 403이 나도 서버 마지막 사용·미사용 만료가 늘어났습니다. `AuthSessionService.useWithCsrf(sessionId, token)`을 더해 조회(쓰기 잠금)·만료 판정·토큰 비교·갱신을 한 트랜잭션에서 하고, 토큰이 맞을 때만 갱신합니다. `AuthSessionServiceTest#useWithCsrfExtendsOnlyWhenTokenMatches`·`#useWithCsrfOnExpiredSessionDeletesItEvenWithMatchingToken`을 더했고, 필수 ③ 통합 테스트는 거절 전후 `last_used_at`·`idle_expires_at`이 같은지 확인합니다. 갱신을 토큰 비교 앞으로 되돌리면 이 통합 테스트가 실패하는 것을 확인했습니다(되돌린 코드는 커밋하지 않음).

@@ -164,7 +164,7 @@ class AuthCsrfApiWebTest {
 
 	@Test
 	void postWithoutCookieIsCsrfInvalid() throws Exception {
-		given(this.authSessionService.use(null)).willReturn(Optional.empty());
+		given(this.authSessionService.useWithCsrf(any(), any())).willReturn(Optional.empty());
 
 		MvcResult result = this.mockMvc.perform(probe().header("X-CSRF-TOKEN", TOKEN)).andReturn();
 
@@ -173,7 +173,7 @@ class AuthCsrfApiWebTest {
 
 	@Test
 	void postWithExpiredSessionIsCsrfInvalidEvenWithFormerToken() throws Exception {
-		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.empty());
+		given(this.authSessionService.useWithCsrf(any(), any())).willReturn(Optional.empty());
 
 		MvcResult result = this.mockMvc
 			.perform(probe().cookie(sessionCookie(SESSION_ID)).header("X-CSRF-TOKEN", TOKEN))
@@ -184,7 +184,8 @@ class AuthCsrfApiWebTest {
 
 	@Test
 	void postWithoutTokenHeaderIsCsrfInvalid() throws Exception {
-		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
+		given(this.authSessionService.useWithCsrf(SESSION_ID, TOKEN))
+			.willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
 
 		MvcResult result = this.mockMvc.perform(probe().cookie(sessionCookie(SESSION_ID))).andReturn();
 
@@ -193,7 +194,8 @@ class AuthCsrfApiWebTest {
 
 	@Test
 	void postWithTokenOfAnotherSessionIsCsrfInvalid() throws Exception {
-		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
+		given(this.authSessionService.useWithCsrf(SESSION_ID, TOKEN))
+			.willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
 		String otherToken = SessionTokens.csrfTokenOf(SessionTokens.newSessionId());
 
 		MvcResult result = this.mockMvc
@@ -205,7 +207,7 @@ class AuthCsrfApiWebTest {
 
 	@Test
 	void csrfIsCheckedBeforeBodyValidation() throws Exception {
-		given(this.authSessionService.use(null)).willReturn(Optional.empty());
+		given(this.authSessionService.useWithCsrf(any(), any())).willReturn(Optional.empty());
 
 		MvcResult result = this.mockMvc
 			.perform(post(PROBE_PATH).contentType(MediaType.APPLICATION_JSON).content("{\"value\":\"\"}"))
@@ -216,7 +218,8 @@ class AuthCsrfApiWebTest {
 
 	@Test
 	void postWithMatchingCookieAndTokenReachesHandler() throws Exception {
-		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
+		given(this.authSessionService.useWithCsrf(SESSION_ID, TOKEN))
+			.willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
 
 		MvcResult result = this.mockMvc
 			.perform(probe().cookie(sessionCookie(SESSION_ID)).header("X-CSRF-TOKEN", TOKEN))
@@ -230,7 +233,8 @@ class AuthCsrfApiWebTest {
 
 	@Test
 	void validCsrfThenInvalidBodyIsInvalidRequest() throws Exception {
-		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
+		given(this.authSessionService.useWithCsrf(SESSION_ID, TOKEN))
+			.willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
 
 		MvcResult result = this.mockMvc
 			.perform(post(PROBE_PATH).contentType(MediaType.APPLICATION_JSON)
@@ -246,7 +250,7 @@ class AuthCsrfApiWebTest {
 
 	@Test
 	void csrfFailureDoesNotEchoTokenOrCookie() throws Exception {
-		given(this.authSessionService.use(any())).willReturn(Optional.empty());
+		given(this.authSessionService.useWithCsrf(any(), any())).willReturn(Optional.empty());
 
 		MvcResult result = this.mockMvc
 			.perform(probe().cookie(sessionCookie(SESSION_ID)).header("X-CSRF-TOKEN", TOKEN))

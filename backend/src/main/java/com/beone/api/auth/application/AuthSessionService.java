@@ -60,6 +60,22 @@ public class AuthSessionService {
 	 */
 	@Transactional
 	public Optional<ActiveSession> use(String sessionId) {
+		return use(sessionId, null, false);
+	}
+
+	/**
+	 * 인증 POST용: 쿠키 값으로 유효한 세션을 찾고, CSRF 토큰이 맞을 때만 사용 시각을 갱신한다. 조회·검사·갱신을 한 트랜잭션(행 쓰기
+	 * 잠금)에서 한다. 토큰이 틀리면 서버 만료를 늘리지 않는다.
+	 * @param sessionId 요청 쿠키의 세션 ID, {@code null} 가능
+	 * @param presentedToken 요청 헤더의 CSRF 토큰, {@code null} 가능
+	 * @return 검사를 통과한 세션과 새 쿠키 수명. 쿠키 없음·형식 오류·없는 세션·만료·토큰 불일치는 빈 값
+	 */
+	@Transactional
+	public Optional<ActiveSession> useWithCsrf(String sessionId, String presentedToken) {
+		return use(sessionId, presentedToken, true);
+	}
+
+	private Optional<ActiveSession> use(String sessionId, String presentedToken, boolean checkCsrf) {
 		if (!SessionTokens.isWellFormed(sessionId)) {
 			return Optional.empty();
 		}
@@ -71,6 +87,9 @@ public class AuthSessionService {
 		LocalDateTime now = now();
 		if (isExpired(session, now)) {
 			this.repository.delete(session);
+			return Optional.empty();
+		}
+		if (checkCsrf && !SessionTokens.csrfMatches(sessionId, presentedToken)) {
 			return Optional.empty();
 		}
 		LocalDateTime idleExpiry = idleExpiry(now, session.getAbsoluteExpiresAt());

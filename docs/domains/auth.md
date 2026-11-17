@@ -57,7 +57,7 @@ com.beone.api.auth
 
 ## 주요 클래스의 역할과 관계
 
-- [`AuthSessionService`](../../backend/src/main/java/com/beone/api/auth/application/AuthSessionService.java)는 쿠키 값으로 세션을 찾고(`use`), 익명 세션을 발급합니다(`issueAnonymous`). 세션은 미사용 만료에 끝나고, 절대 만료가 있으면 그 시각에도 끝납니다. 같은 시각이 되면 이미 만료입니다. 익명 세션은 절대 만료가 없습니다(`absolute_expires_at`이 `NULL`, 2026-11-18 사용자 직접 결정). 회원 세션의 30일은 로그인 단위(U3)에서 채웁니다. 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료가 있으면 넘기지 않고, 이번 사용 시각부터 새 미사용 만료까지를 쿠키 `Max-Age`로 돌려줍니다. 만료한 행은 찾을 때 지웁니다. 조회에 쓰기 잠금(`PESSIMISTIC_WRITE`)을 걸어, 같은 세션을 쓰는 동시 요청이 옛 만료 값으로 판정해 다른 요청이 방금 연장한 세션을 지우지 않게 합니다.
+- [`AuthSessionService`](../../backend/src/main/java/com/beone/api/auth/application/AuthSessionService.java)는 쿠키 값으로 세션을 찾고(`use`), 인증 POST에서는 CSRF 토큰까지 맞을 때만 세션을 갱신하며(`useWithCsrf`, 조회·검사·갱신이 한 트랜잭션이라 틀린 토큰은 서버 만료를 늘리지 않음), 익명 세션을 발급합니다(`issueAnonymous`). 세션은 미사용 만료에 끝나고, 절대 만료가 있으면 그 시각에도 끝납니다. 같은 시각이 되면 이미 만료입니다. 익명 세션은 절대 만료가 없습니다(`absolute_expires_at`이 `NULL`, 2026-11-18 사용자 직접 결정). 회원 세션의 30일은 로그인 단위(U3)에서 채웁니다. 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료가 있으면 넘기지 않고, 이번 사용 시각부터 새 미사용 만료까지를 쿠키 `Max-Age`로 돌려줍니다. 만료한 행은 찾을 때 지웁니다. 조회에 쓰기 잠금(`PESSIMISTIC_WRITE`)을 걸어, 같은 세션을 쓰는 동시 요청이 옛 만료 값으로 판정해 다른 요청이 방금 연장한 세션을 지우지 않게 합니다.
 - [`SessionTokens`](../../backend/src/main/java/com/beone/api/auth/application/SessionTokens.java)는 상태가 없는 부품입니다.
   - 세션 ID: `SecureRandom` 32바이트를 패딩 없는 Base64URL로 쓴 43자입니다. DB에는 SHA-256 해시(16진수 64자)만 저장합니다.
   - CSRF 토큰: 세션 ID에 고정 접두어를 붙여 SHA-256으로 유도한 43자입니다. 서버는 토큰을 따로 저장하지 않고, 요청 쿠키에서 다시 계산해 상수 시간(`MessageDigest.isEqual`)으로 비교합니다. 쿠키가 `HttpOnly`라 다른 사이트의 스크립트는 세션 ID를 읽어 토큰을 만들 수 없습니다. 세션 ID가 바뀌면(로그인·로그아웃, U3) 토큰도 바뀝니다.
@@ -81,7 +81,7 @@ GET /api/v1/auth/csrf
 
 POST /api/v1/auth/... (U2 이후 API)
 → AuthNoStoreFilter: no-store
-→ AuthRequestInterceptor: 쿠키로 세션 조회 → X-CSRF-TOKEN 비교
+→ AuthRequestInterceptor: AuthSessionService.useWithCsrf(쿠키, X-CSRF-TOKEN): 조회(쓰기 잠금) → 만료면 삭제 → 토큰 비교 → 맞을 때만 사용 시각 갱신
    → 실패: CsrfInvalidException → AuthExceptionHandler → 403 CSRF_INVALID
    → 통과: 세션 쿠키를 새 Max-Age로 다시 심음 → 본문 검증과 컨트롤러 처리
 ```

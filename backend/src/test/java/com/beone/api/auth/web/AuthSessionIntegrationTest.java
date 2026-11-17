@@ -188,11 +188,15 @@ class AuthSessionIntegrationTest {
 		assertBody(posted, 200, "{\"data\":\"ok\"}");
 		assertCookieMatchesServer(posted, sessionId, "2026-11-18T12:00", "2026-11-18T14:00");
 
-		// CSRF 실패는 세션을 쓰지 않은 것으로 보고 쿠키를 심지 않는다. 서버 만료도 그대로다.
+		// CSRF 실패는 세션을 쓰지 않은 것으로 보고 쿠키를 심지 않는다. 서버 마지막 사용·미사용 만료도 거절 전과 같다.
 		this.clock.advance(Duration.ofMinutes(10));
+		Map<String, Object> beforeRejected = this.jdbcTemplate.queryForMap("SELECT last_used_at, idle_expires_at FROM auth_sessions");
 		ResponseEntity<String> rejected = post(sessionId, "wrong");
 		assertBody(rejected, 403, CSRF_INVALID);
 		assertThat(rejected.getHeaders().get(HttpHeaders.SET_COOKIE)).isNull();
+		assertThat(this.jdbcTemplate.queryForMap("SELECT last_used_at, idle_expires_at FROM auth_sessions"))
+			.isEqualTo(beforeRejected);
+		assertThat(beforeRejected.get("idle_expires_at").toString()).startsWith("2026-11-18T14:00");
 	}
 
 	private void assertCookieMatchesServer(ResponseEntity<String> response, String sessionId, String lastUsed,

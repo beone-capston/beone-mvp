@@ -102,6 +102,37 @@ class AuthSessionServiceTest {
 	}
 
 	@Test
+	void useWithCsrfExtendsOnlyWhenTokenMatches() {
+		String id = SessionTokens.newSessionId();
+		AuthSessionEntity row = row(id, NOW.minusMinutes(30), NOW.plusMinutes(30), null);
+		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(row));
+
+		// 토큰이 틀리거나 없으면 빈 값이고, 마지막 사용·미사용 만료가 그대로다.
+		assertThat(this.service.useWithCsrf(id, SessionTokens.csrfTokenOf(SessionTokens.newSessionId()))).isEmpty();
+		assertThat(this.service.useWithCsrf(id, null)).isEmpty();
+		assertThat(row.getLastUsedAt()).isEqualTo(NOW.minusMinutes(30));
+		assertThat(row.getIdleExpiresAt()).isEqualTo(NOW.plusMinutes(30));
+		verify(this.repository, never()).delete(any());
+
+		// 맞는 토큰이면 갱신하고 쿠키 수명을 돌려준다.
+		Optional<ActiveSession> active = this.service.useWithCsrf(id, SessionTokens.csrfTokenOf(id));
+		assertThat(active).isPresent();
+		assertThat(row.getLastUsedAt()).isEqualTo(NOW);
+		assertThat(row.getIdleExpiresAt()).isEqualTo(NOW.plusHours(1));
+		assertThat(active.get().cookieMaxAge()).isEqualTo(Duration.ofHours(1));
+	}
+
+	@Test
+	void useWithCsrfOnExpiredSessionDeletesItEvenWithMatchingToken() {
+		String id = SessionTokens.newSessionId();
+		AuthSessionEntity row = row(id, NOW.minusHours(1), NOW, null);
+		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(row));
+
+		assertThat(this.service.useWithCsrf(id, SessionTokens.csrfTokenOf(id))).isEmpty();
+		verify(this.repository).delete(row);
+	}
+
+	@Test
 	void anonymousSessionCreatedLongAgoStaysValidWhileUsed() {
 		String id = SessionTokens.newSessionId();
 		// 발급 40일 전, 마지막 사용 30분 전. 절대 만료가 없으므로 계속 유효하다.

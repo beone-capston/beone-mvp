@@ -31,8 +31,10 @@ class AuthRequestInterceptor implements HandlerInterceptor {
 	@Override
 	public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
 		if (HttpMethod.POST.matches(request.getMethod())) {
-			Optional<ActiveSession> session = this.authSessionService.getObject().use(SessionCookie.read(request));
-			if (session.isEmpty() || !session.get().csrfMatches(request.getHeader(CsrfTokenResponse.HEADER_NAME))) {
+			// 토큰이 맞을 때만 서버 만료를 늘린다(조회·검사·갱신이 한 트랜잭션).
+			Optional<ActiveSession> session = this.authSessionService.getObject()
+				.useWithCsrf(SessionCookie.read(request), request.getHeader(CsrfTokenResponse.HEADER_NAME));
+			if (session.isEmpty()) {
 				throw new CsrfInvalidException();
 			}
 			response.setHeader(HttpHeaders.SET_COOKIE,
