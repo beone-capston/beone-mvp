@@ -13,7 +13,9 @@ enum UserCardErrorCode implements ApiErrorCode {
 
 	USER_CARD_DUPLICATED("USER_CARD_DUPLICATED", HttpStatus.CONFLICT, "같은 상품의 카드가 이미 등록되어 있습니다."),
 
-	PORTFOLIO_READ_ONLY("PORTFOLIO_READ_ONLY", HttpStatus.CONFLICT, "가상 포트폴리오의 보유 카드는 바꿀 수 없습니다.");
+	PORTFOLIO_READ_ONLY("PORTFOLIO_READ_ONLY", HttpStatus.CONFLICT, "가상 포트폴리오의 보유 카드는 바꿀 수 없습니다."),
+
+	REPRESENTATIVE_CARD_IN_USE("REPRESENTATIVE_CARD_IN_USE", HttpStatus.CONFLICT, "결제 전 설정의 대표 카드입니다. 먼저 설정을 바꿔 주세요.");
 
 	private final String code;
 

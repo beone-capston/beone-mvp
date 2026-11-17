@@ -15,9 +15,10 @@
 - (#108) `GET /api/v1/me` 현재 사용자([명세](../api/cards.md#get-apiv1me--현재-사용자-조회))
 - (#108) 보유 카드 API 5개 `GET`·`POST /api/v1/me/cards`, `PATCH /api/v1/me/cards/{userCardId}/mapping`, `PATCH`·`DELETE /api/v1/me/cards/{userCardId}`([명세](../api/cards.md#get-apiv1mecards--보유-카드-목록-조회)), 보유 카드 테이블 `user_cards`와 가상 포트폴리오 시드(Flyway `V4__user_cards.sql`)
 
+- (#111) 대표 카드 보호: 대표 카드 고정 모드의 대표 카드를 추천에서 빼거나 해제하면 409 `REPRESENTATIVE_CARD_IN_USE`, 자동 추천 모드 대표 카드를 해제하면 대표 카드를 비웁니다. 구현은 결제 전 설정([preference 안내](preference.md))이 맡습니다.
+
 계획·미구현(자세한 내용은 [보유 카드](#보유-카드)의 "아직 하지 않는 것"):
 
-- 대표 카드 연동(`REPRESENTATIVE_CARD_IN_USE`, 자동 추천 모드 대표 카드 비우기): 결제 전 설정(A4)에서 구현합니다. 지금은 확장 지점만 있습니다.
 - 매핑·추천 제외 변경에 따른 이전 추천 무효화: 추천(B2)에서 연결합니다.
 - CODEF 보유카드(`holdingSource=CODEF`)와 후보 매핑(`CANDIDATE`): 2차 CODEF 작업입니다.
 
@@ -65,7 +66,7 @@ com.beone.api.card
 │   ├── RecommendationEligibility     추천 비교 대상 판정
 │   ├── UserCardView·UserCardMapping·UserCardChangeResult·CurrentUserSummary  결과 타입
 │   ├── NewUserCard·MappingChange·UserCardChange  검증을 마친 입력
-│   ├── RepresentativeCardGuard       대표 카드 확장 지점(A4에서 구현, 기본은 막지 않음)
+│   ├── RepresentativeCardGuard       대표 카드 확장 지점(구현: preference.PaymentPreferenceCardGuard, 빈이 없으면 막지 않음)
 │   └── UserCardNotFound·UserCardDuplicated·PortfolioReadOnly·CandidateMismatch 예외
 └── persistence/
     ├── UserCardEntity                user_cards 한 행(해제해도 지우지 않음)
@@ -168,9 +169,14 @@ POST /api/v1/me/cards {"displayName":"청춘대로 톡톡","cardProductId":"0917
 - 참거짓 필드(`notSupported`·`excludedFromRecommendation`)는 JSON `true`·`false`만 받습니다. `"true"`·`1`은 400입니다. 열거 값(`status`·`confirmationMethod`)은 문자열로 받아 허용 목록과 비교하므로 숫자 순번이나 소문자는 400입니다.
 - 시각은 `Clock` 빈이 하나 있으면 그것을, 없으면 시스템 시계를 쓰고 Asia/Seoul로 바꿔 초 단위로 저장합니다. 응답은 `+09:00`이 붙은 ISO-8601입니다.
 
+### 대표 카드 보호(#111 구현)
+
+대표 카드 고정 모드의 대표 카드를 추천에서 빼거나 해제할 때의 409 `REPRESENTATIVE_CARD_IN_USE`와, 자동 추천 모드에서 동률 기준 대표 카드를 해제할 때 비우기(D-23)는 결제 전 설정의 [`PaymentPreferenceCardGuard`](../../backend/src/main/java/com/beone/api/preference/application/PaymentPreferenceCardGuard.java)가 [`RepresentativeCardGuard`](../../backend/src/main/java/com/beone/api/card/application/RepresentativeCardGuard.java)를 구현해 맡습니다. 서비스는 추천 제외로 바꾸기 전에 `beforeExclusion`, 해제 전에 `beforeRelease`를 같은 트랜잭션에서 부릅니다. 구현 빈이 없는 슬라이스 테스트 등에서는 기본 구현 `NONE`이 아무것도 막지 않습니다. 자동 추천 모드 대표 카드를 추천에서 빼는 것은 막지도 비우지도 않습니다(결정 28 관리자 판단). 자세한 규칙은 [preference 안내](preference.md#대표-카드-보호보유-카드-patchdelete)에 있습니다.
+
+409 응답은 보유 카드 API에서 나가므로 card 패키지에 [`RepresentativeCardInUseException`](../../backend/src/main/java/com/beone/api/card/application/RepresentativeCardInUseException.java), `UserCardErrorCode.REPRESENTATIVE_CARD_IN_USE`, `UserCardExceptionHandler` 처리 메서드를 더했습니다(관리자 승인 최소 변경). card는 preference를 모르고 확장 지점으로만 만납니다.
+
 ### 아직 하지 않는 것(한계)
 
-- **대표 카드(A4)**: 대표 카드 고정 모드의 대표 카드를 추천에서 빼거나 해제할 때의 409 `REPRESENTATIVE_CARD_IN_USE`와, 자동 추천 모드에서 동률 기준 대표 카드를 해제할 때 비우기(D-23)는 결제 전 설정이 생긴 뒤 동작합니다. 지금은 [`RepresentativeCardGuard`](../../backend/src/main/java/com/beone/api/card/application/RepresentativeCardGuard.java) 확장 지점만 있고, 구현 빈이 없으면 아무것도 막지 않습니다. 서비스는 추천 제외로 바꾸기 전에 `beforeExclusion`, 해제 전에 `beforeRelease`를 같은 트랜잭션에서 부릅니다. A4는 이 인터페이스를 구현한 빈을 하나 등록하면 됩니다. 대표 카드 테이블·설정 값은 만들지 않았습니다.
 - **추천 무효화(B2)**: 매핑을 바꾸거나 추천 제외를 바꾸면 그 카드의 이전 추천을 다시 계산하거나 `확인 필요`로 되돌려야 합니다(D-15). 추천 저장이 없어 지금은 아무것도 무효화하지 않고 `invalidatedRecommendationIds: []`입니다. B2가 추천을 저장하면 `UserCardService.changeMapping`·`update`에서 무효화 대상을 채우도록 연결해야 합니다.
 - **CODEF(2차)**: `CODEF` 출처 카드와 `CANDIDATE` 매핑은 만들지 않습니다. 후보 열이 없으므로 CODEF 작업이 새 마이그레이션으로 후보 상품·근거 열을 더하고 `CODEF_CANDIDATE` 확인을 구현해야 합니다.
 - `USER_CARD_MAPPING_REQUIRED`(409)는 이 작업의 API가 쓰지 않습니다.
@@ -199,4 +205,4 @@ if (detail.ruleStatus() != RuleStatus.VERIFIED) {
 - `supportStatus`는 지원 범위만 나타냅니다. 선택형이 아니고 한도 기간도 확정인데 계산식이나 전월 실적 기간이 미확정이라 계산이 막히는 서비스는 계약 값에 맞는 것이 없어 표시하지 못합니다(새 값을 만들지 않음, 결정 27 A1-5). 현재 저장소의 4종 규칙에는 이런 서비스가 없습니다. 09271 `FUEL`은 계산식이 미확정이지만 선택형이라 `UNSUPPORTED_SELECTION_RULE`입니다.
 - 4종 규칙은 `VERIFIED`이지만 실제 보유 카드와 공식 SKU·약관 버전의 일치는 D-01 미결입니다.
 - 상품 표시 정보는 코드의 표에 있으므로 규칙 카드를 추가하면 표도 함께 고쳐야 합니다. 둘이 다르면 서버가 뜨지 않습니다. 가상 포트폴리오 시드(`V4`)의 카드 구성도 함께 봐야 합니다.
-- 보유 카드의 한계(대표 카드·추천 무효화·CODEF)는 [보유 카드](#보유-카드)의 "아직 하지 않는 것"에 있습니다.
+- 보유 카드의 한계(추천 무효화·CODEF)는 [보유 카드](#보유-카드)의 "아직 하지 않는 것"에 있습니다.

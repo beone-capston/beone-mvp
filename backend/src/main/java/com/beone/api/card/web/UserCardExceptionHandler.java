@@ -5,6 +5,7 @@ import java.util.List;
 import com.beone.api.card.application.CandidateMismatchException;
 import com.beone.api.card.application.CardProductNotFoundException;
 import com.beone.api.card.application.PortfolioReadOnlyException;
+import com.beone.api.card.application.RepresentativeCardInUseException;
 import com.beone.api.card.application.UserCardDuplicatedException;
 import com.beone.api.card.application.UserCardNotFoundException;
 import com.beone.api.common.web.ApiErrorCode;
@@ -46,6 +47,12 @@ class UserCardExceptionHandler {
 	@ExceptionHandler(PortfolioReadOnlyException.class)
 	ResponseEntity<ApiErrorResponse> handleReadOnly(PortfolioReadOnlyException ex) {
 		return respond(UserCardErrorCode.PORTFOLIO_READ_ONLY, List.of(), ex);
+	}
+
+	// 결제 전 설정(preference)의 대표 카드 보호 구현이 던진다(RepresentativeCardGuard).
+	@ExceptionHandler(RepresentativeCardInUseException.class)
+	ResponseEntity<ApiErrorResponse> handleRepresentativeInUse(RepresentativeCardInUseException ex) {
+		return respond(UserCardErrorCode.REPRESENTATIVE_CARD_IN_USE, List.of(), ex);
 	}
 
 	@ExceptionHandler(CardProductNotFoundException.class)
