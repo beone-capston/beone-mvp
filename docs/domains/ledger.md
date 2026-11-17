@@ -23,7 +23,7 @@
 | `month` 누락 | 400 | `INVALID_REQUEST`(`month` 필수 값, 공통 처리기) |
 | `month` 형식 오류(`2026-1`, `2026-13` 등) | 400 | `INVALID_REQUEST`(`month` 형식 오류) |
 | `source`가 `SIMULATION`·`CODEF`가 아님(빈 값·소문자 포함) | 400 | `INVALID_REQUEST`(`source` 형식 오류) |
-| `userCardId`가 없거나 형식이 틀렸거나 해제했거나 다른 사용자의 카드 | 404 | `USER_CARD_NOT_FOUND` |
+| 지정한 `userCardId`의 카드가 없거나, 형식이 틀렸거나, 해제했거나, 다른 사용자의 카드(생략하면 전체 카드를 조회하며 404가 아님) | 404 | `USER_CARD_NOT_FOUND` |
 | 시연 사용자 헤더 없음·틀림 | 400 | `INVALID_REQUEST`(공통) |
 
 ## 핵심 용어
