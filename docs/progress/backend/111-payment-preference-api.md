@@ -39,3 +39,8 @@
 ## 2026-11-17 · CodeRabbit 리뷰 반영(head `0045609` 리뷰)
 - 리뷰 상태: 요약 coverage `0045609`, "No actionable comments", check 통과, 비차단 의견. 사람 승인 없음.
 - 반영(같은 지적 2회째): 스레드 답글이 잠금 대기 확인을 테이블 이름만이 아니라 테스트 세션·카드 행으로 좁히라고 했습니다. `data_lock_waits`의 차단 스레드가 테스트 트랜잭션 연결(`CONNECTION_ID()`)이고 대기 잠금이 그 카드 번호(`LOCK_DATA`)일 때만 진행하도록 바꿨습니다. 옛 잠금 순서에서는 여전히 `Deadlock found`로 실패합니다(되돌린 코드는 커밋하지 않음).
+
+## 2026-11-17 · 최신 `develop` merge(A3 #110 → PR #113 병합 `6446bc7`)
+- `origin/develop`을 merge했습니다(rebase 아님). 충돌은 `docs/architecture.md`의 구현 현황 문장·패키지 구조 문장·패키지 트리 두 줄이었고, `monthlystate`(#110)와 `preference`(#111) 내용을 모두 남겼습니다. `docs/progress/backend/README.md`는 자동 병합으로 두 줄이 모두 남았습니다.
+- Flyway: `develop`에 `V5__monthly_states.sql`이 들어와 `V6__payment_preferences.sql`을 그대로 둡니다(관리자 확인).
+- 통합 테스트 정리 순서: `monthly_states`가 `user_cards`를 참조하게 됐지만, `MonthlyStateIntegrationTest`는 테스트 앞뒤로 `monthly_states`를 먼저 지우고 이 PR의 테스트는 월간 상태를 만들지 않으며 앞뒤로 `payment_preferences`를 먼저 지웁니다. 서로의 `user_cards` 정리를 막는 행이 남지 않아 바꾸지 않았습니다.

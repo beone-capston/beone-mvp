@@ -30,6 +30,7 @@
 - #92 → PR #93: CODEF 2차 오프라인 변환 2단계(`codef.sync`: 카드명 정확 일치 카드 연결, 승인 날짜·시각 해석, 승인번호 지문 주입 기반 중복 키·재조회 대조, D-17 Type2 짝짓기와 불완전 사유 5종, 합성 응답·합성 테스트 키만). PR #93(`develop` 대상, 병합 전). HMAC 키 공급·회전 미결, R3 보류, 부품 구현이며 HTTP API 완성 아님. [작업 기록](92-codef-ledger-candidate.md)
 - #100 → PR: 업무 API 공통 기반(`user` 패키지의 `CurrentUserResolver`·시연 사용자 헤더, Flyway `V2` 시연 사용자 시드, `local`·`demo` CORS)과 `GET /api/v1/demo-users`. `develop` 대상, 병합 전. `GET /api/v1/me`는 보유 카드 작업으로 옮김. [작업 기록](100-business-api-foundation.md)
 - #108 → PR: 현재 사용자 `GET /api/v1/me`와 보유 카드 API 5개(`card` 패키지 보유 카드, Flyway `V4__user_cards.sql` 임시 번호, 가상 포트폴리오 시드 4장, 대표 카드는 확장 지점만·추천 무효화는 B2). `develop` 대상, 병합 전. [작업 기록](108-user-cards-api.md)
+- #110 → PR: 카드 월간 상태 조회·수동 입력 API(`monthlystate` 패키지, Flyway `V5__monthly_states.sql` 임시 번호, 가상 포트폴리오 시드 없음 결정 27 A3, 스냅샷 뒤 모의 승인 합산은 B3). `develop` 대상, 병합 전. [작업 기록](110-monthly-states-api.md)
 - #105 → PR #106: 카드 상품 목록·상세 API(`card` 패키지 상품 조회, `RuleCatalog` 읽기, 테이블·Flyway 없음, `RuleCatalog.cardIds()` 추가). `develop` 병합(`cda31ca`). [작업 기록](105-card-products-api.md)
 - #104 → PR: 주문 생성·조회와 예정 소비 API(`order` 패키지, Flyway `V3`(#105 병합 뒤 번호 확인), 예정 소비는 저장만 D-18 K4). `develop` 대상, 병합 전. [작업 기록](104-orders-planned-spends-api.md)
 - #111 → PR: 결제 전 설정 조회·변경 API와 대표 카드 보호(`preference` 패키지, Flyway `V6__payment_preferences.sql` 임시 번호, card는 409 연결 최소 변경, 추천·모의 승인 사용은 B2·B3). `develop` 대상, 병합 전. [작업 기록](111-payment-preference-api.md)
