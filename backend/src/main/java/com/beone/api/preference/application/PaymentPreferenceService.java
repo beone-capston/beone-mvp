@@ -71,19 +71,24 @@ public class PaymentPreferenceService {
 	 */
 	@Transactional
 	public PaymentPreferenceView change(CurrentUser user, PaymentPreferenceChange change) {
-		// 첫 문장으로 사용자 행을 잠가 대표 카드 보호(보유 카드 추천 제외·해제)와 차례로 처리한다. 잠금을 얻은 뒤 카드를 처음 읽으므로
-		// 앞서 커밋된 해제·추천 제외를 본다.
-		this.paymentPreferenceRepository.lockUser(user.userId());
 		Long cardId = (change.representativeUserCardId() == null) ? null
-				: requireEligibleCard(user, change.representativeUserCardId());
+				: UserCardId.parse(change.representativeUserCardId()).orElseThrow(UserCardNotFoundException::new);
+		// 잠금 순서는 보유 카드 변경과 같게 카드 행 → 사용자 행이다. 설정 저장의 외래 키 검사가 카드 행에 공유 잠금을 걸므로, 사용자 행을
+		// 먼저 잡으면 카드 해제와 서로 기다리는 교착이 생긴다. 잠금을 모두 얻은 뒤 카드를 처음 읽으므로 앞서 커밋된 해제·추천 제외를 본다.
+		if (cardId != null) {
+			this.paymentPreferenceRepository.lockUserCard(cardId);
+		}
+		this.paymentPreferenceRepository.lockUser(user.userId());
+		if (cardId != null) {
+			requireEligibleCard(user, cardId);
+		}
 		LocalDateTime now = LocalDateTime.now(this.clock).truncatedTo(ChronoUnit.SECONDS);
 		this.paymentPreferenceRepository.upsert(user.userId(), change.selectionMode().name(), cardId, now);
 		return new PaymentPreferenceView(change.selectionMode(), (cardId == null) ? null : UserCardId.format(cardId),
 				now);
 	}
 
-	private long requireEligibleCard(CurrentUser user, String userCardId) {
-		long id = UserCardId.parse(userCardId).orElseThrow(UserCardNotFoundException::new);
+	private void requireEligibleCard(CurrentUser user, long id) {
 		String normalized = UserCardId.format(id);
 		UserCardView card = this.userCardService.list(user)
 			.stream()
@@ -93,7 +98,6 @@ public class PaymentPreferenceService {
 		if (!card.recommendationEligibility().eligible()) {
 			throw new RepresentativeCardNotEligibleException();
 		}
-		return id;
 	}
 
 	private static PaymentPreferenceView toView(PaymentPreferenceEntity entity) {

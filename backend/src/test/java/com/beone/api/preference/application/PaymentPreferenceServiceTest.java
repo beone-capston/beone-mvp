@@ -82,7 +82,7 @@ class PaymentPreferenceServiceTest {
 	}
 
 	@Test
-	void changeLocksUserBeforeReadingCardsAndSavesEligibleCard() {
+	void changeLocksCardThenUserBeforeReadingCardsAndSavesEligibleCard() {
 		given(this.userCardService.list(MY_CARDS)).willReturn(List.of(confirmed("uc-1001", false)));
 
 		PaymentPreferenceView view = this.service.change(MY_CARDS,
@@ -90,6 +90,7 @@ class PaymentPreferenceServiceTest {
 
 		assertThat(view).isEqualTo(new PaymentPreferenceView(PaymentSelectionMode.FIXED_REPRESENTATIVE, "uc-1001", NOW));
 		InOrder order = inOrder(this.repository, this.userCardService);
+		order.verify(this.repository).lockUserCard(1001L);
 		order.verify(this.repository).lockUser(1L);
 		order.verify(this.userCardService).list(MY_CARDS);
 		order.verify(this.repository).upsert(1L, "FIXED_REPRESENTATIVE", 1001L, NOW);
@@ -102,6 +103,7 @@ class PaymentPreferenceServiceTest {
 
 		assertThat(view).isEqualTo(new PaymentPreferenceView(PaymentSelectionMode.AUTO_RECOMMEND, null, NOW));
 		verify(this.repository).upsert(1L, "AUTO_RECOMMEND", null, NOW);
+		verify(this.repository, never()).lockUserCard(anyLong());
 		verifyNoInteractions(this.userCardService);
 	}
 
@@ -123,6 +125,7 @@ class PaymentPreferenceServiceTest {
 				new PaymentPreferenceChange(PaymentSelectionMode.FIXED_REPRESENTATIVE, userCardId)))
 			.isInstanceOf(UserCardNotFoundException.class);
 		verifyNoInteractions(this.userCardService);
+		verify(this.repository, never()).lockUserCard(anyLong());
 		verify(this.repository, never()).upsert(anyLong(), anyString(), any(), any());
 	}
 

@@ -79,8 +79,7 @@ public class PaymentPreferenceCardGuard implements RepresentativeCardGuard {
 			});
 	}
 
-	// 설정 변경과 같은 순서(사용자 행 → 설정 행)로 잠근다. 보유 카드 쪽은 카드 행을 먼저 잠그지만 설정 변경은 카드 행을 잠그지
-	// 않으므로 교착이 생기지 않는다.
+	// 보유 카드 서비스가 이미 카드 행을 잠근 뒤 불린다. 설정 변경과 같은 순서(카드 행 → 사용자 행 → 설정 행)를 지킨다.
 	private Optional<PaymentPreferenceEntity> lockedPreference(CurrentUser user) {
 		this.paymentPreferenceRepository.lockUser(user.userId());
 		return this.paymentPreferenceRepository.findForUpdateByUserId(user.userId());

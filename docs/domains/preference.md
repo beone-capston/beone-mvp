@@ -45,7 +45,7 @@ com.beone.api.preference
 │   └── RepresentativeCardNotEligibleException 추천 비교 대상이 아닌 대표 카드
 └── persistence/
     ├── PaymentPreferenceEntity                payment_preferences 한 행(기본 키 = 사용자 ID)
-    └── PaymentPreferenceRepository            사용자 행 잠금, 설정 행 잠금 조회, 넣기·덮어쓰기(upsert)
+    └── PaymentPreferenceRepository            카드 행·사용자 행 잠금, 설정 행 잠금 조회, 넣기·덮어쓰기(upsert)
 ```
 
 소스: [web](../../backend/src/main/java/com/beone/api/preference/web/), [application](../../backend/src/main/java/com/beone/api/preference/application/), [persistence](../../backend/src/main/java/com/beone/api/preference/persistence/), [마이그레이션](../../backend/src/main/resources/db/migration/V6__payment_preferences.sql).
@@ -57,8 +57,8 @@ com.beone.api.preference
 ### 설정 변경(PUT)
 
 1. 웹 계층이 요청 형식을 봅니다. `selectionMode` 누락·허용 밖 값, `representativeUserCardId` 필드 누락(모드와 무관), 고정 모드인데 대표 카드 `null`은 400 `INVALID_REQUEST`이고 필드 오류를 담습니다. 숫자·불리언처럼 문자열이 아닌 값과 깨진 본문은 400 `errors: []`입니다.
-2. 서비스가 사용자 행(`users`)을 쓰기 잠금으로 잠급니다(아래 동시성).
-3. 대표 카드가 있으면 `uc-` 형식을 해석하고, 현재 사용자의 해제하지 않은 보유 카드 목록에서 찾습니다. 형식이 틀리거나 없거나 다른 사용자·해제한 카드는 404 `USER_CARD_NOT_FOUND`입니다(보유 카드 API와 같은 규칙).
+2. 대표 카드가 있으면 `uc-` 형식을 해석합니다. 형식이 틀리면 404 `USER_CARD_NOT_FOUND`입니다.
+3. 대표 카드 행, 사용자 행(`users`) 순으로 쓰기 잠금을 겁니다(아래 동시성). 그다음 현재 사용자의 해제하지 않은 보유 카드 목록에서 대표 카드를 찾습니다. 없거나 다른 사용자·해제한 카드는 404 `USER_CARD_NOT_FOUND`입니다(보유 카드 API와 같은 규칙).
 4. 찾은 카드가 추천 비교 대상이 아니면 409 `REPRESENTATIVE_CARD_NOT_ELIGIBLE`입니다.
 5. 설정 행을 넣거나 덮어쓰고(`INSERT ... ON DUPLICATE KEY UPDATE`), 저장 시각(서울, 초 단위)을 `updatedAt`으로 돌려줍니다.
 
@@ -100,9 +100,11 @@ preference 쪽에서 `UserCardController`를 지목하는 처리기를 두는 �
 
 ## 동시성
 
-- 설정 변경과 대표 카드 보호는 둘 다 먼저 **사용자 행**(`users`)을 `SELECT ... FOR UPDATE`로 잠급니다. 설정 행은 없을 수 있는데, 없는 행을 잠그면 MySQL이 간격 잠금을 걸어 처음 저장하는 요청끼리 교착이 생길 수 있어 항상 있는 사용자 행을 잠급니다. `user` 패키지 코드는 쓰지 않고 행만 잠급니다.
-- 설정 변경은 잠금을 얻은 뒤 보유 카드를 처음 읽으므로 앞서 커밋된 해제·추천 제외를 봅니다. 보유 카드 쪽은 카드 행 → 사용자 행 순으로 잠그고, 설정 변경은 카드 행을 잠그지 않으므로 교착이 생기지 않습니다.
-- 그래서 "고정 모드로 저장"과 "그 카드 해제"가 겹쳐도 해제된 카드가 고정 대표 카드로 남지 않습니다. 둘 중 나중에 잠금을 얻은 쪽이 404 또는 409로 끝납니다.
+- 잠금 순서는 모든 경로에서 **카드 행 → 사용자 행 → 설정 행**입니다. 보유 카드 변경(`UserCardService`)은 대상 카드 행을 쓰기 잠금으로 읽은 뒤 가드를 부르고, 가드는 사용자 행(`users`)과 설정 행을 잠급니다. 설정 변경은 대표 카드가 있으면 그 카드 행(`user_cards`)을 먼저 잠그고, 그다음 사용자 행을 잠급니다. `card`·`user` 패키지 코드는 쓰지 않고 행만 잠급니다.
+- 카드 행을 먼저 잠그는 이유: 설정 저장의 외래 키 검사가 대표 카드 행에 공유 잠금을 겁니다. 설정 변경이 사용자 행을 먼저 잡으면, 같은 카드를 해제하는 요청(카드 행을 잡고 사용자 행을 기다림)과 서로 기다려 MySQL이 한쪽을 교착으로 끊습니다(CodeRabbit 지적, 통합 테스트로 재현·확인).
+- 설정 행이 아니라 사용자 행을 잠그는 이유: 설정 행은 없을 수 있는데, 없는 행을 잠그면 MySQL이 간격 잠금을 걸어 처음 저장하는 요청끼리 교착이 생길 수 있습니다.
+- 설정 변경은 잠금을 모두 얻은 뒤 보유 카드를 처음 읽으므로 앞서 커밋된 해제·추천 제외를 봅니다. 그래서 "고정 모드로 저장"과 "그 카드 해제"가 겹쳐도 해제된 카드가 고정 대표 카드로 남지 않습니다. 나중에 잠금을 얻은 쪽이 404 또는 409로 끝납니다.
+- 형식이 맞지만 없는 카드 번호를 보내면 카드 행 잠금이 간격 잠금이 되어, 그 사이 번호로 새 카드를 등록하는 요청이 이 트랜잭션이 끝날 때(곧 404)까지 잠시 기다릴 수 있습니다.
 
 ## 제약과 한계
 
@@ -112,6 +114,6 @@ preference 쪽에서 `UserCardController`를 지목하는 처리기를 두는 �
 
 ## 테스트
 
-- `test`: [`PaymentPreferenceServiceTest`](../../backend/src/test/java/com/beone/api/preference/application/PaymentPreferenceServiceTest.java)(미설정 표시, 사용자 잠금 → 카드 조회 → 저장 순서, 형식 오류·없는 카드 404, 매핑 미확인·지원 안 함·추천 제외 409, 가상 포트폴리오 카드 허용), [`PaymentPreferenceCardGuardTest`](../../backend/src/test/java/com/beone/api/preference/application/PaymentPreferenceCardGuardTest.java)(보호 표의 모든 칸, 잠금 순서)
+- `test`: [`PaymentPreferenceServiceTest`](../../backend/src/test/java/com/beone/api/preference/application/PaymentPreferenceServiceTest.java)(미설정 표시, 카드 행 잠금 → 사용자 행 잠금 → 카드 조회 → 저장 순서, 형식 오류·없는 카드 404, 매핑 미확인·지원 안 함·추천 제외 409, 가상 포트폴리오 카드 허용), [`PaymentPreferenceCardGuardTest`](../../backend/src/test/java/com/beone/api/preference/application/PaymentPreferenceCardGuardTest.java)(보호 표의 모든 칸, 잠금 순서)
 - `webTest`: [`PaymentPreferenceApiWebTest`](../../backend/src/test/java/com/beone/api/preference/web/PaymentPreferenceApiWebTest.java)(계약 예시 응답, 실패 응답 전부, 헤더 없음·잘못된 값), [`PaymentPreferenceProfileOffWebTest`](../../backend/src/test/java/com/beone/api/preference/web/PaymentPreferenceProfileOffWebTest.java)(local·demo 밖 404), `UserCardApiWebTest`의 409 두 사례
-- `integrationTest`: [`PaymentPreferenceIntegrationTest`](../../backend/src/test/java/com/beone/api/preference/PaymentPreferenceIntegrationTest.java)(Flyway `V6` 적용, 저장·조회, 보유 카드 API 409와 해제 시 비우기, 사용자별 분리, DB 검사 제약)
+- `integrationTest`: [`PaymentPreferenceIntegrationTest`](../../backend/src/test/java/com/beone/api/preference/PaymentPreferenceIntegrationTest.java)(Flyway `V6` 적용, 저장·조회, 보유 카드 API 409와 해제 시 비우기, 사용자별 분리, 카드 변경과 같은 잠금 순서에서 교착 없음, DB 검사 제약)

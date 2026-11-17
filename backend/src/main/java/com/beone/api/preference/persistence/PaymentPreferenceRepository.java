@@ -27,6 +27,18 @@ public interface PaymentPreferenceRepository extends JpaRepository<PaymentPrefer
 	Long lockUser(@Param("userId") long userId);
 
 	/**
+	 * 보유 카드 행({@code user_cards})에 쓰기 잠금을 건다. 트랜잭션 안에서만 부른다.
+	 *
+	 * <p>설정 저장의 외래 키 검사는 대표 카드 행에 공유 잠금을 건다. 보유 카드 변경은 카드 행 → 사용자 행 순으로 잠그므로, 설정 변경도
+	 * 같은 순서로 카드 행을 먼저 잠가야 교착이 생기지 않는다. {@code card} 패키지 코드는 쓰지 않고 행만 잠근다.
+	 * @param userCardId 보유 카드 저장소 번호
+	 * @return 잠근 카드 번호. 행이 없으면 {@code null}
+	 */
+	@Query(value = "SELECT user_card_id FROM user_cards WHERE user_card_id = :userCardId FOR UPDATE",
+			nativeQuery = true)
+	Long lockUserCard(@Param("userCardId") long userCardId);
+
+	/**
 	 * 이 사용자의 설정 행을 쓰기 잠금으로 찾는다. {@link #lockUser} 뒤에 불러, 앞 요청이 커밋한 최신 값을 읽는다.
 	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)

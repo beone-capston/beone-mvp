@@ -23,3 +23,9 @@
   - 시각은 `Clock` 빈이 하나 있으면 그것을, 없으면 시스템 시계를 쓰고 Asia/Seoul 초 단위로 저장합니다(card와 같은 방식).
 - 검증: `./gradlew test webTest integrationTest build javadoc --rerun-tasks` 결과는 PR 본문에 기록합니다.
 - 남은 제한: 추천·모의 승인의 설정 사용(B2·B3), 추천 비교 대상이 아닌 대표 카드 무시(B2), 가상 포트폴리오 추천은 월간 상태 입력 전까지 대부분 `확인 필요`(결정 27 A3), Flyway 번호 확정. 서버 DB 적용·배포, frontend 변경은 하지 않았습니다.
+
+## 2026-11-17 · CodeRabbit 리뷰 반영(head `b816327` 리뷰)
+- 리뷰 상태: 요약 코멘트 coverage `b816327`, "No actionable comments", check 통과. 인라인·제출 리뷰 없음. 사람 승인 없음.
+- 반영: 요약의 보안 구조 검토(Medium·reliability)가 지적한 잠금 순서 순환을 고쳤습니다. 설정 변경이 사용자 행을 먼저 잡고 저장의 외래 키 검사로 대표 카드 행 공유 잠금을 기다리는 동안, 같은 카드를 해제하는 요청은 카드 행을 잡고 사용자 행을 기다려 교착이 됐습니다. 설정 변경도 대표 카드 행을 먼저 잠그도록(카드 행 → 사용자 행) 바꿔 보유 카드 변경과 순서를 맞췄습니다(`PaymentPreferenceRepository.lockUserCard`).
+- 확인: `PaymentPreferenceIntegrationTest#firstSaveWaitsForCardMutationLockOrderWithoutDeadlock`이 카드 변경과 같은 순서로 잠그는 트랜잭션과 설정 저장을 겹칩니다. 옛 순서로 되돌려 돌리면 `Deadlock found when trying to get lock`으로 실패하고, 고친 순서에서는 200으로 끝나는 것을 확인했습니다(되돌린 코드는 커밋하지 않음).
+- 비반영: 교착 재시도 정책은 두지 않았습니다. 잠금 순서를 하나로 맞춰 교착 원인을 없앴기 때문입니다.

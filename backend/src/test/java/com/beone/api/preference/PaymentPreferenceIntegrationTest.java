@@ -8,6 +8,10 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import com.beone.api.support.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
@@ -27,6 +31,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.json.JsonAssert;
 import org.springframework.test.json.JsonCompareMode;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -60,6 +66,9 @@ class PaymentPreferenceIntegrationTest {
 
 	@Autowired
 	JdbcTemplate jdbcTemplate;
+
+	@Autowired
+	PlatformTransactionManager transactionManager;
 
 	@BeforeEach
 	@AfterEach
@@ -168,6 +177,34 @@ class PaymentPreferenceIntegrationTest {
 	}
 
 	@Test
+	void firstSaveWaitsForCardMutationLockOrderWithoutDeadlock() throws Exception {
+		String card = registerConfirmed("09174");
+		long cardId = number(card);
+		Long userId = this.jdbcTemplate.queryForObject("SELECT user_id FROM users WHERE demo_user = 'MY_CARDS'",
+				Long.class);
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		try {
+			CompletableFuture<ResponseEntity<String>> put = new CompletableFuture<>();
+			// 보유 카드 변경과 같은 순서로 잠근다: 카드 행 → (설정 저장 요청 시작) → 사용자 행. 설정 저장이 사용자 행을 먼저 잡으면 교착이다.
+			new TransactionTemplate(this.transactionManager).executeWithoutResult(status -> {
+				this.jdbcTemplate.queryForObject("SELECT user_card_id FROM user_cards WHERE user_card_id = ? FOR UPDATE",
+						Long.class, cardId);
+				executor.submit(() -> put.complete(send("PUT", PATH, "MY_CARDS", body("FIXED_REPRESENTATIVE", card))));
+				pause();
+				this.jdbcTemplate.queryForObject("SELECT user_id FROM users WHERE user_id = ? FOR UPDATE", Long.class,
+						userId);
+			});
+
+			assertBody(put.get(30, TimeUnit.SECONDS), 200,
+					"{\"data\":{\"selectionMode\":\"FIXED_REPRESENTATIVE\",\"representativeUserCardId\":\"%s\",\"updatedAt\":\"%s\"}}"
+						.formatted(card, NOW));
+		}
+		finally {
+			executor.shutdownNow();
+		}
+	}
+
+	@Test
 	void databaseRejectsFixedModeWithoutCard() {
 		Long userId = this.jdbcTemplate.queryForObject("SELECT user_id FROM users WHERE demo_user = 'MY_CARDS'",
 				Long.class);
@@ -180,6 +217,17 @@ class PaymentPreferenceIntegrationTest {
 				+ "representative_user_card_id, updated_at) VALUES (?, 'MANUAL', NULL, NOW())", userId))
 			.isInstanceOf(DataAccessException.class)
 			.hasMessageContaining("ck_payment_preferences_mode");
+	}
+
+	// 설정 저장 요청이 카드 행 잠금에서 기다리기 시작할 시간을 준다. 잠금 순서가 틀리면 이 사이에 사용자 행을 먼저 잡는다.
+	private static void pause() {
+		try {
+			Thread.sleep(1000);
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException(ex);
+		}
 	}
 
 	private String registerConfirmed(String cardProductId) {
