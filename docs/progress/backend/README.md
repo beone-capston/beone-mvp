@@ -38,6 +38,7 @@
 - #116 → PR: 모의 승인·조회·취소 API(`payment` 패키지, `ledger`는 쓰기만, 주문 `PAID`·`CANCELLED` 최소 전이, recommendation 공개 메서드 1개 추가, Flyway `V8__simulated_payments_ledger.sql` 임시 번호, `Idempotency-Key`, 스냅샷 뒤 합산·추천 ID 연결은 B2f). `develop`에 병합 완료(`ca60dda`). [작업 기록](116-simulated-payments-api.md)
 - #118 → PR: 모의 원장 조회 API(`ledger` 패키지 조회 쪽, 거래일 기준 달, 1차 CODEF coverage는 `complete=false`·사유 없음, Flyway 없음, 페이지 나눔 없음). `develop`에 병합 완료(`9d26194`). [작업 기록](118-ledger-transactions-api.md)
 - #120 → PR: 추천 무효화·최근 추천·스냅샷 뒤 사용액 연결(새 API 없음, recommendation·monthlystate→ledger 읽기, card·order는 받는 쪽 조회 포트·구현 recommendation, 확인 필요 버킷은 엔진 입구 `NOT_ENTERED`(사유 추가 후보), Flyway 없음). `develop` 대상, 병합 전. [작업 기록](120-recommendation-usage-links.md)
+- #124 → PR: 회원 인증 U1 세션·CSRF 기반과 `GET /api/v1/auth/csrf`(`auth` 패키지, Flyway `V9__auth_sessions.sql` 임시 번호, `local`·`demo` 전용, Spring Security 없음, 익명 세션 수명 기본값은 사용자 결정 대기, 계약 `docs/api/auth.md`는 Notion 인증 명세 사본 반영). `develop` 대상, 병합 전. [작업 기록](124-auth-session-csrf.md)
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.
