@@ -112,6 +112,17 @@ public class CardProductService {
 				rule.limitBuckets().stream().map(bucket -> bucketOf(bucket, rule)).toList());
 	}
 
+	/**
+	 * 지원하는 상품 ID인지 확인한다. 보유 카드 등록·매핑에서 상품 존재를 확인할 때 쓴다.
+	 * @param cardProductId 상품 ID. 문자열 그대로 비교한다
+	 * @throws CardProductNotFoundException 지원하지 않는 상품 ID일 때
+	 */
+	public void requireSupported(String cardProductId) {
+		if (this.profiles.stream().noneMatch(profile -> profile.cardProductId().equals(cardProductId))) {
+			throw new CardProductNotFoundException();
+		}
+	}
+
 	private CardProductSummary summaryOf(CardProductProfile profile, LocalDate asOf) {
 		RuleSelection selection = select(profile, asOf);
 		if (selection instanceof RuleSelection.Selected selected) {
