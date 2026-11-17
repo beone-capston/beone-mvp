@@ -20,3 +20,4 @@
 - 검증: `./gradlew test webTest integrationTest build javadoc --rerun-tasks` 결과는 PR 본문에 기록합니다.
 - 로컬·테스트 DB만 사용했고 서버 DB 적용·배포는 하지 않았습니다.
 - PR #127 CodeRabbit(`07ffbd7`) 반영: ① 키 없음 통합 시험이 실행 셸의 `BEONE_CODEF_CONNECTED_ID_KEY`에 따라 실패할 수 있다는 지적 → 공유 빌드 파일(`build.gradle`)을 고치는 제안 대신 시험이 키 없는 공급을 직접 주입하도록 바꿨습니다(환경과 무관). ② `docs/architecture.md`의 codef 범위 밖 설명을 해석·전송 계층과 연결 계층으로 나누고, 구현 목록에 연결 API·`codef_connections`를 더했습니다. ③ 재연결 시험이 저장값을 복호화해 새로 발급된 connectedId인지, 이전 값이 정리됐는지 직접 확인하도록 보강했습니다(시험을 `codef.application` 패키지로 옮김).
+- CodeRabbit(`73ed666`) Outside diff Minor 반영: `docs/api/codef.md` DELETE 설명과 명세 단계 미정에 해제 시 보존(2026-11-18 사용자 결정)을 적고, 보존 기간·탈퇴·완전 삭제만 미정으로 남겼습니다.
