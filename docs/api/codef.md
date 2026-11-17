@@ -189,6 +189,9 @@ X-BeONE-Demo-User: MY_CARDS
 
 - **409 `CODEF_NOT_CONNECTED`**: 연결되어 있지 않은 경우
 
+- **409 `PORTFOLIO_READ_ONLY`**: 가상 포트폴리오 사용자가 요청한 경우
+  - 근거: [docs/api.md 업무 오류 코드](../api.md#업무-오류-코드)의 "가상 포트폴리오의 보유 카드·CODEF 쓰기 요청" 규칙(2026-11-18 관리자 판단으로 계약 정합화)
+
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
 ### 명세 단계 미정
