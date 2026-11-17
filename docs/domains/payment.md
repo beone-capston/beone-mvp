@@ -88,7 +88,7 @@ payment
 → 응답 본문을 결제 행과 멱등 키에 저장
 ```
 
-승인 요청 예시(`local`·`demo` 프로필에서만 경로가 열립니다). 본문은 생략하거나 `{}`로 보내도 되며, 그러면 본 추천 비교 없이 승인합니다.
+승인 요청 예시(`local`·`demo` 프로필에서만 경로가 열립니다). 주문·추천 시드는 없으므로 `ord-5001`·`rec-3001`은 계약 예시 값입니다. 먼저 `POST /api/v1/me/orders`로 주문을, `POST /api/v1/me/orders/{orderId}/recommendations`로 추천을 만든 뒤 받은 ID로 바꿔 보냅니다. 본문은 생략하거나 `{}`로 보내도 되며, 그러면 본 추천 비교 없이 승인합니다.
 
 ```bash
 curl -X POST "http://localhost:8080/api/v1/me/orders/ord-5001/simulated-payments" \
@@ -126,7 +126,7 @@ curl -X POST "http://localhost:8080/api/v1/me/orders/ord-5001/simulated-payments
 - 대표 카드 고정 승인의 `selectionBasis`는 `null`입니다(자동 추천의 선택 근거가 아님).
 - `FAILED`의 `approvedAt`은 실패 시각, 혜택은 `{amountWon: null, status: NEEDS_CONFIRMATION}`, `ledgerTransactionId`는 `null`, 취소 가능 금액은 0입니다. `FAILED` 취소는 409 `CANCELLATION_AMOUNT_EXCEEDED`입니다.
 - 원장 승인 행의 거래일·시각은 주문일·주문 시각, 취소 행은 취소한 날짜·시각 없음(계약 예시와 같음). 모의 행의 귀속 상태는 `CONFIRMED`입니다.
-- 재계산 비교 필드는 `selected.userCardId`와 `selected.currentOrderBenefit.amountWon`, 차이의 `reason`은 본 추천의 무효화 이유(없으면 `null`)입니다. 계약이 `changed`를 "선택 카드·혜택이 달라졌는지"로 정의하므로 대표 카드 고정 모드에서도 `selected` 기준입니다. 그래서 고정 모드에서 대표 카드의 혜택만 바뀌면 `changed`는 `false`입니다(계약 문구 정리 후보).
+- 재계산 비교 필드는 `selected.userCardId`와 `selected.currentOrderBenefit.amountWon`, 차이의 `reason`은 본 추천의 무효화 이유(없으면 `null`)입니다. 계약이 `changed`를 "선택 카드·혜택이 달라졌는지"로 정의하므로 대표 카드 고정 모드에서도 `selected` 기준입니다. 그래서 고정 모드에서 대표 카드가 `selected`가 아니면, 대표 카드(승인 카드)의 혜택이 바뀌어도 `selected` 카드와 그 혜택이 그대로인 한 `changed`는 `false`입니다. 대표 카드가 곧 `selected`이면 혜택 변화가 차이로 잡힙니다(계약 문구 정리 후보).
 - 주문의 `simulatedPaymentId`는 문자열로 저장해 `order`가 `payment`에 의존하지 않습니다.
 
 ## 제약과 한계
