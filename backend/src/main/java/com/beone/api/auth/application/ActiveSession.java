@@ -1,16 +1,19 @@
 package com.beone.api.auth.application;
 
+import java.time.Duration;
 import java.util.Objects;
 
 /**
- * 쿠키로 찾은 유효한 세션.
+ * 쿠키로 찾은 유효한 세션. 이번 사용으로 늘어난 미사용 만료에 맞춰 쿠키를 다시 심는다.
  *
  * @param sessionId 세션 ID 원문(요청 쿠키 값)
+ * @param cookieMaxAge 다시 심을 쿠키 {@code Max-Age}(이번 사용 시각부터 서버 미사용 만료까지)
  */
-public record ActiveSession(String sessionId) {
+public record ActiveSession(String sessionId, Duration cookieMaxAge) {
 
 	public ActiveSession {
 		Objects.requireNonNull(sessionId, "sessionId");
+		Objects.requireNonNull(cookieMaxAge, "cookieMaxAge");
 	}
 
 	/** 이 세션의 CSRF 토큰. */
@@ -29,7 +32,7 @@ public record ActiveSession(String sessionId) {
 
 	@Override
 	public String toString() {
-		return "ActiveSession[sessionId=<hidden>]";
+		return "ActiveSession[sessionId=<hidden>, cookieMaxAge=" + this.cookieMaxAge + "]";
 	}
 
 }

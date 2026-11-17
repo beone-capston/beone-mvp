@@ -29,8 +29,9 @@ import org.mockito.ArgumentCaptor;
 /**
  * 세션 발급·조회의 만료 판정과 해시 저장을 확인한다.
  *
- * <p>기대값: 미사용 만료와 절대 만료 중 먼저 오는 시각에 끝나고, 사용하면 미사용 만료가 늘어나되 절대 만료를 넘지 않는다(D-24,
- * docs/api/auth.md 세션 조회의 {@code expiresAt} 설명). 시험 수명은 미사용 1시간·최대 3시간이며 시계는 서울 2026-11-18 10:00이다.
+ * <p>기대값: 익명 세션은 미사용 만료에만 끝나고 절대 만료가 없다(2026-11-18 사용자 직접 결정). 사용하면 미사용 만료가 늘고 쿠키 수명도
+ * 그만큼 다시 정한다. 절대 만료가 있는 세션(회원 세션, U3)은 그 시각에도 끝나고 미사용 만료가 그것을 넘지 않는다(D-24). 시험 미사용
+ * 수명은 1시간이며 시계는 서울 2026-11-18 10:00이다.
  */
 class AuthSessionServiceTest {
 
@@ -38,8 +39,7 @@ class AuthSessionServiceTest {
 
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 18, 10, 0, 0);
 
-	private static final AnonymousSessionProperties LIFETIME = new AnonymousSessionProperties(Duration.ofHours(1),
-			Duration.ofHours(3));
+	private static final AnonymousSessionProperties LIFETIME = new AnonymousSessionProperties(Duration.ofHours(1));
 
 	private AuthSessionRepository repository;
 
@@ -48,12 +48,11 @@ class AuthSessionServiceTest {
 	@BeforeEach
 	void setUp() {
 		this.repository = mock(AuthSessionRepository.class);
-		Clock clock = Clock.fixed(NOW.atZone(SEOUL).toInstant(), ZoneOffset.UTC);
-		this.service = new AuthSessionService(this.repository, LIFETIME, clock);
+		this.service = new AuthSessionService(this.repository, LIFETIME, clockAt(NOW));
 	}
 
 	@Test
-	void issueAnonymousStoresOnlyHashWithLifetimes() {
+	void issueAnonymousStoresOnlyHashWithIdleExpiryAndNoAbsoluteExpiry() {
 		IssuedSession issued = this.service.issueAnonymous();
 
 		ArgumentCaptor<AuthSessionEntity> saved = ArgumentCaptor.forClass(AuthSessionEntity.class);
@@ -64,23 +63,10 @@ class AuthSessionServiceTest {
 		assertThat(row.getCreatedAt()).isEqualTo(NOW);
 		assertThat(row.getLastUsedAt()).isEqualTo(NOW);
 		assertThat(row.getIdleExpiresAt()).isEqualTo(NOW.plusHours(1));
-		assertThat(row.getAbsoluteExpiresAt()).isEqualTo(NOW.plusHours(3));
+		assertThat(row.getAbsoluteExpiresAt()).isNull();
 		assertThat(issued.csrfToken()).isEqualTo(SessionTokens.csrfTokenOf(issued.sessionId()));
-		assertThat(issued.cookieMaxAge()).isEqualTo(Duration.ofHours(3));
+		assertThat(issued.cookieMaxAge()).isEqualTo(Duration.ofHours(1));
 		assertThat(issued.toString()).doesNotContain(issued.sessionId()).doesNotContain(issued.csrfToken());
-	}
-
-	@Test
-	void idleExpiryNeverExceedsAbsoluteExpiryOnIssue() {
-		AuthSessionService equalLifetimes = new AuthSessionService(this.repository,
-				new AnonymousSessionProperties(Duration.ofHours(2), Duration.ofHours(2)),
-				Clock.fixed(NOW.atZone(SEOUL).toInstant(), ZoneOffset.UTC));
-
-		equalLifetimes.issueAnonymous();
-
-		ArgumentCaptor<AuthSessionEntity> saved = ArgumentCaptor.forClass(AuthSessionEntity.class);
-		verify(this.repository).save(saved.capture());
-		assertThat(saved.getValue().getIdleExpiresAt()).isEqualTo(saved.getValue().getAbsoluteExpiresAt());
 	}
 
 	@ParameterizedTest
@@ -99,9 +85,9 @@ class AuthSessionServiceTest {
 	}
 
 	@Test
-	void validSessionIsTouchedAndIdleExpiryExtended() {
+	void validUseExtendsIdleExpiryAndReturnsMatchingCookieMaxAge() {
 		String id = SessionTokens.newSessionId();
-		AuthSessionEntity row = row(id, NOW.minusMinutes(30), NOW.plusMinutes(30), NOW.plusHours(2));
+		AuthSessionEntity row = row(id, NOW.minusMinutes(30), NOW.plusMinutes(30), null);
 		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(row));
 
 		Optional<ActiveSession> active = this.service.use(id);
@@ -110,23 +96,28 @@ class AuthSessionServiceTest {
 		assertThat(active.get().csrfToken()).isEqualTo(SessionTokens.csrfTokenOf(id));
 		assertThat(row.getLastUsedAt()).isEqualTo(NOW);
 		assertThat(row.getIdleExpiresAt()).isEqualTo(NOW.plusHours(1));
+		// 쿠키 수명 = 이번 사용 시각부터 서버 미사용 만료까지.
+		assertThat(active.get().cookieMaxAge()).isEqualTo(Duration.between(NOW, row.getIdleExpiresAt()));
 		verify(this.repository, never()).delete(any());
 	}
 
 	@Test
-	void touchCapsIdleExpiryAtAbsoluteExpiry() {
+	void anonymousSessionCreatedLongAgoStaysValidWhileUsed() {
 		String id = SessionTokens.newSessionId();
-		AuthSessionEntity row = row(id, NOW.minusHours(2).minusMinutes(30), NOW.plusMinutes(10), NOW.plusMinutes(30));
+		// 발급 40일 전, 마지막 사용 30분 전. 절대 만료가 없으므로 계속 유효하다.
+		AuthSessionEntity row = new AuthSessionEntity(SessionTokens.hash(id), NOW.minusDays(40), NOW.minusDays(40).plusHours(1),
+				null);
+		row.touch(NOW.minusMinutes(30), NOW.plusMinutes(30));
 		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(row));
 
 		assertThat(this.service.use(id)).isPresent();
-		assertThat(row.getIdleExpiresAt()).isEqualTo(NOW.plusMinutes(30));
+		assertThat(row.getIdleExpiresAt()).isEqualTo(NOW.plusHours(1));
 	}
 
 	@Test
 	void sessionAtIdleExpiryIsExpiredAndDeleted() {
 		String id = SessionTokens.newSessionId();
-		AuthSessionEntity row = row(id, NOW.minusHours(1), NOW, NOW.plusHours(2));
+		AuthSessionEntity row = row(id, NOW.minusHours(1), NOW, null);
 		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(row));
 
 		assertThat(this.service.use(id)).isEmpty();
@@ -134,29 +125,39 @@ class AuthSessionServiceTest {
 	}
 
 	@Test
-	void sessionAtAbsoluteExpiryIsExpiredEvenIfRecentlyUsed() {
+	void sessionOneSecondBeforeIdleExpiryIsStillValid() {
 		String id = SessionTokens.newSessionId();
-		AuthSessionEntity row = row(id, NOW.minusHours(3), NOW, NOW);
-		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(row));
-
-		assertThat(this.service.use(id)).isEmpty();
-		verify(this.repository).delete(row);
-	}
-
-	@Test
-	void sessionOneSecondBeforeExpiryIsStillValid() {
-		String id = SessionTokens.newSessionId();
-		AuthSessionEntity row = row(id, NOW.minusHours(1), NOW.plusSeconds(1), NOW.plusSeconds(1));
+		AuthSessionEntity row = row(id, NOW.minusHours(1), NOW.plusSeconds(1), null);
 		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(row));
 
 		assertThat(this.service.use(id)).isPresent();
 	}
 
 	@Test
-	void activeSessionToStringHidesSessionId() {
+	void sessionWithAbsoluteExpiryEndsThereAndCapsIdleExpiry() {
+		String capped = SessionTokens.newSessionId();
+		AuthSessionEntity cappedRow = row(capped, NOW.minusMinutes(10), NOW.plusMinutes(10), NOW.plusMinutes(30));
+		given(this.repository.findBySessionHash(SessionTokens.hash(capped))).willReturn(Optional.of(cappedRow));
+
+		Optional<ActiveSession> active = this.service.use(capped);
+
+		assertThat(active).isPresent();
+		assertThat(cappedRow.getIdleExpiresAt()).isEqualTo(NOW.plusMinutes(30));
+		assertThat(active.get().cookieMaxAge()).isEqualTo(Duration.ofMinutes(30));
+
+		String ended = SessionTokens.newSessionId();
+		AuthSessionEntity endedRow = row(ended, NOW.minusMinutes(10), NOW, NOW);
+		given(this.repository.findBySessionHash(SessionTokens.hash(ended))).willReturn(Optional.of(endedRow));
+
+		assertThat(this.service.use(ended)).isEmpty();
+		verify(this.repository).delete(endedRow);
+	}
+
+	@Test
+	void sessionToStringHidesSessionId() {
 		String id = SessionTokens.newSessionId();
 
-		assertThat(new ActiveSession(id).toString()).doesNotContain(id);
+		assertThat(new ActiveSession(id, Duration.ofHours(1)).toString()).doesNotContain(id);
 	}
 
 	@Test
@@ -171,10 +172,13 @@ class AuthSessionServiceTest {
 		assertThat(saved.getValue().getCreatedAt()).isEqualTo(NOW);
 	}
 
+	private static Clock clockAt(LocalDateTime seoulTime) {
+		return Clock.fixed(seoulTime.atZone(SEOUL).toInstant(), ZoneOffset.UTC);
+	}
+
 	private static AuthSessionEntity row(String id, LocalDateTime lastUsed, LocalDateTime idleExpiry,
 			LocalDateTime absoluteExpiry) {
-		AuthSessionEntity row = new AuthSessionEntity(SessionTokens.hash(id), lastUsed, idleExpiry, absoluteExpiry);
-		return row;
+		return new AuthSessionEntity(SessionTokens.hash(id), lastUsed, idleExpiry, absoluteExpiry);
 	}
 
 }

@@ -75,7 +75,7 @@ class AuthCsrfApiWebTest {
 	void withoutCookieIssuesAnonymousSessionCookieAndToken() throws Exception {
 		given(this.authSessionService.use(null)).willReturn(Optional.empty());
 		given(this.authSessionService.issueAnonymous())
-			.willReturn(new IssuedSession(SESSION_ID, TOKEN, Duration.ofDays(30)));
+			.willReturn(new IssuedSession(SESSION_ID, TOKEN, Duration.ofHours(2)));
 
 		MvcResult result = this.mockMvc.perform(get(CSRF_PATH)).andReturn();
 
@@ -87,7 +87,7 @@ class AuthCsrfApiWebTest {
 		assertThat(cookie).isNotNull();
 		assertThat(cookie.getValue()).isEqualTo(SESSION_ID);
 		assertThat(cookie.getPath()).isEqualTo("/");
-		assertThat(cookie.getMaxAge()).isEqualTo(2592000);
+		assertThat(cookie.getMaxAge()).isEqualTo(7200);
 		assertThat(cookie.getSecure()).isTrue();
 		assertThat(cookie.isHttpOnly()).isTrue();
 		assertThat(cookie.getAttribute("SameSite")).isEqualTo("Lax");
@@ -107,14 +107,15 @@ class AuthCsrfApiWebTest {
 	}
 
 	@Test
-	void validSessionCookieReturnsItsTokenWithoutNewCookie() throws Exception {
-		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID)));
+	void validSessionCookieReturnsItsTokenAndRefreshesSameCookieMaxAge() throws Exception {
+		given(this.authSessionService.use(SESSION_ID))
+			.willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
 
 		MvcResult result = this.mockMvc.perform(get(CSRF_PATH).cookie(sessionCookie(SESSION_ID))).andReturn();
 
 		assertBody(result, 200, "{\"data\":{\"headerName\":\"X-CSRF-TOKEN\",\"token\":\"" + TOKEN + "\"}}");
 		assertThat(result.getResponse().getHeader("Cache-Control")).isEqualTo("no-store");
-		assertThat(result.getResponse().getHeaders("Set-Cookie")).isEmpty();
+		assertRefreshedCookie(result, 7200);
 		verify(this.authSessionService, never()).issueAnonymous();
 	}
 
@@ -123,7 +124,7 @@ class AuthCsrfApiWebTest {
 		String stale = SessionTokens.newSessionId();
 		given(this.authSessionService.use(stale)).willReturn(Optional.empty());
 		given(this.authSessionService.issueAnonymous())
-			.willReturn(new IssuedSession(SESSION_ID, TOKEN, Duration.ofDays(30)));
+			.willReturn(new IssuedSession(SESSION_ID, TOKEN, Duration.ofHours(2)));
 
 		MvcResult result = this.mockMvc.perform(get(CSRF_PATH).cookie(sessionCookie(stale))).andReturn();
 
@@ -135,7 +136,7 @@ class AuthCsrfApiWebTest {
 	void demoUserHeaderIsIgnored() throws Exception {
 		given(this.authSessionService.use(null)).willReturn(Optional.empty());
 		given(this.authSessionService.issueAnonymous())
-			.willReturn(new IssuedSession(SESSION_ID, TOKEN, Duration.ofDays(30)));
+			.willReturn(new IssuedSession(SESSION_ID, TOKEN, Duration.ofHours(2)));
 
 		MvcResult result = this.mockMvc.perform(get(CSRF_PATH).header("X-BeONE-Demo-User", "WRONG")).andReturn();
 
@@ -183,7 +184,7 @@ class AuthCsrfApiWebTest {
 
 	@Test
 	void postWithoutTokenHeaderIsCsrfInvalid() throws Exception {
-		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID)));
+		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
 
 		MvcResult result = this.mockMvc.perform(probe().cookie(sessionCookie(SESSION_ID))).andReturn();
 
@@ -192,7 +193,7 @@ class AuthCsrfApiWebTest {
 
 	@Test
 	void postWithTokenOfAnotherSessionIsCsrfInvalid() throws Exception {
-		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID)));
+		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
 		String otherToken = SessionTokens.csrfTokenOf(SessionTokens.newSessionId());
 
 		MvcResult result = this.mockMvc
@@ -215,7 +216,7 @@ class AuthCsrfApiWebTest {
 
 	@Test
 	void postWithMatchingCookieAndTokenReachesHandler() throws Exception {
-		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID)));
+		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
 
 		MvcResult result = this.mockMvc
 			.perform(probe().cookie(sessionCookie(SESSION_ID)).header("X-CSRF-TOKEN", TOKEN))
@@ -223,11 +224,13 @@ class AuthCsrfApiWebTest {
 
 		assertBody(result, 200, "{\"data\":{\"value\":\"ok\"}}");
 		assertThat(result.getResponse().getHeader("Cache-Control")).isEqualTo("no-store");
+		// CSRF를 통과한 인증 POST도 쿠키 수명을 다시 심는다(사본의 POST 응답 헤더 예시에 덧붙임, 2026-11-18 사용자 직접 결정).
+		assertRefreshedCookie(result, 7200);
 	}
 
 	@Test
 	void validCsrfThenInvalidBodyIsInvalidRequest() throws Exception {
-		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID)));
+		given(this.authSessionService.use(SESSION_ID)).willReturn(Optional.of(new ActiveSession(SESSION_ID, Duration.ofHours(2))));
 
 		MvcResult result = this.mockMvc
 			.perform(post(PROBE_PATH).contentType(MediaType.APPLICATION_JSON)
@@ -262,7 +265,20 @@ class AuthCsrfApiWebTest {
 		return new Cookie("__Host-BEONE_SESSION", value);
 	}
 
+	private static void assertRefreshedCookie(MvcResult result, int maxAge) {
+		assertThat(result.getResponse().getHeaders("Set-Cookie")).hasSize(1);
+		Cookie cookie = result.getResponse().getCookie("__Host-BEONE_SESSION");
+		assertThat(cookie).isNotNull();
+		assertThat(cookie.getValue()).isEqualTo(SESSION_ID);
+		assertThat(cookie.getMaxAge()).isEqualTo(maxAge);
+		assertThat(cookie.getPath()).isEqualTo("/");
+		assertThat(cookie.getSecure()).isTrue();
+		assertThat(cookie.isHttpOnly()).isTrue();
+		assertThat(cookie.getAttribute("SameSite")).isEqualTo("Lax");
+	}
+
 	private static void assertCsrfInvalid(MvcResult result) throws Exception {
+		assertThat(result.getResponse().getHeaders("Set-Cookie")).isEmpty();
 		assertBody(result, 403, CSRF_INVALID);
 		assertThat(result.getResponse().getHeader("Cache-Control")).isEqualTo("no-store");
 	}

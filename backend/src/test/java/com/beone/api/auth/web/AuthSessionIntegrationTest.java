@@ -11,6 +11,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -38,7 +39,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.json.JsonAssert;
 import org.springframework.test.json.JsonCompareMode;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -50,16 +50,15 @@ import org.testcontainers.mysql.MySQLContainer;
 
 /**
  * 세션 쿠키·CSRF 기반을 실제 HTTP·MySQL로 확인한다. Flyway {@code V9} 적용({@code ddl-auto: validate}), 세션 ID 해시 저장,
- * 쿠키 헤더 원문, 미사용·절대 만료, 인증 POST의 CSRF 검사를 본다.
+ * 쿠키 헤더 원문, 익명 세션 수명, 인증 POST의 CSRF 검사를 본다.
  *
- * <p>기대값은 docs/api/auth.md(인증 명세 사본 반영)와 D-24다. 만료 경계를 짧게 시험하려고 익명 세션 수명을 미사용 1시간·최대
- * 3시간으로 명시해 주입한다(기본값은 미사용 2시간, AnonymousSessionPropertiesTest). 시계는 서울 2026-11-18 10:00에서 시작해 테스트가 앞으로 돌린다. U1에는 인증 POST API가 없으므로 테스트 전용
- * POST 경로로 검사기를 확인한다.
+ * <p>기대값은 docs/api/auth.md(인증 명세 사본 반영)와 D-24, 2026-11-18 사용자 직접 결정(익명 세션은 미사용 2시간에 만료, 발급 기준
+ * 절대 상한 없음, 유효한 사용마다 쿠키 {@code Max-Age}와 서버 미사용 만료를 함께 갱신)이다. 수명은 설정을 덮어쓰지 않고 기본값(2시간)을
+ * 쓴다. 시계는 주입한 가변 시계로 서울 2026-11-18 10:00에서 시작해 테스트가 앞으로 돌린다(sleep 없음). U1에는 인증 POST API가 없으므로
+ * 테스트 전용 POST 경로로 검사기를 확인한다.
  */
 @IntegrationTest
 @ActiveProfiles("local")
-@TestPropertySource(properties = { "beone.auth.anonymous-session.idle-timeout=PT1H",
-		"beone.auth.anonymous-session.absolute-timeout=PT3H" })
 @Import({ AuthSessionIntegrationTest.MutableClockConfiguration.class, AuthSessionIntegrationTest.ProbeController.class })
 class AuthSessionIntegrationTest {
 
@@ -111,7 +110,7 @@ class AuthSessionIntegrationTest {
 		assertThat(setCookies).hasSize(1);
 		String sessionId = cookieValue(setCookies.get(0));
 		assertThat(setCookies.get(0)).isEqualTo("__Host-BEONE_SESSION=" + sessionId
-				+ "; Path=/; Max-Age=10800; Secure; HttpOnly; SameSite=Lax");
+				+ "; Path=/; Max-Age=7200; Secure; HttpOnly; SameSite=Lax");
 		assertThat(sessionId).matches("[A-Za-z0-9_-]{43}");
 		String token = token(response);
 		assertThat(token).matches("[A-Za-z0-9_-]{43}").isNotEqualTo(sessionId);
@@ -122,54 +121,90 @@ class AuthSessionIntegrationTest {
 		assertThat(row.values()).noneMatch(value -> String.valueOf(value).contains(sessionId))
 			.noneMatch(value -> String.valueOf(value).contains(token));
 		assertThat(row.get("created_at").toString()).startsWith("2026-11-18T10:00");
-		assertThat(row.get("idle_expires_at").toString()).startsWith("2026-11-18T11:00");
-		assertThat(row.get("absolute_expires_at").toString()).startsWith("2026-11-18T13:00");
+		assertThat(row.get("idle_expires_at").toString()).startsWith("2026-11-18T12:00");
+		assertThat(row.get("absolute_expires_at")).isNull();
 	}
 
+	/** 필수 ①: 2시간 안에 계속 쓰면 발급 뒤 2시간을 넘겨도, 발급이 40일 전이어도 유지된다(절대 상한 없음). */
 	@Test
-	void sameSessionReturnsSameTokenWithoutNewCookieAndExtendsIdleExpiry() throws Exception {
+	void sustainedUseKeepsAnonymousSessionBeyondTwoHoursAfterCreation() throws Exception {
 		ResponseEntity<String> first = get(null);
 		String sessionId = cookieValue(first.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
+		for (int i = 0; i < 6; i++) {
+			this.clock.advance(Duration.ofMinutes(110));
+			ResponseEntity<String> used = get(sessionId);
+			assertThat(cookieValue(used.getHeaders().getFirst(HttpHeaders.SET_COOKIE))).isEqualTo(sessionId);
+			assertThat(token(used)).isEqualTo(token(first));
+		}
+		// 발급 뒤 11시간. 같은 세션 한 행만 있다.
+		assertThat(this.jdbcTemplate.queryForList("SELECT session_hash FROM auth_sessions", String.class))
+			.containsExactly(sha256Hex(sessionId));
 
-		this.clock.advance(Duration.ofMinutes(50));
-		ResponseEntity<String> second = get(sessionId);
-
-		assertThat(second.getStatusCode().value()).isEqualTo(200);
-		assertThat(second.getHeaders().get(HttpHeaders.SET_COOKIE)).isNull();
-		assertThat(token(second)).isEqualTo(token(first));
-		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM auth_sessions", Integer.class)).isOne();
-		Map<String, Object> row = this.jdbcTemplate.queryForMap("SELECT * FROM auth_sessions");
-		assertThat(row.get("last_used_at").toString()).startsWith("2026-11-18T10:50");
-		assertThat(row.get("idle_expires_at").toString()).startsWith("2026-11-18T11:50");
+		// 발급 시각을 40일 전으로 옮겨도(회원 최대 30일보다 오래) 생성 기준으로 끝나지 않는다.
+		this.jdbcTemplate.update("UPDATE auth_sessions SET created_at = DATE_SUB(created_at, INTERVAL 40 DAY)");
+		this.clock.advance(Duration.ofMinutes(110));
+		ResponseEntity<String> later = get(sessionId);
+		assertThat(cookieValue(later.getHeaders().getFirst(HttpHeaders.SET_COOKIE))).isEqualTo(sessionId);
+		assertThat(this.jdbcTemplate.queryForObject("SELECT absolute_expires_at FROM auth_sessions", Object.class))
+			.isNull();
 	}
 
+	/** 필수 ②: 마지막 사용 뒤 2시간 동안 쓰지 않으면 만료하고, 다음 조회는 새 익명 세션을 발급하며 옛 행을 지운다. */
 	@Test
-	void idleExpiredSessionIsReplacedAndOldRowDeleted() throws Exception {
+	void anonymousSessionExpiresAfterTwoHoursWithoutUse() throws Exception {
 		ResponseEntity<String> first = get(null);
 		String oldSession = cookieValue(first.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
+		this.clock.advance(Duration.ofMinutes(30));
+		assertThat(cookieValue(get(oldSession).getHeaders().getFirst(HttpHeaders.SET_COOKIE))).isEqualTo(oldSession);
 
-		this.clock.advance(Duration.ofHours(1));
-		ResponseEntity<String> second = get(oldSession);
+		// 마지막 사용(10:30) 뒤 1시간 59분 59초: 아직 유효.
+		this.clock.advance(Duration.ofHours(2).minusSeconds(1));
+		assertThat(cookieValue(get(oldSession).getHeaders().getFirst(HttpHeaders.SET_COOKIE))).isEqualTo(oldSession);
 
-		String newSession = cookieValue(second.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
+		// 마지막 사용(12:29:59) 뒤 정확히 2시간: 만료.
+		this.clock.advance(Duration.ofHours(2));
+		ResponseEntity<String> expired = get(oldSession);
+		String newSession = cookieValue(expired.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
 		assertThat(newSession).isNotEqualTo(oldSession);
-		assertThat(token(second)).isNotEqualTo(token(first));
+		assertThat(token(expired)).isNotEqualTo(token(first));
 		assertThat(this.jdbcTemplate.queryForList("SELECT session_hash FROM auth_sessions", String.class))
 			.containsExactly(sha256Hex(newSession));
+		assertBody(post(oldSession, token(first)), 403, CSRF_INVALID);
 	}
 
+	/** 필수 ③: 유효한 사용(GET csrf, CSRF를 통과한 POST)마다 쿠키 Max-Age=7200을 다시 심고, 서버 미사용 만료와 같은 시각을 가리킨다. */
 	@Test
-	void absoluteExpiryEndsSessionEvenWhenUsedRegularly() throws Exception {
-		String sessionId = cookieValue(get(null).getHeaders().getFirst(HttpHeaders.SET_COOKIE));
-		for (int i = 0; i < 5; i++) {
-			this.clock.advance(Duration.ofMinutes(35));
-			assertThat(get(sessionId).getHeaders().get(HttpHeaders.SET_COOKIE)).isNull();
-		}
-		// 발급 뒤 2시간 55분. 사용을 이어 가도 3시간이 되면 끝난다.
-		this.clock.advance(Duration.ofMinutes(5));
+	void cookieMaxAgeIsRefreshedOnEachValidUseAndMatchesServerIdleExpiry() throws Exception {
+		ResponseEntity<String> issued = get(null);
+		String sessionId = cookieValue(issued.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
+		String token = token(issued);
+		assertCookieMatchesServer(issued, sessionId, "2026-11-18T10:00", "2026-11-18T12:00");
 
-		assertThat(get(sessionId).getHeaders().getFirst(HttpHeaders.SET_COOKIE)).isNotNull()
-			.doesNotContain(sessionId);
+		this.clock.advance(Duration.ofMinutes(50));
+		assertCookieMatchesServer(get(sessionId), sessionId, "2026-11-18T10:50", "2026-11-18T12:50");
+
+		this.clock.advance(Duration.ofMinutes(70));
+		ResponseEntity<String> posted = post(sessionId, token);
+		assertBody(posted, 200, "{\"data\":\"ok\"}");
+		assertCookieMatchesServer(posted, sessionId, "2026-11-18T12:00", "2026-11-18T14:00");
+
+		// CSRF 실패는 세션을 쓰지 않은 것으로 보고 쿠키를 심지 않는다. 서버 만료도 그대로다.
+		this.clock.advance(Duration.ofMinutes(10));
+		ResponseEntity<String> rejected = post(sessionId, "wrong");
+		assertBody(rejected, 403, CSRF_INVALID);
+		assertThat(rejected.getHeaders().get(HttpHeaders.SET_COOKIE)).isNull();
+	}
+
+	private void assertCookieMatchesServer(ResponseEntity<String> response, String sessionId, String lastUsed,
+			String idleExpiry) throws Exception {
+		assertThat(response.getHeaders().get(HttpHeaders.SET_COOKIE)).containsExactly("__Host-BEONE_SESSION=" + sessionId
+				+ "; Path=/; Max-Age=7200; Secure; HttpOnly; SameSite=Lax");
+		Map<String, Object> row = this.jdbcTemplate.queryForMap("SELECT * FROM auth_sessions");
+		assertThat(row.get("last_used_at").toString()).startsWith(lastUsed);
+		assertThat(row.get("idle_expires_at").toString()).startsWith(idleExpiry);
+		// 쿠키 수명(7200초) = 서버 미사용 만료 - 마지막 사용.
+		assertThat(Duration.between((LocalDateTime) row.get("last_used_at"),
+				(LocalDateTime) row.get("idle_expires_at"))).isEqualTo(Duration.ofSeconds(7200));
 	}
 
 	@Test
@@ -186,7 +221,7 @@ class AuthSessionIntegrationTest {
 		assertBody(ok, 200, "{\"data\":\"ok\"}");
 		assertThat(ok.getHeaders().getCacheControl()).isEqualTo("no-store");
 
-		this.clock.advance(Duration.ofHours(3));
+		this.clock.advance(Duration.ofHours(2));
 		ResponseEntity<String> expired = post(sessionId, token);
 		assertBody(expired, 403, CSRF_INVALID);
 		assertThat(expired.getHeaders().getCacheControl()).isEqualTo("no-store");
@@ -207,8 +242,8 @@ class AuthSessionIntegrationTest {
 	void concurrentUseWaitsForExtensionAndDoesNotDeleteExtendedSession() throws Exception {
 		String sessionId = cookieValue(get(null).getHeaders().getFirst(HttpHeaders.SET_COOKIE));
 		String hash = sha256Hex(sessionId);
-		// 저장된 미사용 만료(11:00)에 도달했다. 다른 요청이 같은 순간 이 세션을 연장하고 있다.
-		this.clock.advance(Duration.ofHours(1));
+		// 저장된 미사용 만료(12:00)에 도달했다. 다른 요청이 같은 순간 이 세션을 연장하고 있다.
+		this.clock.advance(Duration.ofHours(2));
 		ExecutorService executor = Executors.newSingleThreadExecutor();
 		try {
 			CompletableFuture<ResponseEntity<String>> concurrent = new CompletableFuture<>();
@@ -216,7 +251,7 @@ class AuthSessionIntegrationTest {
 				this.jdbcTemplate.queryForObject("SELECT auth_session_id FROM auth_sessions WHERE session_hash = ? FOR UPDATE",
 						Long.class, hash);
 				this.jdbcTemplate.update(
-						"UPDATE auth_sessions SET last_used_at = '2026-11-18 10:59:59', idle_expires_at = '2026-11-18 11:59:59' "
+						"UPDATE auth_sessions SET last_used_at = '2026-11-18 11:59:59', idle_expires_at = '2026-11-18 13:59:59' "
 								+ "WHERE session_hash = ?",
 						hash);
 				long connection = this.jdbcTemplate.queryForObject("SELECT CONNECTION_ID()", Long.class);
@@ -225,8 +260,8 @@ class AuthSessionIntegrationTest {
 			});
 
 			ResponseEntity<String> response = concurrent.get(20, TimeUnit.SECONDS);
-			// 잠금 없이 옛 만료 값으로 판정하면 연장된 세션을 지우고 새 쿠키를 심는다.
-			assertThat(response.getHeaders().get(HttpHeaders.SET_COOKIE)).isNull();
+			// 잠금 없이 옛 만료 값으로 판정하면 연장된 세션을 지우고 새 세션 쿠키를 심는다. 잠금이 있으면 같은 세션 쿠키를 갱신한다.
+			assertThat(cookieValue(response.getHeaders().getFirst(HttpHeaders.SET_COOKIE))).isEqualTo(sessionId);
 			assertThat(this.jdbcTemplate.queryForList("SELECT session_hash FROM auth_sessions", String.class))
 				.containsExactly(hash);
 		}

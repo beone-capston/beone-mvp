@@ -22,7 +22,6 @@
   - 로그인 실패 제한: 같은 이메일로 15분 안에 5번 실패하면 15분 동안 429 `RATE_LIMITED`입니다(이메일 기준, IP 기준 없음, 이메일 존재 여부를 구분하지 않음). U3에서 구현하며 U1 코드에는 영향이 없습니다.
   - 회원 세션의 미사용 7일·최대 30일·동시 5개는 그대로입니다. IP 추가 제한과 프록시(`X-Forwarded-For`) 정책은 넣지 않고 공개 배포 전 별도 점검으로 남깁니다.
 - 정정(관리자 `msg_b64f23b28e75`가 `msg_16e9f77e7fc6`의 판단을 철회): 익명 세션의 절대 상한은 **미결**입니다. 사용자 승인값은 미사용 2시간과 동시 5개 계산 제외뿐입니다. 현재 `absolute-timeout` 기본 `PT2H`·쿠키 `Max-Age=7200`은 확정 전 임시값이고, 병합 전에 정합니다. 아래 문장은 철회 전 기록입니다: 익명 세션의 절대 상한도 2시간이었습니다. 사용자 선택지의 '짧게, 오래된 익명 세션이 쌓이지 않게' 의도에 맞춘 것입니다. 로그인에 성공하면 익명 세션을 폐기하고 새 회원 세션을 발급합니다(세션 고정 방지, U3). 사본의 "세션 ID 갱신"과 같은 뜻이라 충돌은 없습니다.
-- 테스트는 만료 경계를 짧게 보려고 미사용 1시간·최대 3시간을 명시해 주입합니다.
 - 작은 구현 결정:
   - CSRF 토큰은 저장하지 않고 세션 ID에서 SHA-256으로 유도합니다(고정 접두어로 세션 해시와 구분). 세션마다 하나라 여러 탭에서 같은 토큰을 쓸 수 있고, 세션 ID가 바뀌면 토큰도 바뀝니다. 비밀 키가 필요 없습니다. 쿠키가 `HttpOnly`라 다른 사이트가 세션 ID를 읽어 토큰을 만들 수 없습니다.
   - CSRF 검사는 서블릿 필터가 아니라 MVC 인터셉터로 합니다. 기능별 처리기로 공통 응답 형식을 그대로 쓰고, 본문 검증(400)보다 먼저 403이 나게 하려는 것입니다. 없는 경로·405는 공통 처리를 따릅니다.
@@ -42,3 +41,18 @@
 ## 2026-11-18 · 최신 `develop` merge(#122 → PR #123 병합 `c3ce45e`)
 - `origin/develop`을 merge했습니다(rebase 아님). 충돌은 `docs/progress/backend/README.md` 진행 목록뿐이었고, develop의 #120·#122 줄을 유지한 채 #124 줄을 그 뒤에 두었습니다.
 - Flyway: `develop`이 `V8`까지라 `V9__auth_sessions.sql`을 그대로 둡니다. 다른 작업선과의 최종 순서는 병합 직전 관리자가 정합니다.
+
+## 2026-11-18 · 익명 세션 절대 상한 없음 확정(사용자 직접 결정)
+- 경위: 절대 상한은 미결(`msg_b64f23b28e75`) → 판단 보고(`msg_3b34e38d2b1e`, 추천 A) → 2026-11-18 사용자 직접 확정(Aside 질문, 관리자 전달 `msg_50deb5fad9d1`·`msg_26e32287fcf8`). 철회된 '절대 2시간(관리자 판단)'과는 다른 결정입니다.
+- 최종 정책: 미사용 2시간, 사용할 때 쿠키 수명과 서버 마지막 사용 갱신, 발급 기준 절대 상한 없음, 동시 5개 계산 제외, 로그인 때 익명 세션 폐기와 새 회원 세션 발급(U3), 회원 세션 7일·30일·5개는 그대로.
+- 코드:
+  - `AnonymousSessionProperties`에서 `absolute-timeout`을 없앴습니다.
+  - V9 `absolute_expires_at`을 `NULL` 허용으로 바꾸고, `CHECK`를 "절대 만료가 있으면 미사용 만료 ≤ 절대 만료"로 고쳤습니다. 익명 세션은 `NULL`이고, 회원 세션의 30일은 U3에서 채웁니다.
+  - `AuthSessionService.use`가 새 쿠키 수명(이번 사용부터 새 미사용 만료까지)을 `ActiveSession`에 담아 돌려줍니다.
+  - `GET /api/v1/auth/csrf`(유효 세션)와 CSRF를 통과한 인증 POST가 같은 쿠키를 새 `Max-Age`로 다시 심습니다. POST 응답의 `Set-Cookie`는 사본에 덧붙인 것으로 `docs/api/auth.md`에 적었습니다.
+- 테스트: 통합 테스트는 수명 설정을 덮어쓰지 않고 기본값(2시간)을 씁니다. 가변 시계를 주입하고 sleep은 쓰지 않습니다. 필수 시험별 이름:
+  - ① `AuthSessionIntegrationTest#sustainedUseKeepsAnonymousSessionBeyondTwoHoursAfterCreation`: 110분 간격으로 6번 써서 발급 뒤 11시간까지, 이어서 발급 시각을 40일 전으로 옮긴 뒤에도 유지됩니다(절대 상한 없음).
+  - ② `AuthSessionIntegrationTest#anonymousSessionExpiresAfterTwoHoursWithoutUse`: 마지막 사용 뒤 1시간 59분 59초에는 유효하고, 정확히 2시간이면 만료합니다. 옛 행을 지우고 새 세션을 발급하며, 옛 쿠키로 보낸 POST는 403입니다.
+  - ③ `AuthSessionIntegrationTest#cookieMaxAgeIsRefreshedOnEachValidUseAndMatchesServerIdleExpiry`: 발급, GET csrf, CSRF를 통과한 POST마다 `Max-Age=7200` 헤더 원문과 서버 `idle_expires_at - last_used_at = 7200초`가 맞습니다. CSRF 실패에는 쿠키가 없습니다.
+  - 단위·웹 테스트: `AuthSessionServiceTest`(절대 만료 `NULL` 저장, 40일 전 발급이어도 유효, 절대 만료가 있는 세션의 상한과 쿠키 수명), `AuthCsrfApiWebTest`(GET csrf와 POST의 쿠키 갱신, 403에는 쿠키 없음), `AnonymousSessionPropertiesTest`.
+  - ④ 로그인 교체 검증은 U3 병합 조건으로 이월(로그인 API 미존재). 로그인 때 세션 ID·CSRF 교체와 익명 세션 폐기는 U3(login) PR에서 시험합니다. U1에는 테스트만을 위한 교체 메서드를 넣지 않습니다(관리자 판단 결정 28, 질문 `msg_445468a45949` → 답 `msg_05e6695fdc35`).

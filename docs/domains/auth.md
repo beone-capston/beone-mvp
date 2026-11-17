@@ -45,7 +45,7 @@ com.beone.api.auth
 ├── application/
 │   ├── AuthSessionService        세션 발급·조회·만료 판정, local·demo
 │   ├── SessionTokens             세션 ID·CSRF 토큰 생성, SHA-256 해시, 상수 시간 비교
-│   ├── AnonymousSessionProperties 익명 세션 수명 설정값(미사용·절대 모두 2시간)
+│   ├── AnonymousSessionProperties 익명 세션 수명 설정값(미사용 2시간, 절대 상한 없음)
 │   ├── AuthConfiguration         설정값 등록, local·demo
 │   └── ActiveSession·IssuedSession 결과 타입(toString에서 원문 숨김)
 └── persistence/
@@ -57,7 +57,7 @@ com.beone.api.auth
 
 ## 주요 클래스의 역할과 관계
 
-- [`AuthSessionService`](../../backend/src/main/java/com/beone/api/auth/application/AuthSessionService.java)는 쿠키 값으로 세션을 찾고(`use`), 익명 세션을 발급합니다(`issueAnonymous`). 세션은 미사용 만료와 절대 만료 중 먼저 오는 시각에 끝납니다. 같은 시각이 되면 이미 만료입니다. 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료를 넘기지 않습니다. 만료한 행은 찾을 때 지웁니다. 조회에 쓰기 잠금(`PESSIMISTIC_WRITE`)을 걸어, 같은 세션을 쓰는 동시 요청이 옛 만료 값으로 판정해 다른 요청이 방금 연장한 세션을 지우지 않게 합니다.
+- [`AuthSessionService`](../../backend/src/main/java/com/beone/api/auth/application/AuthSessionService.java)는 쿠키 값으로 세션을 찾고(`use`), 익명 세션을 발급합니다(`issueAnonymous`). 세션은 미사용 만료에 끝나고, 절대 만료가 있으면 그 시각에도 끝납니다. 같은 시각이 되면 이미 만료입니다. 익명 세션은 절대 만료가 없습니다(`absolute_expires_at`이 `NULL`, 2026-11-18 사용자 직접 결정). 회원 세션의 30일은 로그인 단위(U3)에서 채웁니다. 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료가 있으면 넘기지 않고, 이번 사용 시각부터 새 미사용 만료까지를 쿠키 `Max-Age`로 돌려줍니다. 만료한 행은 찾을 때 지웁니다. 조회에 쓰기 잠금(`PESSIMISTIC_WRITE`)을 걸어, 같은 세션을 쓰는 동시 요청이 옛 만료 값으로 판정해 다른 요청이 방금 연장한 세션을 지우지 않게 합니다.
 - [`SessionTokens`](../../backend/src/main/java/com/beone/api/auth/application/SessionTokens.java)는 상태가 없는 부품입니다.
   - 세션 ID: `SecureRandom` 32바이트를 패딩 없는 Base64URL로 쓴 43자입니다. DB에는 SHA-256 해시(16진수 64자)만 저장합니다.
   - CSRF 토큰: 세션 ID에 고정 접두어를 붙여 SHA-256으로 유도한 43자입니다. 서버는 토큰을 따로 저장하지 않고, 요청 쿠키에서 다시 계산해 상수 시간(`MessageDigest.isEqual`)으로 비교합니다. 쿠키가 `HttpOnly`라 다른 사이트의 스크립트는 세션 ID를 읽어 토큰을 만들 수 없습니다. 세션 ID가 바뀌면(로그인·로그아웃, U3) 토큰도 바뀝니다.
@@ -74,15 +74,16 @@ GET /api/v1/auth/csrf
 → AuthCsrfController
    → SessionCookie.read: __Host-BEONE_SESSION 값(같은 이름이 여럿이면 첫 번째)
    → AuthSessionService.use: 형식 검사 → 해시로 조회(쓰기 잠금) → 만료면 행 삭제 → 유효하면 사용 시각 갱신
-   → 유효: 200 {headerName, token}. 쿠키를 다시 심지 않음
+   → 유효: 200 {headerName, token}
+           + Set-Cookie: 같은 ID, Max-Age=<새 미사용 만료까지 초>(서버 만료와 같은 시각)
    → 없음·만료: issueAnonymous → 200 {headerName, token}
-                + Set-Cookie: __Host-BEONE_SESSION=<ID>; Path=/; Max-Age=<절대 수명 초>; Secure; HttpOnly; SameSite=Lax
+                + Set-Cookie: __Host-BEONE_SESSION=<ID>; Path=/; Max-Age=<미사용 수명 초>; Secure; HttpOnly; SameSite=Lax
 
 POST /api/v1/auth/... (U2 이후 API)
 → AuthNoStoreFilter: no-store
 → AuthRequestInterceptor: 쿠키로 세션 조회 → X-CSRF-TOKEN 비교
    → 실패: CsrfInvalidException → AuthExceptionHandler → 403 CSRF_INVALID
-   → 통과: 본문 검증과 컨트롤러 처리
+   → 통과: 세션 쿠키를 새 Max-Age로 다시 심음 → 본문 검증과 컨트롤러 처리
 ```
 
 ## 짧은 사용 예
@@ -105,10 +106,9 @@ curl -X POST http://localhost:8080/api/v1/auth/sign-up \
 
 | 키 | 의미 | 기본값 |
 | --- | --- | --- |
-| `beone.auth.anonymous-session.idle-timeout` | 익명 세션 미사용 만료 | `PT2H` (2026-11-18 사용자 직접 결정) |
-| `beone.auth.anonymous-session.absolute-timeout` | 익명 세션 절대 만료, 쿠키 `Max-Age` | `PT2H` (미결, 확정 전 임시값) |
+| `beone.auth.anonymous-session.idle-timeout` | 익명 세션 미사용 만료, 쿠키 `Max-Age` | `PT2H` (2026-11-18 사용자 직접 결정) |
 
-미사용 만료는 절대 만료보다 길 수 없고, 둘 다 1초 이상이어야 합니다. 어기면 서버가 시작하지 않습니다. `application*.yml`에는 값을 넣지 않았고, 테스트는 값을 명시해 주입합니다.
+익명 세션에는 발급 기준 절대 상한이 없어 설정 키도 없습니다(2026-11-18 사용자 직접 결정). 미사용 만료는 1초 이상이어야 합니다. 어기면 서버가 시작하지 않습니다. `application*.yml`에는 값을 넣지 않았고, 테스트는 값을 명시해 주입합니다.
 
 ## 제약과 현재 구현 범위
 

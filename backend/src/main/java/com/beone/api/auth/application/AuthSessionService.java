@@ -1,6 +1,7 @@
 package com.beone.api.auth.application;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
@@ -18,8 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 서버 세션의 발급·조회(D-24, docs/api/auth.md). 세션은 MySQL {@code auth_sessions}에 해시로 저장한다.
  *
- * <p>세션은 미사용 만료와 절대 만료 중 먼저 오는 시각에 끝난다. 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료를 넘기지
- * 않는다. 만료한 세션은 찾을 때 지운다. {@code local}·{@code demo} 프로필 전용이다(관리자 승인, 결정 30).
+ * <p>세션은 미사용 만료에 끝나고, 절대 만료가 있으면 그 시각에도 끝난다. 익명 세션은 절대 만료가 없다(2026-11-18 사용자 직접 결정).
+ * 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료가 있으면 넘기지 않는다. 만료한 세션은 찾을 때 지운다. {@code local}·{@code demo} 프로필 전용이다(관리자 승인, 결정 30).
  */
 @Service
 @Profile({ "local", "demo" })
@@ -55,7 +56,7 @@ public class AuthSessionService {
 	/**
 	 * 쿠키 값으로 유효한 세션을 찾고 사용 시각을 갱신한다.
 	 * @param sessionId 요청 쿠키의 세션 ID, {@code null} 가능
-	 * @return 유효한 세션. 쿠키 없음·형식 오류·없는 세션·만료는 빈 값
+	 * @return 유효한 세션과 새 쿠키 수명. 쿠키 없음·형식 오류·없는 세션·만료는 빈 값
 	 */
 	@Transactional
 	public Optional<ActiveSession> use(String sessionId) {
@@ -72,8 +73,9 @@ public class AuthSessionService {
 			this.repository.delete(session);
 			return Optional.empty();
 		}
-		session.touch(now, idleExpiry(now, session.getAbsoluteExpiresAt()));
-		return Optional.of(new ActiveSession(sessionId));
+		LocalDateTime idleExpiry = idleExpiry(now, session.getAbsoluteExpiresAt());
+		session.touch(now, idleExpiry);
+		return Optional.of(new ActiveSession(sessionId, Duration.between(now, idleExpiry)));
 	}
 
 	/**
@@ -83,21 +85,20 @@ public class AuthSessionService {
 	@Transactional
 	public IssuedSession issueAnonymous() {
 		LocalDateTime now = now();
-		LocalDateTime absoluteExpiry = now.plus(this.anonymousSession.absoluteTimeout());
 		String sessionId = SessionTokens.newSessionId();
-		this.repository.save(new AuthSessionEntity(SessionTokens.hash(sessionId), now, idleExpiry(now, absoluteExpiry),
-				absoluteExpiry));
-		return new IssuedSession(sessionId, SessionTokens.csrfTokenOf(sessionId), this.anonymousSession.absoluteTimeout());
+		this.repository.save(new AuthSessionEntity(SessionTokens.hash(sessionId), now, idleExpiry(now, null), null));
+		return new IssuedSession(sessionId, SessionTokens.csrfTokenOf(sessionId), this.anonymousSession.idleTimeout());
 	}
 
-	/** 미사용 만료와 절대 만료 중 하나라도 지났으면(같은 시각 포함) 만료다. */
+	/** 미사용 만료나 (있으면) 절대 만료가 지났으면(같은 시각 포함) 만료다. */
 	static boolean isExpired(AuthSessionEntity session, LocalDateTime now) {
-		return !now.isBefore(session.getIdleExpiresAt()) || !now.isBefore(session.getAbsoluteExpiresAt());
+		LocalDateTime absolute = session.getAbsoluteExpiresAt();
+		return !now.isBefore(session.getIdleExpiresAt()) || (absolute != null && !now.isBefore(absolute));
 	}
 
 	private LocalDateTime idleExpiry(LocalDateTime now, LocalDateTime absoluteExpiry) {
 		LocalDateTime idle = now.plus(this.anonymousSession.idleTimeout());
-		return idle.isAfter(absoluteExpiry) ? absoluteExpiry : idle;
+		return (absoluteExpiry != null && idle.isAfter(absoluteExpiry)) ? absoluteExpiry : idle;
 	}
 
 	private LocalDateTime now() {

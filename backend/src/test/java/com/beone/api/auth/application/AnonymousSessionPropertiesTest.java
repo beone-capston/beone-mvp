@@ -8,40 +8,25 @@ import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 /**
- * 익명 세션 수명 설정값의 기본값과 검증을 확인한다. 미사용 2시간은 2026-11-18 사용자 직접 결정, 절대 상한은 미결이며 기본 2시간은 확정 전 임시값이다.
+ * 익명 세션 수명 설정값의 기본값과 검증을 확인한다. 미사용 2시간·절대 상한 없음은 2026-11-18 사용자 직접 결정이다.
  */
 class AnonymousSessionPropertiesTest {
 
 	@Test
-	void missingValuesFallBackToDecidedDefaults() {
-		AnonymousSessionProperties properties = new AnonymousSessionProperties(null, null);
-
-		assertThat(properties.idleTimeout()).isEqualTo(Duration.ofHours(2));
-		assertThat(properties.absoluteTimeout()).isEqualTo(Duration.ofHours(2));
+	void missingIdleTimeoutFallsBackToTwoHours() {
+		assertThat(new AnonymousSessionProperties(null).idleTimeout()).isEqualTo(Duration.ofHours(2));
 	}
 
 	@Test
-	void explicitValuesAreKept() {
-		AnonymousSessionProperties properties = new AnonymousSessionProperties(Duration.ofHours(1), Duration.ofHours(1));
-
-		assertThat(properties.idleTimeout()).isEqualTo(Duration.ofHours(1));
-		assertThat(properties.absoluteTimeout()).isEqualTo(Duration.ofHours(1));
+	void explicitIdleTimeoutIsKept() {
+		assertThat(new AnonymousSessionProperties(Duration.ofHours(1)).idleTimeout()).isEqualTo(Duration.ofHours(1));
 	}
 
 	@Test
-	void rejectsNonPositiveOrSubSecondTimeouts() {
-		assertThatIllegalArgumentException()
-			.isThrownBy(() -> new AnonymousSessionProperties(Duration.ZERO, Duration.ofHours(1)));
-		assertThatIllegalArgumentException()
-			.isThrownBy(() -> new AnonymousSessionProperties(Duration.ofHours(1), Duration.ofSeconds(-1)));
-		assertThatIllegalArgumentException()
-			.isThrownBy(() -> new AnonymousSessionProperties(Duration.ofMillis(500), Duration.ofHours(1)));
-	}
-
-	@Test
-	void rejectsIdleLongerThanAbsolute() {
-		assertThatIllegalArgumentException()
-			.isThrownBy(() -> new AnonymousSessionProperties(Duration.ofHours(2), Duration.ofHours(1)));
+	void rejectsNonPositiveOrSubSecondIdleTimeout() {
+		assertThatIllegalArgumentException().isThrownBy(() -> new AnonymousSessionProperties(Duration.ZERO));
+		assertThatIllegalArgumentException().isThrownBy(() -> new AnonymousSessionProperties(Duration.ofSeconds(-1)));
+		assertThatIllegalArgumentException().isThrownBy(() -> new AnonymousSessionProperties(Duration.ofMillis(500)));
 	}
 
 }
