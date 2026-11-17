@@ -92,7 +92,7 @@ POST /api/v1/auth/... (U2 이후 API)
 # 1. 토큰과 익명 세션 쿠키 받기
 curl -i http://localhost:8080/api/v1/auth/csrf
 # HTTP/1.1 200
-# Set-Cookie: __Host-BEONE_SESSION=<세션 ID>; Path=/; Max-Age=7200; Secure; HttpOnly; SameSite=Lax
+# Set-Cookie: __Host-BEONE_SESSION=<세션 ID>; Path=/; Max-Age=7200; Secure; HttpOnly; SameSite=Lax  (기본 idle-timeout PT2H일 때)
 # Cache-Control: no-store
 # {"data":{"headerName":"X-CSRF-TOKEN","token":"<토큰>"}}
 

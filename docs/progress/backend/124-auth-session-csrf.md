@@ -61,3 +61,7 @@
 - 리뷰 상태: 제출 리뷰 1건(head `8ec56ac`, 인라인 2건, 모두 Minor, 문서). 두 지적 모두 `0d04dc6`에도 해당해 함께 고쳤습니다.
 - 반영 1(CSRF 현재 동작과 계약 구분): `docs/api/auth.md` 공통 사항을 「CSRF(계약)」과 「CSRF(현재 구현, U1)」로 나눴습니다. 지금은 인증 POST API가 없어 `POST /api/v1/auth/sign-up` 같은 요청은 쿠키가 없어도 404(메서드가 다르면 405)이며, 각 POST API가 구현되는 U2~U4부터 403이 납니다.
 - 반영 2(가짜 메일 발송기 상태): 공통 사항과 「미정」의 두 문장을 '가짜 발송기도 아직 구현하지 않음(U2 이후)'으로 고쳐 도메인 문서와 맞췄습니다.
+
+## 2026-11-18 · CodeRabbit 리뷰 반영(head `303d1d0` 리뷰)
+- 리뷰 상태: 제출 리뷰 1건(head `303d1d0`, 인라인 1건, Minor, 문서). CodeRabbit 검사 SUCCESS.
+- 반영: `docs/api/auth.md`의 쿠키 수명 문장 세 곳과 `docs/domains/auth.md` 예시가 `Max-Age=7200`을 고정값처럼 적고 있어, `idle-timeout` 초이며 7200은 기본 설정(`PT2H`)일 때의 값이라고 고쳤습니다.
