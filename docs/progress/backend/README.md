@@ -42,6 +42,7 @@
 - #124 → PR: 회원 인증 U1 세션·CSRF 기반과 `GET /api/v1/auth/csrf`(`auth` 패키지, Flyway `V9__auth_sessions.sql` 임시 번호, `local`·`demo` 전용, Spring Security 없음, 익명 세션 미사용 2시간·절대 상한 없음·사용마다 쿠키 갱신(사용자 결정), 계약 `docs/api/auth.md`는 Notion 인증 명세 사본 반영). `develop` 대상, 병합 전. [작업 기록](124-auth-session-csrf.md)
 - #126 → PR: CODEF 연결 상태 조회·계정 연결·해제 API(C2, `codef.application`·`persistence`·`web` 신규, 게이트웨이 인터페이스와 local·demo 가짜 구현만, 실 CODEF·실키 없음, connectedId AES-GCM 암호화·키 환경 변수, 해제는 연결 행만 삭제, Flyway `V10__codef_connections.sql` 임시 번호). `develop` 대상, 병합 전. [작업 기록](126-codef-connection.md)
 - #128 → PR: 회원 인증 U2 회원가입·인증메일 재요청·이메일 인증 완료(`auth` 패키지, Flyway `V11__auth_members.sql` 임시 번호, `members`(ID `usr-`+32자)·`auth_tokens`(해시만)·`auth_mail_throttles`(이메일 해시), Argon2id m=19456·t=2·p=1과 `bcprov-jdk18on` 추가, 가짜 메일 발송기, 같은 주소 60초 합산 429, 계정 존재 비공개, 링크 형식·정리 기한 미정). `develop` 대상, 병합 전. [작업 기록](128-auth-sign-up.md)
+- #132 → PR: 회원 인증 U3 로그인·로그아웃·현재 회원 세션 조회(`auth` 패키지, Flyway `V13__auth_member_sessions.sql` 임시 번호(`V12`는 CODEF C3), `auth_sessions.member_id`, 회원 세션 미사용 7일·최대 30일·동시 5개(6번째는 가장 오래 쓰지 않은 세션 종료), 로그인 때 세션 ID·CSRF 교체와 이전 세션 폐기(병합 조건 ④ 통합 테스트), 같은 이메일 15분 5회 실패 시 15분 429(IP 기준 없음), 계정 없음도 더미 해시 비교, 로그인 READ COMMITTED). `develop` 대상, 병합 전. [작업 기록](132-auth-login.md)
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.

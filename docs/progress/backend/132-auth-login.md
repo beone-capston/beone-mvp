@@ -1,0 +1,20 @@
+# #132 회원 인증 U3 로그인·로그아웃·현재 회원 세션 조회 API
+
+브랜치 `feat/132-auth-login`, 시작 기준 `origin/develop` `098cd74`(PR #130 병합).
+
+## 2026-11-18 · `auth` 패키지 확장·Flyway V13(임시 번호) · PR(`develop` 대상, 병합 전)
+- 근거: [D-24](../../decisions.md#d-24-확정-정책)(미사용 7일·최대 30일·동시 5개), 2026-11-18 사용자 직접 결정(같은 이메일 15분 안 5번 실패 시 15분 429, IP 기준 없음, 익명 세션 미사용 2시간·절대 상한 없음), 관리 기록 결정 28·29·30. 계약은 [인증 API 명세](../../api/auth.md)(Notion 인증 명세 고정 사본 반영)입니다.
+- 6번째 로그인 처리는 사본에 "가장 오래 쓰지 않은 세션을 종료"로 있어 질문 없이 그대로 구현했습니다.
+- 한 일:
+  - `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/session`. 모두 `local`·`demo` 프로필 전용이고, 로그인·로그아웃은 U1의 CSRF 검사를 받습니다.
+  - Flyway `V13__auth_member_sessions.sql`: `auth_sessions`에 `member_id`(회원 FK, 삭제 시 함께 삭제, 회원 세션은 절대 만료 필수 CHECK, 회원·마지막 사용 인덱스), `auth_login_throttles`(이메일 해시 키, 잠금 시각), `auth_login_failures`(이메일 해시, 실패 시각). **임시 번호**이며 `V12`는 CODEF C3 몫으로 비워 둡니다.
+  - 로그인은 성공 때 요청의 이전 세션(익명이든 회원이든)을 지우고 새 세션 ID를 발급합니다(세션 고정 방지). CSRF 토큰은 세션 ID에서 유도되므로 함께 바뀝니다. 응답 쿠키는 `Max-Age=2592000`(사본) 하나입니다.
+  - 동시 5개: 새 세션을 만들기 전에 그 회원의 만료 세션을 지우고, 유효한 세션이 5개면 가장 오래 쓰지 않은 세션부터 지웁니다. 회원 행 잠금으로 같은 회원의 동시 로그인을 차례로 처리합니다.
+  - 로그인 실패 제한, 계정 없음도 더미 해시와 Argon2id 비교(응답 시간 차이 줄이기), `INVALID_CREDENTIALS`·`EMAIL_NOT_VERIFIED`·`UNAUTHENTICATED`(문구 사본).
+  - `/me`·`CurrentUserResolver`·시연 헤더·`user/**`·`common/**`·`application*.yml`·CORS·frontend·android, 익명 세션 규칙은 바꾸지 않았습니다. 새 의존성 없음.
+  - 문서: [인증 API 명세](../../api/auth.md)(구현 표, CSRF 현재 동작, 쿠키 갱신, 로그인 실패 제한, 「구현에서 정한 세부 해석(U3)」, 미정), [auth 안내](../../domains/auth.md), [구조 안내](../../architecture.md)의 auth 항목·트리 줄·구현 현황 문장의 인증 부분.
+- 병합 조건 ④: `MemberSessionIntegrationTest#loginReplacesSessionIdAndCsrfTokenAndDiscardsAnonymousSession`이 실제 HTTP·MySQL에서 로그인 뒤 새 세션 ID ≠ 익명 세션 ID, 새 CSRF 토큰 ≠ 이전 토큰, 익명 세션 행 삭제, 이전 쿠키·이전 토큰으로 POST하면 403, 회원 세션에서 다시 로그인해도 교체됨을 확인합니다. 시계는 주입한 가변 시계이고 sleep은 없습니다.
+- 구현에서 정한 세부 해석(PR 리뷰 포인트): 실패 세기 경계(정확히 15분 전 실패 제외), 비밀번호가 맞은 미인증은 실패로 세지 않음, 잠긴 동안의 시도는 세지 않음, 성공·잠금 때 실패 기록 삭제, 판정 순서 403 → 400 → 429 → 401 → 403, 세션 조회는 서버 미사용 만료만 늘리고 쿠키를 다시 심지 않음.
+- 동시성: 처음 구현에서 서로 다른 회원 8명이 동시에 로그인하는 통합 시험이 MySQL 교착(500)으로 실패했습니다. 기본 격리 REPEATABLE READ에서 회원별 세션 잠금 조회(`FOR UPDATE`)가 인덱스 간격까지 잠가, 세션이 없던 회원들의 새 세션 삽입끼리 서로 기다렸기 때문입니다. 로그인 트랜잭션을 READ COMMITTED로 바꿔 간격 잠금을 없앴고(같은 회원은 회원 행 잠금으로 계속 차례 처리), 같은 시험을 3번 더 돌려 교착 없이 통과했습니다. 같은 이메일 동시 실패 7건은 정확히 401 5건·429 2건입니다.
+- 검증: `./gradlew test webTest integrationTest build javadoc --rerun-tasks` 결과는 PR 본문에 기록합니다.
+- 남은 제한: 비밀번호 재설정(U4, 다른 목적 토큰 시험 포함), 회원 세션과 `/me` 업무 자원의 연결(D-24 미결), IP 기준 제한, 로그인 잠금 상태 행·만료 세션 정리 기한, 공개 프로필·CORS, Flyway 번호 확정. 서버 DB 적용·배포, frontend 변경은 하지 않았습니다.

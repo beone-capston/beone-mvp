@@ -19,7 +19,8 @@ import org.springframework.test.web.servlet.MvcResult;
 /**
  * local·demo 밖(프로필 없음)에서는 인증 API가 등록되지 않아 404 {@code NOT_FOUND}이고 세션 쿠키도 심지 않는다(관리자 승인, 결정 30).
  */
-@WebSliceTest(controllers = { AuthCsrfController.class, MemberRegistrationController.class })
+@WebSliceTest(controllers = { AuthCsrfController.class, MemberRegistrationController.class,
+		MemberSessionController.class })
 class AuthCsrfProfileOffWebTest {
 
 	@Autowired
@@ -53,9 +54,22 @@ class AuthCsrfProfileOffWebTest {
 	}
 
 	@Test
+	void sessionApisAreNotFoundOutsideLocalAndDemo() throws Exception {
+		for (String path : new String[] { "/api/v1/auth/login", "/api/v1/auth/logout" }) {
+			MvcResult result = this.mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{}"))
+				.andReturn();
+			assertThat(result.getResponse().getStatus()).as(path).isEqualTo(404);
+			assertThat(result.getResponse().getHeaders("Set-Cookie")).as(path).isEmpty();
+		}
+		MvcResult session = this.mockMvc.perform(get("/api/v1/auth/session")).andReturn();
+		assertThat(session.getResponse().getStatus()).isEqualTo(404);
+	}
+
+	@Test
 	void authBeansAreNotRegistered() {
 		assertThat(this.context.getBeanNamesForType(AuthCsrfController.class)).isEmpty();
 		assertThat(this.context.getBeanNamesForType(MemberRegistrationController.class)).isEmpty();
+		assertThat(this.context.getBeanNamesForType(MemberSessionController.class)).isEmpty();
 		assertThat(this.context.getBeanNamesForType(AuthWebConfiguration.class)).isEmpty();
 	}
 

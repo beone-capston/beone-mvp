@@ -1,5 +1,6 @@
 package com.beone.api.auth.persistence;
 
+import java.util.List;
 import java.util.Optional;
 
 import jakarta.persistence.LockModeType;
@@ -19,5 +20,14 @@ public interface AuthSessionRepository extends JpaRepository<AuthSessionEntity, 
 	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<AuthSessionEntity> findBySessionHash(String sessionHash);
+
+	/**
+	 * 회원의 세션을 오래 쓰지 않은 순(마지막 사용 시각, 같으면 발급 순)으로 찾고 쓰기 잠금을 건다. 동시 세션 수를 맞출 때 쓴다. 회원 행을
+	 * 먼저 잠근 트랜잭션 안에서만 호출한다.
+	 * @param memberId 회원 ID
+	 * @return 만료 여부와 관계없는 그 회원의 세션 행
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	List<AuthSessionEntity> findByMemberIdOrderByLastUsedAtAscAuthSessionIdAsc(String memberId);
 
 }
