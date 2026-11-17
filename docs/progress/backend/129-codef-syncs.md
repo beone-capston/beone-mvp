@@ -24,3 +24,4 @@
 - 서비스에서 달라진 점: local·demo 서버에서 CODEF 연결 뒤 동기화를 누르면 합성 카드가 매핑 전 보유 카드로 나타나고, 합성 승인 행 판정 결과와 카드사 조회 실적(참고)을 볼 수 있습니다. 실제 카드사 데이터는 조회되지 않고 원장 조회 결과(행)는 바뀌지 않습니다. frontend 변경 없음.
 - 검증: `./gradlew test webTest integrationTest build javadoc --rerun-tasks` 결과는 PR 본문에 기록합니다.
 - 로컬·테스트 DB만 사용했고 서버 DB 적용·배포는 하지 않았습니다.
+- PR #131 CodeRabbit(`64491cf`) 반영: ① V12의 카드명·발급일자·지문 열 정렬 규칙을 `utf8mb4_bin`(PAD SPACE, 후행 공백 무시)에서 `utf8mb4_0900_bin`(NO PAD)으로 바꿔 후행 공백만 다른 카드명을 다른 키로 봅니다. 아직 병합 전 마이그레이션이라 같은 파일을 고쳤고, 통합 시험에 후행 공백 행은 들어가고 완전히 같은 키는 막히는지 더했습니다. ② 도메인 문서·`CodefSyncService` Javadoc의 검사 순서를 실제대로 요청 본문·날짜 형식 400이 가상 포트폴리오 409보다 먼저로 고쳤습니다. ③ `docs/api/codef.md` syncs 설명·처리 흐름과 `docs/domains/card.md` 핵심 용어에 남아 있던 "카드명으로 `CANDIDATE` 후보 제시" 설명을 `UNMAPPED`·후보 없음으로 정정했습니다.

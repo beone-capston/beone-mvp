@@ -1,6 +1,7 @@
 package com.beone.api.codef.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -20,6 +21,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -182,6 +184,22 @@ class CodefSyncIntegrationTest {
 		assertThat(count("SELECT COUNT(*) FROM codef_approval_rows")).isEqualTo(3);
 		assertThat(count("SELECT COUNT(*) FROM codef_syncs")).isEqualTo(2);
 		assertThat(count("SELECT COUNT(*) FROM codef_performance_references")).isEqualTo(2);
+	}
+
+	@Test
+	void duplicateKeyDistinguishesTrailingSpacesInCardNames() {
+		connect("MY_CARDS", "kbuser01");
+		send("POST", SYNCS, "MY_CARDS", null);
+		String copy = "INSERT INTO codef_approval_rows (user_id, user_card_id, sync_id, card_name, approval_fingerprint, "
+				+ "used_date, used_time, signed_amount, row_kind, recorded_at) SELECT user_id, user_card_id, sync_id, %s, "
+				+ "approval_fingerprint, used_date, used_time, signed_amount, row_kind, recorded_at "
+				+ "FROM codef_approval_rows ORDER BY codef_approval_row_id LIMIT 1";
+
+		// 후행 공백만 다른 카드명은 다른 키다(NO PAD 정렬). 완전히 같은 키는 계속 막는다
+		this.jdbcTemplate.update(copy.formatted("CONCAT(card_name, ' ')"));
+		assertThat(count("SELECT COUNT(*) FROM codef_approval_rows")).isEqualTo(4);
+		assertThatThrownBy(() -> this.jdbcTemplate.update(copy.formatted("card_name")))
+			.isInstanceOf(DuplicateKeyException.class);
 	}
 
 	@Test

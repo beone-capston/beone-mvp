@@ -31,7 +31,7 @@
 - **지원 상태(`supportStatus`)**: 서비스 하나를 BeONE이 계산할 수 있는 범위인지([D-18](../decisions.md) K1). 범위 밖은 계산하지 않고 `확인 필요`로 둡니다.
 - **보유 카드(`userCardId`)**: 사용자가 가진 카드 한 장. ID는 `uc-` 뒤에 저장소 번호를 붙인 문자열입니다(예: `uc-1001`). 카드번호·끝 4자리·CVV·유효기간은 받지도 저장하지도 않습니다(D-14 ⑨).
 - **보유 출처(`holdingSource`)**: `MANUAL`(수동 등록), `CODEF`(2차), `SYNTHETIC`(가상 포트폴리오 시드).
-- **매핑(`mapping`)**: 보유 카드가 규칙 카드 4종 중 무엇인지 연결한 기록([D-15](../decisions.md#d-15d-16d-17-확정-정책)). 상태는 `UNMAPPED`(모름)·`CANDIDATE`(CODEF 후보, 2차)·`USER_CONFIRMED`(사용자 확인)·`NOT_SUPPORTED`(4종 아님)이고 계산에는 `USER_CONFIRMED`만 씁니다. 가상 포트폴리오 카드는 규칙 카드 자체라 매핑이 없습니다(`mapping: null`).
+- **매핑(`mapping`)**: 보유 카드가 규칙 카드 4종 중 무엇인지 연결한 기록([D-15](../decisions.md#d-15d-16d-17-확정-정책)). 상태는 `UNMAPPED`(모름)·`CANDIDATE`(CODEF 후보)·`USER_CONFIRMED`(사용자 확인)·`NOT_SUPPORTED`(4종 아님)이고 계산에는 `USER_CONFIRMED`만 씁니다. `CANDIDATE`는 상태 값으로만 있고, 지금은 CODEF 카드도 `UNMAPPED`로 만들며 후보 상품·후보 매핑을 만들지 않습니다(결정 20 R3). 가상 포트폴리오 카드는 규칙 카드 자체라 매핑이 없습니다(`mapping: null`).
 - **추천 비교 대상(`recommendationEligibility`)**: 이 카드가 추천 비교에 들어갈 수 있는지와 빠지는 이유(`USER_EXCLUDED`·`MAPPING_UNCONFIRMED`·`NO_SUPPORTED_RULE`).
 
 ## 패키지 구조

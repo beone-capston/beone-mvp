@@ -55,7 +55,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * CODEF 보유카드·승인내역·실적을 조회해 BeONE에 옮긴다(docs/api/codef.md POST /api/v1/me/codef/syncs, D-15·D-16·D-17, 결정 20·22,
  * 관리자 판단 K1·K2·P6·P8·P9·P11·Q1~Q8).
  *
- * <p>순서: 가상 포트폴리오 409 → 기간 400 → 연결 없음 409 → 재연결 필요 409 → 게이트웨이·connectedId 키 없음 502 → CODEF 조회(트랜잭션 밖,
+ * <p>순서: (요청 본문·날짜 형식 400은 컨트롤러 바인딩에서 먼저) 가상 포트폴리오 409 → 기간 400 → 연결 없음 409 → 재연결 필요 409 → 게이트웨이·connectedId 키 없음 502 → CODEF 조회(트랜잭션 밖,
  * 동기) → 세 대상 모두 실패면 502 → 짧은 저장 트랜잭션. 저장 트랜잭션은 보유 카드 행(ID 오름차순) → 사용자 행 → 연결 행 순으로 잠그고,
  * 조회 중 연결이 해제·교체됐으면 아무것도 저장하지 않고 409 {@code CODEF_NOT_CONNECTED}다.
  *

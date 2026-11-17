@@ -331,7 +331,7 @@ codef/
 처리 흐름과 검사 순서:
 
 ```text
-가상 포트폴리오 409 PORTFOLIO_READ_ONLY → 날짜 형식 400 → 기간 규칙 400 → 연결 없음 409 CODEF_NOT_CONNECTED
+요청 본문·날짜 형식 400 → 가상 포트폴리오 409 PORTFOLIO_READ_ONLY → 기간 규칙 400 → 연결 없음 409 CODEF_NOT_CONNECTED
 → RECONNECT_REQUIRED 상태 409 CODEF_RECONNECT_REQUIRED → 게이트웨이·connectedId 키 없음 502 CODEF_UNAVAILABLE
 → 보유카드·승인내역(HMAC 키가 있을 때만)·실적 조회 → codef.sync로 대상별 판정
 → 세 대상 모두 실패면 502(아무것도 저장 안 함), 일부 실패면 200 + partialFailures
@@ -348,7 +348,7 @@ codef/
 - **기간(관리자 판단 P9)**: 생략하면 서울 기준 이번 달 1일~오늘, `to`만 없으면 오늘, `from`만 없으면 `to`가 속한 달 1일입니다. `to`가 오늘보다 늦으면 400(`field`=`to`), `from`이 `to`보다 늦으면 400, `from < to.minusMonths(12).plusDays(1)`이면 400(관계 오류는 `field`=`null`)입니다. 짝을 맞추려고 기간을 넓히지 않습니다.
 - **재연결 필요(관리자 판단 P2)**: 게이트웨이가 연결 무효를 알리면 연결 상태를 `RECONNECT_REQUIRED`로 바꾸고 409입니다. 지금은 가짜 게이트웨이만 이 결과를 내며 실 CODEF 결과 코드와의 대응은 없습니다. 다음 연결 성공이 `CONNECTED`로 돌립니다.
 - **가상 포트폴리오(관리자 판단 Q7)**: 409 `PORTFOLIO_READ_ONLY`입니다. [docs/api.md](../api.md#업무-오류-코드)의 "가상 포트폴리오의 CODEF 쓰기 요청" 규칙에 따른 것이며 계약 syncs 실패 목록에도 반영했습니다.
-- **동시성(관리자 판단 Q8)**: CODEF 조회는 트랜잭션 밖입니다. 저장은 보유 카드 행 → 사용자 행 → 연결 행 순으로 잠급니다. 모의 승인(주문 → 보유 카드 → 원장 삽입의 사용자 행 공유 잠금)과 보유 카드 잠금 순서를 맞춰 교착을 피하고, 같은 사용자의 동시 동기화·카드 해제는 차례로 처리합니다. 중복 판단 키의 유니크 제약(`uk_codef_approval_rows_key`)이 마지막 방어선입니다. 카드명 칼럼은 응답 문자열을 그대로 비교하려고 `utf8mb4_bin`입니다.
+- **동시성(관리자 판단 Q8)**: CODEF 조회는 트랜잭션 밖입니다. 저장은 보유 카드 행 → 사용자 행 → 연결 행 순으로 잠급니다. 모의 승인(주문 → 보유 카드 → 원장 삽입의 사용자 행 공유 잠금)과 보유 카드 잠금 순서를 맞춰 교착을 피하고, 같은 사용자의 동시 동기화·카드 해제는 차례로 처리합니다. 중복 판단 키의 유니크 제약(`uk_codef_approval_rows_key`)이 마지막 방어선입니다. 카드명 칼럼은 응답 문자열을 그대로 비교하려고 후행 공백까지 구분하는 `utf8mb4_0900_bin`(NO PAD)입니다. `utf8mb4_bin`은 후행 공백을 무시해 쓰지 않았습니다.
 - **card 패키지 접근(관리자 판단 P8의 최소 접근)**: [`UserCardService`](../../backend/src/main/java/com/beone/api/card/application/UserCardService.java)의 `lockHeldCardsForCodefSync`(해제하지 않은 보유 카드 잠금, CODEF 카드 ID 반환)와 `registerCodefCard`(CODEF·UNMAPPED 카드 생성), [`UserCardEntity.codef`](../../backend/src/main/java/com/beone/api/card/persistence/UserCardEntity.java)만 더했습니다. `user_cards` 스키마는 바꾸지 않았습니다.
 - **가짜 게이트웨이 조회**: `classpath:codef/fake/`의 합성 fixture(실제 카드명·승인번호 형식을 복사하지 않음)를 전송 계층과 같은 해석기로 읽습니다. 기본 시나리오는 카드 3장(그중 1장은 30자를 넘어 건너뜀), 승인 5행(정상, Type2 짝, 부분취소 코드, 건너뛴 카드의 행), 카드 A의 전월 실적 1건입니다. 승인 사용일자는 요청 시작일, 실적 기간은 서울 기준 전월로 채웁니다. 연결 때 쓴 합성 아이디로 동기화 시나리오를 고릅니다: `fake-sync-reconnect`(연결 무효), `fake-sync-unavailable`(세 조회 모두 실패), `fake-sync-partial`(실적만 실패). 서버를 다시 띄워 모르는 connectedId는 기본 시나리오입니다.
 

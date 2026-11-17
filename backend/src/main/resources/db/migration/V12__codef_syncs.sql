@@ -1,7 +1,8 @@
 -- CODEF 조회·동기화(docs/api/codef.md POST /api/v1/me/codef/syncs, D-09·D-15·D-16·D-17). 사용자 데이터는 user_id로 나눠 저장한다.
 -- CODEF 승인 행은 이 codef 전용 테이블에만 둔다. ledger_transactions와 원장 조회는 바꾸지 않는다(결정 22 R8, 관리자 판단 K2).
 -- 승인번호 원문은 저장하지 않고 HMAC 지문만 둔다(결정 20 R2, 2026-11-18 사용자 직접 결정 P6). 불완전 행은 저장하지 않으며 재조회 때 다시 판정한다.
--- 카드명은 CODEF 응답 문자열 그대로 비교하므로(결정 R1) 대소문자·악센트를 구분하는 utf8mb4_bin으로 둔다. 시간 값은 Asia/Seoul 기준 시각이다.
+-- 카드명은 CODEF 응답 문자열 그대로 비교하므로(결정 R1) 대소문자·악센트·후행 공백을 모두 구분하는 utf8mb4_0900_bin(NO PAD)으로 둔다.
+-- utf8mb4_bin은 PAD SPACE라 후행 공백만 다른 카드명을 같은 값으로 본다. 시간 값은 Asia/Seoul 기준 시각이다.
 -- 버전 번호 V12는 다른 작업선과 나눈 임시 번호다(V11은 인증 U2 예정). 병합 직전 관리자가 순서를 정한다(D-23).
 
 -- 성공(200)한 동기화 한 번. 외부 표현은 sync- 접두어 + 번호다.
@@ -22,8 +23,8 @@ CREATE TABLE codef_syncs (
 CREATE TABLE codef_held_cards (
     user_card_id  BIGINT       NOT NULL,
     user_id       BIGINT       NOT NULL,
-    card_name     VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
-    issue_date    VARCHAR(64)  COLLATE utf8mb4_bin NULL,
+    card_name     VARCHAR(255) COLLATE utf8mb4_0900_bin NOT NULL,
+    issue_date    VARCHAR(64)  COLLATE utf8mb4_0900_bin NULL,
     first_sync_id BIGINT       NOT NULL,
     PRIMARY KEY (user_card_id),
     KEY idx_codef_held_cards_user_name (user_id, card_name),
@@ -39,8 +40,8 @@ CREATE TABLE codef_approval_rows (
     user_id               BIGINT       NOT NULL,
     user_card_id          BIGINT       NOT NULL,
     sync_id               BIGINT       NOT NULL,
-    card_name             VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
-    approval_fingerprint  VARCHAR(64)  COLLATE utf8mb4_bin NOT NULL,
+    card_name             VARCHAR(255) COLLATE utf8mb4_0900_bin NOT NULL,
+    approval_fingerprint  VARCHAR(64)  COLLATE utf8mb4_0900_bin NOT NULL,
     used_date             DATE         NOT NULL,
     used_time             TIME         NOT NULL,
     signed_amount         BIGINT       NOT NULL,
@@ -65,7 +66,7 @@ CREATE TABLE codef_performance_references (
     user_id                        BIGINT       NOT NULL,
     user_card_id                   BIGINT       NULL,
     sync_id                        BIGINT       NOT NULL,
-    card_name                      VARCHAR(255) COLLATE utf8mb4_bin NULL,
+    card_name                      VARCHAR(255) COLLATE utf8mb4_0900_bin NULL,
     period_from                    DATE         NULL,
     period_to                      DATE         NULL,
     current_use_won                BIGINT       NULL,
