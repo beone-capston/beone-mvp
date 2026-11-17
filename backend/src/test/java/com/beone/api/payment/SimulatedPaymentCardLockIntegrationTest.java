@@ -34,6 +34,9 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.json.JsonAssert;
+import org.springframework.test.json.JsonCompareMode;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -78,6 +81,9 @@ class SimulatedPaymentCardLockIntegrationTest {
 	@Autowired
 	JdbcTemplate jdbcTemplate;
 
+	@Autowired
+	TransactionTemplate transactions;
+
 	@BeforeEach
 	@AfterEach
 	void clearRows() {
@@ -107,25 +113,29 @@ class SimulatedPaymentCardLockIntegrationTest {
 
 	@Test
 	void concurrentApprovalsOfTwoOrdersOnTheSameCardAreSerializedByTheCardLock() throws Exception {
-		registerFixedGreatCard();
+		String card = registerFixedGreatCard();
 		String first = createOrder();
 		String second = createOrder();
 		NOW.set(START.plusSeconds(60));
-		CountDownLatch ready = new CountDownLatch(2);
-		CountDownLatch go = new CountDownLatch(1);
-		ExecutorService pool = Executors.newFixedThreadPool(2);
-		List<Future<ResponseEntity<String>>> results = new ArrayList<>();
+		CountDownLatch held = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		ExecutorService pool = Executors.newFixedThreadPool(3);
 		List<Map<String, Object>> approvals = new ArrayList<>();
 		try {
-			for (String[] request : new String[][] { { first, "key-1" }, { second, "key-2" } }) {
-				results.add(pool.submit(() -> {
-					ready.countDown();
-					go.await();
-					return approve(request[0], request[1]);
-				}));
-			}
-			assertThat(ready.await(30, TimeUnit.SECONDS)).isTrue();
-			go.countDown();
+			// 테스트 트랜잭션이 카드 행을 쓰기 잠금한 채로 두 승인을 보낸다. 두 승인 트랜잭션이 모두 서버에서 잠금을 기다리는 것을 확인한
+			// 뒤 풀어 주므로, 두 승인이 서버에서 겹친다는 것이 클라이언트·서버 실행 순서와 무관하게 보장된다
+			Future<?> holder = pool.submit(() -> this.transactions.executeWithoutResult(status -> {
+				this.jdbcTemplate.queryForList("SELECT user_card_id FROM user_cards WHERE user_card_id = ? FOR UPDATE",
+						cardKey(card));
+				held.countDown();
+				await(release);
+			}));
+			assertThat(held.await(30, TimeUnit.SECONDS)).isTrue();
+			List<Future<ResponseEntity<String>>> results = List.of(pool.submit(() -> approve(first, "key-1")),
+					pool.submit(() -> approve(second, "key-2")));
+			awaitLockWaits(2);
+			release.countDown();
+			holder.get(60, TimeUnit.SECONDS);
 			for (Future<ResponseEntity<String>> result : results) {
 				ResponseEntity<String> response = result.get(60, TimeUnit.SECONDS);
 				assertThat(response.getStatusCode().value()).isEqualTo(201);
@@ -133,12 +143,82 @@ class SimulatedPaymentCardLockIntegrationTest {
 			}
 		}
 		finally {
+			release.countDown();
 			pool.shutdownNow();
 		}
 
 		// 먼저 잠금을 얻은 승인(원장 행 ID가 작은 쪽)과 뒤 승인을 나눠 본다
 		approvals.sort(Comparator.comparingLong(approval -> ledgerKey((String) approval.get("ledgerTransactionId"))));
 		assertSecondSawTheFirst(approvals);
+	}
+
+	@Test
+	void replayOfAPaidOrderDoesNotWaitForTheCardWhileAFullCancellationHoldsIt() throws Exception {
+		// #122 리뷰 지적: 전액 취소는 원장 INSERT의 외래 키 검사로 카드 행 공유 잠금을 쥔 뒤 주문 행을 잠근다(markCancelled). 같은 주문의
+		// 승인 재생이 주문 행을 쥔 채 카드 행을 기다리면 서로 기다린다. 재생은 카드를 잠그지 않아야 한다. 취소 트랜잭션의 앞부분을
+		// 테스트 트랜잭션으로 재현한다(카드 공유 잠금 → 대기 → 주문 행 잠금)
+		String card = registerFixedGreatCard();
+		String order = createOrder();
+		NOW.set(START.plusSeconds(60));
+		ResponseEntity<String> approved = approve(order, "key-a");
+		assertThat(approved.getStatusCode().value()).isEqualTo(201);
+		CountDownLatch held = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		ExecutorService pool = Executors.newFixedThreadPool(2);
+		try {
+			Future<?> cancellation = pool.submit(() -> this.transactions.executeWithoutResult(status -> {
+				this.jdbcTemplate.queryForList(
+						"SELECT user_card_id FROM user_cards WHERE user_card_id = ? LOCK IN SHARE MODE", cardKey(card));
+				held.countDown();
+				await(release);
+				this.jdbcTemplate.queryForList("SELECT order_id FROM orders WHERE order_id = ? FOR UPDATE",
+						Long.parseLong(order.substring("ord-".length())));
+			}));
+			assertThat(held.await(30, TimeUnit.SECONDS)).isTrue();
+
+			// 카드 공유 잠금이 쥐어진 동안 재생이 끝나야 한다(카드를 기다리면 여기서 멈춘다)
+			ResponseEntity<String> replay = pool.submit(() -> approve(order, "key-a")).get(30, TimeUnit.SECONDS);
+
+			assertThat(replay.getStatusCode().value()).isEqualTo(201);
+			JsonAssert.comparator(JsonCompareMode.STRICT).assertIsMatch(approved.getBody(), replay.getBody());
+			ResponseEntity<String> anotherKey = pool.submit(() -> approve(order, "key-b")).get(30, TimeUnit.SECONDS);
+			assertThat(anotherKey.getStatusCode().value()).isEqualTo(409);
+			release.countDown();
+			cancellation.get(30, TimeUnit.SECONDS);
+		}
+		finally {
+			release.countDown();
+			pool.shutdownNow();
+		}
+	}
+
+	// 두 승인이 카드 잠금 조회에서 기다리는지 직접 확인한다(시간 추정 없음). 상한은 실패 판정용이다
+	private void awaitLockWaits(int expected) {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+		while (lockWaits() < expected) {
+			assertThat(System.nanoTime()).as("승인 트랜잭션 %d개가 잠금 대기에 들어가지 않음", expected).isLessThan(deadline);
+			Thread.onSpinWait();
+		}
+	}
+
+	private int lockWaits() {
+		// 같은 DB 사용자의 연결은 PROCESS 권한 없이 보인다. 카드 잠금 조회를 실행 중인(잠금을 기다리는) 다른 연결 수
+		return this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM information_schema.PROCESSLIST"
+				+ " WHERE ID <> CONNECTION_ID() AND LOWER(INFO) LIKE '%from user_cards%for update%'", Integer.class);
+	}
+
+	private static void await(CountDownLatch latch) {
+		try {
+			assertThat(latch.await(60, TimeUnit.SECONDS)).isTrue();
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException(ex);
+		}
+	}
+
+	private static long cardKey(String userCardId) {
+		return Long.parseLong(userCardId.substring("uc-".length()));
 	}
 
 	// 두 승인 모두 확정되고 원장 차감액은 0이 아니라 모름(null)으로 남는다. 뒤 승인의 재계산만 앞 승인 때문에 GREAT 사용액을 모른다
@@ -174,7 +254,7 @@ class SimulatedPaymentCardLockIntegrationTest {
 		return send("POST", "/api/v1/me/orders/" + order + "/simulated-payments", "MY_CARDS", key, null);
 	}
 
-	private void registerFixedGreatCard() {
+	private String registerFixedGreatCard() {
 		ResponseEntity<String> created = send("POST", "/api/v1/me/cards", "MY_CARDS", null,
 				"{\"displayName\":\"그레이트\",\"cardProductId\":\"09174\"}");
 		assertThat(created.getStatusCode().value()).isEqualTo(201);
@@ -186,6 +266,7 @@ class SimulatedPaymentCardLockIntegrationTest {
 				"{\"selectionMode\":\"FIXED_REPRESENTATIVE\",\"representativeUserCardId\":\"" + card + "\"}")
 			.getStatusCode()
 			.value()).isEqualTo(200);
+		return card;
 	}
 
 	private String createOrder() {

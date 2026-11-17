@@ -179,6 +179,24 @@ class SimulatedPaymentServiceTest {
 	}
 
 	@Test
+	void alreadyPaidOrderIsReplayedOrRejectedWithoutLockingCards() throws Exception {
+		// #122 리뷰: 이미 승인된 주문은 재계산하지 않으므로 카드를 잠그지 않는다(같은 주문 전액 취소와의 순환 대기 방지)
+		OrderDetail paid = new OrderDetail("ord-5001", 10000, LocalDate.of(2026, 11, 3), LocalTime.of(10, 40),
+				"스타벅스 송도점", "STARBUCKS_STORE", PaymentMethod.DIRECT, OrderStatus.PAID, CREATED, "pay-7001");
+		given(this.orders.lockForPayment(ME, "ord-5001")).willReturn(paid);
+		ApprovalDocument stored = new ApprovalDocument("pay-7001", "ord-5001", "APPROVED", "2026-11-03T10:42:00+09:00",
+				10000, "AUTO_RECOMMEND", "uc-1001", "09174", false, new ApprovalDocument.Amount(2100L, "CONFIRMED"), null,
+				null, null, new ApprovalDocument.Recalculation("rec-3002", null, null, List.of()), "lt-9001", 10000);
+		given(this.idempotency.replay(eq(1L), eq("key-1"), anyString(), any()))
+			.willReturn(Optional.of(this.jsonMapper.writeValueAsString(stored)));
+
+		assertThat(this.service.approve(ME, "ord-5001", new ApprovalCommand(null, false), "key-1")).isEqualTo(stored);
+		assertThatThrownBy(() -> this.service.approve(ME, "ord-5001", new ApprovalCommand(null, false), "key-2"))
+			.isInstanceOf(OrderNotPayableException.class);
+		verify(this.cards, never()).lockHeldCardsForPayment(any());
+	}
+
+	@Test
 	void cancellationDoesNotLockHeldCards() {
 		approveWith("09174", 2100L, "GREAT");
 
