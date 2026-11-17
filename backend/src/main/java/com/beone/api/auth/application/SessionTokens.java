@@ -19,7 +19,8 @@ import java.util.regex.Pattern;
  * 계산해 비교한다.</li>
  * <li>비교는 {@link MessageDigest#isEqual(byte[], byte[])}로 상수 시간에 한다.</li>
  * </ul>
- * 원문 세션 ID와 토큰은 로그·예외 메시지에 넣지 않는다.
+ * 메일로 보내는 1회용 토큰(이메일 인증 등)도 세션 ID와 같은 방식으로 만들고 같은 해시로 저장한다. 원문 세션 ID와 토큰은 로그·예외
+ * 메시지에 넣지 않는다.
  */
 public final class SessionTokens {
 
@@ -43,6 +44,11 @@ public final class SessionTokens {
 		byte[] bytes = new byte[TOKEN_BYTES];
 		RANDOM.nextBytes(bytes);
 		return ENCODER.encodeToString(bytes);
+	}
+
+	/** 메일로 보내는 1회용 토큰(43자 Base64URL)을 만든다. 세션 ID와 같은 생성 방식이다. */
+	public static String newMailToken() {
+		return newSessionId();
 	}
 
 	/**

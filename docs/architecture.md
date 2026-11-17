@@ -41,8 +41,8 @@
   - 범위 밖: `GET /api/v1/me`(보유 카드 작업과 함께 구현), 회원 인증(D-24).
 - [auth: 회원 인증 세션·CSRF](domains/auth.md)
   - 위치: `backend/src/main/java/com/beone/api/auth/` (`web`, `application`, `persistence`)
-  - 책임: MySQL 서버 세션 `auth_sessions`(Flyway `V9`, 세션 ID는 SHA-256 해시만 저장), 세션 쿠키 `__Host-BEONE_SESSION`, `GET /api/v1/auth/csrf`와 `/api/v1/auth/**` POST의 CSRF 검사(#124, U1). `local`·`demo` 프로필에서만 등록됩니다. 시연 사용자 헤더와 `user` 패키지에 의존하지 않습니다.
-  - 범위 밖: 가입·인증메일·로그인·로그아웃·세션 조회·비밀번호 재설정(U2~U4), 회원과 `/me` 업무 자원의 연결(D-24 미결), 공개 CORS.
+  - 책임: MySQL 서버 세션 `auth_sessions`(Flyway `V9`, 세션 ID는 SHA-256 해시만 저장), 세션 쿠키 `__Host-BEONE_SESSION`, `GET /api/v1/auth/csrf`와 `/api/v1/auth/**` POST의 CSRF 검사(#124, U1), 회원 `members`·1회용 토큰 `auth_tokens`·메일 요청 제한 `auth_mail_throttles`(Flyway `V11`)와 회원가입·인증메일 재요청·이메일 인증 완료(#128, U2, Argon2id, 가짜 메일 발송기). `local`·`demo` 프로필에서만 등록됩니다. 시연 사용자 헤더와 `user` 패키지에 의존하지 않습니다.
+  - 범위 밖: 로그인·로그아웃·세션 조회(U3), 비밀번호 재설정(U4), 회원과 `/me` 업무 자원의 연결(D-24 미결), 공개 CORS.
 
 도메인이 아닌 공통 웹 기반 코드:
 
@@ -57,7 +57,7 @@
 - 사용자 식별은 [D-09](decisions.md#d-09d-14-확정-정책)에 따라 MVP 한정으로 고정 시연 사용자 2명(내 카드·가상 포트폴리오)을 씁니다. 로그인은 없고, 현재 사용자는 서버의 한 곳에서만 정합니다. 사용자 데이터는 `user_id`로 나눠 저장합니다. 이는 `local`·`demo` 환경의 계약이며(현재 사용자 결정 지점은 #100에서 [user](domains/user.md)에 구현), 공개 회원 환경은 [D-24](decisions.md#d-24-확정-정책)(구현 전)를 따릅니다.
 - 업무 API는 [D-14](decisions.md#d-09d-14-확정-정책)에 따라 `/api/v1/me/...` 형태로 둡니다. 1차는 수동 입력·가상 포트폴리오, 2차는 CODEF 연결·조회입니다.
 - 개별 API 명세는 [`docs/api/`](api/README.md)에 있습니다(2026-11-03, 구현 전).
-- 업무 API는 `GET /api/v1/demo-users`(#100), 카드 상품 조회 `GET /api/v1/card-products`·`/{cardProductId}`(#105, 테이블 없음), 주문·예정 소비 `POST /api/v1/me/orders`·`GET /api/v1/me/orders/{orderId}`·`GET`·`PUT /api/v1/me/planned-spends`(#104), 현재 사용자 `GET /api/v1/me`와 보유 카드 `GET`·`POST /api/v1/me/cards`·`PATCH /api/v1/me/cards/{userCardId}/mapping`·`PATCH`·`DELETE /api/v1/me/cards/{userCardId}`(#108, `card` 패키지), 카드 월간 상태 `GET`·`PUT /api/v1/me/cards/{userCardId}/monthly-states/{month}`(#110, `monthlystate` 패키지), 결제 전 설정 `GET`·`PUT /api/v1/me/payment-preference`와 보유 카드 대표 카드 보호(#111, `preference` 패키지), 추천 계산·조회 `POST /api/v1/me/orders/{orderId}/recommendations`·`GET /api/v1/me/recommendations/{recommendationId}`(#114, `recommendation` 패키지), 모의 승인·조회·취소 `POST /api/v1/me/orders/{orderId}/simulated-payments`·`GET /api/v1/me/simulated-payments/{simulatedPaymentId}`·`POST /api/v1/me/simulated-payments/{simulatedPaymentId}/cancellations`(#116, `payment` 패키지), 원장 조회 `GET /api/v1/me/ledger-transactions`(#118, `ledger` 패키지, 모의 원장 행만, 새 테이블 없음), CODEF 연결 `GET`·`POST`·`DELETE /api/v1/me/codef/connection`(#126, `codef` 연결 계층, 가짜 게이트웨이만)이 구현됐고, DB 업무 테이블은 시연 사용자 `users`, 주문 `orders`·예정 소비 `planned_spends`(#104), 보유 카드 `user_cards`(#108, 가상 포트폴리오 시드 4장), 월간 상태 `monthly_states`와 자식 테이블 2개(#110, 시드 없음), 결제 전 설정 `payment_preferences`(#111), 추천 `recommendations`·`recommendation_card_bases`(#114), 모의 결제 `simulated_payments`·`payment_cancellations`·`idempotency_keys`와 자체 모의 원장 `ledger_transactions`·`ledger_usage_effects`(#116, 주문 `simulated_payment_id` 열 추가), CODEF 연결 `codef_connections`(#126)입니다. 인증 계층은 [auth](domains/auth.md)의 세션·CSRF 기반과 `GET /api/v1/auth/csrf`(#124, 세션 테이블 `auth_sessions`)만 있고, 업무 API의 현재 사용자 결정에는 연결되지 않았습니다.
+- 업무 API는 `GET /api/v1/demo-users`(#100), 카드 상품 조회 `GET /api/v1/card-products`·`/{cardProductId}`(#105, 테이블 없음), 주문·예정 소비 `POST /api/v1/me/orders`·`GET /api/v1/me/orders/{orderId}`·`GET`·`PUT /api/v1/me/planned-spends`(#104), 현재 사용자 `GET /api/v1/me`와 보유 카드 `GET`·`POST /api/v1/me/cards`·`PATCH /api/v1/me/cards/{userCardId}/mapping`·`PATCH`·`DELETE /api/v1/me/cards/{userCardId}`(#108, `card` 패키지), 카드 월간 상태 `GET`·`PUT /api/v1/me/cards/{userCardId}/monthly-states/{month}`(#110, `monthlystate` 패키지), 결제 전 설정 `GET`·`PUT /api/v1/me/payment-preference`와 보유 카드 대표 카드 보호(#111, `preference` 패키지), 추천 계산·조회 `POST /api/v1/me/orders/{orderId}/recommendations`·`GET /api/v1/me/recommendations/{recommendationId}`(#114, `recommendation` 패키지), 모의 승인·조회·취소 `POST /api/v1/me/orders/{orderId}/simulated-payments`·`GET /api/v1/me/simulated-payments/{simulatedPaymentId}`·`POST /api/v1/me/simulated-payments/{simulatedPaymentId}/cancellations`(#116, `payment` 패키지), 원장 조회 `GET /api/v1/me/ledger-transactions`(#118, `ledger` 패키지, 모의 원장 행만, 새 테이블 없음), CODEF 연결 `GET`·`POST`·`DELETE /api/v1/me/codef/connection`(#126, `codef` 연결 계층, 가짜 게이트웨이만)이 구현됐고, DB 업무 테이블은 시연 사용자 `users`, 주문 `orders`·예정 소비 `planned_spends`(#104), 보유 카드 `user_cards`(#108, 가상 포트폴리오 시드 4장), 월간 상태 `monthly_states`와 자식 테이블 2개(#110, 시드 없음), 결제 전 설정 `payment_preferences`(#111), 추천 `recommendations`·`recommendation_card_bases`(#114), 모의 결제 `simulated_payments`·`payment_cancellations`·`idempotency_keys`와 자체 모의 원장 `ledger_transactions`·`ledger_usage_effects`(#116, 주문 `simulated_payment_id` 열 추가), CODEF 연결 `codef_connections`(#126)입니다. 인증 계층은 [auth](domains/auth.md)의 세션·CSRF 기반과 `GET /api/v1/auth/csrf`(#124, 세션 테이블 `auth_sessions`), 회원가입·인증메일 재요청·이메일 인증 완료(#128, `members`·`auth_tokens`·`auth_mail_throttles`)만 있고, 업무 API의 현재 사용자 결정에는 연결되지 않았습니다.
 
 ## 업무 API 패키지 구조 (D-23, 미구현)
 
@@ -66,7 +66,7 @@
 ```text
 com.beone.api
 ├── user            # CurrentUserResolver, 시연 사용자 [구현, #100]
-├── auth            # 회원 인증 세션·CSRF [U1 구현, #124, 가입·로그인 등은 후속, auth 안내: domains/auth.md]
+├── auth            # 회원 인증 [U1 세션·CSRF #124, U2 가입·이메일 인증 #128, 로그인 등은 후속, auth 안내: domains/auth.md]
 ├── card            # 상품 조회 [구현, #105, 테이블 없음], 보유 카드·매핑·GET /me [구현, #108]
 ├── preference      # 결제 전 설정, 대표 카드 보호(card 확장 지점 구현) [구현, #111, preference 안내: domains/preference.md]
 ├── monthlystate    # 월간 상태 조회·수동 입력 [구현, #110, monthlystate 안내: domains/monthlystate.md]
