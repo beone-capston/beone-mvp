@@ -53,6 +53,11 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>동시 요청은 행 잠금으로 직렬화한다. 승인은 주문 행, 취소는 결제 행을 {@code SELECT ... FOR UPDATE}로 먼저 잠근 뒤 멱등 키를 본다.
  * 같은 주문을 다른 키로 동시에 승인하면 뒤 요청은 앞 요청이 커밋한 {@code PAID}를 읽어 409 {@code ORDER_ALREADY_PAID}가 된다.
+ *
+ * <p>승인은 주문 행 다음에 이 사용자의 보유 카드 행 전부를 ID 오름차순으로 잠근다(#122). 잠금 순서는 주문 행 → 보유 카드 행이고,
+ * 이 두 잠금은 트랜잭션의 첫 일반 읽기보다 앞선다. MySQL 기본 격리 수준(REPEATABLE READ)은 첫 일반 읽기에서 읽기 시점을 정하므로,
+ * 카드 잠금을 기다린 뒤 읽는 원장은 앞 승인이 커밋한 행을 포함한다. 그래서 같은 카드의 다른 주문을 동시에 승인해도 뒤 요청은 앞
+ * 승인의 한도 차감액을 반영한 잔여 한도로 계산한다. 취소는 다른 결제의 원장을 읽어 계산하지 않으므로 카드 행을 잠그지 않는다.
  */
 @Service
 public class SimulatedPaymentService {
@@ -143,6 +148,8 @@ public class SimulatedPaymentService {
 	public ApprovalDocument approve(CurrentUser user, String orderId, ApprovalCommand command,
 			String idempotencyKey) {
 		OrderDetail order = this.orderService.lockForPayment(user, orderId);
+		// 첫 일반 읽기(멱등 키 조회) 전에 잠가야 기다린 뒤 앞 승인이 커밋한 원장을 읽는다
+		this.userCardService.lockHeldCardsForPayment(user);
 		LocalDateTime now = now();
 		String fingerprint = Fingerprint.of(user.userId(), "POST",
 				"/api/v1/me/orders/" + order.orderId() + "/simulated-payments", this.jsonMapper.writeValueAsString(command));

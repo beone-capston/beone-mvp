@@ -11,8 +11,10 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -60,6 +62,7 @@ import com.beone.api.user.application.DemoUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.test.util.ReflectionTestUtils;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -159,6 +162,30 @@ class SimulatedPaymentServiceTest {
 		verify(this.orders).markPaid(ME, "ord-5001", "pay-7001");
 		verify(this.idempotency).remember(eq(1L), eq("key-1"), anyString(), eq(this.saved.getDocumentJson()), any());
 		assertThat(this.jsonMapper.readValue(this.saved.getDocumentJson(), ApprovalDocument.class)).isEqualTo(document);
+	}
+
+	@Test
+	void approvalLocksTheOrderThenAllHeldCardsBeforeAnyPlainReadOrRecalculation() {
+		// #122: 같은 카드의 다른 주문 동시 승인 경합을 막는 잠금 순서. 주문 행 → 보유 카드 행 → 멱등 키 조회(첫 일반 읽기) → 재계산
+		recalculatesTo("09174", 2100L, List.of(new RecommendationCalculation.BucketDeduction("uc-1001", "GREAT", 2100L)));
+
+		this.service.approve(ME, "ord-5001", new ApprovalCommand(null, false), "key-1");
+
+		InOrder order = inOrder(this.orders, this.cards, this.idempotency, this.recommendations);
+		order.verify(this.orders).lockForPayment(ME, "ord-5001");
+		order.verify(this.cards).lockHeldCardsForPayment(ME);
+		order.verify(this.idempotency).replay(eq(1L), eq("key-1"), anyString(), any());
+		order.verify(this.recommendations).calculateForApproval(ME, "ord-5001");
+	}
+
+	@Test
+	void cancellationDoesNotLockHeldCards() {
+		approveWith("09174", 2100L, "GREAT");
+
+		this.service.cancel(ME, "pay-7001", 4000, "key-c");
+
+		// 승인 한 번만 잠근다. 취소는 다른 결제의 원장을 읽어 계산하지 않는다
+		verify(this.cards, times(1)).lockHeldCardsForPayment(ME);
 	}
 
 	@Test

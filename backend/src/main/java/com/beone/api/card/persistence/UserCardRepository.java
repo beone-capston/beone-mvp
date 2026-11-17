@@ -7,6 +7,8 @@ import com.beone.api.card.application.MappingStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * 보유 카드 저장소. 조회는 항상 사용자 ID와 함께 하고 해제한 카드는 찾지 않는다(D-09, 결정 27 A2-2).
@@ -24,6 +26,16 @@ public interface UserCardRepository extends JpaRepository<UserCardEntity, Long> 
 	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<UserCardEntity> findByUserCardIdAndUserIdAndReleasedAtIsNull(Long userCardId, Long userId);
+
+	/**
+	 * 이 사용자의 해제하지 않은 카드 전부를 ID 오름차순으로 쓰기 잠금한다(#122). 모의 승인이 추천 재계산 전에 부른다.
+	 *
+	 * <p>{@code idx_user_cards_user_id}(사용자 ID, 기본 키 순) 순서로 읽으며 잠그므로 같은 사용자의 요청들은 항상 같은 순서로 잠가
+	 * 서로 교착하지 않는다. 잠금 읽기이므로 이 호출이 트랜잭션의 일관 읽기 시점을 정하지 않는다. 트랜잭션 안에서만 부른다.
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select c from UserCardEntity c where c.userId = :userId and c.releasedAt is null order by c.userCardId")
+	List<UserCardEntity> lockActiveByUserIdOrderByUserCardId(@Param("userId") Long userId);
 
 	/** 이 사용자에게 이 상태·상품의 해제하지 않은 카드가 있는지. 수동 등록의 중복 검사에 쓴다. */
 	boolean existsByUserIdAndCardProductIdAndMappingStatusAndReleasedAtIsNull(Long userId, String cardProductId,

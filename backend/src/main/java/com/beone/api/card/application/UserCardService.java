@@ -17,6 +17,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -184,6 +185,18 @@ public class UserCardService {
 		this.representativeCardGuard.beforeRelease(user, entity.getUserCardId());
 		entity.release(now());
 		this.userCardRepository.saveAndFlush(entity);
+	}
+
+	/**
+	 * 모의 승인 전에 이 사용자의 해제하지 않은 보유 카드 행을 ID 오름차순으로 쓰기 잠금한다(#122). 추천 재계산은 이 카드들을 모두
+	 * 비교하고 각 카드의 스냅샷 뒤 원장 차감액을 읽으므로, 같은 사용자의 다른 주문 승인은 앞 승인이 커밋할 때까지 기다린 뒤 그
+	 * 원장을 반영해 계산한다. 잠금은 호출자 트랜잭션이 끝날 때 풀린다. 호출자의 트랜잭션 안에서만 부른다.
+	 * @param user 현재 사용자
+	 * @return 잠근 카드 수
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public int lockHeldCardsForPayment(CurrentUser user) {
+		return this.userCardRepository.lockActiveByUserIdOrderByUserCardId(user.userId()).size();
 	}
 
 	private void requireWritable(CurrentUser user) {
