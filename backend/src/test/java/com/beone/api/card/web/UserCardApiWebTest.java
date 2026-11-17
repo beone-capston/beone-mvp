@@ -27,6 +27,7 @@ import com.beone.api.card.application.MappingStatus;
 import com.beone.api.card.application.NewUserCard;
 import com.beone.api.card.application.PortfolioReadOnlyException;
 import com.beone.api.card.application.RecommendationEligibility;
+import com.beone.api.card.application.RepresentativeCardInUseException;
 import com.beone.api.card.application.UserCardChange;
 import com.beone.api.card.application.UserCardChangeResult;
 import com.beone.api.card.application.UserCardDuplicatedException;
@@ -77,6 +78,8 @@ class UserCardApiWebTest {
 	private static final String READ_ONLY = "{\"code\":\"PORTFOLIO_READ_ONLY\",\"message\":\"가상 포트폴리오의 보유 카드는 바꿀 수 없습니다.\",\"errors\":[]}";
 
 	private static final String DUPLICATED = "{\"code\":\"USER_CARD_DUPLICATED\",\"message\":\"같은 상품의 카드가 이미 등록되어 있습니다.\",\"errors\":[]}";
+
+	private static final String REPRESENTATIVE_IN_USE = "{\"code\":\"REPRESENTATIVE_CARD_IN_USE\",\"message\":\"결제 전 설정의 대표 카드입니다. 먼저 설정을 바꿔 주세요.\",\"errors\":[]}";
 
 	private static final CurrentUser MY_CARDS = new CurrentUser(1L, DemoUser.MY_CARDS);
 
@@ -546,6 +549,15 @@ class UserCardApiWebTest {
 				"VIRTUAL_PORTFOLIO")), READ_ONLY, 409);
 	}
 
+	@Test
+	void excludingFixedRepresentativeCardIs409() throws Exception {
+		given(this.userCardService.update(eq(MY_CARDS), eq("uc-1001"), any()))
+			.willThrow(new RepresentativeCardInUseException());
+
+		assertJson(perform(json(patch(CARDS + "/uc-1001"), "{\"excludedFromRecommendation\":true}").header(HEADER,
+				"MY_CARDS")), REPRESENTATIVE_IN_USE, 409);
+	}
+
 	// DELETE /api/v1/me/cards/{userCardId}
 
 	@Test
@@ -564,6 +576,13 @@ class UserCardApiWebTest {
 
 		willThrow(new PortfolioReadOnlyException()).given(this.userCardService).release(PORTFOLIO, "uc-1");
 		assertJson(perform(delete(CARDS + "/uc-1").header(HEADER, "VIRTUAL_PORTFOLIO")), READ_ONLY, 409);
+	}
+
+	@Test
+	void releasingFixedRepresentativeCardIs409() throws Exception {
+		willThrow(new RepresentativeCardInUseException()).given(this.userCardService).release(MY_CARDS, "uc-1001");
+
+		assertJson(perform(delete(CARDS + "/uc-1001").header(HEADER, "MY_CARDS")), REPRESENTATIVE_IN_USE, 409);
 	}
 
 	private void assertFieldError(MockHttpServletRequestBuilder request, String body, String field, String message)
