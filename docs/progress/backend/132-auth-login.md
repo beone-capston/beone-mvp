@@ -18,3 +18,9 @@
 - 동시성: 처음 구현에서 서로 다른 회원 8명이 동시에 로그인하는 통합 시험이 MySQL 교착(500)으로 실패했습니다. 기본 격리 REPEATABLE READ에서 회원별 세션 잠금 조회(`FOR UPDATE`)가 인덱스 간격까지 잠가, 세션이 없던 회원들의 새 세션 삽입끼리 서로 기다렸기 때문입니다. 로그인 트랜잭션을 READ COMMITTED로 바꿔 간격 잠금을 없앴고(같은 회원은 회원 행 잠금으로 계속 차례 처리), 같은 시험을 3번 더 돌려 교착 없이 통과했습니다. 같은 이메일 동시 실패 7건은 정확히 401 5건·429 2건입니다.
 - 검증: `./gradlew test webTest integrationTest build javadoc --rerun-tasks` 결과는 PR 본문에 기록합니다.
 - 남은 제한: 비밀번호 재설정(U4, 다른 목적 토큰 시험 포함), 회원 세션과 `/me` 업무 자원의 연결(D-24 미결), IP 기준 제한, 로그인 잠금 상태 행·만료 세션 정리 기한, 공개 프로필·CORS, Flyway 번호 확정. 서버 DB 적용·배포, frontend 변경은 하지 않았습니다.
+
+## 2026-11-18 · CodeRabbit 리뷰 반영(head `03ac995` 리뷰)
+- 리뷰 상태: 제출 리뷰 1건(head `03ac995`, 인라인 4건, 모두 Minor, 리뷰 본문의 범위 밖 지적 없음). 네 지적 모두 현재 코드·문서에 해당해 반영했습니다.
+- 반영 1(계정 전환 교착): A의 세션으로 B에, B의 세션으로 A에 동시에 로그인하면 이전 세션 행과 대상 회원 세션 행을 엇갈려 잠가 교착 500이 났습니다. `MemberSessionIntegrationTest#crossAccountSwitchesNeverFailWithServerError`(15회 동시 전환)가 고치기 전 첫 회에 500으로 실패했습니다. 로그인 전체를 `TransactionTemplate`(READ COMMITTED) 한 번으로 실행하고, `PessimisticLockingFailureException`(교착·잠금 대기 실패)로 지면 새 트랜잭션에서 처음부터 다시 판정합니다(최대 3번). 진 시도는 실패 기록까지 롤백되므로 두 번 세지 않습니다. 고친 뒤 4번 돌려 모두 통과했고, MySQL은 전환마다 한쪽을 교착으로 되돌리지만(로그 15건) 재시도가 흡수합니다.
+- 반영 2(잠금 판정 시각): 잠금 상태 행을 기다리기 전에 읽은 시각으로 판정·기록해, 대기 뒤 잠금이 이미 끝났는데 429를 주거나 잠금 기간이 Argon2id 계산 시간만큼 짧아질 수 있었습니다. `LoginAttemptThrottle.lock`으로 행을 먼저 잡은 뒤 시각을 읽어 `lockedFor`에 넘기고, 실패 시각은 비밀번호 비교 뒤에 읽습니다. `MemberLoginServiceTest#timesAreReadAfterTheThrottleLockAndAfterPasswordComparison`(읽을 때마다 1초 가는 시계)로 확인합니다.
+- 반영 3·4(문서): `docs/architecture.md` 사용자 식별 문장의 "로그인은 없고"를 업무 API가 회원 로그인에 연결되지 않았다는 뜻으로, `docs/domains/auth.md` 로그인 흐름의 "5개 넘으면"을 "유효 세션이 이미 5개면"으로 고쳤습니다.

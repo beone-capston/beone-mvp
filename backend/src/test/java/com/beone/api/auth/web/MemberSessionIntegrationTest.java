@@ -444,6 +444,41 @@ class MemberSessionIntegrationTest {
 	}
 
 	@Test
+	void crossAccountSwitchesNeverFailWithServerError() throws Exception {
+		String otherId = "usr-fedcba9876543210fedcba9876543210";
+		createMember(MEMBER_ID, EMAIL, true);
+		createMember(otherId, "other@example.com", true);
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			for (int round = 0; round < 15; round++) {
+				// A의 세션으로 B에 로그인하고, 동시에 B의 세션으로 A에 로그인한다(서로 상대 회원의 세션을 지우고 잠근다).
+				String a = loginAs(EMAIL);
+				String b = loginAs("other@example.com");
+				Session fromA = new Session(a, csrfOf(a));
+				Session fromB = new Session(b, csrfOf(b));
+				CountDownLatch ready = new CountDownLatch(2);
+				Future<Integer> toB = executor.submit((Callable<Integer>) () -> {
+					ready.countDown();
+					ready.await(10, TimeUnit.SECONDS);
+					return login(fromA, "other@example.com", PASSWORD).getStatusCode().value();
+				});
+				Future<Integer> toA = executor.submit((Callable<Integer>) () -> {
+					ready.countDown();
+					ready.await(10, TimeUnit.SECONDS);
+					return login(fromB, EMAIL, PASSWORD).getStatusCode().value();
+				});
+				assertThat(toB.get(60, TimeUnit.SECONDS)).as("round " + round + " A->B").isEqualTo(200);
+				assertThat(toA.get(60, TimeUnit.SECONDS)).as("round " + round + " B->A").isEqualTo(200);
+				assertThat(sessionRowCount(a)).isZero();
+				assertThat(sessionRowCount(b)).isZero();
+			}
+		}
+		finally {
+			executor.shutdownNow();
+		}
+	}
+
+	@Test
 	void loginAndLogoutWithoutCsrfAreForbiddenAndChangeNothing() throws Exception {
 		createMember(MEMBER_ID, EMAIL, true);
 		Session anonymous = anonymous();

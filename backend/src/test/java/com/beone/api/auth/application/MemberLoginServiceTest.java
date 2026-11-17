@@ -1,15 +1,19 @@
 package com.beone.api.auth.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -20,6 +24,9 @@ import com.beone.api.auth.persistence.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.transaction.support.TransactionOperations;
 
 /**
  * 로그인 판정 순서와 계정 존재 비공개를 확인한다.
@@ -53,7 +60,8 @@ class MemberLoginServiceTest {
 		given(this.hasher.hash(anyString())).willReturn("dummy-hash");
 		given(this.throttle.lockedFor(anyString(), any())).willReturn(Optional.empty());
 		Clock clock = Clock.fixed(NOW.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneOffset.UTC);
-		this.service = new MemberLoginService(this.members, this.throttle, this.hasher, this.sessions, clock);
+		this.service = new MemberLoginService(this.members, this.throttle, this.hasher, this.sessions, clock,
+				TransactionOperations.withoutTransaction());
 	}
 
 	@Test
@@ -113,6 +121,64 @@ class MemberLoginServiceTest {
 		assertThat(result).isEqualTo(new LoginResult.Succeeded(member.getMemberId(), "user@example.com", issued));
 		verify(this.throttle).recordSuccess("user@example.com");
 		assertThat(result.toString()).doesNotContain("user@example.com").doesNotContain(issued.sessionId());
+	}
+
+	@Test
+	void lockConflictIsRetriedInANewAttemptUpToThreeTimes() {
+		MemberEntity member = member(true);
+		given(this.members.findByEmail("user@example.com"))
+			.willThrow(new CannotAcquireLockException("deadlock"))
+			.willThrow(new CannotAcquireLockException("deadlock"))
+			.willReturn(Optional.of(member));
+		given(this.hasher.matches("right", "stored-hash")).willReturn(true);
+		IssuedSession issued = new IssuedSession(SessionTokens.newSessionId(), "csrf", Duration.ofDays(30));
+		given(this.sessions.issueMember(member.getMemberId(), PREVIOUS)).willReturn(issued);
+
+		assertThat(this.service.login("user@example.com", "right", PREVIOUS)).isInstanceOf(LoginResult.Succeeded.class);
+		verify(this.throttle, times(3)).lock("user@example.com");
+	}
+
+	@Test
+	void lockConflictOnTheLastAttemptIsRethrown() {
+		given(this.members.findByEmail("user@example.com")).willThrow(new CannotAcquireLockException("deadlock"));
+
+		assertThatThrownBy(() -> this.service.login("user@example.com", "pw", PREVIOUS))
+			.isInstanceOf(CannotAcquireLockException.class);
+		verify(this.throttle, times(MemberLoginService.MAX_ATTEMPTS)).lock("user@example.com");
+	}
+
+	@Test
+	void timesAreReadAfterTheThrottleLockAndAfterPasswordComparison() {
+		// 시계를 읽을 때마다 1초씩 간다. 잠금 판정은 잠금 행을 잡은 뒤의 시각, 실패 기록은 비교 뒤의 시각을 받아야 한다.
+		Clock ticking = new Clock() {
+			private int reads;
+
+			@Override
+			public ZoneId getZone() {
+				return ZoneId.of("Asia/Seoul");
+			}
+
+			@Override
+			public Clock withZone(ZoneId zone) {
+				return this;
+			}
+
+			@Override
+			public Instant instant() {
+				return NOW.atZone(ZoneId.of("Asia/Seoul")).toInstant().plusSeconds(this.reads++);
+			}
+		};
+		MemberLoginService service = new MemberLoginService(this.members, this.throttle, this.hasher, this.sessions,
+				ticking, TransactionOperations.withoutTransaction());
+		given(this.members.findByEmail("nobody@example.com")).willReturn(Optional.empty());
+
+		service.login("nobody@example.com", "pw", PREVIOUS);
+
+		InOrder order = inOrder(this.throttle, this.hasher);
+		order.verify(this.throttle).lock("nobody@example.com");
+		order.verify(this.throttle).lockedFor("nobody@example.com", NOW);
+		order.verify(this.hasher).matches("pw", "dummy-hash");
+		order.verify(this.throttle).recordFailure("nobody@example.com", NOW.plusSeconds(1));
 	}
 
 	@Test

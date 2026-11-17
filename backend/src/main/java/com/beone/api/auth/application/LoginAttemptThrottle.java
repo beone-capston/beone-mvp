@@ -43,6 +43,16 @@ public class LoginAttemptThrottle {
 	}
 
 	/**
+	 * 이메일의 잠금 상태 행을 만들거나 배타 잠금한다. 같은 이메일의 다른 로그인이 끝날 때까지 기다릴 수 있으므로, 호출한 쪽은 이 뒤에
+	 * 현재 시각을 읽어 {@link #lockedFor}에 넘긴다.
+	 * @param normalizedEmail 정규화한 이메일
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void lock(String normalizedEmail) {
+		lockRow(normalizedEmail);
+	}
+
+	/**
 	 * 이메일의 잠금 상태 행을 배타 잠금하고 잠겨 있는지 본다. 같은 트랜잭션에서 {@link #recordFailure}·{@link #recordSuccess}보다 먼저
 	 * 부른다.
 	 * @param normalizedEmail 정규화한 이메일
