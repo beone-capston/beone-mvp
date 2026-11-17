@@ -21,6 +21,7 @@
   - 우선순위는 `ORDER_PAID` > `MAPPING_CHANGED` > `MONTHLY_STATE_CHANGED`입니다.
   - **추천 제외 변경은 `MAPPING_CHANGED`로 묶었습니다.** 보유 카드 계약은 추천 제외가 실제로 바뀌면 무효화하라고 요구하는데, 추천 계약의 사유 값은 셋뿐입니다. 값을 더하면 계약 변경이라 "비교 대상 여부 변경"으로 보고 매핑 변경과 묶었습니다.
   - 계약 문구 정리 후보: `invalidatedReason`의 `MAPPING_CHANGED` 설명에 해제·추천 제외 변경 포함을 적을지, 별도 값을 둘지.
+  - 결제 전 설정 변경은 계약 사유 값에 없어 무효화하지 않습니다. 추천은 계산 당시 설정에만 유효합니다(CodeRabbit 지적으로 문서에 명시, 계약 문구 정리 후보).
   - `inputSnapshot`은 `NOT_DETERMINED`일 때 `null`입니다. 스냅샷 시각은 입력이 있는 카드만 키로 넣습니다.
   - 가상 포트폴리오 카드는 `mapping: null`이고, `displayName`은 보유 카드 표시 이름입니다.
   - `policyEvidence`는 항상 `UNDETERMINED`입니다. `SINGLE_COMPARED_CARD`는 중립 문구입니다.

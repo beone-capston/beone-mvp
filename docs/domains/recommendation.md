@@ -87,6 +87,8 @@ EngineResult result = engine.recommend(new EngineRequest(order.orderDate(),
    2. `MAPPING_CHANGED`: 계산 때 넘긴 카드 중 하나라도 해제됐거나, 매핑 상태·규칙 상품 ID·**추천 제외 여부**가 바뀜
    3. `MONTHLY_STATE_CHANGED`: 계산 때 넘긴 카드 중 하나라도 주문 월의 월간 상태 스냅샷 시각이 바뀜(새로 입력, 다시 입력, 비우기 포함)
 
+결제 전 설정(선택 방식·대표 카드) 변경은 무효화 사유가 아닙니다. 계약의 `invalidatedReason` 값에 설정 변경이 없기 때문입니다. 저장한 추천은 **계산 당시의 결제 전 설정에 대해서만 유효**하며, 그때 넘긴 대표 카드는 `inputSnapshot.representativeUserCardId`에 남습니다. 설정을 바꿨다면 POST로 다시 계산합니다.
+
 ## 엔진 입력으로 옮기는 규칙
 
 [`EngineInputAssembler`](../../backend/src/main/java/com/beone/api/recommendation/application/EngineInputAssembler.java)는 값을 판단하지 않고 모양만 바꿉니다.
@@ -121,6 +123,7 @@ EngineResult result = engine.recommend(new EngineRequest(order.orderDate(),
 - 계산 응답 JSON과 무효화 판정용 카드 근거를 저장하고, 조회는 다시 계산하지 않습니다(B2-3).
 - 무효화는 조회할 때 저장한 근거와 지금 상태를 비교해 판정합니다(B2-4, 지연 판정). 카드나 월간 상태를 바꾸는 쪽(`card`·`monthlystate`)에서 추천 행을 갱신하지 않아도 되므로 다른 패키지를 고치지 않습니다.
 - **추천 제외 변경을 `MAPPING_CHANGED`로 묶은 이유**: 보유 카드 계약([`cards.md`](../api/cards.md)의 추천 제외 설명)은 `excludedFromRecommendation`이 실제로 바뀌면 그 카드가 들어간 추천을 무효화하라고 요구합니다. 그런데 추천 계약의 `invalidatedReason`은 `MAPPING_CHANGED`·`MONTHLY_STATE_CHANGED`·`ORDER_PAID` 셋뿐입니다. 새 값을 더하면 계약 변경이므로, 추천 제외 변경을 "그 카드가 비교 대상인지가 바뀜"으로 보고 매핑 상태·규칙 상품 변경, 해제와 같은 `MAPPING_CHANGED`로 묶었습니다.
+- 계약 문구 정리 후보(결제 전 설정): 설정 변경을 무효화 사유로 둘지, "계산 당시 설정에만 유효"를 계약에 적을지. 지금은 계약대로 무효화하지 않습니다.
 - 계약 문구 정리 후보: `invalidatedReason` 설명에 "`MAPPING_CHANGED`는 매핑 상태·규칙 상품 변경, 카드 해제, 추천 제외 변경을 포함한다"를 적거나, 별도 값을 둘지 정하는 것. 관리자가 계약 정리 때 판단합니다.
 
 ## 제약과 한계
