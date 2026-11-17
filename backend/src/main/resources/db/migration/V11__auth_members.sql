@@ -4,9 +4,10 @@
 
 -- 회원. ID는 'usr-' + 무작위 32자 16진수(관리자 판단, 결정 28). 이메일은 정규화(앞뒤 공백 제거·소문자)한 값이다.
 -- 비밀번호는 Argon2id 해시 문자열만 저장한다. 이메일 인증 전이면 email_verified_at이 NULL이다.
+-- 이메일은 이진 비교(utf8mb4_bin)로 둔다. 기본 비교 규칙은 악센트를 구분하지 않아 jose@와 josé@를 같은 계정으로 본다.
 CREATE TABLE members (
     member_id         VARCHAR(36)  NOT NULL,
-    email             VARCHAR(254) NOT NULL,
+    email             VARCHAR(254) COLLATE utf8mb4_bin NOT NULL,
     password_hash     VARCHAR(255) NOT NULL,
     email_verified_at DATETIME     NULL,
     created_at        DATETIME     NOT NULL,

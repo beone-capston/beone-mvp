@@ -293,6 +293,48 @@ class MemberRegistrationIntegrationTest {
 	}
 
 	@Test
+	void verificationRacingReissueNeverFailsWithServerError() throws Exception {
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			for (int i = 0; i < 15; i++) {
+				String email = "race" + i + "@example.com";
+				this.mailSender.clear();
+				signUp(email, PASSWORD);
+				String token = onlyMail().token();
+				advance(Duration.ofSeconds(60));
+				CountDownLatch ready = new CountDownLatch(2);
+				Future<Integer> verifying = executor.submit((Callable<Integer>) () -> {
+					ready.countDown();
+					ready.await(10, TimeUnit.SECONDS);
+					return verify(token).getStatusCode().value();
+				});
+				Future<Integer> reissuing = executor.submit((Callable<Integer>) () -> {
+					ready.countDown();
+					ready.await(10, TimeUnit.SECONDS);
+					return resend(email).getStatusCode().value();
+				});
+				// 인증과 재발급 중 어느 쪽이 먼저든 교착(500) 없이 끝난다. 재발급이 먼저면 옛 토큰은 400이다.
+				assertThat(verifying.get(30, TimeUnit.SECONDS)).as("verify " + i).isIn(204, 400);
+				assertThat(reissuing.get(30, TimeUnit.SECONDS)).as("reissue " + i).isEqualTo(202);
+			}
+		}
+		finally {
+			executor.shutdownNow();
+		}
+	}
+
+	@Test
+	void accentedAddressIsADifferentAccount() throws Exception {
+		assertBody(signUp("jose@example.com", PASSWORD), 202, ACCEPTED);
+		assertBody(signUp("josé@example.com", PASSWORD), 202, ACCEPTED);
+
+		assertThat(this.jdbcTemplate.queryForList("SELECT email FROM members ORDER BY email", String.class))
+			.containsExactly("jose@example.com", "josé@example.com");
+		assertThat(this.mailSender.sentMails()).extracting(AuthMail::to)
+			.containsExactly("jose@example.com", "josé@example.com");
+	}
+
+	@Test
 	void requestsWithoutCsrfAreForbiddenAndCreateNothing() {
 		ResponseEntity<String> response = client().post()
 			.uri("/api/v1/auth/sign-up")

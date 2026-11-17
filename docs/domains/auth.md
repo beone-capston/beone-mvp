@@ -87,6 +87,7 @@ com.beone.api.auth
 - [`AuthExceptionHandler`](../../backend/src/main/java/com/beone/api/auth/web/AuthExceptionHandler.java)는 `auth.web` 패키지의 컨트롤러에만 적용합니다. 인터셉터가 던진 예외도 그 요청의 핸들러 기준으로 이 처리기가 받습니다.
 - 요청 진입점은 [`AuthCsrfController`](../../backend/src/main/java/com/beone/api/auth/web/AuthCsrfController.java), 쿠키 문자열은 [`SessionCookie`](../../backend/src/main/java/com/beone/api/auth/web/SessionCookie.java), 인터셉터·필터 등록은 [`AuthWebConfiguration`](../../backend/src/main/java/com/beone/api/auth/web/AuthWebConfiguration.java), 익명 세션 수명은 [`AnonymousSessionProperties`](../../backend/src/main/java/com/beone/api/auth/application/AnonymousSessionProperties.java), 저장은 [`AuthSessionEntity`](../../backend/src/main/java/com/beone/api/auth/persistence/AuthSessionEntity.java)·[`AuthSessionRepository`](../../backend/src/main/java/com/beone/api/auth/persistence/AuthSessionRepository.java)입니다.
 - [`MemberRegistrationService`](../../backend/src/main/java/com/beone/api/auth/application/MemberRegistrationService.java)는 가입·인증메일 재요청·이메일 인증 완료를 한 트랜잭션씩 처리합니다. 가입과 재요청은 먼저 [`MailRequestThrottle`](../../backend/src/main/java/com/beone/api/auth/application/MailRequestThrottle.java)로 같은 주소 60초 제한을 통과해야 합니다. 가입은 계정 유무와 관계없이 [`PasswordHasher`](../../backend/src/main/java/com/beone/api/auth/application/PasswordHasher.java)로 해시를 계산하고(응답 시간 차이 줄이기), 신규면 미인증 회원을 만들고, 미인증 기존 계정이면 비밀번호를 바꾸지 않고 인증메일만 다시 보내며, 인증된 계정이면 아무것도 보내지 않습니다. 반환값이 없어 컨트롤러는 항상 같은 202로 답합니다. 메일은 토큰 저장이 커밋된 뒤에만 [`AuthMailSender`](../../backend/src/main/java/com/beone/api/auth/application/AuthMailSender.java)로 보냅니다.
+- 잠금 순서는 회원 행 → 토큰 행입니다. 재발급(회원을 잠근 뒤 이전 토큰 삭제)과 이메일 인증(회원 ID를 잠금 없이 읽고 회원을 잠근 뒤 토큰을 잠가 다시 확인)이 같은 순서라 동시에 실행돼도 교착하지 않습니다. 회원 이메일 열은 이진 비교(`utf8mb4_bin`)라 `jose@`와 `josé@`는 다른 계정입니다.
 - [`MailRequestThrottle`](../../backend/src/main/java/com/beone/api/auth/application/MailRequestThrottle.java)은 이메일의 SHA-256 해시로 `auth_mail_throttles` 행을 만들거나 배타 잠금을 건 뒤(`INSERT ... ON DUPLICATE KEY UPDATE`) 잠금 읽기로 마지막 접수 시각을 봅니다. 60초 안이면 남은 초로 `MailRateLimitedException`을 던지고, 아니면 시각을 바꿉니다. 처음부터 배타 잠금을 쓰므로 같은 주소의 동시 요청은 차례로 판정되고 교착이 없습니다(공유 잠금 뒤 배타 잠금으로 올리던 첫 구현은 동시 시험에서 교착 500이 났습니다).
 - [`PasswordHasher`](../../backend/src/main/java/com/beone/api/auth/application/PasswordHasher.java)는 Bouncy Castle의 Argon2 구현으로 m=19456KiB·t=2·p=1, 솔트 16바이트, 해시 32바이트의 PHC 문자열을 만듭니다. `matches`는 저장값의 파라미터로 다시 계산해 상수 시간으로 비교하며 로그인 단위(U3)가 씁니다.
 - [`FakeAuthMailSender`](../../backend/src/main/java/com/beone/api/auth/application/FakeAuthMailSender.java)는 메일을 보내지 않고 최근 100통을 메모리에만 담습니다. 로그를 남기지 않고, 테스트가 `sentMails()`로 토큰을 꺼냅니다.
@@ -128,7 +129,8 @@ POST /api/v1/auth/email-verification-requests {email}
 → 같은 제한 → 미인증 계정이면 새 토큰 발급·메일, 아니면 없음 → 같은 202
 
 POST /api/v1/auth/email-verifications {token}
-→ 토큰 해시로 조회(쓰기 잠금) → 없음·목적 다름·만료(30분)면 400 AUTH_TOKEN_INVALID
+→ 토큰 해시로 회원 ID만 읽기(잠금 없음) → 회원 잠금 → 토큰 잠금 조회로 다시 확인
+   → 없음·회원 다름·목적 다름·만료(30분)면 400 AUTH_TOKEN_INVALID
 → 회원 인증 시각 기록 → 그 회원의 인증 토큰 모두 삭제 → 204(로그인 세션은 만들지 않음)
 ```
 
@@ -168,4 +170,4 @@ curl -i -X POST http://localhost:8080/api/v1/auth/sign-up \
 - 미인증 계정·만료 토큰·메일 제한 기록의 정리 기한은 미정이라 지우지 않습니다. 쓴 토큰과 재발급으로 무효가 된 토큰은 바로 지웁니다.
 - 가짜 발송기는 서버 메모리에만 메일을 두므로 로컬에서 실제로 인증을 끝까지 해 보려면 테스트를 써야 합니다. 링크 주소 형식은 미정입니다.
 - `V11`은 임시 번호입니다. `V10`이 나중에 병합되면 Flyway 순서를 관리자가 병합 직전에 조정합니다.
-- 테스트: `SessionTokensTest`·`AnonymousSessionPropertiesTest`·`AuthSessionServiceTest`·`SessionCookieTest`(단위), `AuthCsrfApiWebTest`·`AuthCsrfProfileOffWebTest`(웹 슬라이스, 테스트 전용 POST 경로로 CSRF 검사), `AuthSessionIntegrationTest`(실제 HTTP·MySQL, V9 적용·해시 저장·만료). U2: `PasswordHasherTest`(Argon2 참조 구현 시험 벡터)·`EmailAddressesTest`·`MemberIdsTest`·`MailRequestThrottleTest`·`NewPasswordTest`(단위), `MemberRegistrationApiWebTest`(웹 슬라이스), `MemberRegistrationIntegrationTest`(실제 HTTP·MySQL, V11 적용·해시만 저장·계정 존재 비공개·토큰 30분·1회용·재발급 무효·60초 합산·동시 가입·로그에 원문 없음).
+- 테스트: `SessionTokensTest`·`AnonymousSessionPropertiesTest`·`AuthSessionServiceTest`·`SessionCookieTest`(단위), `AuthCsrfApiWebTest`·`AuthCsrfProfileOffWebTest`(웹 슬라이스, 테스트 전용 POST 경로로 CSRF 검사), `AuthSessionIntegrationTest`(실제 HTTP·MySQL, V9 적용·해시 저장·만료). U2: `PasswordHasherTest`(Argon2 참조 구현 시험 벡터)·`EmailAddressesTest`·`MemberIdsTest`·`MailRequestThrottleTest`·`NewPasswordTest`(단위), `MemberRegistrationApiWebTest`(웹 슬라이스), `MemberRegistrationIntegrationTest`(실제 HTTP·MySQL, V11 적용·해시만 저장·계정 존재 비공개·토큰 30분·1회용·재발급 무효·60초 합산·동시 가입·인증과 재발급 경합·악센트 주소 구분·로그에 원문 없음).

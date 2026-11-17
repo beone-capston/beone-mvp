@@ -22,3 +22,9 @@
   - 메일 요청 제한은 처음에 `INSERT IGNORE` 뒤 조건부 `UPDATE`로 만들었는데, 동시 가입 통합 시험에서 MySQL 교착(공유 잠금 뒤 배타 잠금으로 올리기)으로 500이 났습니다. `INSERT ... ON DUPLICATE KEY UPDATE`로 처음부터 배타 잠금을 잡고 잠금 읽기 뒤 Java에서 판정하도록 바꿨고, 같은 시험을 5번 더 돌려 교착 없이 통과했습니다. 이 때문에 `auth_mail_throttles.last_requested_at`은 같은 트랜잭션이 방금 만든 행에 한해 `NULL`을 허용합니다.
 - 검증: `./gradlew test webTest integrationTest build javadoc --rerun-tasks` 결과는 PR 본문에 기록합니다.
 - 남은 제한: 로그인·로그아웃·세션 조회(U3, 로그인 교체 시험 ④가 병합 조건), 비밀번호 재설정(U4), 실발송·공급자·링크 형식, 미인증 계정·만료 토큰·제한 기록 정리 기한, 공개 프로필·CORS, Flyway 번호 확정. 서버 DB 적용·배포, frontend 변경은 하지 않았습니다.
+
+## 2026-11-18 · CodeRabbit 리뷰 반영(head `13a8dd0` 리뷰)
+- 리뷰 상태: 제출 리뷰 1건(head `13a8dd0`, 인라인 3건, 모두 Minor). 세 지적 모두 현재 코드에 해당해 반영했습니다.
+- 반영 1(인증과 재발급의 잠금 순서): 이메일 인증은 토큰 → 회원, 재발급은 회원 → 토큰 순으로 잠가 동시에 실행되면 교착할 수 있었습니다. 인증이 토큰의 회원 ID를 잠금 없이 읽고 회원을 먼저 잠근 뒤 토큰을 잠가 다시 확인하도록 바꿨습니다(`MemberRepository.findLockedById`, `AuthTokenRepository.findMemberIdByTokenHash`). `MemberRegistrationIntegrationTest#verificationRacingReissueNeverFailsWithServerError`(인증과 재발급을 15회 동시 실행)는 고치기 전 교착 500으로 실패했고, 고친 뒤 4번 돌려 모두 통과했습니다.
+- 반영 2(이메일 비교 규칙): `members.email`이 기본 `utf8mb4_0900_ai_ci`(악센트 무시)를 받아, `jose@example.com` 가입 뒤 `josé@example.com` 가입이 첫 계정에 인증메일을 다시 보냈습니다. V11에서 `email` 열을 `utf8mb4_bin`으로 지정했습니다(V11은 미병합 자기 파일). 소문자 정규화는 그대로입니다. `#accentedAddressIsADifferentAccount`는 고치기 전 실패, 고친 뒤 통과입니다.
+- 반영 3(구조 문서): `docs/architecture.md` auth 항목의 범위 밖 목록에서 가입·인증메일을 빼고 U3·U4만 남겼습니다.

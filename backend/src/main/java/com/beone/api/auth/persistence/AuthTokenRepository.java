@@ -23,6 +23,15 @@ public interface AuthTokenRepository extends JpaRepository<AuthTokenEntity, Long
 	Optional<AuthTokenEntity> findByTokenHash(String tokenHash);
 
 	/**
+	 * 잠금 없이 토큰의 회원 ID만 읽는다. 회원 행을 먼저 잠그기 위한 것이며, 결과는 회원 잠금 뒤 {@link #findByTokenHash}로 다시
+	 * 확인한다.
+	 * @param tokenHash 토큰 원문의 SHA-256 16진수
+	 * @return 회원 ID, 없으면 빈 값
+	 */
+	@Query("select t.memberId from AuthTokenEntity t where t.tokenHash = :tokenHash")
+	Optional<String> findMemberIdByTokenHash(@Param("tokenHash") String tokenHash);
+
+	/**
 	 * 회원의 해당 목적 토큰을 모두 지운다(재발급·사용 뒤 이전 토큰 무효).
 	 * @param memberId 회원 ID
 	 * @param purpose 토큰 목적

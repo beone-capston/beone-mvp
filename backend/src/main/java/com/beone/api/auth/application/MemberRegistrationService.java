@@ -110,11 +110,15 @@ public class MemberRegistrationService {
 	@Transactional
 	public void verifyEmail(String token) {
 		LocalDateTime now = now();
-		AuthTokenEntity found = this.tokens.findByTokenHash(SessionTokens.hash(token))
+		String tokenHash = SessionTokens.hash(token);
+		// 잠금 순서는 회원 → 토큰이다(재발급과 같은 순서라 교착하지 않음). 회원 ID는 잠금 없이 읽고, 잠근 뒤 토큰을 다시 확인한다.
+		String memberId = this.tokens.findMemberIdByTokenHash(tokenHash).orElseThrow(AuthTokenInvalidException::new);
+		MemberEntity member = this.members.findLockedById(memberId).orElseThrow(AuthTokenInvalidException::new);
+		this.tokens.findByTokenHash(tokenHash)
+			.filter(t -> t.getMemberId().equals(memberId))
 			.filter(t -> t.getPurpose() == AuthTokenPurpose.EMAIL_VERIFICATION)
 			.filter(t -> !t.isExpiredAt(now))
 			.orElseThrow(AuthTokenInvalidException::new);
-		MemberEntity member = this.members.findById(found.getMemberId()).orElseThrow(AuthTokenInvalidException::new);
 		member.markEmailVerified(now);
 		this.tokens.deleteByMemberIdAndPurpose(member.getMemberId(), AuthTokenPurpose.EMAIL_VERIFICATION);
 	}

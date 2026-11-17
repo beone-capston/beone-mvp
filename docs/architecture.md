@@ -40,7 +40,7 @@
 - [auth: 회원 인증 세션·CSRF](domains/auth.md)
   - 위치: `backend/src/main/java/com/beone/api/auth/` (`web`, `application`, `persistence`)
   - 책임: MySQL 서버 세션 `auth_sessions`(Flyway `V9`, 세션 ID는 SHA-256 해시만 저장), 세션 쿠키 `__Host-BEONE_SESSION`, `GET /api/v1/auth/csrf`와 `/api/v1/auth/**` POST의 CSRF 검사(#124, U1), 회원 `members`·1회용 토큰 `auth_tokens`·메일 요청 제한 `auth_mail_throttles`(Flyway `V11`)와 회원가입·인증메일 재요청·이메일 인증 완료(#128, U2, Argon2id, 가짜 메일 발송기). `local`·`demo` 프로필에서만 등록됩니다. 시연 사용자 헤더와 `user` 패키지에 의존하지 않습니다.
-  - 범위 밖: 가입·인증메일·로그인·로그아웃·세션 조회·비밀번호 재설정(U2~U4), 회원과 `/me` 업무 자원의 연결(D-24 미결), 공개 CORS.
+  - 범위 밖: 로그인·로그아웃·세션 조회(U3), 비밀번호 재설정(U4), 회원과 `/me` 업무 자원의 연결(D-24 미결), 공개 CORS.
 
 도메인이 아닌 공통 웹 기반 코드:
 
