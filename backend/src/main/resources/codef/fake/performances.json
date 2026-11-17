@@ -1,0 +1,18 @@
+{
+  "_fixture": {"synthetic": true, "use": "local·demo 가짜 게이트웨이 전용. {{PREVIOUS_START}}·{{PREVIOUS_END}}는 서울 기준 전월 1일·말일(yyyyMMdd)로 바꾼다. 금액은 합성 값", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "FAKE-TX-PERFORMANCES"},
+  "data": [
+    {
+      "resCardName": "가짜KB 테스트카드 A",
+      "resCardBenefitList": [
+        {
+          "resType": "",
+          "resCardBenefitName": "",
+          "resCardPerformanceList": [
+            {"resStandardUseAmt": "300000", "resCurrentUseAmt": "120000", "resRequiredPerformanceAmt": "180000", "commStartDate": "{{PREVIOUS_START}}", "commEndDate": "{{PREVIOUS_END}}", "resCoverageCriteria": "", "resMeetPerformanceYN": ""}
+          ]
+        }
+      ]
+    }
+  ]
+}

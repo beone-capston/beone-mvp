@@ -199,6 +199,35 @@ public class UserCardService {
 		return this.userCardRepository.lockActiveByUserIdOrderByUserCardId(user.userId()).size();
 	}
 
+	/**
+	 * CODEF 동기화 저장 전에 이 사용자의 해제하지 않은 보유 카드 행을 ID 오름차순으로 쓰기 잠금하고, 그중 CODEF 카드 ID를 돌려준다
+	 * (#129). 모의 승인과 같은 순서(보유 카드 → 사용자 행)로 잠가 서로 교착하지 않게 하고, 같은 사용자의 카드 해제와도 차례로
+	 * 처리한다. 호출자의 트랜잭션 안에서만 부른다.
+	 * @param user 현재 사용자
+	 * @return 해제하지 않은 CODEF 카드 ID(오름차순)
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public List<Long> lockHeldCardsForCodefSync(CurrentUser user) {
+		return this.userCardRepository.lockActiveByUserIdOrderByUserCardId(user.userId())
+			.stream()
+			.filter(card -> card.getHoldingSource() == HoldingSource.CODEF)
+			.map(UserCardEntity::getUserCardId)
+			.toList();
+	}
+
+	/**
+	 * CODEF 보유카드로 새 보유 카드를 만든다(#129). 매핑은 {@code UNMAPPED}, 상품 후보는 없다(결정 20 R3). 가상 포트폴리오 검사와
+	 * 표시 이름 검사(1~30자)는 호출자가 마친 뒤 부른다. 호출자의 트랜잭션 안에서만 부른다.
+	 * @param user 현재 사용자
+	 * @param displayName 앞뒤 공백을 뗀 1~30자 표시 이름
+	 * @return 만든 보유 카드의 저장소 번호
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public long registerCodefCard(CurrentUser user, String displayName) {
+		UserCardEntity entity = UserCardEntity.codef(user.userId(), displayName, now());
+		return this.userCardRepository.saveAndFlush(entity).getUserCardId();
+	}
+
 	private void requireWritable(CurrentUser user) {
 		if (profileOf(user).readOnly()) {
 			throw new PortfolioReadOnlyException();

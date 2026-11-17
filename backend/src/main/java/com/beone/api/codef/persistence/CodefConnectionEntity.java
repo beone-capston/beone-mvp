@@ -76,6 +76,22 @@ public class CodefConnectionEntity {
 		return previous;
 	}
 
+	/**
+	 * 동기화가 성공(200)한 시각을 남긴다.
+	 * @param syncedAt 동기화 시각(서울)
+	 */
+	public void markSynced(LocalDateTime syncedAt) {
+		this.lastSyncedAt = syncedAt;
+	}
+
+	/**
+	 * 재연결이 필요한 상태로 바꾼다. 지금은 가짜 게이트웨이의 연결 무효 결과에서만 부른다(관리자 판단 P2). 다음 연결 성공이 다시
+	 * {@code CONNECTED}로 돌린다.
+	 */
+	public void markReconnectRequired() {
+		this.status = CodefConnectionStatus.RECONNECT_REQUIRED;
+	}
+
 	public Long getUserId() {
 		return this.userId;
 	}

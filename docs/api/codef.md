@@ -258,8 +258,8 @@ to
         {
           "userCardId": "uc-2001",
           "cardName": "청춘대로 톡톡카드",
-          "candidateCardProductId": "09174",
-          "mappingStatus": "CANDIDATE"
+          "candidateCardProductId": null,
+          "mappingStatus": "UNMAPPED"
         }
       ]
     },
@@ -294,6 +294,7 @@ to
 
 #### 응답 필드
 
+- `heldCards.newCandidates[]` · 새 CODEF 카드는 `mappingStatus`=`UNMAPPED`, `candidateCardProductId`=`null`이다. 카드명으로 상품 후보를 정하지 않고 사용자가 직접 고른다(결정 20 R3, 2026-11-18 관리자 판단 K1).
 - `performances[].usedInCalculation` · 항상 `false`. 사용자가 확인해 수동 입력해야 계산에 쓴다(D-16)
 - `incompleteRows[]` · 원장에 넣지 않은 행과 이유. 카드번호·승인번호 원문은 담지 않는다
 - 부분 동기화 실패와 전체 실패를 구분한다. 일부 항목만 실패하면 200과 `data.partialFailures[]`(항목: `target`=`HELD_CARDS`/`APPROVALS`/`PERFORMANCES`(제안, 샌드박스 확인 뒤 확정), 공개 `code`·`message`, 실패가 없으면 `[]`)를 담고, 전부 실패하면 502를 준다(제안). timeout을 504로 나눌지는 전송 계약과 함께 정한다
@@ -306,6 +307,8 @@ to
 - **409 `CODEF_RECONNECT_REQUIRED`**: 재연결이 필요한 경우
 
 - **502 `CODEF_UNAVAILABLE`**: CODEF 전체 실패
+
+- **409 `PORTFOLIO_READ_ONLY`**: 가상 포트폴리오 사용자([`docs/api.md`](../api.md) "`PORTFOLIO_READ_ONLY`는 가상 포트폴리오의 보유 카드·CODEF 쓰기 요청에 씁니다")
 
 - **400 `INVALID_REQUEST`**: 요청값이 올바르지 않은 경우
   - 날짜 형식 오류, 12개월 초과, `from`이 `to`보다 늦음
