@@ -141,6 +141,21 @@ class CodefConnectionIntegrationTest {
 	}
 
 	@Test
+	void currentUserCodefConnectedFollowsTheConnectionRow() {
+		// #136: GET /api/v1/me codefConnected는 연결 행 존재다. RECONNECT_REQUIRED도 연결이 있는 상태이고, 가상 포트폴리오는 항상 false
+		assertThat(codefConnected("MY_CARDS")).isFalse();
+		send("POST", "MY_CARDS", body("kbuser01", "pw"));
+		assertThat(codefConnected("MY_CARDS")).isTrue();
+		assertThat(codefConnected("VIRTUAL_PORTFOLIO")).isFalse();
+
+		this.jdbcTemplate.update("UPDATE codef_connections SET status = 'RECONNECT_REQUIRED'");
+		assertThat(codefConnected("MY_CARDS")).isTrue();
+
+		send("DELETE", "MY_CARDS", null);
+		assertThat(codefConnected("MY_CARDS")).isFalse();
+	}
+
+	@Test
 	void failedReconnectionsKeepTheExistingConnection() {
 		send("POST", "MY_CARDS", body("kbuser01", "pw"));
 		String connected = send("GET", "MY_CARDS", null).getBody();
@@ -204,6 +219,18 @@ class CodefConnectionIntegrationTest {
 	private static void assertJson(ResponseEntity<String> response, String expected, int status) {
 		assertThat(response.getStatusCode().value()).isEqualTo(status);
 		JsonAssert.comparator(JsonCompareMode.STRICT).assertIsMatch(expected, response.getBody());
+	}
+
+	private boolean codefConnected(String demoUser) {
+		ResponseEntity<String> me = RestClient.create("http://localhost:" + this.port)
+			.get()
+			.uri("/api/v1/me")
+			.header("X-BeONE-Demo-User", demoUser)
+			.retrieve()
+			.toEntity(String.class);
+		assertThat(me.getStatusCode().value()).isEqualTo(200);
+		assertThat(me.getBody()).containsAnyOf("\"codefConnected\":true", "\"codefConnected\":false");
+		return me.getBody().contains("\"codefConnected\":true");
 	}
 
 	private ResponseEntity<String> send(String method, String demoUser, String body) {

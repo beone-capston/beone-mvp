@@ -9,7 +9,7 @@ import com.beone.api.user.application.DemoUserProfile;
  *
  * @param profile 현재 시연 사용자 표시 정보
  * @param cardCount 해제하지 않은 보유 카드 수
- * @param codefConnected 2차 CODEF 연결 여부. 1차에서는 항상 {@code false}(계약)
+ * @param codefConnected CODEF 연결 행이 있는지({@code RECONNECT_REQUIRED} 포함, #136)
  */
 public record CurrentUserSummary(DemoUserProfile profile, long cardCount, boolean codefConnected) {
 

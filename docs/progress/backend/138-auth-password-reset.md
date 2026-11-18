@@ -13,5 +13,10 @@
   - 메일 60초 제한은 U2의 `MailRequestThrottle`을 그대로 써 가입·인증메일 재요청과 합산합니다. 계정이 없어도 똑같이 셉니다.
   - 완료: 회원 행을 잠근 한 트랜잭션에서 Argon2id 새 해시로 바꾸고 그 회원의 모든 세션과 재설정 토큰을 지웁니다. 해시 계산은 잠금 전에 해 같은 회원의 로그인 대기를 줄입니다. 이메일 인증 상태·인증 토큰·로그인 잠금은 그대로이고 자동 로그인하지 않습니다.
   - U2의 토큰 발급·커밋 뒤 메일 발송을 `AuthTokenMailer`로 옮겨 가입과 재설정이 함께 씁니다(동작 변경 없음, U2 테스트 그대로 통과).
-- 테스트: `PasswordResetApiWebTest`(22), `AuthCsrfProfileOffWebTest` 추가 1, `PasswordResetIntegrationTest`(15). 다른 목적 토큰 상호 거부(U2 이월)와 이전 비밀번호 로그인·재설정 동시 경합(10회)을 포함합니다.
+- 테스트: `PasswordResetApiWebTest`(22), `AuthCsrfProfileOffWebTest` 추가 1, `PasswordResetIntegrationTest`(15, 리뷰 반영 뒤 16). 다른 목적 토큰 상호 거부(U2 이월)와 이전 비밀번호 로그인·재설정 동시 경합(10회)을 포함합니다.
 - 남은 것: 메일 링크 형식·실발송(미정), 회원 세션과 `/me` 연결(D-24 미결), 로그인 상태의 비밀번호 변경·탈퇴·이메일 변경(D-24 후속), 만료 토큰·제한 기록 정리 기한(미정).
+
+## 2026-11-18 · CodeRabbit 반영(head `9684b88`)과 최신 `develop` 병합(`d90f3c3`, F1 #137)
+- Minor: `docs/architecture.md` auth 항목의 "범위 밖"에 남은 비밀번호 재설정(U4)을 지웠습니다.
+- Nitpick: 같은 재설정 토큰을 서로 다른 세션·서로 다른 새 비밀번호로 동시에 보내는 통합 테스트를 더했습니다. 정확히 하나만 204, 나머지는 400 `AUTH_TOKEN_INVALID`이고 저장된 비밀번호는 성공한 요청의 값입니다.
+- PR이 충돌 상태라 `origin/develop`을 merge했습니다(rebase 없음). 충돌은 `docs/progress/backend/README.md` 목록뿐이고 양쪽을 살렸습니다. 새 Flyway 파일은 없습니다.

@@ -224,6 +224,51 @@ class PasswordResetIntegrationTest {
 		assertThat(passwordHashOf(MEMBER_ID)).isEqualTo(hashAfterFirst);
 	}
 
+	/** 1회용은 동시 사용에도 지켜진다: 같은 토큰을 겹쳐 보내면 정확히 하나만 바꾸고 저장된 비밀번호는 그 요청의 값이다. */
+	@Test
+	void concurrentUsesOfTheSameTokenSucceedExactlyOnce() throws Exception {
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			for (int round = 0; round < 5; round++) {
+				String memberId = "usr-%032d".formatted(round);
+				String email = "twice" + round + "@example.com";
+				createMember(memberId, email, true);
+				this.mailSender.clear();
+				assertBody(requestReset(anonymous(), email), 202, ACCEPTED);
+				String token = onlyMail().token();
+				Session first = anonymous();
+				Session second = anonymous();
+				CountDownLatch ready = new CountDownLatch(2);
+				Future<ResponseEntity<String>> toNew = executor.submit((Callable<ResponseEntity<String>>) () -> {
+					ready.countDown();
+					ready.await(10, TimeUnit.SECONDS);
+					return reset(first, token, NEW_PASSWORD);
+				});
+				Future<ResponseEntity<String>> toAnother = executor.submit((Callable<ResponseEntity<String>>) () -> {
+					ready.countDown();
+					ready.await(10, TimeUnit.SECONDS);
+					return reset(second, token, "another1!pass");
+				});
+
+				ResponseEntity<String> newResult = toNew.get(60, TimeUnit.SECONDS);
+				ResponseEntity<String> anotherResult = toAnother.get(60, TimeUnit.SECONDS);
+				List<Integer> statuses = new ArrayList<>(
+						List.of(newResult.getStatusCode().value(), anotherResult.getStatusCode().value()));
+				assertThat(statuses).as("round " + round).containsExactlyInAnyOrder(204, 400);
+				ResponseEntity<String> loser = newResult.getStatusCode().value() == 400 ? newResult : anotherResult;
+				assertBody(loser, 400, TOKEN_INVALID);
+				String winner = newResult.getStatusCode().value() == 204 ? NEW_PASSWORD : "another1!pass";
+				String loserPassword = winner.equals(NEW_PASSWORD) ? "another1!pass" : NEW_PASSWORD;
+				PasswordHasher hasher = new PasswordHasher();
+				assertThat(hasher.matches(winner, passwordHashOf(memberId))).as("round " + round).isTrue();
+				assertThat(hasher.matches(loserPassword, passwordHashOf(memberId))).as("round " + round).isFalse();
+			}
+		}
+		finally {
+			executor.shutdownNow();
+		}
+	}
+
 	@Test
 	void resetTokenIsValidForFifteenMinutes() throws Exception {
 		createMember(MEMBER_ID, EMAIL, true);
