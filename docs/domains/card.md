@@ -162,7 +162,7 @@ POST /api/v1/me/cards {"displayName":"청춘대로 톡톡","cardProductId":"0917
 | 표시 이름 | 앞뒤 공백을 뗀 뒤 1~30자(유니코드 문자 기준). 공백만이면 400 | A2-9, 계약 |
 | 알 수 없는 필드 | 400 `INVALID_REQUEST`, `errors: []`(역직렬화 실패와 같은 모양). 공유 Jackson 설정을 바꾸지 않고 요청 DTO에만 적용 | A2-9, D-14 ⑨ |
 | CODEF 후보 열 | 만들지 않음. `candidateCardProductId`·`candidateBasis`는 항상 `null` | A2-10 |
-| `codefConnected` | 1차는 항상 `false` | 계약 |
+| `codefConnected` | CODEF 연결 행이 있으면 `true`(`RECONNECT_REQUIRED` 포함), 없으면·가상 포트폴리오는 `false`. card는 codef를 직접 참조하지 않고 조회 포트 [`CodefConnectionLookup`](../../backend/src/main/java/com/beone/api/card/application/CodefConnectionLookup.java)을 부르며 구현은 codef의 `CodefConnectionStatusLookup`이다(구현 빈이 없으면 `false`) | 계약, #136 |
 
 그 밖의 작은 구현 결정:
 

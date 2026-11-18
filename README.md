@@ -49,6 +49,7 @@ cp .env.example .env
 
 - `.env`는 git에서 제외됩니다. 실제 값은 절대 커밋하지 않습니다.
 - CODEF 키(`CODEF_*`)는 **서버(backend)에서만** 사용합니다. `android/`와 `frontend/`에 넣지 않습니다. 키가 없어도 서버는 뜨고 CODEF 호출만 실패합니다. 변수 목록은 [CODEF 설정과 샌드박스 확인 절차](docs/development/codef-sandbox-check.md)를 봅니다.
+- CODEF 연결·동기화 키 `BEONE_CODEF_CONNECTED_ID_KEY`(connectedId 암호화)·`BEONE_CODEF_APPROVAL_HMAC_KEY`(승인번호 HMAC)는 각각 Base64로 적은 32바이트이고 고정 기본값이 없습니다. 값은 저장소에 두지 않고 서버 프로세스 환경에만 줍니다. 없으면 CODEF 연결은 502, 동기화의 승인내역은 부분 실패입니다([codef 안내](docs/domains/codef.md)). `.env.example`에는 아직 이름이 없습니다.
 - `frontend/.env.example`은 프론트엔드 전용 공개 설정(`VITE_API_BASE_URL`)입니다. `VITE_` 변수는 번들에 포함되므로 비밀값을 넣지 않습니다.
 
 ## 실행

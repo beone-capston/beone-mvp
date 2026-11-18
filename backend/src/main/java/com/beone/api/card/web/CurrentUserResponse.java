@@ -10,7 +10,7 @@ import com.beone.api.card.application.CurrentUserSummary;
  * @param portfolioType 포트폴리오 종류
  * @param readOnly 보유 카드 쓰기 불가 여부
  * @param cardCount 해제하지 않은 보유 카드 수
- * @param codefConnected 2차 CODEF 연결 여부. 1차에서는 항상 {@code false}
+ * @param codefConnected CODEF 연결 행이 있는지({@code RECONNECT_REQUIRED} 포함, #136)
  */
 record CurrentUserResponse(String demoUser, String displayName, String portfolioType, boolean readOnly,
 		long cardCount, boolean codefConnected) {
