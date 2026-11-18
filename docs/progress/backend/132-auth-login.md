@@ -24,3 +24,7 @@
 - 반영 1(계정 전환 교착): A의 세션으로 B에, B의 세션으로 A에 동시에 로그인하면 이전 세션 행과 대상 회원 세션 행을 엇갈려 잠가 교착 500이 났습니다. `MemberSessionIntegrationTest#crossAccountSwitchesNeverFailWithServerError`(15회 동시 전환)가 고치기 전 첫 회에 500으로 실패했습니다. 로그인 전체를 `TransactionTemplate`(READ COMMITTED) 한 번으로 실행하고, `PessimisticLockingFailureException`(교착·잠금 대기 실패)로 지면 새 트랜잭션에서 처음부터 다시 판정합니다(최대 3번). 진 시도는 실패 기록까지 롤백되므로 두 번 세지 않습니다. 고친 뒤 4번 돌려 모두 통과했고, MySQL은 전환마다 한쪽을 교착으로 되돌리지만(로그 15건) 재시도가 흡수합니다.
 - 반영 2(잠금 판정 시각): 잠금 상태 행을 기다리기 전에 읽은 시각으로 판정·기록해, 대기 뒤 잠금이 이미 끝났는데 429를 주거나 잠금 기간이 Argon2id 계산 시간만큼 짧아질 수 있었습니다. `LoginAttemptThrottle.lock`으로 행을 먼저 잡은 뒤 시각을 읽어 `lockedFor`에 넘기고, 실패 시각은 비밀번호 비교 뒤에 읽습니다. `MemberLoginServiceTest#timesAreReadAfterTheThrottleLockAndAfterPasswordComparison`(읽을 때마다 1초 가는 시계)로 확인합니다.
 - 반영 3·4(문서): `docs/architecture.md` 사용자 식별 문장의 "로그인은 없고"를 업무 API가 회원 로그인에 연결되지 않았다는 뜻으로, `docs/domains/auth.md` 로그인 흐름의 "5개 넘으면"을 "유효 세션이 이미 5개면"으로 고쳤습니다.
+
+## 2026-11-18 · 최신 `develop` 병합(`876b515`, CODEF C3 #131)
+- PR이 충돌 상태라 `origin/develop`을 merge했습니다(rebase 없음). 충돌은 `docs/architecture.md` 구현 현황 문장과 `docs/progress/backend/README.md` 목록으로, 양쪽 내용을 모두 살렸습니다.
+- `V12__codef_syncs.sql`이 먼저 들어와 Flyway 순서는 V11 → V12 → V13입니다. 병합 뒤 전체 검증을 다시 했습니다(결과는 PR 본문).

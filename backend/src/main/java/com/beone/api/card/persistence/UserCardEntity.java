@@ -92,6 +92,21 @@ public class UserCardEntity {
 		return entity;
 	}
 
+	/**
+	 * CODEF 보유카드 조회로 얻은 카드를 만든다(D-15, #129). 상품 후보를 정하지 않으므로 항상 {@code UNMAPPED}이고 상품 ID가 없다
+	 * (결정 20 R3).
+	 */
+	public static UserCardEntity codef(long userId, String displayName, LocalDateTime registeredAt) {
+		UserCardEntity entity = new UserCardEntity();
+		entity.userId = userId;
+		entity.displayName = displayName;
+		entity.holdingSource = HoldingSource.CODEF;
+		entity.mappingStatus = MappingStatus.UNMAPPED;
+		entity.excludedFromRecommendation = false;
+		entity.registeredAt = registeredAt;
+		return entity;
+	}
+
 	/** 매핑을 바꾼다. 상품 ID는 {@code USER_CONFIRMED}일 때만 둔다. */
 	public void changeMapping(MappingStatus mappingStatus, String cardProductId,
 			ConfirmationMethod confirmationMethod, LocalDateTime confirmedAt) {
