@@ -9,6 +9,7 @@ import com.beone.api.common.web.FieldViolation;
 import com.beone.api.monthlystate.application.MappingRequiredException;
 import com.beone.api.monthlystate.application.MonthlyStateCardNotFoundException;
 import com.beone.api.monthlystate.application.RuleMismatchException;
+import com.beone.api.monthlystate.application.SourceConflictNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -43,6 +44,11 @@ class MonthlyStateExceptionHandler {
 	@ExceptionHandler(MappingRequiredException.class)
 	ResponseEntity<ApiErrorResponse> handleMappingRequired(MappingRequiredException ex) {
 		return respond(MonthlyStateErrorCode.USER_CARD_MAPPING_REQUIRED, List.of(), ex);
+	}
+
+	@ExceptionHandler(SourceConflictNotFoundException.class)
+	ResponseEntity<ApiErrorResponse> handleSourceConflictNotFound(SourceConflictNotFoundException ex) {
+		return respond(MonthlyStateErrorCode.SOURCE_CONFLICT_NOT_FOUND, List.of(), ex);
 	}
 
 	@ExceptionHandler(RuleMismatchException.class)

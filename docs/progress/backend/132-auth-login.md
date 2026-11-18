@@ -33,3 +33,6 @@
 - `MemberSessionIntegrationTest#crossAccountSwitchesNeverFailWithServerError`: 상태 코드만 보던 것을, 각 전환 로그인 응답의 `userId`와 새 쿠키로 조회한 세션의 `userId`가 전환 대상 회원인지까지 확인하도록 강화했습니다.
 - `MemberLoginServiceTest#timesAreReadAfterTheThrottleLockAndAfterPasswordComparison`: 읽기 횟수로 시간을 구분하던 시계를 가변 시계로 바꾸고, 잠금(`lock`)과 비밀번호 비교(`matches`) 대역이 각각 시간을 흘려보내게 해 시각을 그 뒤에 읽는지 검증합니다.
 - 코드 변경 없음(테스트만).
+
+## 2026-11-18 · 최신 `develop` 병합(`94f655a`, 월간 상태 출처 선택 C1 #135)
+- PR이 다시 충돌 상태라 `origin/develop`을 merge했습니다(rebase 없음). 충돌은 `docs/architecture.md` 구현 현황 문장과 `docs/progress/backend/README.md` 목록으로, 양쪽 내용을 모두 살렸습니다. 새 Flyway 파일은 없어 순서는 V11 → V12 → V13 그대로입니다.
