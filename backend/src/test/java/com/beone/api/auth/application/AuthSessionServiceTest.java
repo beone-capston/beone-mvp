@@ -15,6 +15,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import com.beone.api.auth.persistence.AuthSessionEntity;
@@ -201,6 +203,103 @@ class AuthSessionServiceTest {
 		verify(this.repository).save(saved.capture());
 		// UTC 01:00은 서울 10:00이다(시간 값은 서울 기준 시각으로 저장).
 		assertThat(saved.getValue().getCreatedAt()).isEqualTo(NOW);
+	}
+
+	// 회원 세션(U3)
+
+	@Test
+	void memberSessionUseExtendsIdleExpiryBySevenDaysCappedByAbsolute() {
+		String id = SessionTokens.newSessionId();
+		AuthSessionEntity member = memberRow(id, NOW.minusDays(1), NOW.plusDays(6), NOW.plusDays(29));
+		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(member));
+
+		Optional<MemberSession> found = this.service.useMember(id);
+
+		assertThat(found).contains(new MemberSession("usr-1", NOW.minusDays(1), NOW.plusDays(7), NOW.plusDays(29)));
+		assertThat(member.getLastUsedAt()).isEqualTo(NOW);
+		// 쿠키 갱신도 회원 세션이면 7일이다.
+		assertThat(this.service.use(id)).get().extracting(ActiveSession::cookieMaxAge).isEqualTo(Duration.ofDays(7));
+
+		AuthSessionEntity late = memberRow(id, NOW.minusDays(27), NOW.plusDays(1), NOW.plusDays(3));
+		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(late));
+		assertThat(this.service.useMember(id)).get().extracting(MemberSession::expiresAt).isEqualTo(NOW.plusDays(3));
+	}
+
+	@Test
+	void useMemberIgnoresAnonymousSessionWithoutTouchingIt() {
+		String id = SessionTokens.newSessionId();
+		AuthSessionEntity anonymous = row(id, NOW.minusMinutes(10), NOW.plusMinutes(50), null);
+		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(anonymous));
+
+		assertThat(this.service.useMember(id)).isEmpty();
+		assertThat(anonymous.getLastUsedAt()).isEqualTo(NOW.minusMinutes(10));
+		verify(this.repository, never()).delete(any());
+	}
+
+	@Test
+	void useMemberDeletesExpiredMemberSession() {
+		String id = SessionTokens.newSessionId();
+		AuthSessionEntity expired = memberRow(id, NOW.minusDays(7), NOW, NOW.plusDays(20));
+		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(expired));
+
+		assertThat(this.service.useMember(id)).isEmpty();
+		verify(this.repository).delete(expired);
+	}
+
+	@Test
+	void issueMemberDeletesPreviousAndExpiredSessionsAndKeepsAtMostFive() {
+		String previous = SessionTokens.newSessionId();
+		AuthSessionEntity previousRow = row(previous, NOW.minusMinutes(1), NOW.plusMinutes(59), null);
+		given(this.repository.findBySessionHash(SessionTokens.hash(previous))).willReturn(Optional.of(previousRow));
+		AuthSessionEntity expired = memberRow(SessionTokens.newSessionId(), NOW.minusDays(8), NOW.minusDays(1),
+				NOW.plusDays(10));
+		List<AuthSessionEntity> live = new ArrayList<>();
+		for (int i = 0; i < 5; i++) {
+			live.add(memberRow(SessionTokens.newSessionId(), NOW.minusHours(5 - i), NOW.plusDays(6), NOW.plusDays(20)));
+		}
+		List<AuthSessionEntity> stored = new ArrayList<>();
+		stored.add(expired);
+		stored.addAll(live);
+		given(this.repository.findByMemberIdOrderByLastUsedAtAscAuthSessionIdAsc("usr-1")).willReturn(stored);
+
+		IssuedSession issued = this.service.issueMember("usr-1", previous);
+
+		verify(this.repository).delete(previousRow);
+		verify(this.repository).delete(expired);
+		// 유효한 세션이 이미 5개라 가장 오래 쓰지 않은 하나만 지운다.
+		verify(this.repository).delete(live.get(0));
+		verify(this.repository, never()).delete(live.get(1));
+		ArgumentCaptor<AuthSessionEntity> saved = ArgumentCaptor.forClass(AuthSessionEntity.class);
+		verify(this.repository).save(saved.capture());
+		AuthSessionEntity row = saved.getValue();
+		assertThat(row.getMemberId()).isEqualTo("usr-1");
+		assertThat(row.getSessionHash()).isEqualTo(SessionTokens.hash(issued.sessionId()));
+		assertThat(issued.sessionId()).isNotEqualTo(previous);
+		assertThat(row.getCreatedAt()).isEqualTo(NOW);
+		assertThat(row.getIdleExpiresAt()).isEqualTo(NOW.plusDays(7));
+		assertThat(row.getAbsoluteExpiresAt()).isEqualTo(NOW.plusDays(30));
+		assertThat(issued.cookieMaxAge()).isEqualTo(Duration.ofDays(30));
+		assertThat(issued.csrfToken()).isEqualTo(SessionTokens.csrfTokenOf(issued.sessionId()))
+			.isNotEqualTo(SessionTokens.csrfTokenOf(previous));
+	}
+
+	@Test
+	void endDeletesOnlyAWellFormedExistingSession() {
+		String id = SessionTokens.newSessionId();
+		AuthSessionEntity session = row(id, NOW, NOW.plusHours(1), null);
+		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(session));
+
+		this.service.end(id);
+		this.service.end("malformed");
+		this.service.end(null);
+
+		verify(this.repository).delete(session);
+		verify(this.repository).findBySessionHash(anyString());
+	}
+
+	private static AuthSessionEntity memberRow(String id, LocalDateTime lastUsed, LocalDateTime idleExpiry,
+			LocalDateTime absoluteExpiry) {
+		return new AuthSessionEntity(SessionTokens.hash(id), "usr-1", lastUsed, idleExpiry, absoluteExpiry);
 	}
 
 	private static Clock clockAt(LocalDateTime seoulTime) {

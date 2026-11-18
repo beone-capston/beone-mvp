@@ -1,5 +1,7 @@
 package com.beone.api.auth.web;
 
+import java.time.Duration;
+
 import com.beone.api.auth.application.AuthTokenInvalidException;
 import com.beone.api.auth.application.MailRateLimitedException;
 import com.beone.api.common.web.ApiErrorCode;
@@ -35,13 +37,38 @@ class AuthExceptionHandler {
 		return respond(AuthErrorCode.AUTH_TOKEN_INVALID, ex);
 	}
 
-	/** 429와 남은 초({@code Retry-After}). */
+	@ExceptionHandler(UnauthenticatedException.class)
+	ResponseEntity<ApiErrorResponse> handleUnauthenticated(UnauthenticatedException ex) {
+		return respond(AuthErrorCode.UNAUTHENTICATED, ex);
+	}
+
+	@ExceptionHandler(InvalidCredentialsException.class)
+	ResponseEntity<ApiErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex) {
+		return respond(AuthErrorCode.INVALID_CREDENTIALS, ex);
+	}
+
+	@ExceptionHandler(EmailNotVerifiedException.class)
+	ResponseEntity<ApiErrorResponse> handleEmailNotVerified(EmailNotVerifiedException ex) {
+		return respond(AuthErrorCode.EMAIL_NOT_VERIFIED, ex);
+	}
+
+	/** 메일 요청 제한: 429와 남은 초({@code Retry-After}). */
 	@ExceptionHandler(MailRateLimitedException.class)
 	ResponseEntity<ApiErrorResponse> handleRateLimited(MailRateLimitedException ex) {
+		return rateLimited(ex.retryAfter(), ex);
+	}
+
+	/** 로그인 실패 제한: 429와 남은 초({@code Retry-After}). */
+	@ExceptionHandler(LoginRateLimitedException.class)
+	ResponseEntity<ApiErrorResponse> handleLoginRateLimited(LoginRateLimitedException ex) {
+		return rateLimited(ex.retryAfter(), ex);
+	}
+
+	private static ResponseEntity<ApiErrorResponse> rateLimited(Duration retryAfter, Exception ex) {
 		log.debug("API error code={} status={} exception={}", AuthErrorCode.RATE_LIMITED.code(),
 				AuthErrorCode.RATE_LIMITED.status().value(), ex.getClass().getName());
 		return ResponseEntity.status(AuthErrorCode.RATE_LIMITED.status())
-			.header(HttpHeaders.RETRY_AFTER, Long.toString(ex.retryAfter().toSeconds()))
+			.header(HttpHeaders.RETRY_AFTER, Long.toString(retryAfter.toSeconds()))
 			.contentType(MediaType.APPLICATION_JSON)
 			.body(ApiErrorResponse.of(AuthErrorCode.RATE_LIMITED));
 	}
