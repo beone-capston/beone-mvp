@@ -134,11 +134,11 @@ class CardExceptionHandler {
 
 ### 예약한 오류 코드 자리
 
-인증 필요(401)는 `UNAUTHENTICATED`, 권한 없음(403)은 `FORBIDDEN`으로 자리를 예약합니다(D-09, 값은 2026-11-03 사용자 지시). `local`·`demo`의 고정 사용자 방식에서는 이 응답을 보내지 않습니다. 회원 인증 API에서의 사용은 [D-24](decisions.md#d-24-확정-정책)에 따른 [인증 API 명세](api/auth.md)를 따릅니다. 인증 코드는 업무 오류 코드 표의 「인증」 묶음이며 `auth` 패키지의 기능별 오류 코드로 둡니다. `CommonApiErrorCode`에는 추가하지 않았습니다. 2026-11-18 기준 구현된 인증 코드는 `CSRF_INVALID`뿐입니다(#124).
+인증 필요(401)는 `UNAUTHENTICATED`, 권한 없음(403)은 `FORBIDDEN`으로 자리를 예약합니다(D-09, 값은 2026-11-03 사용자 지시). `local`·`demo`의 고정 사용자 방식에서는 이 응답을 보내지 않습니다. 회원 인증 API에서의 사용은 [D-24](decisions.md#d-24-확정-정책)에 따른 [인증 API 명세](api/auth.md)를 따릅니다. 인증 코드는 업무 오류 코드 표의 「인증」 묶음이며 `auth` 패키지의 기능별 오류 코드로 둡니다. `CommonApiErrorCode`에는 추가하지 않았습니다. 2026-11-18 기준 인증 코드 6개(`UNAUTHENTICATED`·`INVALID_CREDENTIALS`·`EMAIL_NOT_VERIFIED`·`CSRF_INVALID`·`AUTH_TOKEN_INVALID`·`RATE_LIMITED`)가 `auth` 패키지에 구현돼 있습니다(#125·#130·#133·#140). `FORBIDDEN`은 아직 쓰는 곳이 없습니다.
 
 ## 업무 API 공통 규약
 
-D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 모두 구현 전입니다. 개별 API는 [`docs/api/`](api/README.md)에 있습니다.
+D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 업무 API에 로컬·테스트 범위로 구현돼 있습니다(배포 전, 구현 상태는 [`docs/api/` README](api/README.md)). 개별 API는 [`docs/api/`](api/README.md)에 있습니다.
 
 ### 시연 사용자
 
@@ -240,11 +240,10 @@ D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 모�
 - `ApiResponse<T>`, `ApiErrorResponse`, `FieldViolation`, `ApiErrorCode`, `CommonApiErrorCode`, `GlobalExceptionHandler`
 - 위 표의 표준 MVC 예외 처리, 포괄 상태 매핑, 안전한 500 처리와 로그
 - `@WebSliceTest`와 `webTest` Gradle 태스크
+- 업무 API와 DTO, 기능별 오류 코드 enum과 처리기([`docs/api/`](api/README.md) 상태 항목, 로컬·테스트 범위)
 
 미구현·범위 밖:
 
-- 실제 업무 API와 DTO. 명세는 [`docs/api/`](api/README.md)에 있고 코드는 없음
-- 기능별 오류 코드 enum과 기능별 처리기(각 기능 구현 시 추가)
 - 인증·인가 오류(`UNAUTHENTICATED`·`FORBIDDEN`)의 코드 추가와 Spring Security 연동(자리만 예약, D-09)
 - DB·CODEF·AI 등 외부 연동 예외의 세부 분류(현재는 예상하지 못한 예외로 500 처리)
 - 서블릿 필터 단계 예외의 공통 응답

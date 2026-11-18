@@ -47,6 +47,7 @@
 - #134 → PR: 월간 상태 출처 충돌 계산 기준 선택 API(C1, `PUT .../monthly-states/{month}/source-selections`, 관리자 판단 P10: 요청 검증 400·카드 404·충돌이 없으면 항상 409 `SOURCE_CONFLICT_NOT_FOUND`, D-16상 지금은 충돌 경로가 없음, 가상 포트폴리오도 같은 판정, Flyway·테이블 없음). `develop`에 병합 완료(`94f655a`). [작업 기록](134-source-selections.md)
 - #136 → PR: F1(`GET /api/v1/me` `codefConnected`를 연결 행 존재로 반영, card 조회 포트 `CodefConnectionLookup`·codef 구현, README에 CODEF 키 이름, `.env.example`은 가드레일로 후속, `DemoUserIntegrationTest` 간헐 실패 조사 기록만). `develop` 대상, 병합 전. [작업 기록](136-codef-connected.md)
 - #138 → PR: 회원 인증 U4 비밀번호 재설정 요청·완료(`auth` 패키지, 새 Flyway 없음, 재설정 토큰 15분·1회용 해시 저장, 메일 60초 합산, 완료 시 그 회원의 모든 세션 종료, 관리자 판단: 미인증 계정에도 발송·로그인 잠금 유지, [기록](138-auth-password-reset.md))
+- #141 → PR: 업무·인증 API 구현 상태 문구 정합(문서만, S1A R1~R8: `docs/api/README.md`·개별 문서 5행·`docs/api.md` 세 곳·`docs/domains/ledger.md` CODEF 완전성, 정책 변경 없음, [기록](141-api-status-sync.md))
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.
