@@ -7,7 +7,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
 
-import com.beone.api.auth.persistence.AuthTokenEntity;
 import com.beone.api.auth.persistence.AuthTokenPurpose;
 import com.beone.api.auth.persistence.AuthTokenRepository;
 import com.beone.api.auth.persistence.MemberEntity;
@@ -17,8 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 회원가입·인증메일 재요청·이메일 인증 완료(docs/api/auth.md U2, D-24).
@@ -42,23 +39,23 @@ public class MemberRegistrationService {
 
 	private final PasswordHasher passwordHasher;
 
-	private final AuthMailSender mailSender;
+	private final AuthTokenMailer tokenMailer;
 
 	private final Clock clock;
 
 	@Autowired
 	public MemberRegistrationService(MemberRepository members, AuthTokenRepository tokens, MailRequestThrottle throttle,
-			PasswordHasher passwordHasher, AuthMailSender mailSender, ObjectProvider<Clock> clock) {
-		this(members, tokens, throttle, passwordHasher, mailSender, clock.getIfUnique(Clock::systemUTC));
+			PasswordHasher passwordHasher, AuthTokenMailer tokenMailer, ObjectProvider<Clock> clock) {
+		this(members, tokens, throttle, passwordHasher, tokenMailer, clock.getIfUnique(Clock::systemUTC));
 	}
 
 	MemberRegistrationService(MemberRepository members, AuthTokenRepository tokens, MailRequestThrottle throttle,
-			PasswordHasher passwordHasher, AuthMailSender mailSender, Clock clock) {
+			PasswordHasher passwordHasher, AuthTokenMailer tokenMailer, Clock clock) {
 		this.members = Objects.requireNonNull(members, "members");
 		this.tokens = Objects.requireNonNull(tokens, "tokens");
 		this.throttle = Objects.requireNonNull(throttle, "throttle");
 		this.passwordHasher = Objects.requireNonNull(passwordHasher, "passwordHasher");
-		this.mailSender = Objects.requireNonNull(mailSender, "mailSender");
+		this.tokenMailer = Objects.requireNonNull(tokenMailer, "tokenMailer");
 		this.clock = Objects.requireNonNull(clock, "clock").withZone(AuthSessionService.ZONE);
 	}
 
@@ -124,18 +121,7 @@ public class MemberRegistrationService {
 	}
 
 	private void sendVerificationMail(MemberEntity member, LocalDateTime now) {
-		this.tokens.deleteByMemberIdAndPurpose(member.getMemberId(), AuthTokenPurpose.EMAIL_VERIFICATION);
-		String token = SessionTokens.newMailToken();
-		this.tokens.save(new AuthTokenEntity(member.getMemberId(), AuthTokenPurpose.EMAIL_VERIFICATION,
-				SessionTokens.hash(token), now, now.plus(EMAIL_VERIFICATION_TTL)));
-		AuthMail mail = new AuthMail(member.getEmail(), AuthTokenPurpose.EMAIL_VERIFICATION, token);
-		// 토큰 저장이 커밋된 뒤에만 보낸다. 커밋에 실패하면 쓸 수 없는 토큰이 메일로 나가지 않는다.
-		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-			@Override
-			public void afterCommit() {
-				MemberRegistrationService.this.mailSender.send(mail);
-			}
-		});
+		this.tokenMailer.issue(member, AuthTokenPurpose.EMAIL_VERIFICATION, EMAIL_VERIFICATION_TTL, now);
 	}
 
 	private LocalDateTime now() {

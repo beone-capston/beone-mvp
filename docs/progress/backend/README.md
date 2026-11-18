@@ -45,6 +45,7 @@
 - #129 → PR: CODEF 조회·동기화 API(C3, `POST /api/v1/me/codef/syncs`, 가짜 게이트웨이·합성 fixture만, 새 CODEF 카드 `UNMAPPED`, 승인 행은 codef 전용 테이블·원장 불변, 승인번호 HMAC 지문만·키 환경 변수, 실적은 참고값, card 메서드 2개 추가, Flyway `V12__codef_syncs.sql` 임시 번호). `develop`에 병합 완료(`876b515`). [작업 기록](129-codef-syncs.md)
 - #132 → PR: 회원 인증 U3 로그인·로그아웃·현재 회원 세션 조회(`auth` 패키지, Flyway `V13__auth_member_sessions.sql` 임시 번호(`V12`는 CODEF C3 #129), `auth_sessions.member_id`, 회원 세션 미사용 7일·최대 30일·동시 5개(6번째는 가장 오래 쓰지 않은 세션 종료), 로그인 때 세션 ID·CSRF 교체와 이전 세션 폐기(병합 조건 ④ 통합 테스트), 같은 이메일 15분 5회 실패 시 15분 429(IP 기준 없음), 계정 없음도 더미 해시 비교, 로그인 READ COMMITTED). `develop` 대상, 병합 전. [작업 기록](132-auth-login.md)
 - #134 → PR: 월간 상태 출처 충돌 계산 기준 선택 API(C1, `PUT .../monthly-states/{month}/source-selections`, 관리자 판단 P10: 요청 검증 400·카드 404·충돌이 없으면 항상 409 `SOURCE_CONFLICT_NOT_FOUND`, D-16상 지금은 충돌 경로가 없음, 가상 포트폴리오도 같은 판정, Flyway·테이블 없음). `develop` 대상, 병합 전. [작업 기록](134-source-selections.md)
+- #138 → PR: 회원 인증 U4 비밀번호 재설정 요청·완료(`auth` 패키지, 새 Flyway 없음, 재설정 토큰 15분·1회용 해시 저장, 메일 60초 합산, 완료 시 그 회원의 모든 세션 종료, 관리자 판단: 미인증 계정에도 발송·로그인 잠금 유지, [기록](138-auth-password-reset.md))
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.

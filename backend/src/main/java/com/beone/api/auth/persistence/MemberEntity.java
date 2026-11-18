@@ -52,6 +52,14 @@ public class MemberEntity {
 	}
 
 	/** 이메일 인증을 마친 것으로 기록한다. 이미 인증했으면 처음 시각을 유지한다. */
+	/**
+	 * 비밀번호 해시를 바꾼다(비밀번호 재설정, U4).
+	 * @param newPasswordHash 새 Argon2id 해시 문자열
+	 */
+	public void changePassword(String newPasswordHash) {
+		this.passwordHash = Objects.requireNonNull(newPasswordHash, "newPasswordHash");
+	}
+
 	public void markEmailVerified(LocalDateTime verifiedAt) {
 		if (this.emailVerifiedAt == null) {
 			this.emailVerifiedAt = Objects.requireNonNull(verifiedAt, "verifiedAt");
