@@ -276,6 +276,7 @@ codef/
 │   ├── FakeCodefGateway         local·demo용 가짜. 합성 아이디로 실패 재현, 그 밖은 합성 connectedId
 │   ├── CodefRegistration        등록 결과: Registered·LoginRejected·CardVerificationRequired·Unavailable
 │   ├── CodefRegistrations       결과 코드 분류 → 등록 결과 대응표
+│   ├── CodefConnectionStatusLookup card의 CodefConnectionLookup 구현. 연결 행이 있으면 GET /api/v1/me codefConnected=true(#136)
 │   └── CodefConnectionView·CodefConnectionStatus·CodefConnectResult, 예외 5종
 ├── persistence/                 codef_connections 엔티티·저장소(Flyway V10, 임시 번호)
 └── web/                         컨트롤러, 요청·응답, 오류 코드, 기능별 처리기
@@ -297,6 +298,7 @@ codef/
   **실코드 대응이 없는 것**: 결과 분류에 로그인 실패 분류가 없으므로(#47에서 `CF-12401`·`CF-12834`를 미분류로 정정) 400 `CODEF_LOGIN_FAILED`로 가는 실 결과 코드는 없습니다. 이 응답은 가짜 게이트웨이의 로그인 거절로만 나옵니다. `RECONNECT_REQUIRED`로 바꾸는 실 결과 코드도 없습니다. 근거 있는 코드가 확인되면 별도 결정으로 더합니다. 시간 초과를 504로 나누지 않습니다.
 - **민감 정보**: 비밀번호는 `char[]`로 받아 게이트웨이에 넘긴 뒤 지우고 저장하지 않습니다. 아이디도 저장하지 않습니다. 요청 객체·등록 결과·엔티티의 문자열 표현에 아이디·비밀번호·connectedId를 넣지 않습니다. 가짜 게이트웨이는 RSA 암호화를 하지 않습니다(관리자 판단 P7). 실 구현은 받은 즉시 CODEF 공개키로 암호화해 보내야 합니다(D-14 원칙 9).
 - **가짜 게이트웨이 합성 아이디**: `fake-login-rejected`(로그인 거절), `fake-card-verification`(카드소지확인), `fake-unavailable`(사용 불가). 그 밖의 아이디는 성공이며 `fake-cid-` 접두어의 무작위 connectedId를 줍니다. 실계정 아이디를 넣어도 CODEF로 보내지 않습니다.
+- **현재 사용자 응답(#136)**: `GET /api/v1/me`의 `codefConnected`는 연결 행이 있으면 `true`입니다(`RECONNECT_REQUIRED` 포함, 재연결 필요 여부는 연결 상태 GET으로 봄). card가 codef를 참조하지 않도록 card의 조회 포트 `CodefConnectionLookup`을 codef의 `CodefConnectionStatusLookup`이 구현합니다.
 - **저장**: `codef_connections`(사용자당 한 행, 아이디·비밀번호 컬럼 없음). 동시 연결·해제는 사용자 행을 먼저 잠가 차례로 처리합니다.
 - **connectedId 암호화(2026-11-18 사용자 직접 결정 P5)**: AES-256-GCM, 저장 형식 `v1:` + Base64(무작위 12바이트 IV ‖ 암호문 ‖ 16바이트 태그), 사용자 ID를 추가 인증 데이터로 묶어 다른 사용자 행으로 옮긴 값은 복호화되지 않습니다. 키는 프로세스 환경 변수 `BEONE_CODEF_CONNECTED_ID_KEY`(Base64로 적은 32바이트)에서 읽고 `application*.yml`에는 두지 않습니다. local·demo에도 고정 기본값이 없으며, 키가 없거나 형식이 틀리면 연결 POST가 502 `CODEF_UNAVAILABLE`로 실패하고 평문으로 대신 저장하지 않습니다. 테스트는 합성 키를 주입합니다. 운영 키 공급·설정과 키 회전은 별도 승인이며 구현하지 않았습니다. 키 값은 저장소·로그에 남기지 않습니다.
 

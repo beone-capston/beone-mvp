@@ -44,6 +44,8 @@ public class UserCardService {
 
 	private final Supplier<RecommendationInvalidationLookup> invalidationLookup;
 
+	private final Supplier<CodefConnectionLookup> connectionLookup;
+
 	private final Clock clock;
 
 	/**
@@ -53,34 +55,43 @@ public class UserCardService {
 	 * @param demoUserService 시연 사용자 표시 정보·읽기 전용 여부
 	 * @param representativeCardGuard 결제 전 설정(A4)의 대표 카드 검사
 	 * @param invalidationLookup 무효화된 추천 조회 포트. 추천이 보유 카드에 의존하므로 순환을 피하려고 부를 때 찾는다(#120)
+	 * @param connectionLookup CODEF 연결 여부 조회 포트. codef가 보유 카드에 의존하므로 같은 이유로 부를 때 찾는다(#136)
 	 * @param clock 등록·확인·해제 시각을 정할 시계
 	 */
 	@Autowired
 	public UserCardService(UserCardRepository userCardRepository, CardProductService cardProductService,
 			DemoUserService demoUserService, ObjectProvider<RepresentativeCardGuard> representativeCardGuard,
-			ObjectProvider<RecommendationInvalidationLookup> invalidationLookup, ObjectProvider<Clock> clock) {
+			ObjectProvider<RecommendationInvalidationLookup> invalidationLookup,
+			ObjectProvider<CodefConnectionLookup> connectionLookup, ObjectProvider<Clock> clock) {
 		this(userCardRepository, cardProductService, demoUserService,
 				representativeCardGuard.getIfAvailable(() -> RepresentativeCardGuard.NONE),
 				() -> invalidationLookup.getIfAvailable(() -> RecommendationInvalidationLookup.NONE),
+				() -> connectionLookup.getIfAvailable(() -> CodefConnectionLookup.NONE),
 				clock.getIfUnique(Clock::systemUTC));
 	}
 
 	UserCardService(UserCardRepository userCardRepository, CardProductService cardProductService,
 			DemoUserService demoUserService, RepresentativeCardGuard representativeCardGuard,
-			Supplier<RecommendationInvalidationLookup> invalidationLookup, Clock clock) {
+			Supplier<RecommendationInvalidationLookup> invalidationLookup,
+			Supplier<CodefConnectionLookup> connectionLookup, Clock clock) {
 		this.userCardRepository = Objects.requireNonNull(userCardRepository, "userCardRepository");
 		this.cardProductService = Objects.requireNonNull(cardProductService, "cardProductService");
 		this.demoUserService = Objects.requireNonNull(demoUserService, "demoUserService");
 		this.representativeCardGuard = Objects.requireNonNull(representativeCardGuard, "representativeCardGuard");
 		this.invalidationLookup = Objects.requireNonNull(invalidationLookup, "invalidationLookup");
+		this.connectionLookup = Objects.requireNonNull(connectionLookup, "connectionLookup");
 		this.clock = Objects.requireNonNull(clock, "clock").withZone(SEOUL);
 	}
 
-	/** 현재 사용자 표시 정보와 해제하지 않은 보유 카드 수. {@code codefConnected}는 1차에서 항상 {@code false}다. */
+	/**
+	 * 현재 사용자 표시 정보, 해제하지 않은 보유 카드 수, CODEF 연결 여부. 연결 여부는 codef의 연결 행 존재다({@link CodefConnectionLookup},
+	 * #136).
+	 */
 	@Transactional(readOnly = true)
 	public CurrentUserSummary summarize(CurrentUser user) {
 		return new CurrentUserSummary(profileOf(user),
-				this.userCardRepository.countByUserIdAndReleasedAtIsNull(user.userId()), false);
+				this.userCardRepository.countByUserIdAndReleasedAtIsNull(user.userId()),
+				this.connectionLookup.get().isConnected(user));
 	}
 
 	/** 해제하지 않은 보유 카드를 등록 순으로 돌려준다(결정 27 A2-2). */

@@ -58,6 +58,8 @@ class UserCardServiceTest {
 
 	private RecommendationInvalidationLookup invalidations;
 
+	private CodefConnectionLookup connections;
+
 	private UserCardService service;
 
 	@BeforeEach
@@ -66,13 +68,14 @@ class UserCardServiceTest {
 		this.cardProductService = mock(CardProductService.class);
 		this.guard = mock(RepresentativeCardGuard.class);
 		this.invalidations = mock(RecommendationInvalidationLookup.class);
+		this.connections = mock(CodefConnectionLookup.class);
 		DemoUserService demoUserService = mock(DemoUserService.class);
 		given(demoUserService.listDemoUsers()).willReturn(List.of(
 				new DemoUserProfile(DemoUser.MY_CARDS, "내 카드", PortfolioType.REAL, false),
 				new DemoUserProfile(DemoUser.VIRTUAL_PORTFOLIO, "가상 포트폴리오", PortfolioType.SYNTHETIC, true)));
 		given(this.repository.saveAndFlush(any())).willAnswer(invocation -> withId(invocation.getArgument(0), 1001L));
 		this.service = new UserCardService(this.repository, this.cardProductService, demoUserService, this.guard,
-				() -> this.invalidations,
+				() -> this.invalidations, () -> this.connections,
 				Clock.fixed(Instant.parse("2026-11-17T01:30:00Z"), ZoneOffset.UTC));
 	}
 
@@ -84,6 +87,21 @@ class UserCardServiceTest {
 
 		assertThat(this.service.summarize(PORTFOLIO)).isEqualTo(new CurrentUserSummary(
 				new DemoUserProfile(DemoUser.VIRTUAL_PORTFOLIO, "가상 포트폴리오", PortfolioType.SYNTHETIC, true), 4, false));
+	}
+
+	@Test
+	void summarizeReportsCodefConnectionFromTheLookup() {
+		// #136: 1차의 항상 false 대신 codef 연결 행 존재를 그대로 옮긴다
+		given(this.repository.countByUserIdAndReleasedAtIsNull(1L)).willReturn(2L);
+		given(this.connections.isConnected(MY_CARDS)).willReturn(true, false);
+
+		assertThat(this.service.summarize(MY_CARDS).codefConnected()).isTrue();
+		assertThat(this.service.summarize(MY_CARDS).codefConnected()).isFalse();
+	}
+
+	@Test
+	void defaultLookupWithoutCodefIsNotConnected() {
+		assertThat(CodefConnectionLookup.NONE.isConnected(MY_CARDS)).isFalse();
 	}
 
 	@Test
