@@ -407,6 +407,43 @@ class MonthlyStateServiceTest {
 		return stored;
 	}
 
+	@Test
+	void sourceSelectionHasNoConflictForAnyHeldCardAndWritesNothing() {
+		// 관리자 판단 P10·D-16: 월간 상태는 MANUAL만 저장하고 CODEF 실적은 참고값, INFERRED는 보류라 충돌이 없다.
+		// 수동 값이 있어도, 매핑 전 카드여도, CODEF 카드여도, 가상 포트폴리오여도 같다
+		holds(confirmed("uc-11", "09271"), withStatus("uc-12", MappingStatus.UNMAPPED),
+				new UserCardView("uc-13", "합성 CODEF 카드", HoldingSource.CODEF, null,
+						new UserCardMapping(MappingStatus.UNMAPPED, null, null, null), false,
+						RecommendationEligibility.of(HoldingSource.CODEF, MappingStatus.UNMAPPED, false), NOW),
+				new UserCardView("uc-31", "올라운드 티타늄카드", HoldingSource.SYNTHETIC, "09271", null, false,
+						RecommendationEligibility.of(HoldingSource.SYNTHETIC, null, false), NOW));
+		given(this.states.findByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11"))
+			.willReturn(Optional.of(storedFor("09271")));
+		SourceSelection selection = new SourceSelection("previousMonthPerformanceWon", OCTOBER, StateSource.CODEF,
+				"cf-v1");
+
+		for (String card : List.of("uc-11", "uc-12", "uc-13")) {
+			assertThatThrownBy(() -> this.service.selectSource(ME, card, NOVEMBER, selection)).as(card)
+				.isInstanceOf(SourceConflictNotFoundException.class);
+		}
+		assertThatThrownBy(() -> this.service.selectSource(new CurrentUser(2L, DemoUser.VIRTUAL_PORTFOLIO), "uc-31",
+				NOVEMBER, selection))
+			.isInstanceOf(SourceConflictNotFoundException.class);
+		verify(this.states, never()).insertIfAbsent(any(), any(), any(), any());
+		verify(this.states, never()).saveAndFlush(any());
+		verify(this.usages, never()).saveAllAndFlush(any());
+		verify(this.selections, never()).saveAllAndFlush(any());
+	}
+
+	@Test
+	void sourceSelectionForMissingOrOtherUsersCardIsNotFound() {
+		holds(confirmed("uc-11", "09271"));
+
+		assertThatThrownBy(() -> this.service.selectSource(ME, "uc-12", NOVEMBER,
+				new SourceSelection("registeredOn", OCTOBER, StateSource.MANUAL, "cf-v1")))
+			.isInstanceOf(MonthlyStateCardNotFoundException.class);
+	}
+
 	private void holds(UserCardView... cards) {
 		given(this.userCards.list(ME)).willReturn(List.of(cards));
 		given(this.userCards.list(new CurrentUser(2L, DemoUser.VIRTUAL_PORTFOLIO))).willReturn(List.of(cards));
