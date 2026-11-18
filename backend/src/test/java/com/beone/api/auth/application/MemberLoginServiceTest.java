@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.inOrder;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -18,13 +18,13 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.beone.api.auth.persistence.MemberEntity;
 import com.beone.api.auth.persistence.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.transaction.support.TransactionOperations;
 
@@ -149,10 +149,10 @@ class MemberLoginServiceTest {
 
 	@Test
 	void timesAreReadAfterTheThrottleLockAndAfterPasswordComparison() {
-		// 시계를 읽을 때마다 1초씩 간다. 잠금 판정은 잠금 행을 잡은 뒤의 시각, 실패 기록은 비교 뒤의 시각을 받아야 한다.
-		Clock ticking = new Clock() {
-			private int reads;
-
+		// 잠금 대기와 비밀번호 비교가 각각 시간을 흘려보낸다. 잠금 판정은 잠금 뒤 시각, 실패 기록은 비교 뒤 시각을 받아야 한다.
+		Instant start = NOW.atZone(ZoneId.of("Asia/Seoul")).toInstant();
+		AtomicReference<Instant> current = new AtomicReference<>(start);
+		Clock movable = new Clock() {
 			@Override
 			public ZoneId getZone() {
 				return ZoneId.of("Asia/Seoul");
@@ -165,20 +165,23 @@ class MemberLoginServiceTest {
 
 			@Override
 			public Instant instant() {
-				return NOW.atZone(ZoneId.of("Asia/Seoul")).toInstant().plusSeconds(this.reads++);
+				return current.get();
 			}
 		};
 		MemberLoginService service = new MemberLoginService(this.members, this.throttle, this.hasher, this.sessions,
-				ticking, TransactionOperations.withoutTransaction());
+				movable, TransactionOperations.withoutTransaction());
 		given(this.members.findByEmail("nobody@example.com")).willReturn(Optional.empty());
+		willAnswer(invocation -> current.updateAndGet(t -> t.plusSeconds(60))).given(this.throttle)
+			.lock("nobody@example.com");
+		given(this.hasher.matches("pw", "dummy-hash")).willAnswer(invocation -> {
+			current.updateAndGet(t -> t.plusSeconds(1));
+			return false;
+		});
 
 		service.login("nobody@example.com", "pw", PREVIOUS);
 
-		InOrder order = inOrder(this.throttle, this.hasher);
-		order.verify(this.throttle).lock("nobody@example.com");
-		order.verify(this.throttle).lockedFor("nobody@example.com", NOW);
-		order.verify(this.hasher).matches("pw", "dummy-hash");
-		order.verify(this.throttle).recordFailure("nobody@example.com", NOW.plusSeconds(1));
+		verify(this.throttle).lockedFor("nobody@example.com", NOW.plusSeconds(60));
+		verify(this.throttle).recordFailure("nobody@example.com", NOW.plusSeconds(61));
 	}
 
 	@Test

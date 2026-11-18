@@ -28,3 +28,8 @@
 ## 2026-11-18 · 최신 `develop` 병합(`876b515`, CODEF C3 #131)
 - PR이 충돌 상태라 `origin/develop`을 merge했습니다(rebase 없음). 충돌은 `docs/architecture.md` 구현 현황 문장과 `docs/progress/backend/README.md` 목록으로, 양쪽 내용을 모두 살렸습니다.
 - `V12__codef_syncs.sql`이 먼저 들어와 Flyway 순서는 V11 → V12 → V13입니다. 병합 뒤 전체 검증을 다시 했습니다(결과는 PR 본문).
+
+## 2026-11-18 · CodeRabbit 사소한 지적 반영(head `c6d254b` 리뷰 본문의 Nitpick 2건)
+- `MemberSessionIntegrationTest#crossAccountSwitchesNeverFailWithServerError`: 상태 코드만 보던 것을, 각 전환 로그인 응답의 `userId`와 새 쿠키로 조회한 세션의 `userId`가 전환 대상 회원인지까지 확인하도록 강화했습니다.
+- `MemberLoginServiceTest#timesAreReadAfterTheThrottleLockAndAfterPasswordComparison`: 읽기 횟수로 시간을 구분하던 시계를 가변 시계로 바꾸고, 잠금(`lock`)과 비밀번호 비교(`matches`) 대역이 각각 시간을 흘려보내게 해 시각을 그 뒤에 읽는지 검증합니다.
+- 코드 변경 없음(테스트만).

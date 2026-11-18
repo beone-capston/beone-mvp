@@ -457,18 +457,18 @@ class MemberSessionIntegrationTest {
 				Session fromA = new Session(a, csrfOf(a));
 				Session fromB = new Session(b, csrfOf(b));
 				CountDownLatch ready = new CountDownLatch(2);
-				Future<Integer> toB = executor.submit((Callable<Integer>) () -> {
+				Future<ResponseEntity<String>> toB = executor.submit((Callable<ResponseEntity<String>>) () -> {
 					ready.countDown();
 					ready.await(10, TimeUnit.SECONDS);
-					return login(fromA, "other@example.com", PASSWORD).getStatusCode().value();
+					return login(fromA, "other@example.com", PASSWORD);
 				});
-				Future<Integer> toA = executor.submit((Callable<Integer>) () -> {
+				Future<ResponseEntity<String>> toA = executor.submit((Callable<ResponseEntity<String>>) () -> {
 					ready.countDown();
 					ready.await(10, TimeUnit.SECONDS);
-					return login(fromB, EMAIL, PASSWORD).getStatusCode().value();
+					return login(fromB, EMAIL, PASSWORD);
 				});
-				assertThat(toB.get(60, TimeUnit.SECONDS)).as("round " + round + " A->B").isEqualTo(200);
-				assertThat(toA.get(60, TimeUnit.SECONDS)).as("round " + round + " B->A").isEqualTo(200);
+				assertSwitchedTo(toB.get(60, TimeUnit.SECONDS), otherId, "round " + round + " A->B");
+				assertSwitchedTo(toA.get(60, TimeUnit.SECONDS), MEMBER_ID, "round " + round + " B->A");
 				assertThat(sessionRowCount(a)).isZero();
 				assertThat(sessionRowCount(b)).isZero();
 			}
@@ -513,6 +513,16 @@ class MemberSessionIntegrationTest {
 	}
 
 	private record Session(String id, String csrf) {
+	}
+
+	/** 전환 로그인이 200이고, 응답과 새 쿠키로 조회한 세션이 모두 대상 회원인지 본다. */
+	private void assertSwitchedTo(ResponseEntity<String> response, String memberId, String description) {
+		assertThat(response.getStatusCode().value()).as(description).isEqualTo(200);
+		assertThat(response.getBody()).as(description).contains("\"userId\":\"" + memberId + "\"");
+		String newSession = cookieValue(response.getHeaders().getFirst(HttpHeaders.SET_COOKIE));
+		ResponseEntity<String> session = getSession(newSession);
+		assertThat(session.getStatusCode().value()).as(description).isEqualTo(200);
+		assertThat(session.getBody()).as(description).contains("\"userId\":\"" + memberId + "\"");
 	}
 
 	private void createMember(String memberId, String email, boolean verified) {
