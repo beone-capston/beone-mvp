@@ -274,6 +274,39 @@ class MonthlyStateIntegrationTest {
 	}
 
 	@Test
+	void sourceSelectionWithoutAnyConflictIsAlwaysNotFoundAndStoresNothing() {
+		// 관리자 판단 P10·D-16: 수동 값이 있어도 충돌이 없어 409 SOURCE_CONFLICT_NOT_FOUND, 가상 포트폴리오도 같다
+		String card = register("{\"displayName\":\"올라운드\",\"cardProductId\":\"09271\"}");
+		String path = CARDS + "/" + card + "/monthly-states/2026-11";
+		send("PUT", path, "MY_CARDS",
+				"{\"previousMonthPerformanceWon\":{\"value\":523000,\"period\":{\"from\":\"2026-10-01\",\"to\":\"2026-10-31\"}}}");
+		String before = send("GET", path, "MY_CARDS", null).getBody();
+		String request = """
+				{"item":"previousMonthPerformanceWon","period":{"from":"2026-10-01","to":"2026-10-31"},
+				 "selectedSource":"MANUAL","conflictVersion":"cf-v3"}""";
+		String noConflict = "{\"code\":\"SOURCE_CONFLICT_NOT_FOUND\",\"message\":\"출처 충돌이 없는 항목입니다.\",\"errors\":[]}";
+
+		ResponseEntity<String> mine = send("PUT", path + "/source-selections", "MY_CARDS", request);
+		String seed = (String) items(send("GET", CARDS, "VIRTUAL_PORTFOLIO", null).getBody()).get(0).get("userCardId");
+		ResponseEntity<String> portfolio = send("PUT", CARDS + "/" + seed + "/monthly-states/2026-11/source-selections",
+				"VIRTUAL_PORTFOLIO", request);
+
+		for (ResponseEntity<String> response : List.of(mine, portfolio)) {
+			assertThat(response.getStatusCode().value()).isEqualTo(409);
+			JsonAssert.comparator(JsonCompareMode.STRICT).assertIsMatch(noConflict, response.getBody());
+		}
+		JsonAssert.comparator(JsonCompareMode.STRICT).assertIsMatch(before, send("GET", path, "MY_CARDS", null).getBody());
+		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM monthly_states", Integer.class)).isEqualTo(1);
+
+		String notFound = "{\"code\":\"USER_CARD_NOT_FOUND\",\"message\":\"보유 카드를 찾을 수 없습니다.\",\"errors\":[]}";
+		for (ResponseEntity<String> response : List.of(send("PUT", path + "/source-selections", "VIRTUAL_PORTFOLIO", request),
+				send("PUT", CARDS + "/uc-999999/monthly-states/2026-11/source-selections", "MY_CARDS", request))) {
+			assertThat(response.getStatusCode().value()).isEqualTo(404);
+			JsonAssert.comparator(JsonCompareMode.STRICT).assertIsMatch(notFound, response.getBody());
+		}
+	}
+
+	@Test
 	void releasedCardIsNotFound() {
 		String card = register("{\"displayName\":\"올라운드\",\"cardProductId\":\"09271\"}");
 		send("PUT", CARDS + "/" + card + "/monthly-states/2026-11", "MY_CARDS",

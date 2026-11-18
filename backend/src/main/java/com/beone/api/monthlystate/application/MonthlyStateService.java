@@ -145,6 +145,28 @@ public class MonthlyStateService {
 		return toView(user, card, month, saved, productId, false);
 	}
 
+	/**
+	 * 출처 충돌의 계산 기준을 고른다(관리자 판단 P10, D-16). 카드를 확인한 뒤, 충돌이 없으면 항상
+	 * {@link SourceConflictNotFoundException}이다. 가상 포트폴리오도 다른 사용자와 같다(월간 상태는 가상 포트폴리오에서도 동작, D-19).
+	 *
+	 * <p>지금은 충돌이 생기는 경로가 없어 이 메서드는 항상 예외로 끝나고 아무것도 저장하지 않는다. 월간 상태 값은 {@code MANUAL}만 저장되고,
+	 * CODEF 실적은 참고값이라 월간 상태에 들어오지 않으며(D-16, codef 동기화 #129의 {@code usedInCalculation=false}),
+	 * {@code INFERRED}는 원장 기반 산출이 보류돼 만들지 않는다. 사용자가 참고해 입력한 {@code MANUAL} 값과 그 CODEF 값도 충돌이 아니다.
+	 *
+	 * <p>확장 지점: 월간 상태에 두 번째 출처(CODEF 값 반영 또는 {@code INFERRED} 산출)가 결정으로 열리면, 이 카드·항목·기준 기간의
+	 * 출처별 후보를 모아 값이 다를 때만 충돌로 보고, {@code conflictVersion} 대조(바뀌었으면 409 {@code SOURCE_CONFLICT_CHANGED}),
+	 * 고른 출처 값 없음(400), 선택 저장과 200 응답, 월간 상태 조회 {@code conflicts[]}를 함께 구현한다.
+	 * @throws MonthlyStateCardNotFoundException 없거나 해제했거나 다른 사용자의 카드
+	 * @throws SourceConflictNotFoundException 충돌이 없는 항목(지금은 항상)
+	 */
+	@Transactional(readOnly = true)
+	public void selectSource(CurrentUser user, String userCardId, YearMonth month, SourceSelection selection) {
+		Objects.requireNonNull(month, "month");
+		Objects.requireNonNull(selection, "selection");
+		findCard(user, userCardId);
+		throw new SourceConflictNotFoundException();
+	}
+
 	private LocalDateTime now() {
 		return LocalDateTime.now(this.clock).truncatedTo(ChronoUnit.SECONDS);
 	}
