@@ -47,4 +47,12 @@ final class SessionCookie {
 		return NAME + "=" + sessionId + "; Path=/; Max-Age=" + maxAge.toSeconds() + "; Secure; HttpOnly; SameSite=Lax";
 	}
 
+	/**
+	 * 세션 쿠키를 지우는 {@code Set-Cookie} 값(로그아웃).
+	 * @return 헤더 값
+	 */
+	static String clear() {
+		return NAME + "=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax";
+	}
+
 }

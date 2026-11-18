@@ -20,6 +20,12 @@ class SessionCookieTest {
 	}
 
 	@Test
+	void clearHeaderMatchesLogoutContract() {
+		assertThat(SessionCookie.clear())
+			.isEqualTo("__Host-BEONE_SESSION=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax");
+	}
+
+	@Test
 	void readReturnsFirstSessionCookieOrNull() {
 		MockHttpServletRequest none = new MockHttpServletRequest();
 		assertThat(SessionCookie.read(none)).isNull();

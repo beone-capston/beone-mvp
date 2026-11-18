@@ -6,9 +6,15 @@ import org.springframework.http.HttpStatus;
 /**
  * 회원 인증 API의 오류 코드(docs/api.md 업무 오류 코드 「인증」, docs/api/auth.md). 문구는 인증 명세 사본과 같다.
  *
- * <p>지금은 CSRF 검사(U1)와 가입·이메일 인증(U2)이 쓰는 코드만 둔다. 나머지 인증 코드는 그 코드를 쓰는 API와 함께 추가한다.
+ * <p>CSRF 검사(U1), 가입·이메일 인증(U2), 로그인·세션 조회(U3)가 쓰는 코드다. 문구는 사본과 같다.
  */
 enum AuthErrorCode implements ApiErrorCode {
+
+	UNAUTHENTICATED("UNAUTHENTICATED", HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
+
+	INVALID_CREDENTIALS("INVALID_CREDENTIALS", HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호를 확인해 주세요."),
+
+	EMAIL_NOT_VERIFIED("EMAIL_NOT_VERIFIED", HttpStatus.FORBIDDEN, "이메일 인증을 완료해 주세요."),
 
 	CSRF_INVALID("CSRF_INVALID", HttpStatus.FORBIDDEN, "요청을 확인할 수 없습니다. 화면을 새로고침한 후 다시 시도해 주세요."),
 
