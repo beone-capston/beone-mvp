@@ -20,7 +20,7 @@ import org.springframework.test.web.servlet.MvcResult;
  * local·demo 밖(프로필 없음)에서는 인증 API가 등록되지 않아 404 {@code NOT_FOUND}이고 세션 쿠키도 심지 않는다(관리자 승인, 결정 30).
  */
 @WebSliceTest(controllers = { AuthCsrfController.class, MemberRegistrationController.class,
-		MemberSessionController.class })
+		MemberSessionController.class, PasswordResetController.class })
 class AuthCsrfProfileOffWebTest {
 
 	@Autowired
@@ -66,10 +66,21 @@ class AuthCsrfProfileOffWebTest {
 	}
 
 	@Test
+	void passwordResetApisAreNotFoundOutsideLocalAndDemo() throws Exception {
+		for (String path : new String[] { "/api/v1/auth/password-reset-requests", "/api/v1/auth/password-resets" }) {
+			MvcResult result = this.mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{}"))
+				.andReturn();
+			assertThat(result.getResponse().getStatus()).as(path).isEqualTo(404);
+			assertThat(result.getResponse().getHeaders("Set-Cookie")).as(path).isEmpty();
+		}
+	}
+
+	@Test
 	void authBeansAreNotRegistered() {
 		assertThat(this.context.getBeanNamesForType(AuthCsrfController.class)).isEmpty();
 		assertThat(this.context.getBeanNamesForType(MemberRegistrationController.class)).isEmpty();
 		assertThat(this.context.getBeanNamesForType(MemberSessionController.class)).isEmpty();
+		assertThat(this.context.getBeanNamesForType(PasswordResetController.class)).isEmpty();
 		assertThat(this.context.getBeanNamesForType(AuthWebConfiguration.class)).isEmpty();
 	}
 
