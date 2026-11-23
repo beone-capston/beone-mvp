@@ -1,0 +1,284 @@
+.auth-shell {
+  --auth-bg: #F3F5F7;
+  --auth-surface: #FFFFFF;
+  --auth-text: #142235;
+  --auth-muted: #9DAFBA;
+  --auth-border: #CDD5D8;
+  --auth-primary: #2D86A3;
+  --auth-on-primary: #FFFFFF;
+  --auth-error: #BE4848;
+  --auth-logo-accent: #78AEB7;
+
+  container-type: inline-size;
+  max-inline-size: 480px;
+  min-block-size: 100dvh;
+  margin-inline: auto;
+  background: var(--auth-bg);
+  color: var(--auth-text);
+  font-family: Inter, 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+}
+
+.auth-frame {
+  --u: calc(100cqw / 866);
+
+  min-block-size: max(100dvh, calc(1600 * var(--u)));
+  padding-block: 0 calc(70 * var(--u));
+  letter-spacing: calc(-1.8 * var(--u));
+}
+
+.auth-frame--login {
+  display: flex;
+  flex-direction: column;
+  padding-block-start: calc(180 * var(--u));
+  padding-block-end: calc(119 * var(--u));
+}
+
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(68 * var(--u));
+  min-block-size: calc(267 * var(--u));
+  margin-block-end: calc(122 * var(--u));
+}
+
+/* Two crops of the existing brand image align the symbol and wordmark independently. */
+.auth-symbol,
+.auth-wordmark {
+  display: block;
+  background: url('/beone-logo-blue.png') no-repeat;
+  mix-blend-mode: multiply;
+}
+
+.auth-symbol {
+  inline-size: calc(121 * var(--u));
+  block-size: calc(146 * var(--u));
+  background-size: 281.25% 186.73%;
+  background-position: 50% 26.91%;
+}
+
+.auth-wordmark {
+  inline-size: calc(233 * var(--u));
+  block-size: calc(53 * var(--u));
+  background-size: 165.44% 666.67%;
+  background-position: 54.49% 85.14%;
+}
+
+.auth-header {
+  display: flex;
+  align-items: center;
+  gap: calc(27 * var(--u));
+  block-size: calc(78 * var(--u));
+  margin: 0 0 calc(103 * var(--u)) calc(41 * var(--u));
+}
+
+.auth-frame--signup {
+  min-block-size: 100dvh;
+  padding-block-start: calc(71 * var(--u));
+}
+
+.auth-header .auth-wordmark {
+  inline-size: calc(135 * var(--u));
+  block-size: calc(31 * var(--u));
+}
+
+.auth-back {
+  display: grid;
+  place-items: center;
+  inline-size: calc(51 * var(--u));
+  block-size: 100%;
+  padding: 0;
+  background: transparent;
+  color: var(--auth-primary);
+}
+
+.auth-back span {
+  inline-size: calc(23 * var(--u));
+  block-size: calc(23 * var(--u));
+  border: solid currentColor;
+  border-width: 0 0 calc(3.5 * var(--u)) calc(3.5 * var(--u));
+  rotate: 45deg;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  inline-size: calc(702 * var(--u));
+  margin-inline: auto;
+  flex: 1;
+}
+
+.auth-form h1 {
+  padding-inline-start: calc(8 * var(--u));
+  margin-block-end: calc(51 * var(--u));
+  font-size: calc(40 * var(--u));
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.auth-frame--signup h1 {
+  margin-block-end: calc(73 * var(--u));
+}
+
+.auth-fields {
+  min-inline-size: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.auth-field + .auth-field {
+  margin-block-start: calc(46 * var(--u));
+}
+
+.auth-frame--signup .auth-field--confirmation {
+  margin-block-start: calc(57 * var(--u));
+}
+
+.auth-field label {
+  display: block;
+  padding-inline-start: calc(8 * var(--u));
+  margin-block-end: calc(14 * var(--u));
+  font-size: calc(29 * var(--u));
+  font-weight: 500;
+  line-height: calc(35 * var(--u));
+}
+
+.auth-field input {
+  display: block;
+  inline-size: 100%;
+  block-size: calc(89 * var(--u));
+  padding-inline: calc(30 * var(--u));
+  border: max(1px, calc(1.3 * var(--u))) solid var(--auth-border);
+  border-radius: calc(15 * var(--u));
+  background: var(--auth-surface);
+  color: var(--auth-text);
+  font: inherit;
+  font-size: calc(23 * var(--u));
+  font-weight: 500;
+  letter-spacing: inherit;
+}
+
+.auth-field input[data-field-error] {
+  border-color: var(--auth-error);
+}
+
+.auth-field input::placeholder {
+  color: var(--auth-muted);
+  opacity: 1;
+}
+
+.auth-hint,
+.auth-field-error {
+  margin: calc(9 * var(--u)) calc(12 * var(--u)) 0;
+  font-size: calc(20 * var(--u));
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.auth-hint,
+.auth-reset,
+.auth-switch {
+  color: var(--auth-muted);
+}
+
+.auth-field-error,
+.auth-problem {
+  color: var(--auth-error);
+}
+
+.auth-reset {
+  display: block;
+  margin: calc(13 * var(--u)) calc(18 * var(--u)) 0 auto;
+  padding: 0;
+  background: transparent;
+  font-size: calc(21 * var(--u));
+  line-height: 1.3;
+  letter-spacing: inherit;
+}
+
+.auth-frame--login .auth-actions {
+  margin-block-start: auto;
+  padding-block-start: calc(50 * var(--u));
+}
+
+.auth-frame--signup .auth-actions {
+  margin-block-start: calc(86 * var(--u));
+}
+
+.auth-feedback {
+  display: grid;
+  align-content: end;
+  min-block-size: calc(40 * var(--u));
+  padding: 0 calc(5 * var(--u)) calc(9 * var(--u));
+  text-align: center;
+  font-size: calc(21 * var(--u));
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.auth-frame--signup .auth-feedback {
+  min-block-size: calc(35 * var(--u));
+}
+
+.auth-primary {
+  inline-size: 100%;
+  min-block-size: calc(89 * var(--u));
+  padding: calc(8 * var(--u));
+  border-radius: calc(15 * var(--u));
+  background: var(--auth-primary);
+  color: var(--auth-on-primary);
+  font-size: calc(29 * var(--u));
+  font-weight: 600;
+  letter-spacing: inherit;
+}
+
+.auth-switch {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: calc(12 * var(--u));
+  margin-block-start: calc(16 * var(--u));
+  font-size: calc(21 * var(--u));
+  line-height: calc(28 * var(--u));
+}
+
+.auth-switch button {
+  padding: 0;
+  background: transparent;
+  color: var(--auth-text);
+  font-weight: 700;
+  letter-spacing: inherit;
+}
+
+.auth-session {
+  display: grid;
+  align-content: center;
+  gap: 16px;
+  max-inline-size: calc(702 * var(--u));
+  margin-inline: auto;
+  padding-block: 24px;
+  text-align: center;
+  font-size: 14px;
+  letter-spacing: normal;
+}
+
+.auth-session-notice {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: calc(12 * var(--u));
+  font-size: calc(21 * var(--u));
+  text-align: center;
+}
+
+.auth-session-notice button {
+  padding: 0;
+  background: transparent;
+  color: var(--auth-primary);
+  font-weight: 700;
+  letter-spacing: inherit;
+}
