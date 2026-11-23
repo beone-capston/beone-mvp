@@ -1,0 +1,20 @@
+<resources>
+    <string name="check_launcher_label">B:ONE 인증 점검</string>
+    <string name="check_notice">debug 전용 점검 화면입니다. 실제 결제나 카드사 인증이 아니며, 앱 안의 가상 결제 화면 활성화만 확인합니다.</string>
+    <string name="check_active_indicator">활성 상태 표시(점검용)</string>
+    <string name="check_authenticate">기기 인증</string>
+    <string name="check_remaining_seconds">남은 시간 %1$d초</string>
+    <string name="check_status_active">활성 중 (인증 수단: %1$s)</string>
+    <string name="check_status_authenticating">인증 진행 중</string>
+    <string name="check_status_draining">이전 인증 창을 정리하는 중입니다. 정리가 끝나면 [기기 인증]을 다시 눌러 주세요.</string>
+    <string name="check_status_stalled">인증 응답이 없어 진행을 멈췄습니다. 활성화하지 않습니다. 앱을 완전히 종료한 뒤 다시 열어 주세요.</string>
+    <string name="check_status_no_response">인증 응답이 대기 시간 안에 오지 않아 비활성화되었습니다. 앱을 완전히 종료한 뒤 다시 열어 주세요.</string>
+    <string name="check_timeout_notice">응답 대기 시간(근거 없는 제안, 관측으로 조정): 인증 중 %1$d초, 정리 중 %2$d초</string>
+    <string name="check_status_not_authenticated">인증 전입니다. 기기 인증을 진행해 주세요.</string>
+    <string name="check_status_expired">60초가 지나 비활성화되었습니다. 다시 인증해 주세요.</string>
+    <string name="check_status_failed">인증에 실패해 비활성화되었습니다. 다시 인증해 주세요.</string>
+    <string name="check_status_canceled">인증이 취소되어 비활성화되었습니다. 다시 인증해 주세요.</string>
+    <string name="check_status_left_app">앱을 벗어나 비활성화되었습니다. 다시 인증해 주세요.</string>
+    <string name="check_status_setup_required">기기 인증 수단이 없습니다. 기기 설정에서 화면 잠금(PIN 등)을 먼저 설정해 주세요.</string>
+    <string name="check_status_unavailable">이 기기에서는 지금 기기 인증을 사용할 수 없습니다.</string>
+</resources>

@@ -163,7 +163,7 @@ password
 
 ## DELETE /api/v1/me/codef/connection — CODEF 연결 해제
 
-- [2차·전송 계약 미결] CODEF 연결을 해제한다. 이미 가져온 조회 데이터의 보존·삭제 정책은 미결이다.
+- [2차·전송 계약 미결] CODEF 연결을 해제한다. 연결(connectedId)만 지우고 추가 수집을 멈춘다. 이미 가져온 CODEF 보유 카드·승인 행·확인한 매핑은 보존하며 데이터 완전 삭제가 아니다(2026-11-18 사용자 결정).
 
 CODEF 연결을 해제하는 API.
 
@@ -189,11 +189,14 @@ X-BeONE-Demo-User: MY_CARDS
 
 - **409 `CODEF_NOT_CONNECTED`**: 연결되어 있지 않은 경우
 
+- **409 `PORTFOLIO_READ_ONLY`**: 가상 포트폴리오 사용자가 요청한 경우
+  - 근거: [docs/api.md 업무 오류 코드](../api.md#업무-오류-코드)의 "가상 포트폴리오의 보유 카드·CODEF 쓰기 요청" 규칙(2026-11-18 관리자 판단으로 계약 정합화)
+
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
 ### 명세 단계 미정
 
-- 조회 데이터(CODEF 원장·보유카드) 보존·삭제 정책.
+- 보존 기간, 탈퇴·완전 삭제 정책(해제 시 보존 여부는 2026-11-18 사용자 결정으로 보존 확정, 카드는 보유 카드 해제로 따로 지운다).
 
 ### 근거
 
@@ -201,12 +204,12 @@ X-BeONE-Demo-User: MY_CARDS
 
 ## POST /api/v1/me/codef/syncs — CODEF 조회·동기화
 
-- [2차·전송 계약 미결] 보유카드·승인내역·실적을 조회해 보유카드는 매핑 후보로, 승인내역은 CODEF 원장으로 옮기고 실적은 참고값으로만 저장한다(D-16·D-17).
+- [2차·전송 계약 미결] 보유카드·승인내역·실적을 조회해 보유카드는 매핑 전 보유 카드(`UNMAPPED`)로, 승인내역은 CODEF 원장으로 옮기고 실적은 참고값으로만 저장한다(D-16·D-17).
 
 CODEF에서 KB국민카드 보유카드·승인내역·실적조회를 가져와 BeONE 데이터로 옮기는 API.
 
 ```text
-보유카드 → HeldCard(CODEF), 카드명으로 매핑 후보(CANDIDATE)만 제시
+보유카드 → HeldCard(CODEF), UNMAPPED·candidateCardProductId=null로 생성, 상품은 사용자가 직접 선택(결정 20 R3)
 승인내역 → CODEF 원장. 전액 취소로 확정된 형태만 반영, 부분취소 의심·짝 없음·짝 여럿·판단 불가 행은 넣지 않고 불완전 표시
 실적조회 → "카드사 조회 실적(참고)"로만 저장, 전월 실적에 자동 반영하지 않음
 재조회 → 중복 판단 키로 같은 행을 두 번 넣지 않음
@@ -255,8 +258,8 @@ to
         {
           "userCardId": "uc-2001",
           "cardName": "청춘대로 톡톡카드",
-          "candidateCardProductId": "09174",
-          "mappingStatus": "CANDIDATE"
+          "candidateCardProductId": null,
+          "mappingStatus": "UNMAPPED"
         }
       ]
     },
@@ -291,9 +294,10 @@ to
 
 #### 응답 필드
 
+- `heldCards.newCandidates[]` · 새 CODEF 카드는 `mappingStatus`=`UNMAPPED`, `candidateCardProductId`=`null`이다. 카드명으로 상품 후보를 정하지 않고 사용자가 직접 고른다(결정 20 R3, 2026-11-18 관리자 판단 K1).
 - `performances[].usedInCalculation` · 항상 `false`. 사용자가 확인해 수동 입력해야 계산에 쓴다(D-16)
 - `incompleteRows[]` · 원장에 넣지 않은 행과 이유. 카드번호·승인번호 원문은 담지 않는다
-- 부분 동기화 실패와 전체 실패를 구분한다. 일부 항목만 실패하면 200과 `data.partialFailures[]`(항목: `target`=`HELD_CARDS`/`APPROVALS`/`PERFORMANCES`, 공개 `code`·`message`, 실패가 없으면 `[]`)를 담고, 전부 실패하면 502를 준다(제안). timeout을 504로 나눌지는 전송 계약과 함께 정한다
+- 부분 동기화 실패와 전체 실패를 구분한다. 일부 항목만 실패하면 200과 `data.partialFailures[]`(항목: `target`=`HELD_CARDS`/`APPROVALS`/`PERFORMANCES`(제안, 샌드박스 확인 뒤 확정), 공개 `code`·`message`, 실패가 없으면 `[]`)를 담고, 전부 실패하면 502를 준다(제안). timeout을 504로 나눌지는 전송 계약과 함께 정한다
 - HTTP 200만으로 CODEF 성공으로 보지 않는다. URL 디코딩 뒤 결과 코드를 확인한다. 전체 카드번호가 오면 모델·저장·로그·브라우저로 넘기기 전에 제거한다. 카드 이용한도를 월 혜택 한도로 쓰지 않는다
 
 ### 실패 응답
@@ -303,6 +307,8 @@ to
 - **409 `CODEF_RECONNECT_REQUIRED`**: 재연결이 필요한 경우
 
 - **502 `CODEF_UNAVAILABLE`**: CODEF 전체 실패
+
+- **409 `PORTFOLIO_READ_ONLY`**: 가상 포트폴리오 사용자([`docs/api.md`](../api.md) "`PORTFOLIO_READ_ONLY`는 가상 포트폴리오의 보유 카드·CODEF 쓰기 요청에 씁니다")
 
 - **400 `INVALID_REQUEST`**: 요청값이 올바르지 않은 경우
   - 날짜 형식 오류, 12개월 초과, `from`이 `to`보다 늦음

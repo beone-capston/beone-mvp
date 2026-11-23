@@ -14,11 +14,14 @@ frontend/   React 웹 (Vite + TypeScript)
 backend/    Spring Boot API (Java 21, MySQL)
 docs/       PRD, 결정 기록, 코드·테스트 컨벤션
 fixtures/   평가·시연용 데이터 (fixtures/private/ 는 git 제외)
+deploy/     배포용 Compose와 이미지 빌드·로컬 검증 스크립트
 docker-compose.yml   로컬 MySQL
 .env.example         환경변수 예시
 ```
 
 세 애플리케이션은 각각 독립적으로 빌드·테스트합니다. 루트에는 공용 빌드 도구가 없습니다.
+
+백엔드 배포 이미지와 배포 Compose는 [백엔드 배포 기반](docs/deployment/backend-compose.md)에 있습니다. 로컬 개발 실행은 아래 절차를 그대로 따릅니다.
 
 ## 요구 환경
 
@@ -35,7 +38,7 @@ docker-compose.yml   로컬 MySQL
 |---|---|
 | backend | Spring Boot 4.1.1, Gradle 9.7.1 (Groovy DSL), Flyway, MySQL Connector/J, Testcontainers |
 | frontend | React 19, Vite 8, TypeScript 6.0, Vitest 5, Testing Library, oxlint |
-| android | AGP 9.1.1, Gradle 9.3.1 (Kotlin DSL), compileSdk/targetSdk 36, minSdk 30, AppCompat |
+| android | AGP 9.1.1, Gradle 9.3.1 (Kotlin DSL), compileSdk/targetSdk 36, minSdk 30, AppCompat, androidx.biometric 1.1.0 |
 | DB | MySQL 8.4.11 (docker-compose와 Testcontainers가 같은 이미지 사용) |
 
 ## 환경변수
@@ -46,6 +49,7 @@ cp .env.example .env
 
 - `.env`는 git에서 제외됩니다. 실제 값은 절대 커밋하지 않습니다.
 - CODEF 키(`CODEF_*`)는 **서버(backend)에서만** 사용합니다. `android/`와 `frontend/`에 넣지 않습니다. 키가 없어도 서버는 뜨고 CODEF 호출만 실패합니다. 변수 목록은 [CODEF 설정과 샌드박스 확인 절차](docs/development/codef-sandbox-check.md)를 봅니다.
+- CODEF 연결·동기화 키 `BEONE_CODEF_CONNECTED_ID_KEY`(connectedId 암호화)·`BEONE_CODEF_APPROVAL_HMAC_KEY`(승인번호 HMAC)는 각각 Base64로 적은 32바이트이고 고정 기본값이 없습니다. 값은 저장소에 두지 않고 서버 프로세스 환경에만 줍니다. 없으면 CODEF 연결은 502, 동기화의 승인내역은 부분 실패입니다([codef 안내](docs/domains/codef.md)). `.env.example`에는 아직 이름이 없습니다.
 - `frontend/.env.example`은 프론트엔드 전용 공개 설정(`VITE_API_BASE_URL`)입니다. `VITE_` 변수는 번들에 포함되므로 비밀값을 넣지 않습니다.
 
 ## 실행
@@ -90,6 +94,7 @@ cd android
 - 카드 등록·월간 상태 확인·가상 주문 버튼은 준비 중 안내를 제공합니다. 실제 API 연결, 혜택 계산, Android 인증은 아직 연결하지 않았습니다.
 - 네이비·민트 브랜드 색상과 제공된 로고 이미지(`frontend/public/beone-brand.png`)를 사용하며, 모든 화면에서 최대 480px 너비의 세로 앱 레이아웃과 하단 메뉴를 제공합니다. Android WebView의 안전 영역 여백을 반영합니다.
 - 실행은 `frontend/`에서 `npm run dev` 후 터미널에 표시된 주소로 접속합니다.
+debug 앱은 개발 서버 `http://localhost:5173/`을 엽니다. 실기기에서는 프런트엔드 개발 서버를 켠 뒤 `adb reverse tcp:5173 tcp:5173`으로 연결합니다. 주소는 `./gradlew installDebug -Pbeone.devServerUrl=<주소>`로 바꿀 수 있습니다. debug에서 평문 HTTP는 `localhost`·`127.0.0.1`·`10.0.2.2`에만 허용되므로, 그 밖의 주소는 기기가 신뢰하는 시스템 인증서의 HTTPS여야 합니다. 실기기에서는 LAN 주소 대신 `adb reverse`를 쓸 수 있습니다. release 앱은 `https://beonepay.site/`를 열고, 탐색과 브리지(`window.BeoneBridge`)의 신뢰 origin은 `https://beonepay.site` 하나입니다. release 앱의 실기기 확인은 아직 하지 않았습니다([`docs/android/webview-shell.md`](docs/android/webview-shell.md)).
 
 ## 빌드·테스트
 
@@ -125,6 +130,8 @@ npm run build
 cd android
 ./gradlew assembleDebug testDebugUnitTest lintDebug
 ```
+
+debug 빌드에는 실기기 인증 확인용 **B:ONE 인증 점검** 화면이 함께 설치됩니다(release 미포함). 확인 항목은 [`docs/android/device-checklist.md`](docs/android/device-checklist.md)에 있습니다.
 
 계측 테스트(`connectedAndroidTest`)는 아직 작성하지 않았습니다. 추가하면 기기 또는 에뮬레이터를 연결해 실행합니다. 생체인증·기기 PIN·60초 활성화의 최종 확인은 에뮬레이터가 아닌 실제 Android 기기에서 합니다 ([PRD FR-06](docs/PRD.md)).
 

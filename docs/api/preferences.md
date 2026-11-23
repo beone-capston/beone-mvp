@@ -83,22 +83,18 @@ FIXED_REPRESENTATIVE
 
 ```text
 selectionMode
-```
-
-- `FIXED_REPRESENTATIVE`면 `representativeUserCardId`가 필수다.
-
-#### 선택 필드
-
-```text
 representativeUserCardId
 ```
+
+- `representativeUserCardId`는 항상 보낸다. 값은 `null`일 수 있고 필드 누락은 400이다(D-23). 모드만 바꾸다 대표 카드를 모르게 지우지 않기 위해서다.
 
 - 대표 카드는 매핑이 `USER_CONFIRMED`인 카드만 고를 수 있다. 추천 비교에서 빠진 카드는 동률 처리의 대표 카드 후보도 될 수 없다(D-15). 주문마다 달라지는 혜택 `확인 필요`는 이 제한이 아니다(D-19).
 - `selectionMode`와 대표 카드의 조합
   - `AUTO_RECOMMEND` + 대표 카드: 저장하고 동률 처리 3단계에만 쓴다(D-12)
   - `AUTO_RECOMMEND` + `null`: 대표 카드를 지운다
   - `FIXED_REPRESENTATIVE` + 대표 카드: 그 카드로 고정한다
-  - `FIXED_REPRESENTATIVE` + `null`·누락: 400 `INVALID_REQUEST`
+  - `FIXED_REPRESENTATIVE` + `null`: 400 `INVALID_REQUEST`
+  - 모드와 무관하게 필드 누락: 400 `INVALID_REQUEST`
 - 결제 중 카드를 다시 고르는 단계는 없다(PRD §4). 사용자 통제는 이 설정으로만 한다.
 
 ### Response Body
@@ -117,13 +113,14 @@ representativeUserCardId
 
 #### 응답 필드
 
-- 응답 형식은 「설정 조회」와 같다. `updatedAt`은 이번에 저장한 시각이다
+- 응답 형식은 「결제 전 설정 조회」와 같다. `updatedAt`은 이번에 저장한 시각이다
 
 ### 실패 응답
 
 - **400 `INVALID_REQUEST`**: 요청값이 올바르지 않은 경우
   - `selectionMode` 누락·허용 밖 값
-  - `FIXED_REPRESENTATIVE`인데 대표 카드 누락
+  - `representativeUserCardId` 필드 누락
+  - `FIXED_REPRESENTATIVE`인데 대표 카드가 `null`
 
 - **404 `USER_CARD_NOT_FOUND`**: 없거나 다른 사용자의 카드
 
@@ -134,4 +131,4 @@ representativeUserCardId
 
 ### 근거
 
-- 결정 기록 D-12·D-15
+- 결정 기록 D-12·D-15·D-23

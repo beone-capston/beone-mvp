@@ -1,0 +1,66 @@
+# 배포용 백엔드와 MySQL.
+# 서버의 기존 nginx Compose(/opt/beone/compose.yaml, 프로젝트 beone)와 분리된 프로젝트로 띄운다.
+# 항상 파일(-f)·프로젝트(-p)·환경 파일(--env-file)을 명시해 실행한다. 절차는 docs/deployment/backend-compose.md.
+# 두 서비스 모두 호스트 포트를 공개하지 않는다. 외부 80·443은 기존 nginx만 담당하며, 이 단계에서는 /api·/actuator를 프록시하지 않는다.
+# MySQL 이미지 태그는 루트 docker-compose.yml(로컬 개발)과 같게 유지한다.
+name: beone-app
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  mysql:
+    image: mysql:8.4.11
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?set MYSQL_DATABASE in the env file}
+      MYSQL_USER: ${MYSQL_USER:?set MYSQL_USER in the env file}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in the env file}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in the env file}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      # binlog는 켠 채 3일만 보관한다(2026-11-15 사용자 결정). 시점 복구 절차는 아직 없고 백업은 덤프로 한다.
+      - --binlog-expire-logs-seconds=259200
+      - --innodb-buffer-pool-size=256M
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 1g
+    restart: unless-stopped
+    logging: *default-logging
+
+  backend:
+    image: ${BEONE_API_IMAGE:?set BEONE_API_IMAGE to the loaded image tag}
+    # 레지스트리가 없다. 이미지는 docker load로 미리 들여온다.
+    pull_policy: never
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      # Docker 내부 이름으로 접속한다. application.yml의 localhost 기본값으로 떨어지지 않게 항상 넣는다.
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:?set MYSQL_DATABASE in the env file}
+      DB_USERNAME: ${MYSQL_USER:?set MYSQL_USER in the env file}
+      DB_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in the env file}
+      TZ: Asia/Seoul
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError
+    healthcheck:
+      # 추가 도구 없이 bash의 /dev/tcp로 내부 health를 조회한다.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 180s
+    mem_limit: 1g
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  mysql-data:

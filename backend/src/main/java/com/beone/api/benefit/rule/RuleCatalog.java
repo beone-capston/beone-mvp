@@ -1,12 +1,15 @@
 package com.beone.api.benefit.rule;
 
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import com.beone.api.benefit.card.CardId;
 import com.beone.api.benefit.card.ServiceId;
@@ -52,6 +55,20 @@ public final class RuleCatalog {
 				}
 			}
 		}
+	}
+
+	/**
+	 * 규칙 버전이 하나라도 있는 카드 ID 전체. 검증 상태·적용 기간과 관계없이 모두 담는다(읽기 전용).
+	 *
+	 * <p>판정에는 쓰지 않는다. 카드 상품 조회처럼 카탈로그에 어떤 카드가 있는지 알아야 하는 호출자가 쓴다.
+	 * @return 카드 ID 문자열 오름차순의 수정할 수 없는 집합
+	 */
+	public SortedSet<CardId> cardIds() {
+		SortedSet<CardId> ids = new TreeSet<>();
+		for (CardRuleVersion version : versions) {
+			ids.add(version.cardId());
+		}
+		return Collections.unmodifiableSortedSet(ids);
 	}
 
 	public RuleSelection select(CardId cardId, LocalDate decisionDate) {

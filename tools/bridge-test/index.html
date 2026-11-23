@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- 외부 요청 차단: 스크립트·스타일·iframe은 같은 origin과 debug 시험용 127.0.0.1만. 링크 이동은 CSP 대상이 아니다. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; frame-src 'self' http://127.0.0.1:*; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>브리지 시험(T)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-role="top">
+  <header>
+    <h1>브리지 v1 시험 페이지(T)</h1>
+    <p class="warn">시험 전용 페이지입니다. 제품 화면이 아니며 시험이 끝나면 제거합니다. 이 페이지는 외부로 아무것도 보내지 않습니다.</p>
+  </header>
+
+  <section>
+    <h2>현재 프레임</h2>
+    <dl>
+      <dt>origin</dt><dd id="origin"></dd>
+      <dt>주소</dt><dd id="location"></dd>
+      <dt><code>typeof window.BeoneBridge</code></dt><dd><strong id="bridge-type"></strong> <button type="button" id="refresh-type">다시 확인하고 기록</button></dd>
+    </dl>
+    <p><a id="visit-link" href="?visit=1">같은 페이지로 이동해 웹 기록 추가</a> (BR13 준비)</p>
+  </section>
+
+  <section>
+    <h2>보내기</h2>
+    <p>입력란의 문자열을 가공하지 않고 <code>window.BeoneBridge.postMessage(문자열)</code>로 보냅니다. 예시 버튼은 입력란만 채우고, 전송은 [보내기]로 합니다.</p>
+    <label for="message">보낼 문자열</label>
+    <textarea id="message" rows="4" spellcheck="false" autocomplete="off"></textarea>
+    <p>JavaScript <code>length</code>(UTF-16 코드 단위): <strong id="message-length">0</strong> / 상한 4096</p>
+    <p><button type="button" id="send" class="primary">보내기</button></p>
+
+    <h3>계약 메시지 6종 (bridge-contract-candidate.md 3절)</h3>
+    <p>웹 → 네이티브</p>
+    <div class="buttons">
+      <button type="button" data-preset='{"v":1,"type":"state.get"}'>state.get</button>
+      <button type="button" data-preset='{"v":1,"type":"auth.request"}'>auth.request</button>
+      <button type="button" data-preset='{"v":1,"type":"payment.check"}'>payment.check</button>
+    </div>
+    <p>네이티브 → 웹 <code>type</code>을 웹이 보내는 경우(BR18⑨와 같은 성격). 네이티브는 웹 → 네이티브 3종만 받으므로 <code>UNKNOWN_TYPE</code>이 기대값입니다. 순서표에는 ⑨ <code>state</code>만 있습니다.</p>
+    <div class="buttons">
+      <button type="button" data-preset='{"v":1,"type":"state"}'>state</button>
+      <button type="button" data-preset='{"v":1,"type":"payment.check.result"}'>payment.check.result</button>
+      <button type="button" data-preset='{"v":1,"type":"error"}'>error</button>
+    </div>
+
+    <h3>BR17 크기 경계 (<code>pad</code> 채우기)</h3>
+    <div class="buttons">
+      <button type="button" data-pad="1:ascii:4096">① ASCII 4096</button>
+      <button type="button" data-pad="1:ascii:4097">② ASCII 4097</button>
+      <button type="button" data-pad="1:hangul:4096">③ 한글(가) 4096</button>
+      <button type="button" data-pad="1:emoji:4097">④ 이모지(😀) 포함 4097</button>
+      <button type="button" data-pad="2:ascii:4097">⑤ v=2 ASCII 4097</button>
+    </div>
+
+    <h3>BR18 검사 순서와 오류</h3>
+    <div class="buttons">
+      <button type="button" data-preset="not json">① not json</button>
+      <button type="button" data-preset="[1]">② [1]</button>
+      <button type="button" data-preset='{"type":"state.get"}'>③ v 없음</button>
+      <button type="button" data-preset='{"v":2,"type":"state.get"}'>④ v=2</button>
+      <button type="button" data-preset='{"v":"1","type":"state.get"}'>⑤ v="1"</button>
+      <button type="button" data-preset='{"v":1,"type":"unknown"}'>⑥ unknown</button>
+      <button type="button" data-preset='{"type":"unknown"}'>⑦ v 없음 unknown</button>
+      <button type="button" data-preset='{"v":2,"type":"unknown"}'>⑧ v=2 unknown</button>
+      <button type="button" data-preset='{"v":1,"type":"state"}'>⑨ state</button>
+      <button type="button" data-preset='{"v":1}'>⑩ type 없음</button>
+    </div>
+
+    <h3>BR21 문자열이 아닌 메시지</h3>
+    <p><button type="button" id="send-buffer">ArrayBuffer 보내기 (내용: UTF-8 <code>{"v":1,"type":"state.get"}</code>)</button></p>
+  </section>
+
+  <section>
+    <h2>기록</h2>
+    <p>받은 메시지·보낸 메시지·메모를 시각(UTC, ISO 8601)과 함께 이 origin의 웹 저장소(localStorage)에 남깁니다. 새로고침해도 남습니다. <span id="log-count"></span></p>
+    <p><button type="button" id="clear-log">기록 지우기</button></p>
+    <ol id="log" class="log"></ol>
+  </section>
+
+  <section>
+    <h2>BR19 같은 origin iframe</h2>
+    <iframe id="same-frame" title="같은 origin iframe"></iframe>
+  </section>
+
+  <section>
+    <h2>BR20 다른 origin iframe</h2>
+    <p id="cross-frame-note"></p>
+    <iframe id="cross-frame" title="다른 origin iframe"></iframe>
+  </section>
+
+  <section>
+    <h2>BR24 신뢰 origin 밖 링크</h2>
+    <p>release에서 누르면 열리지 않고 차단 안내가 떠야 합니다(W3과 같음).</p>
+    <ul>
+      <li><a href="https://www.beonepay.site/">https://www.beonepay.site/</a></li>
+      <li><a href="http://beonepay.site/">http://beonepay.site/</a></li>
+    </ul>
+  </section>
+
+  <script src="test.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "_fixture": {"synthetic": true, "basis": "승인내역!H24:H48, 참고 승인내역 취소건!I14·I15. R2 같은 응답 안 같은 키, 승인번호·사용일자 없음, 취소여부는 키에 넣지 않음", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "SYN-TX-LDUP-0001"},
+  "data": [
+    {"resUsedDate": "20261020", "resUsedTime": "120000", "resCardName": "SYN CARD A", "resUsedAmount": "9000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-D21"},
+    {"resUsedDate": "20261020", "resUsedTime": "120000", "resCardName": "SYN CARD A", "resUsedAmount": "9000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-D21"},
+    {"resUsedDate": "20261020", "resUsedTime": "121000", "resCardName": "SYN CARD A", "resUsedAmount": "9000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": ""},
+    {"resUsedDate": "", "resUsedTime": "122000", "resCardName": "SYN CARD A", "resUsedAmount": "9000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-D24"},
+    {"resUsedDate": "20261020", "resUsedTime": "123000", "resCardName": "SYN CARD A", "resUsedAmount": "9000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-D22"},
+    {"resUsedDate": "20261020", "resUsedTime": "130000", "resCardName": "SYN CARD A", "resUsedAmount": "6000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-D23"},
+    {"resUsedDate": "20261020", "resUsedTime": "130000", "resCardName": "SYN CARD A", "resUsedAmount": "6000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "6000", "resApprovalNo": "SYN-APR-D23"}
+  ]
+}

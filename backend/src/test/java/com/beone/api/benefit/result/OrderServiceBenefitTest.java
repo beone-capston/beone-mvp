@@ -35,8 +35,8 @@ class OrderServiceBenefitTest {
 	}
 
 	@ParameterizedTest
-	@EnumSource(value = ApplicationStatus.class, names = { "APPLIED", "APPLIED_CAP_REMAINING", "RULE_EXPIRED",
-			"NO_VERIFIED_RULE", "NEEDS_CONFIRMATION" })
+	@EnumSource(value = ApplicationStatus.class, names = { "APPLIED", "APPLIED_CAP_REMAINING", "NO_CONTRIBUTION",
+			"RULE_EXPIRED", "NO_VERIFIED_RULE", "NEEDS_CONFIRMATION" })
 	void rejectedUnmetConditions(ApplicationStatus condition) {
 		BenefitAmount anyAmount = condition.isApplied() ? BenefitAmount.confirmed(1_000) : ZERO;
 
@@ -51,7 +51,8 @@ class OrderServiceBenefitTest {
 	void allowedAndRejectedConditionsCoverEveryStatus() {
 		// 상태가 새로 추가되면 허용 여부를 명시적으로 정하도록 실패시킨다.
 		Set<ApplicationStatus> rejected = EnumSet.of(ApplicationStatus.APPLIED, ApplicationStatus.APPLIED_CAP_REMAINING,
-				ApplicationStatus.RULE_EXPIRED, ApplicationStatus.NO_VERIFIED_RULE, ApplicationStatus.NEEDS_CONFIRMATION);
+				ApplicationStatus.NO_CONTRIBUTION, ApplicationStatus.RULE_EXPIRED, ApplicationStatus.NO_VERIFIED_RULE,
+				ApplicationStatus.NEEDS_CONFIRMATION);
 
 		assertThat(ServiceCandidate.ALLOWED_UNMET_CONDITIONS).doesNotContainAnyElementsOf(rejected);
 		assertThat(ServiceCandidate.ALLOWED_UNMET_CONDITIONS.size() + rejected.size())

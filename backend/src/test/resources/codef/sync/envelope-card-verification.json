@@ -1,0 +1,5 @@
+{
+  "_fixture": {"synthetic": true, "basis": "공식 오류 목록 249행 CF-12108 카드소지확인 필요, 로그인!B25", "observed": false},
+  "result": {"code": "CF-12108", "transactionId": "SYN-TX-ENV-0007"},
+  "data": {}
+}

@@ -81,6 +81,25 @@ class RuleCatalogTest {
 	}
 
 	@Test
+	void cardIdsListsEveryCardWithAnyVersionInStringOrder() {
+		CardRuleVersion verified = rule("V1", between("2026-01-01", "2026-12-31"), VerificationStatus.VERIFIED, false);
+		CardRuleVersion expired = new CardRuleVersion(CardId.of("01914"), "OLD", between("2025-01-01", "2025-12-31"),
+				VerificationStatus.VERIFIED, false, SOURCES, RuleTestData.resolvedPolicy(), List.of(rateService("Great")),
+				List.of(bucket("Great")));
+		CardRuleVersion candidate = new CardRuleVersion(CardId.of("01664"), "DRAFT",
+				between("2026-01-01", "2026-12-31"), VerificationStatus.CANDIDATE, false, SOURCES,
+				RuleTestData.resolvedPolicy(), List.of(rateService("Great")), List.of(bucket("Great")));
+		CardRuleVersion secondOfSameCard = rule("V2", between("2027-01-01", "2027-12-31"), VerificationStatus.VERIFIED,
+				false);
+		RuleCatalog catalog = new RuleCatalog(List.of(verified, expired, candidate, secondOfSameCard));
+
+		assertThat(catalog.cardIds()).containsExactly(CardId.of("01664"), CardId.of("01914"), CardId.of("09174"));
+		assertThatThrownBy(() -> catalog.cardIds().add(CardId.of("09271")))
+			.isInstanceOf(UnsupportedOperationException.class);
+		assertThat(new RuleCatalog(List.of()).cardIds()).isEmpty();
+	}
+
+	@Test
 	void rejectsOverlappingSelectableVersionsAndDuplicateVersions() {
 		CardRuleVersion first = rule("V1", between("2026-01-01", "2026-10-15"), VerificationStatus.VERIFIED, false);
 		CardRuleVersion second = rule("V2", between("2026-10-15", "2026-12-31"), VerificationStatus.VERIFIED, false);

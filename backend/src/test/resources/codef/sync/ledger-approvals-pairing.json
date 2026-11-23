@@ -1,0 +1,26 @@
+{
+  "_fixture": {"synthetic": true, "basis": "참고 승인내역 취소건!C3:D9 I14(type1) I15(type2 승인건·취소건), 승인내역!H42 주석 B52. D-17 짝짓기 시나리오: 승인번호 공유·비공유, 짝 여럿, 부분취소 의심, 조회 기간 밖 원 승인, 다른 카드", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "SYN-TX-LPAIR-0001"},
+  "data": [
+    {"resUsedDate": "20261010", "resUsedTime": "101000", "resCardName": "SYN CARD A", "resUsedAmount": "10000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P01"},
+    {"resUsedDate": "20261012", "resUsedTime": "090000", "resCardName": "SYN CARD A", "resUsedAmount": "-10000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P01"},
+    {"resUsedDate": "20261010", "resUsedTime": "110000", "resCardName": "SYN CARD A", "resUsedAmount": "20000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P02"},
+    {"resUsedDate": "20261012", "resUsedTime": "091000", "resCardName": "SYN CARD A", "resUsedAmount": "-20000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P92"},
+    {"resUsedDate": "20261011", "resUsedTime": "100000", "resCardName": "SYN CARD A", "resUsedAmount": "30000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P03"},
+    {"resUsedDate": "20261011", "resUsedTime": "100500", "resCardName": "SYN CARD A", "resUsedAmount": "30000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P03"},
+    {"resUsedDate": "20261013", "resUsedTime": "090000", "resCardName": "SYN CARD A", "resUsedAmount": "-30000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P03"},
+    {"resUsedDate": "20261011", "resUsedTime": "110000", "resCardName": "SYN CARD A", "resUsedAmount": "15000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P04"},
+    {"resUsedDate": "20261013", "resUsedTime": "091000", "resCardName": "SYN CARD A", "resUsedAmount": "-5000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P04"},
+    {"resUsedDate": "20261001", "resUsedTime": "080000", "resCardName": "SYN CARD A", "resUsedAmount": "-7000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P05"},
+    {"resUsedDate": "20261014", "resUsedTime": "100000", "resCardName": "SYN CARD A", "resUsedAmount": "8000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "8000", "resApprovalNo": "SYN-APR-P06"},
+    {"resUsedDate": "20261014", "resUsedTime": "101000", "resCardName": "SYN CARD A", "resUsedAmount": "8000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "3000", "resApprovalNo": "SYN-APR-P07"},
+    {"resUsedDate": "20261014", "resUsedTime": "102000", "resCardName": "SYN CARD A", "resUsedAmount": "8000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "2", "resCancelAmount": "2000", "resApprovalNo": "SYN-APR-P08"},
+    {"resUsedDate": "20261014", "resUsedTime": "103000", "resCardName": "SYN CARD A", "resUsedAmount": "8000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "3", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P09"},
+    {"resUsedDate": "20261015", "resUsedTime": "100000", "resCardName": "SYN CARD A", "resUsedAmount": "9000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P10"},
+    {"resUsedDate": "20261016", "resUsedTime": "100000", "resCardName": "SYN CARD C|SYN ISSUER", "resUsedAmount": "-9000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P10"},
+    {"resUsedDate": "20261015", "resUsedTime": "110000", "resCardName": "SYN CARD A", "resUsedAmount": "4000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P11"},
+    {"resUsedDate": "20261016", "resUsedTime": "110000", "resCardName": "SYN CARD A", "resUsedAmount": "-6000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P11"},
+    {"resUsedDate": "20261017", "resUsedTime": "100000", "resCardName": "SYN CARD A", "resUsedAmount": "12", "resAccountCurrency": "USD", "resHomeForeignType": "2", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P12"},
+    {"resUsedDate": "20261017", "resUsedTime": "110000", "resCardName": "SYN CARD A", "resUsedAmount": "-5000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-P13"}
+  ]
+}

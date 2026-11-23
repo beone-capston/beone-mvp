@@ -16,7 +16,19 @@ android {
     }
 
     buildTypes {
+        debug {
+            // 개발 서버 주소. 기기에서는 `adb reverse tcp:5173 tcp:5173`으로 연결한다.
+            val devServerOverride = providers.gradleProperty("beone.devServerUrl")
+            val devServerUrl = devServerOverride.getOrElse("http://localhost:5173/")
+            // 주소를 바꾼 빌드인지 테스트가 구분할 수 있게 둔다.
+            buildConfigField("boolean", "DEV_SERVER_OVERRIDDEN", devServerOverride.isPresent.toString())
+            val escapedUrl = devServerUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+            buildConfigField("String", "WEB_START_URL", "\"$escapedUrl\"")
+        }
         release {
+            // D-25·브리지 계약 v1(2026-11-16 사용자 결정): 서버 HTTPS 화면을 연다.
+            // 탐색·브리지 신뢰 origin은 이 주소의 origin `https://beonepay.site` 하나다. www·HTTP·와일드카드는 넣지 않는다.
+            buildConfigField("String", "WEB_START_URL", "\"https://beonepay.site/\"")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -33,10 +45,21 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    testOptions {
+        unitTests.all { test ->
+            // 요청한 개발 서버 주소를 BuildConfig와 다른 경로로 테스트에 전달한다.
+            providers.gradleProperty("beone.devServerUrl").orNull?.let { requested ->
+                test.systemProperty("beone.test.requestedDevServerUrl", requested)
+            }
+        }
+    }
 }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.biometric)
+    implementation(libs.androidx.webkit)
     testImplementation(libs.junit)
 }

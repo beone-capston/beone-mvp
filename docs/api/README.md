@@ -3,9 +3,10 @@
 BeONE 업무 API의 구현 기준 명세입니다. 공통 규약은 [`docs/api.md`](../api.md#업무-api-공통-규약)에 있고, 이 폴더에는 기능 묶음별 개별 API를 적습니다.
 
 - **상태:** 설계 확정 전 명세이며 **모두 구현 전**입니다. 동작하는 업무 API는 아직 없습니다. OpenAPI 문서는 구현할 때 코드에서 만듭니다.
-- **기준:** [결정 기록](../decisions.md)의 D-09·D-12~D-18과 `backend`의 `benefit` 도메인 모델입니다. 문서와 코드가 다르면 이 폴더를 임의로 맞추지 말고 충돌을 알립니다.
+- **기준:** [결정 기록](../decisions.md)의 D-09·D-12~D-19·D-22·D-23과 `backend`의 `benefit` 도메인 모델입니다. 문서와 코드가 다르면 이 폴더를 임의로 맞추지 말고 충돌을 알립니다.
 - **예시 JSON:** 합성 값입니다. 실제 API 실행, 약관 검증, CODEF 응답 관측의 결과가 아닙니다.
-- **규칙 데이터:** 2026-11-03 기준 `VERIFIED` 규칙 데이터가 저장소에 없습니다. 이 상태에서 추천은 모든 카드가 `RULE_UNAVAILABLE`인 `NOT_DETERMINED`입니다.
+- **규칙 데이터:** 4종 규칙은 `backend/src/main/resources/rules/`에 `VERIFIED` 상태로 있고 서버 시작 때 `RuleCatalog`로 읽습니다. 공식 SKU·약관 버전 일치는 D-01 미결입니다.
+- **엔진 입구:** 업무 코드는 `com.beone.api.benefit.engine`만 씁니다(D-22). 입구 타입(#71)과 계산 연결(#81)이 `develop`에 구현돼 있습니다. 이 엔진을 부르는 업무 API는 구현 전입니다. 업무 API가 엔진에 넘기는 값 중 HTTP 요청으로 받지 않는 `policyEvidence`는 [추천](recommendations.md#엔진-입력-중-요청으로-받지-않는-값)에 적었습니다.
 
 ## API 목록 (28개: 1차 23개, 2차 초안 5개)
 
@@ -42,6 +43,8 @@ BeONE 업무 API의 구현 기준 명세입니다. 공통 규약은 [`docs/api.m
 | 2차 | POST | `/api/v1/me/codef/syncs` | CODEF 조회·동기화 | [codef](codef.md) |
 | 2차 | PUT | `/api/v1/me/cards/{userCardId}/monthly-states/{month}/source-selections` | 출처 충돌 계산 기준 선택 | [monthly-states](monthly-states.md) |
 
+회원 인증 API 9개(`/api/v1/auth/*`, D-24)는 [auth](auth.md)에 있습니다. 출처는 저장소 밖 Notion 인증 명세의 고정 사본이며, `GET /api/v1/auth/csrf`만 구현됐습니다(#124, `local`·`demo` 전용).
+
 ## 확인 상태 값
 
 D-14가 명세 단계로 넘긴 값 목록입니다. 2026-11-03 사용자 지시로 정했습니다. "제안"은 아직 확인받지 않은 값입니다.
@@ -49,7 +52,7 @@ D-14가 명세 단계로 넘긴 값 목록입니다. 2026-11-03 사용자 지시
 | 대상 | 값 | 근거 |
 | --- | --- | --- |
 | 매핑 상태 | `UNMAPPED`·`CANDIDATE`·`USER_CONFIRMED`·`NOT_SUPPORTED`. 가상 포트폴리오 카드는 매핑 대상이 아니므로 `mapping=null` | D-15 |
-| 상태값 사유 | `NOT_ENTERED`·`PERIOD_MISMATCH`·`SOURCE_CONFLICT`·`NEGATIVE_UNCONFIRMED_ATTRIBUTION` | D-16·D-17 |
+| 상태값 사유 | `NOT_ENTERED`·`SOURCE_CONFLICT`·`NEGATIVE_UNCONFIRMED_ATTRIBUTION`. 기준 기간 불일치는 엔진이 계산 때 판단해 추천의 `확인 필요`로 나타낸다(D-22) | D-16·D-17·D-22 |
 | 추천 제외 사유 | `RULE_UNAVAILABLE` > `MAPPING_UNCONFIRMED` > `NEEDS_CONFIRMATION` > `UNSUPPORTED`, `NO_SUPPORTED_RULE`. `USER_EXCLUDED`는 K3 순서 밖이며 "사용자 제외"로 따로 표시 | D-15, D-18 K3, D-19 |
 | 비교 카드 0원 사유 | `CONFIRMED_NOT_MET`(K3 순서의 마지막) | D-18 K3 |
 | 서비스 지원 범위 | `SUPPORTED`·`SUPPORTED_SINGLE_MONTHLY_LIMIT`(통합 한도와 매입 순서 명시 카드 포함)·`UNSUPPORTED_LIMIT_PERIOD`·`UNSUPPORTED_SELECTION_RULE` | D-18 K1 |
@@ -63,13 +66,8 @@ D-14가 명세 단계로 넘긴 값 목록입니다. 2026-11-03 사용자 지시
 
 ## 명세 단계 미정
 
-- **가상 포트폴리오의 표시 이름·추천 제외 변경:** D-19는 보유 카드 추가·삭제만 시드로 고정했습니다. 이 변경은 결정 기록에 없고, 현재 명세는 `PORTFOLIO_READ_ONLY`로 둡니다.
-- **모의 승인 실패:** PRD FR-07의 내부 테스트 실패(`FAILED`)를 일으키는 조건.
-- **판정일:** `decisionDate`를 주문일로 쓸지([진행 기록](../progress/backend/README.md) 사용자 확인 7번).
-- **같은 상품 두 장 보유:** 현재 제안은 중복 거부입니다.
-- **`merchantClass` 전체 목록:** 규칙 데이터와 함께 정합니다.
-- **무효화된 추천으로 승인:** 현재 제안은 차이만 표시입니다.
-- **D-07:** 추천 2초 목표의 측정 환경.
+2026-11-04 표시 이름·추천 제외, `FAILED` 조건, 판정일, 같은 상품 두 장, `merchantClass` 목록, 무효가 된 추천의 승인, D-07을 [D-22](../decisions.md#d-22-확정-정책)·[D-23](../decisions.md#d-23-확정-정책)으로 정했습니다.
+
 - **2차 CODEF:** 전송 계약, 결과 코드와 오류 코드 대응, 중복 판단 키, 승인번호 공유 여부, 연결 해제 시 조회 데이터 보존·삭제.
 
 ## 기존 초안 대조 (D-14 후속)

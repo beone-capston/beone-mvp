@@ -1,0 +1,11 @@
+{
+  "_fixture": {"synthetic": true, "use": "local·demo 가짜 게이트웨이 전용. {{USED_DATE}}는 요청 시작일(yyyyMMdd)로 바꾼다. 승인번호는 실제 형식을 따르지 않은 합성 값", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "FAKE-TX-APPROVALS"},
+  "data": [
+    {"resUsedDate": "{{USED_DATE}}", "resUsedTime": "101500", "resCardName": "가짜KB 테스트카드 A", "resUsedAmount": "12000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "FAKE-APR-0001"},
+    {"resUsedDate": "{{USED_DATE}}", "resUsedTime": "120000", "resCardName": "가짜KB 테스트카드 B", "resUsedAmount": "30000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "FAKE-APR-0002"},
+    {"resUsedDate": "{{USED_DATE}}", "resUsedTime": "130000", "resCardName": "가짜KB 테스트카드 B", "resUsedAmount": "-30000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "", "resApprovalNo": "FAKE-APR-0002"},
+    {"resUsedDate": "{{USED_DATE}}", "resUsedTime": "140000", "resCardName": "가짜KB 테스트카드 A", "resUsedAmount": "5000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "2", "resCancelAmount": "", "resApprovalNo": "FAKE-APR-0003"},
+    {"resUsedDate": "{{USED_DATE}}", "resUsedTime": "150000", "resCardName": "가짜KB 테스트카드 이름이 서른 글자를 넘도록 길게 지은 합성 카드", "resUsedAmount": "8000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "FAKE-APR-0004"}
+  ]
+}

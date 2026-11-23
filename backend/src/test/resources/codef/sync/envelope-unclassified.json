@@ -1,0 +1,5 @@
+{
+  "_fixture": {"synthetic": true, "basis": "공식 오류 목록 340행 CF-12872(분류 표 밖, 미분류 유지)", "observed": false},
+  "result": {"code": "CF-12872", "transactionId": "SYN-TX-ENV-0008"},
+  "data": {}
+}
