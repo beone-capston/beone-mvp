@@ -1,0 +1,68 @@
+# #157 회원 세션으로 업무 사용자 결정과 /me·내 카드 연결 (G2 첫 수직 기능)
+
+브랜치 `feat/157-member-session-mycards`, 시작 기준 `origin/develop` `4b18396`(PR #142 병합).
+
+## 2026-11-24 · `user`·`auth`·`card` 변경, Flyway `V14` · PR(`develop` 대상, 병합 전)
+
+- 근거: 결정 37(2026-11-24 사용자 직접 선택, G1 1·2회차 답변 D1a·D2·D3·D4·D5·D6·D7·O2-L), [D-09](../../decisions.md#d-09d-14-확정-정책)(현재 사용자 결정 지점 한 곳, `user_id` 분리), [D-24](../../decisions.md#d-24-확정-정책)(쿠키·7일·30일·5개), D-23(남의 자원 404). 기록은 [결정 37](../../decisions.md#결정-37-회원과-업무-장부-연결)에 옮겼습니다.
+- 관리자 판단 3개(결정 28 범위의 구현 세부, G1 패키지 권장 그대로)
+  - 회원용 `users` 행은 이메일 인증 완료와 같은 트랜잭션에서 만듭니다. 이미 인증된 회원은 `V14`가 백필합니다.
+  - `users.member_id → members` FK는 RESTRICT입니다.
+  - 새 프로필 이름은 `member`입니다.
+- 한 일
+  - Flyway `V14__member_users.sql`
+    - `users.demo_user`를 NULL 허용으로 바꿨습니다. UNIQUE는 유지합니다.
+    - `users.member_id VARCHAR(36)`(NULL, UNIQUE, FK `members` RESTRICT)를 더했습니다.
+    - `CHECK ((demo_user IS NULL) <> (member_id IS NULL))`를 더했습니다.
+    - 인증된 회원은 '내 카드'·REAL·쓰기 가능으로 백필합니다. 시연 2행과 업무 FK 11개는 그대로입니다.
+  - `CurrentUser`
+    - `(userId, demoUser nullable, portfolioType, readOnly)`로 바꿨습니다.
+    - 시연 사용자용 2인자 생성자를 남겨 기존 테스트가 그대로 동작합니다.
+    - 읽기 전용 판단 3곳(`UserCardService`, `CodefConnectionService`, `CodefSyncService`)을 `readOnly()` 기준으로 바꿨습니다. local·demo의 외부 동작은 바뀌지 않습니다(기존 테스트 전부 통과).
+  - `user`
+    - `UserProfileService`: `/me` 표시 정보를 DB 행에서 읽습니다. `UserCardService`가 `DemoUserService` 대신 씁니다.
+    - `MemberUserService`: 회원 장부를 조회하고, `MemberEmailVerifiedEvent`를 받아 장부를 만듭니다. `MANDATORY` 트랜잭션입니다.
+    - `MemberCurrentUserResolver`·`MemberUserWebConfiguration`: `member` 프로필 전용입니다.
+    - `CurrentUserModeGuard`: `member`와 `local`·`demo`를 함께 켜면 기동에 실패합니다. `BeanFactoryPostProcessor`입니다.
+    - `DemoUserService.listDemoUsers`는 시연 행만 읽습니다.
+  - `auth`
+    - `MemberRegistrationService.verifyEmail`이 같은 트랜잭션에서 이벤트를 발행합니다.
+    - `AuthSessionService.checkMemberRequest`: 401 → 쓰기 CSRF 403 → 통과 시 미사용 7일 연장(30일 상한)을 한 트랜잭션에서 합니다. CSRF가 실패하면 갱신하지 않습니다.
+    - `MemberApiInterceptor`·`MemberApiWebConfiguration`: `/api/v1/me`, `/api/v1/me/**`에서 컨트롤러가 있는 경로만 검사하고 쿠키를 재발급합니다.
+    - `MemberApiExceptionHandler`: 401·403을 인증 API와 같은 본문으로 냅니다.
+    - `AuthenticatedMember`: 회원 ID를 요청 속성으로 넘깁니다.
+    - 인증 부품 15개에 `member` 프로필을 더했습니다. 가짜 메일 발송기도 포함합니다.
+  - `card`
+    - `CurrentUserController`·`UserCardController`에 `member` 프로필을 더했습니다.
+    - `/me` 응답의 `demoUser`는 회원이면 `null`입니다(형태 유지, D7).
+  - `member`에 등록하지 않은 것: 주문·예정 소비·추천·모의 승인·월간 상태·결제 설정·원장·CODEF·시연 사용자 목록·CORS. 로그인 여부와 관계없이 404입니다(D9 미결).
+- 테스트
+  - 단위
+    - `CurrentUserTest`(3)
+    - `MemberUserServiceTest`(3)
+    - `CurrentUserModeGuardTest`(8)
+    - `AuthSessionServiceTest` 추가 4
+    - `UserCardServiceTest` 추가 1
+  - 웹 슬라이스: `DemoUserApiWebTest` 2건의 프로브 기대값에 `CurrentUser` 새 필드를 반영했습니다. 테스트 전용 경로이며 공개 응답은 그대로입니다.
+  - 통합
+    - `MemberProfileIntegrationTest`(8, `member` 프로필)
+      - 가입 → 인증 → 로그인 → `/me`
+      - A·B 격리와 남의 카드 404
+      - 시연 헤더 무시와 시연 포트폴리오 접근 불가
+      - 미인증·익명·만료·로그아웃 401
+      - 7일 연장·30일 상한·쿠키 재발급
+      - CSRF 403·미저장과 401 → 403 → 400 → 404 순서
+      - 동시 6번째 로그인
+      - 미등록 경로 404
+    - `MemberUsersMigrationIntegrationTest`(2): 별도 스키마에 V13 적용 → 회원 → V14 순서로 백필을 확인하고, CHECK·UNIQUE·FK·RESTRICT를 확인합니다.
+    - `MemberRegistrationIntegrationTest` 추가 단언: 인증 완료 때 장부를 만듭니다.
+    - auth 통합 테스트 3개의 정리 순서: RESTRICT 때문에 회원 장부를 먼저 지웁니다.
+- 검증 결과와 메모리 관측: PR 본문에 적습니다. `member` 프로필 통합 컨텍스트가 1개 늘었습니다. 컨텍스트 캐시 상한 4(#143)는 그대로입니다.
+- 남은 것
+  - 프런트 Vite 프록시: 팀원 조율 대기(N-FE-PROXY, D-23 11항 변경 기록만 함)
+  - 회원용 가상 포트폴리오(D1b, G3 이후)
+  - `member`에 열 나머지 업무 API(D9)
+  - 공개 프로필 구성(O1~O3)
+  - 탈퇴·보존(D10)
+  - D8
+  - D3의 DB 갱신 빈도 제한: 이번에는 하지 않았습니다. 업무 요청마다 갱신합니다.
