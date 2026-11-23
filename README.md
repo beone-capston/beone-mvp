@@ -88,13 +88,14 @@ cd android
 ./gradlew installDebug
 ```
 
+debug 앱은 개발 서버 `http://localhost:5173/`을 엽니다. 실기기에서는 프런트엔드 개발 서버를 켠 뒤 `adb reverse tcp:5173 tcp:5173`으로 연결합니다. 주소는 `./gradlew installDebug -Pbeone.devServerUrl=<주소>`로 바꿀 수 있습니다. debug에서 평문 HTTP는 `localhost`·`127.0.0.1`·`10.0.2.2`에만 허용되므로, 그 밖의 주소는 기기가 신뢰하는 시스템 인증서의 HTTPS여야 합니다. 실기기에서는 LAN 주소 대신 `adb reverse`를 쓸 수 있습니다. release 앱은 `https://beonepay.site/`를 열고, 탐색과 브리지(`window.BeoneBridge`)의 신뢰 origin은 `https://beonepay.site` 하나입니다. release 앱의 실기기 확인은 아직 하지 않았습니다([`docs/android/webview-shell.md`](docs/android/webview-shell.md)).
+
 ## 프론트엔드 메인화면
 
 - 내 카드 모드는 등록 카드가 없는 초기 화면이며, 가상 포트폴리오 모드에서는 시연용 카드 4종을 예시로 표시합니다. 모드 선택은 현재 화면에서만 유지됩니다.
 - 카드 등록·월간 상태 확인·가상 주문 버튼은 준비 중 안내를 제공합니다. 실제 API 연결, 혜택 계산, Android 인증은 아직 연결하지 않았습니다.
 - 네이비·민트 브랜드 색상과 제공된 로고 이미지(`frontend/public/beone-brand.png`)를 사용하며, 모든 화면에서 최대 480px 너비의 세로 앱 레이아웃과 하단 메뉴를 제공합니다. Android WebView의 안전 영역 여백을 반영합니다.
 - 실행은 `frontend/`에서 `npm run dev` 후 터미널에 표시된 주소로 접속합니다.
-debug 앱은 개발 서버 `http://localhost:5173/`을 엽니다. 실기기에서는 프런트엔드 개발 서버를 켠 뒤 `adb reverse tcp:5173 tcp:5173`으로 연결합니다. 주소는 `./gradlew installDebug -Pbeone.devServerUrl=<주소>`로 바꿀 수 있습니다. debug에서 평문 HTTP는 `localhost`·`127.0.0.1`·`10.0.2.2`에만 허용되므로, 그 밖의 주소는 기기가 신뢰하는 시스템 인증서의 HTTPS여야 합니다. 실기기에서는 LAN 주소 대신 `adb reverse`를 쓸 수 있습니다. release 앱은 `https://beonepay.site/`를 열고, 탐색과 브리지(`window.BeoneBridge`)의 신뢰 origin은 `https://beonepay.site` 하나입니다. release 앱의 실기기 확인은 아직 하지 않았습니다([`docs/android/webview-shell.md`](docs/android/webview-shell.md)).
 
 ## 빌드·테스트
 
