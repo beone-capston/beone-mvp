@@ -14,12 +14,12 @@ import com.beone.api.benefit.money.Won;
  * <p>
  * 기존 {@link ServiceBenefit}과 다른 타입이다. 후보에는 적용 상태({@code APPLIED} 계열)를 붙이지 않는다.
  *
+ * @param serviceId 서비스 식별자
  * @param standaloneAmount 이 서비스만 고를 때의 금액으로 한도 적용 전 값이다. 원 미만 처리 방식 등 근거가 없으면 확인 필요로 둔다
  * @param unmetConditions 확인된 미충족 사유. 순서는 계약이 아니다(사유 우선순위는 미결)
  * @param remainingLimit 양수 후보를 줄일 남은 한도(D-18 K1). 한도가 없거나 금액이 0원이면 비어 있다
  * @param limitReason 한도 입력 때문에 판정하지 못한 사유. 있으면 금액은 확인 필요다
  * @param fractionalWonTruncated 금액을 계산하며 원 미만을 버렸으면 참(D-03)
- * @param serviceId 서비스 식별자
  */
 public record ServiceCandidate(ServiceId serviceId, BenefitAmount standaloneAmount,
 		Set<ApplicationStatus> unmetConditions, Optional<Won> remainingLimit, Optional<LimitReason> limitReason,

@@ -138,10 +138,10 @@ public class SimulatedPaymentService {
 
 	/**
 	 * 주문을 다시 계산해 모의 승인한다. {@code simulateFailure}면 실패 기록만 남긴다(201, D-23-4).
-	 * @param idempotencyKey 비어 있지 않은 Idempotency-Key
 	 * @param user 현재 사용자
 	 * @param orderId 외부 주문 ID
 	 * @param command 승인 요청 입력
+	 * @param idempotencyKey 비어 있지 않은 Idempotency-Key
 	 * @return 승인 응답 문서
 	 * @throws com.beone.api.order.application.OrderNotFoundException 없거나 다른 사용자의 주문
 	 * @throws IdempotencyKeyReusedException 같은 키·다른 지문
@@ -229,10 +229,10 @@ public class SimulatedPaymentService {
 
 	/**
 	 * 모의 승인을 전액 또는 부분 취소한다. 원장에는 항상 취소 행을 남기고, 영향은 확정 규칙이 있는 값만 확정한다(D-17).
-	 * @param amountWon 1 이상 취소 금액
-	 * @param idempotencyKey 비어 있지 않은 Idempotency-Key
 	 * @param user 현재 사용자
 	 * @param simulatedPaymentId 외부 결제 ID
+	 * @param amountWon 1 이상 취소 금액
+	 * @param idempotencyKey 비어 있지 않은 Idempotency-Key
 	 * @return 취소 응답 문서
 	 * @throws SimulatedPaymentNotFoundException 없거나 다른 사용자의 결제
 	 * @throws IdempotencyKeyReusedException 같은 키·다른 지문

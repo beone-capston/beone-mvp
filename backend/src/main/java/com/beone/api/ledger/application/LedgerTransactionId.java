@@ -17,7 +17,7 @@ public final class LedgerTransactionId {
 
 	/**
 	 * DB 번호를 외부 ID로 쓴다.
-	 * @param id DB 번호
+	 * @param id 양수 DB 번호
 	 * @return 외부 거래 ID
 	 */
 	public static String format(long id) {

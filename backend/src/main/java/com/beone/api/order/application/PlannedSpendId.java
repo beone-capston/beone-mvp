@@ -12,7 +12,7 @@ public final class PlannedSpendId {
 
 	/**
 	 * 저장소 번호를 외부 표현으로 바꾼다.
-	 * @param id 저장소 번호
+	 * @param id 양수 저장소 번호
 	 * @return 외부 예정 소비 ID
 	 */
 	public static String format(long id) {

@@ -53,10 +53,10 @@ public record Ledger(LedgerSource source, List<LedgerTransaction> transactions, 
 	 * <li>그 밖에는 {@code CONFIRMED_ABSENT}</li>
 	 * </ol>
 	 *
-	 * @param asOf 결과에 영향을 줄 수 있는 마지막 날짜. 실적 기간 종료일보다 앞설 수 없다
 	 * @param cardId 카드 상품 식별자
 	 * @param window 실적 기간
-	 * @return 취소 발생 근거
+	 * @param asOf 결과에 영향을 줄 수 있는 마지막 날짜. 실적 기간 종료일보다 앞설 수 없다
+	 * @return 취소가 실적 기간에 영향을 주는지에 대한 근거({@code PRESENT}·{@code CONFIRMED_ABSENT}·{@code UNDETERMINED})
 	 */
 	public TriggerEvidence cancellationEvidence(CardId cardId, BasisPeriod window, LocalDate asOf) {
 		Objects.requireNonNull(cardId, "cardId");

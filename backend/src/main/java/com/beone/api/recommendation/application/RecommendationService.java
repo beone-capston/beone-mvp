@@ -208,8 +208,8 @@ public class RecommendationService {
 
 	/**
 	 * 저장한 추천 하나의 지금 무효화 사유. {@link #get}과 같은 지연 판정이다. 보유 카드 변경 응답의 무효화 목록에 쓴다(#120).
-	 * @param recommendationId 저장소 추천 번호
 	 * @param user 현재 사용자
+	 * @param recommendationId 저장소 추천 번호
 	 * @return 무효화 사유. 유효하거나 이 사용자의 추천이 아니면 비어 있다
 	 */
 	@Transactional(readOnly = true)

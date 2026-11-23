@@ -9,10 +9,10 @@ import com.beone.api.benefit.card.ServiceId;
 /**
  * 후보 금액을 확정하지 못한 서비스. 0원 후보가 아니다(D-05).
  *
+ * @param serviceId 서비스 식별자
  * @param stage 확인 필요로 둔 단계
  * @param reasons 확인 필요 사유. 앞 단계가 준 문구를 바꾸지 않고 담는다
  * @param limitReason 한도 입력 때문에 판정하지 못한 사유(D-18 K1)
- * @param serviceId 서비스 식별자
  */
 public record ServiceNeedingConfirmation(ServiceId serviceId, ConfirmationStage stage, List<String> reasons,
 		Optional<LimitReason> limitReason) {

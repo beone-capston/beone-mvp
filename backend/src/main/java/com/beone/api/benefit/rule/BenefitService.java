@@ -81,7 +81,7 @@ public record BenefitService(ServiceId id, BenefitKind kind, MerchantTarget targ
 	 * @param excludedClasses 혜택에서 제외하는 업종
 	 * @param paymentMethods 대상 결제 방식
 	 * @param minimumAmount 건당 최소 금액
-	 * @param maximumTargetAmount 건당 할인 대상 금액 상한
+	 * @param maximumTargetAmount 건당 할인 대상 금액 상한. 없으면 빈 값
 	 * @param tiers 전월 실적 구간별 계산 방식
 	 * @param limitBuckets 혜택이 차감하는 한도
 	 * @param requiresSelection 선택형 서비스면 참

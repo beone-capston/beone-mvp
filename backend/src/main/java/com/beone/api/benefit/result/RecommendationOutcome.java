@@ -16,12 +16,12 @@ public sealed interface RecommendationOutcome {
 	/**
 	 * 카드를 선택한 결과.
 	 *
+	 * @param card 선택한 카드
 	 * @param basis 선택을 결정한 D-12 단계. 비교한 카드가 한 장이면 비어 있다
 	 * @param tiedCards 모든 혜택 단계에서 같은 카드들. 임의 규칙 단계로 정해졌을 때만 적는다(D-12)
 	 * @param marginOverRunnerUp 차선 카드와의 월간 혜택 차이. 확정된 경우에만 있다
 	 * @param conditional 미확인 상태 때문에 선택이 바뀔 수 있으면 참. 이때는 확정 최적 추천으로 표시하지 않는다(PRD FR-05, D-03).
 	 * 바뀔 수 있는지는 계산 단계가 판단하고 모델은 값만 보관한다.
-	 * @param card 선택한 카드
 	 */
 	record Selected(CardId card, Optional<SelectionBasis> basis, List<CardId> tiedCards,
 			Optional<Won> marginOverRunnerUp, boolean conditional) implements RecommendationOutcome {

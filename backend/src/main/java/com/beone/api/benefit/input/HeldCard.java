@@ -10,9 +10,9 @@ import com.beone.api.benefit.state.StateValue;
 /**
  * 포트폴리오의 보유 카드. {@code holdingSource}로 가상 카드와 실제 카드를 구분한다(PRD §3, D-04).
  *
- * @param registeredAt 카드 등록일. 신규 유예 판정에 쓴다
  * @param cardId 카드 상품 식별자
  * @param holdingSource 보유 출처(가상·실제 구분)
+ * @param registeredAt 카드 등록일. 신규 유예 판정에 쓴다
  */
 public record HeldCard(CardId cardId, StateSource holdingSource, StateValue<LocalDate> registeredAt) {
 

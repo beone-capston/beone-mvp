@@ -80,9 +80,9 @@ public class UserCardEntity {
 	 * @param userId 소유 사용자 ID
 	 * @param displayName 표시 이름
 	 * @param mappingStatus 매핑 상태
-	 * @param cardProductId 카드 상품 ID. 받은 값을 그대로 저장한다
-	 * @param confirmationMethod 확인 방법
-	 * @param confirmedAt 확인 시각
+	 * @param cardProductId 카드 상품 ID. {@code USER_CONFIRMED}가 아니면 호출자가 {@code null}을 넘긴다(이 메서드는 검사하지 않고 그대로 저장한다)
+	 * @param confirmationMethod 확인 방법. {@code UNMAPPED}이면 호출자가 {@code null}을 넘긴다
+	 * @param confirmedAt 확인 시각. {@code UNMAPPED}이면 호출자가 {@code null}을 넘긴다
 	 * @param registeredAt 등록 시각
 	 * @return 저장 전 수동 등록 카드
 	 */
@@ -124,9 +124,9 @@ public class UserCardEntity {
 	/**
 	 * 매핑을 바꾼다. 상품 ID는 {@code USER_CONFIRMED}일 때만 둔다.
 	 * @param mappingStatus 새 매핑 상태
-	 * @param cardProductId 카드 상품 ID. 받은 값을 그대로 저장한다
-	 * @param confirmationMethod 확인 방법
-	 * @param confirmedAt 확인 시각
+	 * @param cardProductId 카드 상품 ID. {@code USER_CONFIRMED}가 아니면 호출자가 {@code null}을 넘긴다(이 메서드는 검사하지 않고 그대로 저장한다)
+	 * @param confirmationMethod 확인 방법. {@code UNMAPPED}이면 호출자가 {@code null}을 넘긴다
+	 * @param confirmedAt 확인 시각. {@code UNMAPPED}이면 호출자가 {@code null}을 넘긴다
 	 */
 	public void changeMapping(MappingStatus mappingStatus, String cardProductId,
 			ConfirmationMethod confirmationMethod, LocalDateTime confirmedAt) {

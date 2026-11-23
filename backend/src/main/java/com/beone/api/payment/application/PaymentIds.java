@@ -26,7 +26,7 @@ public enum PaymentIds {
 
 	/**
 	 * DB 번호를 외부 ID로 쓴다.
-	 * @param id DB 번호
+	 * @param id 양수 DB 번호
 	 * @return 외부 ID
 	 */
 	public String format(long id) {

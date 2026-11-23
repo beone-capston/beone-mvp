@@ -91,9 +91,9 @@ public class OrderService {
 
 	/**
 	 * 잠근 주문을 {@code PAID}로 바꾸고 결제 ID를 연결한다. {@link #lockForPayment}와 같은 트랜잭션에서 부른다.
-	 * @param simulatedPaymentId 승인한 결제의 외부 ID
 	 * @param user 현재 사용자
 	 * @param orderId 외부 주문 ID
+	 * @param simulatedPaymentId 승인한 결제의 외부 ID
 	 * @throws IllegalStateException 주문이 {@code CREATED}가 아닐 때
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
