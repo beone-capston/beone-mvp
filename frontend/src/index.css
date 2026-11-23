@@ -54,6 +54,21 @@ p {
   overflow-x: clip;
 }
 
+/* 남은 화면 높이를 본문에 할당하고 하단 메뉴 공간 확보 */
+.wallet-app > main {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 빠른결제 배치
+   소개 / 안내 배너 / 카드 제목 / 카드와 부가서비스 /
+   순서 점 / 카드 이름 / 남은 여백 / 모의 결제 안내 */
+.quick-payment {
+  height: 100%;
+  display: grid;
+  grid-template-rows: 42px 64px 28px auto 24px 25px minmax(0, 1fr) 25px;
+}
+
 /* 상단 로고 · 카드 추가 · 마이페이지 */
 .wallet-header {
   display: flex;
@@ -137,8 +152,12 @@ p {
   margin-bottom: 9px;
 }
 
+.wallet-intro .eyebrow {
+  display: none;
+}
+
 .wallet-intro h1 {
-  font-size: 22px;
+  font-size: 19px;
   letter-spacing: -1px;
   font-weight: 750;
 }
@@ -203,6 +222,7 @@ p {
 
 /* 카드 슬라이드: 카드 크기, 좌우 간격, 위아래 여백 */
 .card-carousel {
+  /* 카드 최대 너비 285px, 카드 사이 간격 16px */
   --card-width: min(78vw, 285px);
   display: flex;
   align-items: center;
@@ -210,6 +230,7 @@ p {
   min-height: 0;
   overflow-x: auto;
   overflow-y: hidden;
+  /* 위 여백 4px / 좌우 중앙 정렬 / 아래 여백 6px */
   padding: 4px calc((100% - var(--card-width)) / 2) 6px;
   scroll-snap-type: x mandatory;
   scroll-padding-inline: calc((100% - var(--card-width)) / 2);
@@ -378,6 +399,25 @@ p {
 
 .card-footline strong span {
   color: #9bd1b8;
+}
+
+/* 각 카드 아래에 붙는 부가서비스 버튼 */
+.card-services {
+  width: calc(100% - 12px);
+  min-height: 44px;
+  margin-top: -8px;
+  padding: 17px 12px 11px;
+  border: 1px solid #e5e9ed;
+  border-radius: 0 0 20px 20px;
+  background: #fff;
+  box-shadow: 0 9px 12px -8px #20384b33;
+  color: #62736f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.card-services:hover {
+  background: #edf4ef;
 }
 
 /* 카드 아래 순서 표시 점 */
@@ -585,29 +625,37 @@ p {
   .wallet-header {
     padding-inline: 17px;
   }
+
   .wallet-intro {
     margin-inline: 20px;
   }
+
   .wallet-intro h1 {
     font-size: 19px;
   }
+
   .tip-banner {
     margin-inline: 17px;
     padding: 14px 12px;
     gap: 9px;
   }
+
   .tip-banner p {
     font-size: 12px;
   }
+
   .tip-banner small {
     font-size: 9px;
   }
+
   .payment-card {
     padding: 17px;
   }
+
   .payment-card h3 {
     font-size: 12px;
   }
+
   .card-topline {
     font-size: 10px;
   }
@@ -622,91 +670,60 @@ p {
   }
 }
 
-
-/* Reserve space for navigation; distribute the remaining viewport to the wallet. */
-.wallet-app > main {
-  flex: 1;
-  min-height: 0;
-}
-
-/* 빠른결제 세로 배치: 각 영역의 높이 조정 */
-.quick-payment {
-  height: 100%;
-  display: grid;
-  grid-template-rows: 42px 64px 28px auto 24px 25px minmax(0, 1fr) 25px;
-}
-
-.wallet-intro .eyebrow {
-  display: none;
-}
-
-.wallet-intro h1 {
-  font-size: 19px;
-}
-
 /* 높이 700px 이하 화면의 간격과 카드 내부 크기 */
 @media (max-height: 700px) {
   .wallet-header {
     flex-basis: 60px;
   }
+
   .quick-payment {
     grid-template-rows: 35px 56px 24px auto 24px 25px minmax(0, 1fr) 22px;
   }
+
   .tip-banner {
     padding-block: 7px;
   }
+
   .tip-banner small {
     margin-top: 2px;
     font-size: 9px;
   }
+
   .tip-icon {
     width: 32px;
     height: 34px;
   }
+
   .bottom-nav {
     margin-block: 7px 10px;
   }
+
   .payment-card {
     padding: 14px 16px;
   }
+
   .card-topline {
     font-size: 10px;
   }
+
   .payment-card h3 {
     font-size: 12px;
     margin-top: 4px;
   }
+
   .chip {
     width: 27px;
     height: 22px;
     left: 17px;
   }
+
   .card-footline {
     bottom: 12px;
     left: 16px;
     right: 16px;
   }
+
   .card-footline strong {
     font-size: 16px;
   }
-}
-
-
-/* 각 카드 아래에 붙는 부가서비스 버튼 */
-.card-services {
-  width: calc(100% - 12px);
-  min-height: 44px;
-  margin-top: -8px;
-  padding: 17px 12px 11px;
-  border: 1px solid #e5e9ed;
-  border-radius: 0 0 20px 20px;
-  background: #fff;
-  box-shadow: 0 9px 12px -8px #20384b33;
-  color: #62736f;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.card-services:hover {
-  background: #edf4ef;
 }
