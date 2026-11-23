@@ -57,7 +57,7 @@ function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
           onClick={() => selectMenu('빠른결제')}
         >
           <span className="brand-symbol">
-            <img src="/beone-brand.png" alt="" />
+            <img src="/beone-logo-blue.png" alt="" />
           </span>
           <span>
             B<span className="brand-colon">:</span>ONE

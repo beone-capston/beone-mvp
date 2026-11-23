@@ -20,12 +20,18 @@ export function Icon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={name === 'more' ? 3.5 : 1.5}
+      strokeWidth={name === 'more' ? 1 : 1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d={paths[name]} />
+      {name === 'more' ? (
+        [5, 12, 19].map((cy) => (
+          <circle key={cy} cx="12" cy={cy} r="1.25" fill="var(--more-icon-fill)" />
+        ))
+      ) : (
+        <path d={paths[name]} />
+      )}
     </svg>
   )
 }

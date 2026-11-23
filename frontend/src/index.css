@@ -1,8 +1,21 @@
 /* 기본 색상: 첨부된 Figma 프레임 */
 :root {
+  --app-bg: #F3F5F7;
+  --surface: #FFFFFF;
+  --text-primary: #1B2C42;
+  --text-muted: #808D99;
+  --brand-primary: #2D86A3;
+  --brand-secondary: #355D87;
+  --brand-wordmark: #142235;
+  --border-subtle: #D3DBDE;
+  --chevron-color: #485F7C;
+  --nav-inactive: #829397;
+  --on-brand: #FFFFFF;
+  --more-icon-fill: #D9D9D9;
+
   font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif;
-  color: #1b2e46;
-  background: #e6ebee;
+  color: var(--text-primary);
+  background: var(--app-bg);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 }
@@ -31,7 +44,7 @@ a {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible {
-  outline: 2px solid #2d89a3;
+  outline: 2px solid var(--brand-primary);
   outline-offset: 3px;
 }
 
@@ -73,7 +86,7 @@ p {
   padding-bottom: calc(14px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  background: #f3f5f6;
+  background: var(--app-bg);
 }
 
 .wallet-header {
@@ -89,7 +102,7 @@ p {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  color: #172638;
+  color: var(--brand-wordmark);
   font-size: 23px;
   font-weight: 800;
   letter-spacing: -1px;
@@ -97,10 +110,10 @@ p {
 }
 
 .brand-colon {
-  color: #172638;
+  color: var(--brand-secondary);
 }
 
-/* 제공된 실제 로고 시트의 심볼 영역 */
+/* 새 파란 로고 원본의 심볼 영역만 표시: 재착색·재작도 없음 */
 .brand-symbol {
   position: relative;
   display: inline-block;
@@ -111,11 +124,12 @@ p {
 
 .brand-symbol img {
   position: absolute;
-  width: 95px;
+  width: 67.5px;
   max-width: none;
-  left: -34.75px;
-  top: -9.15px;
-  mix-blend-mode: multiply;
+  left: -21.75px;
+  top: -7.125px;
+  /* PNG 실제 외곽에서 추출한 클리핑: 배경만 숨기고 흰 숫자 1 보존 */
+  clip-path: polygon(32.2222% 12.5000%, 56.6667% 12.5000%, 57.8889% 12.7632%, 59.7778% 13.4211%, 61.2222% 14.2105%, 62.1111% 14.8684%, 62.8889% 15.6579%, 63.1111% 15.7895%, 63.8889% 16.7105%, 63.8889% 16.8421%, 64.3333% 17.3684%, 64.3333% 17.5000%, 64.6667% 17.8947%, 64.7778% 18.2895%, 65.0000% 18.5526%, 65.0000% 18.6842%, 65.3333% 19.3421%, 65.3333% 19.6053%, 65.5556% 20.0000%, 65.5556% 20.3947%, 65.6667% 20.5263%, 65.6667% 20.7895%, 65.7778% 20.9211%, 65.7778% 21.4474%, 65.8889% 21.5789%, 65.8889% 24.8684%, 65.7778% 25.0000%, 65.7778% 25.5263%, 65.6667% 25.6579%, 65.6667% 26.0526%, 65.5556% 26.1842%, 65.5556% 26.5789%, 65.4444% 26.7105%, 65.4444% 26.9737%, 65.2222% 27.3684%, 65.2222% 27.6316%, 65.1111% 27.7632%, 65.1111% 27.8947%, 65.0000% 28.0263%, 64.6667% 28.9474%, 64.4444% 29.2105%, 64.4444% 29.3421%, 64.2222% 29.6053%, 64.2222% 29.7368%, 64.0000% 30.0000%, 64.0000% 30.1316%, 63.4444% 30.7895%, 63.4444% 30.9211%, 62.2222% 32.3684%, 62.0000% 32.5000%, 61.5556% 33.0263%, 60.6667% 33.8158%, 57.0000% 36.7105%, 58.1111% 36.8421%, 59.6667% 37.2368%, 60.6667% 37.6316%, 61.8889% 38.2895%, 63.1111% 39.2105%, 64.0000% 40.1316%, 64.2222% 40.2632%, 65.4444% 41.8421%, 65.4444% 41.9737%, 65.7778% 42.3684%, 65.7778% 42.5000%, 66.0000% 42.7632%, 66.1111% 43.1579%, 66.3333% 43.4211%, 66.3333% 43.5526%, 67.0000% 45.0000%, 67.0000% 45.2632%, 67.1111% 45.3947%, 67.1111% 45.6579%, 67.2222% 45.7895%, 67.2222% 46.0526%, 67.3333% 46.1842%, 67.3333% 46.4474%, 67.4444% 46.5789%, 67.4444% 46.9737%, 67.5556% 47.1053%, 67.5556% 47.5000%, 67.6667% 47.6316%, 67.6667% 48.2895%, 67.7778% 48.4211%, 67.7778% 52.1053%, 67.6667% 52.2368%, 67.6667% 53.0263%, 67.5556% 53.1579%, 67.5556% 53.6842%, 67.4444% 53.8158%, 67.4444% 54.2105%, 67.3333% 54.3421%, 67.3333% 54.6053%, 67.2222% 54.7368%, 67.2222% 55.1316%, 67.1111% 55.2632%, 67.1111% 55.5263%, 66.8889% 55.9211%, 66.8889% 56.1842%, 66.5556% 56.8421%, 66.5556% 57.1053%, 66.2222% 57.6316%, 66.2222% 57.7632%, 66.1111% 57.8947%, 66.0000% 58.2895%, 65.7778% 58.5526%, 65.6667% 58.9474%, 65.1111% 59.7368%, 65.1111% 59.8684%, 64.6667% 60.3947%, 64.6667% 60.5263%, 63.3333% 62.1053%, 63.1111% 62.2368%, 62.6667% 62.7632%, 61.3333% 63.8158%, 59.2222% 65.0000%, 57.6667% 65.5263%, 56.4444% 65.7895%, 32.2222% 65.9211%);
 }
 
 .header-actions {
@@ -124,6 +138,7 @@ p {
 }
 
 .header-actions button {
+  color: var(--text-primary);
   width: 40px;
   height: 44px;
   display: grid;
@@ -143,7 +158,7 @@ p {
   display: grid;
   grid-template-columns: 80px 134px;
   margin: 0 27px 0 30px;
-  border-bottom: 1px solid #cdd7db;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .mode-tabs button {
@@ -151,13 +166,13 @@ p {
   padding: 4px 0 9px;
   font-size: 16px;
   font-weight: 600;
-  color: #82929f;
+  color: var(--text-muted);
   background: transparent;
   transition: color 200ms;
 }
 
 .mode-tabs button[aria-selected='true'] {
-  color: #1b2e46;
+  color: var(--text-primary);
   font-weight: 750;
 }
 
@@ -168,7 +183,7 @@ p {
   width: 52px;
   height: 3px;
   border-radius: 3px;
-  background: #2d8ca7;
+  background: var(--brand-primary);
   transform: translateX(calc(var(--mode-index) * 80px));
   transition: transform 200ms, width 200ms;
 }
@@ -203,7 +218,7 @@ p {
 
 .card-section-heading h2 > span {
   margin-left: 3px;
-  color: #355f84;
+  color: var(--brand-secondary);
 }
 
 /* 카드 폭과 중앙 여백: 다음 카드가 오른쪽에 일부 노출됨 */
@@ -404,10 +419,10 @@ p {
   min-height: 40px;
   margin-top: -7px;
   padding: 12px 8px 9px;
-  border: 1px solid #e5e9ed;
+  border: 1px solid var(--border-subtle);
   border-radius: 0 0 18px 18px;
-  background: #fff;
-  color: #365f82;
+  background: var(--surface);
+  color: var(--brand-secondary);
   font-size: 14px;
   font-weight: 700;
 }
@@ -431,7 +446,7 @@ p {
   width: 4px;
   height: 4px;
   border-radius: 5px;
-  background: #cbd5d9;
+  background: var(--border-subtle);
   transition: width 180ms, background 180ms;
 }
 
@@ -441,7 +456,7 @@ p {
 
 .card-pagination button[aria-pressed='true'] span {
   width: 15px;
-  background: #355f84;
+  background: var(--brand-secondary);
 }
 
 .card-caption {
@@ -454,7 +469,7 @@ p {
 
 .simulation-disclaimer {
   margin: 16px 20px;
-  color: #76858e;
+  color: var(--text-muted);
   font-size: 9px;
   text-align: center;
 }
@@ -465,6 +480,7 @@ p {
 }
 
 .preference-trigger {
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 7px;
@@ -477,7 +493,7 @@ p {
 
 .chevron {
   display: inline-flex;
-  color: #426487;
+  color: var(--chevron-color);
   transition: transform 140ms;
 }
 
@@ -498,10 +514,10 @@ p {
   width: 174px;
   max-width: calc(100vw - 56px);
   padding: 5px;
-  border: 1px solid #e1e7eb;
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 8px 24px #1d35421c;
+  background: var(--surface);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text-primary) 11%, transparent);
   animation: popover-in 140ms ease-out;
 }
 
@@ -519,8 +535,8 @@ p {
 }
 
 .preference-popover button[aria-checked='true'] {
-  color: #287f99;
-  background: #eff6f8;
+  color: var(--brand-primary);
+  background: var(--app-bg);
 }
 
 .preference-popover svg {
@@ -539,8 +555,8 @@ p {
   margin: 18px auto 0;
   padding: 3px;
   border-radius: 50px;
-  background: #fff;
-  box-shadow: 0 5px 14px #233b4508;
+  background: var(--surface);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--text-primary) 3%, transparent);
 }
 
 .nav-indicator {
@@ -550,7 +566,7 @@ p {
   left: 3px;
   width: calc((100% - 6px) / 3);
   border-radius: 40px;
-  background: #2d89a3;
+  background: var(--brand-primary);
   transform: translateX(calc(var(--active-index) * 100%));
   transition: transform 360ms cubic-bezier(0.22, 0.8, 0.25, 1);
 }
@@ -566,13 +582,13 @@ p {
   padding: 6px 4px;
   background: transparent;
   border-radius: 40px;
-  color: #8198a2;
+  color: var(--nav-inactive);
   font-size: 10px;
   transition: color 200ms;
 }
 
 .bottom-nav button[aria-current='page'] {
-  color: #fff;
+  color: var(--on-brand);
   font-weight: 700;
 }
 
@@ -590,7 +606,7 @@ p {
   align-items: flex-end;
   justify-content: center;
   padding: 16px;
-  background: #17263855;
+  background: color-mix(in srgb, var(--text-primary) 33%, transparent);
 }
 
 .sheet {
@@ -600,8 +616,8 @@ p {
   overflow-y: auto;
   padding: 22px;
   border-radius: 22px;
-  background: #fff;
-  box-shadow: 0 12px 44px #122f4522;
+  background: var(--surface);
+  box-shadow: 0 12px 44px color-mix(in srgb, var(--text-primary) 13%, transparent);
   animation: popover-in 150ms ease-out;
 }
 
@@ -634,7 +650,7 @@ p {
   margin-bottom: 16px;
   font-size: 14px;
   line-height: 1.8;
-  color: #536978;
+  color: var(--text-muted);
 }
 
 .primary-button {
@@ -642,8 +658,8 @@ p {
   min-height: 46px;
   padding: 12px;
   border-radius: 12px;
-  background: #2d89a3;
-  color: #fff;
+  background: var(--brand-primary);
+  color: var(--on-brand);
   font-size: 14px;
   font-weight: 600;
 }
@@ -663,19 +679,19 @@ p {
   gap: 12px;
   min-height: 48px;
   padding: 10px;
-  border: 1px solid #e2e9ed;
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   font-size: 14px;
   cursor: pointer;
 }
 
 .representative-options input {
-  accent-color: #2d89a3;
+  accent-color: var(--brand-primary);
 }
 
 .auth-countdown {
   margin-bottom: 15px;
-  color: #2d89a3;
+  color: var(--brand-primary);
   font-size: 30px;
   font-weight: 700;
 }
@@ -704,8 +720,8 @@ p {
   max-width: 440px;
   padding: 10px 10px 10px 17px;
   border-radius: 12px;
-  background: #243e50;
-  color: #fff;
+  background: var(--text-primary);
+  color: var(--on-brand);
   font-size: 13px;
   line-height: 1.7;
 }
@@ -728,13 +744,13 @@ p {
 
 .empty-state p,
 .placeholder-page p {
-  color: #627686;
+  color: var(--text-muted);
   font-size: 14px;
   line-height: 1.8;
 }
 
 .placeholder-page > span {
-  color: #627686;
+  color: var(--text-muted);
   font-size: 13px;
 }
 
