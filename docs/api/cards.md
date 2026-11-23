@@ -117,7 +117,7 @@ X-BeONE-Demo-User: MY_CARDS
 #### 응답 필드
 
 - `cardCount` · Integer · 등록 해제되지 않은 보유 카드 수
-- `codefConnected` · Boolean · CODEF 연결 여부. CODEF 연결 행이 있으면 `true`다. 상태가 `RECONNECT_REQUIRED`여도 연결은 있으므로 `true`이고, 재연결 필요 여부는 [CODEF 연결 상태 조회](codef.md)의 `status`·`reconnectRequired`로 본다. 연결이 없거나 가상 포트폴리오면 `false`
+- `codefConnected` · Boolean · CODEF 연결 여부. CODEF 연결 행이 있으면 `true`다. 상태가 `RECONNECT_REQUIRED`여도 연결은 있으므로 `true`이고, 재연결 필요 여부는 [CODEF 연결 상태 조회](codef.md)의 `status`·`reconnectRequired`로 본다. 연결이 없거나 가상 포트폴리오면 `false`(F1 #137, 사용자 확인 결정 32 Q8, 2026-11-18)
 
 ### 실패 응답
 

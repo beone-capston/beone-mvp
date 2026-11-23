@@ -48,6 +48,7 @@
 - #136 → PR: F1(`GET /api/v1/me` `codefConnected`를 연결 행 존재로 반영, card 조회 포트 `CodefConnectionLookup`·codef 구현, README에 CODEF 키 이름, `.env.example`은 가드레일로 후속, `DemoUserIntegrationTest` 간헐 실패 조사 기록만). `develop` 대상, 병합 전. [작업 기록](136-codef-connected.md)
 - #138 → PR: 회원 인증 U4 비밀번호 재설정 요청·완료(`auth` 패키지, 새 Flyway 없음, 재설정 토큰 15분·1회용 해시 저장, 메일 60초 합산, 완료 시 그 회원의 모든 세션 종료, 관리자 판단: 미인증 계정에도 발송·로그인 잠금 유지, [기록](138-auth-password-reset.md))
 - #141 → PR: 업무·인증 API 구현 상태 문구 정합(문서만, S1A R1~R8: `docs/api/README.md`·개별 문서 5행·`docs/api.md` 세 곳·`docs/domains/ledger.md` CODEF 완전성, 정책 변경 없음, [기록](141-api-status-sync.md))
+- #153 → PR: 결정 32 기존 동작 명시(문서만, S1A Q1~Q5·Q7~Q9·R9: `docs/api/` codef·recommendations·mock-payments·ledger·monthly-states·auth·cards, 정책·코드 변경 없음, [기록](153-decision32-contract-notes.md))
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.
