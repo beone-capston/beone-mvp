@@ -23,7 +23,10 @@ public class DemoUserService {
 		this.userRepository = userRepository;
 	}
 
-	/** 시연 사용자 목록을 {@link DemoUser} 선언 순서로 돌려준다. */
+	/**
+	 * 시연 사용자 목록을 {@link DemoUser} 선언 순서로 돌려준다.
+	 * @return 시연 사용자 목록
+	 */
 	public List<DemoUserProfile> listDemoUsers() {
 		return this.userRepository.findAll()
 			.stream()
@@ -32,7 +35,11 @@ public class DemoUserService {
 			.toList();
 	}
 
-	/** 시연 사용자 구분에 해당하는 현재 사용자를 돌려준다. */
+	/**
+	 * 시연 사용자 구분에 해당하는 현재 사용자를 돌려준다.
+	 * @param demoUser 시연 사용자 구분
+	 * @return 현재 사용자
+	 */
 	public CurrentUser currentUserOf(DemoUser demoUser) {
 		UserEntity user = this.userRepository.findByDemoUser(demoUser)
 			.orElseThrow(() -> new IllegalStateException("시연 사용자 시드가 없습니다."));
