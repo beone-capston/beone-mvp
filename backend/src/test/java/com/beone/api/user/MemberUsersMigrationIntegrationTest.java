@@ -3,6 +3,7 @@ package com.beone.api.user;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,16 +84,17 @@ class MemberUsersMigrationIntegrationTest {
 				+ " read_only) VALUES ('usr-verified-1', '내 카드', 'REAL', FALSE)"))
 			.isInstanceOf(DataIntegrityViolationException.class);
 		// 주인이 없거나 둘 다인 행은 넣을 수 없다
-		// CHECK 위반은 MySQL 오류 3819이며 Spring이 무결성 위반으로 분류하지 않으므로 제약 이름으로 확인한다
+		// CHECK 위반은 MySQL 오류 3819이며 Spring이 무결성 위반으로 분류하지 않는다. 메시지 문구 대신 SQL 오류 코드로 확인한다
+		// users의 CHECK는 V14의 ck_users_owner 하나뿐이므로 3819는 이 제약의 위반이다
 		assertThatThrownBy(() -> this.schema.update(
 				"INSERT INTO users (display_name, portfolio_type, read_only) VALUES ('x', 'REAL', FALSE)"))
 			.isInstanceOf(DataAccessException.class)
-			.hasMessageContaining("ck_users_owner");
+			.satisfies(MemberUsersMigrationIntegrationTest::assertCheckViolation);
 		insertMember("usr-verified-2", "v2@example.com", "2026-11-17 09:00:00");
 		assertThatThrownBy(() -> this.schema.update("INSERT INTO users (demo_user, member_id, display_name,"
 				+ " portfolio_type, read_only) VALUES ('OTHER_DEMO', 'usr-verified-2', 'x', 'REAL', FALSE)"))
 			.isInstanceOf(DataAccessException.class)
-			.hasMessageContaining("ck_users_owner");
+			.satisfies(MemberUsersMigrationIntegrationTest::assertCheckViolation);
 		// 없는 회원은 참조할 수 없고, 장부가 있는 회원은 지울 수 없다
 		assertThatThrownBy(() -> this.schema.update("INSERT INTO users (member_id, display_name, portfolio_type,"
 				+ " read_only) VALUES ('usr-missing-000', 'x', 'REAL', FALSE)"))
@@ -139,6 +141,16 @@ class MemberUsersMigrationIntegrationTest {
 	private DriverManagerDataSource dataSource(String database) {
 		String url = "jdbc:mysql://" + this.mysql.getHost() + ":" + this.mysql.getMappedPort(3306) + "/" + database;
 		return new DriverManagerDataSource(url, "root", this.mysql.getPassword());
+	}
+
+	/** MySQL CHECK 제약 위반(오류 코드 3819)인지 확인한다. 드라이버·서버 버전별 메시지 문구에 의존하지 않는다. */
+	private static void assertCheckViolation(Throwable thrown) {
+		Throwable cause = thrown;
+		while (cause != null && !(cause instanceof SQLException)) {
+			cause = cause.getCause();
+		}
+		assertThat(cause).as("SQLException 원인").isInstanceOf(SQLException.class);
+		assertThat(((SQLException) cause).getErrorCode()).isEqualTo(3819);
 	}
 
 }

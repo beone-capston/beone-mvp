@@ -37,6 +37,8 @@ import org.springframework.web.client.RestClient;
  * <li>D5: 401 → CSRF 403 → 본문 400 → 404 순서. 남의 자원은 404이고 {@code FORBIDDEN}은 쓰지 않는다</li>
  * <li>D6: 쓰기 요청은 {@code X-CSRF-TOKEN}이 필요하고, 실패하면 403이며 저장하지 않는다</li>
  * <li>D7: {@code /me}는 demoUser=null, REAL, 쓰기 가능, '내 카드'</li>
+ * <li>G1 D5 권장 4항: {@code /api/v1/me}·{@code /api/v1/me/**}의 응답(401·403·쿠키를 다시 심는 200·미등록 404)에는
+ * {@code Cache-Control: no-store}가 붙는다. 인증 API와 같은 규칙이다(docs/api/auth.md)</li>
  * </ul>
  * member 프로필에 등록하지 않은 업무 API(주문·추천·모의 승인·월간 상태·결제 설정·원장·CODEF·시연 사용자 목록)는 404다. 시계는 주입한 가변
  * 시계로 서울 2026-11-18 10:00에서 시작한다.
@@ -57,6 +59,8 @@ class MemberProfileIntegrationTest {
 	private static final String UNAUTHENTICATED = "{\"code\":\"UNAUTHENTICATED\",\"message\":\"로그인이 필요합니다.\",\"errors\":[]}";
 
 	private static final String CSRF_INVALID = "{\"code\":\"CSRF_INVALID\",\"message\":\"요청을 확인할 수 없습니다. 화면을 새로고침한 후 다시 시도해 주세요.\",\"errors\":[]}";
+
+	private static final String USER_CARD_NOT_FOUND = "{\"code\":\"USER_CARD_NOT_FOUND\",\"message\":\"보유 카드를 찾을 수 없습니다.\",\"errors\":[]}";
 
 	private static final String CARD = "{\"displayName\":\"내 첫 카드\",\"cardProductId\":\"09174\"}";
 
@@ -135,6 +139,13 @@ class MemberProfileIntegrationTest {
 		assertNotFound(send(HttpMethod.PATCH, "/api/v1/me/cards/" + cardOfA + "/mapping", b,
 				"{\"status\":\"NOT_SUPPORTED\"}"));
 		assertNotFound(send(HttpMethod.DELETE, "/api/v1/me/cards/" + cardOfA, b, null));
+		// 남의 카드와 없는 카드는 코드·본문이 같아 존재 여부가 드러나지 않는다
+		String missing = "/api/v1/me/cards/uc-999999999";
+		assertThat(send(HttpMethod.PATCH, missing, b, "{\"displayName\":\"남의 카드\"}").getBody())
+			.isEqualTo(send(HttpMethod.PATCH, "/api/v1/me/cards/" + cardOfA, b, "{\"displayName\":\"남의 카드\"}")
+				.getBody());
+		assertThat(send(HttpMethod.DELETE, missing, b, null).getBody())
+			.isEqualTo(send(HttpMethod.DELETE, "/api/v1/me/cards/" + cardOfA, b, null).getBody());
 		assertThat(activeCardCount(MEMBER_A)).isOne();
 		assertThat(this.jdbcTemplate.queryForObject("SELECT display_name FROM user_cards WHERE user_card_id = ?",
 				String.class, Long.parseLong(cardOfA.substring("uc-".length()))))
@@ -171,15 +182,19 @@ class MemberProfileIntegrationTest {
 		assertBody(headerOnly, 401, UNAUTHENTICATED);
 	}
 
-	/** D5: 쿠키 없음·익명 세션·만료·로그아웃 뒤에는 401이다. */
+	/** D5: 쿠키 없음·익명 세션·만료·로그아웃 뒤에는 401이다. 401에도 no-store가 붙는다. */
 	@Test
 	void unauthenticatedExpiredAndLoggedOutAreUnauthorized() throws Exception {
-		assertBody(send(HttpMethod.GET, "/api/v1/me", new Session(null, null), null), 401, UNAUTHENTICATED);
+		ResponseEntity<String> noCookie = send(HttpMethod.GET, "/api/v1/me", new Session(null, null), null);
+		assertBody(noCookie, 401, UNAUTHENTICATED);
+		assertNoStore(noCookie);
 		assertBody(send(HttpMethod.GET, "/api/v1/me/cards", new Session(null, null), null), 401, UNAUTHENTICATED);
 		Session anonymous = anonymous();
 		assertBody(send(HttpMethod.GET, "/api/v1/me", anonymous, null), 401, UNAUTHENTICATED);
 		// 401이 CSRF 403·본문 400보다 먼저다
-		assertBody(send(HttpMethod.POST, "/api/v1/me/cards", anonymous, "{}"), 401, UNAUTHENTICATED);
+		ResponseEntity<String> anonymousWrite = send(HttpMethod.POST, "/api/v1/me/cards", anonymous, "{}");
+		assertBody(anonymousWrite, 401, UNAUTHENTICATED);
+		assertNoStore(anonymousWrite);
 
 		Session expiring = loginNew(MEMBER_A, "a@example.com");
 		this.clock.advance(Duration.ofDays(7));
@@ -189,10 +204,12 @@ class MemberProfileIntegrationTest {
 		assertThat(send(HttpMethod.GET, "/api/v1/me", loggedOut, null).getStatusCode().value()).isEqualTo(200);
 		assertThat(send(HttpMethod.POST, "/api/v1/auth/logout", loggedOut, null).getStatusCode().value())
 			.isEqualTo(204);
-		assertBody(send(HttpMethod.GET, "/api/v1/me/cards", loggedOut, null), 401, UNAUTHENTICATED);
+		ResponseEntity<String> afterLogout = send(HttpMethod.GET, "/api/v1/me/cards", loggedOut, null);
+		assertBody(afterLogout, 401, UNAUTHENTICATED);
+		assertNoStore(afterLogout);
 	}
 
-	/** D3: 업무 요청이 미사용 만료를 7일 늘리고 쿠키를 다시 심는다. 절대 만료 30일은 넘지 않는다. */
+	/** D3: 업무 요청이 미사용 만료를 7일 늘리고 쿠키를 다시 심는다(그 응답은 no-store). 절대 만료 30일은 넘지 않는다. */
 	@Test
 	void businessRequestsExtendIdleExpiryButNotAbsoluteExpiry() throws Exception {
 		Session a = loginNew(MEMBER_A, "a@example.com");
@@ -202,6 +219,7 @@ class MemberProfileIntegrationTest {
 		assertThat(refreshed.getStatusCode().value()).isEqualTo(200);
 		assertThat(refreshed.getHeaders().getFirst(HttpHeaders.SET_COOKIE))
 			.isEqualTo("__Host-BEONE_SESSION=" + a.id() + "; Path=/; Max-Age=604800; Secure; HttpOnly; SameSite=Lax");
+		assertNoStore(refreshed);
 
 		// 처음 로그인 뒤 7일이 지났지만 6일째 사용으로 늘어나 아직 유효하다
 		this.clock.advance(Duration.ofDays(6));
@@ -213,6 +231,7 @@ class MemberProfileIntegrationTest {
 		this.clock.advance(Duration.ofDays(6));
 		ResponseEntity<String> capped = send(HttpMethod.GET, "/api/v1/me", a, null);
 		assertThat(capped.getHeaders().getFirst(HttpHeaders.SET_COOKIE)).contains("Max-Age=518400;");
+		assertNoStore(capped);
 		this.clock.advance(Duration.ofDays(6));
 		assertBody(send(HttpMethod.GET, "/api/v1/me", a, null), 401, UNAUTHENTICATED);
 	}
@@ -224,7 +243,9 @@ class MemberProfileIntegrationTest {
 		Session noToken = new Session(a.id(), null);
 		Session wrongToken = new Session(a.id(), "x".repeat(43));
 
-		assertBody(send(HttpMethod.POST, "/api/v1/me/cards", noToken, CARD), 403, CSRF_INVALID);
+		ResponseEntity<String> forbidden = send(HttpMethod.POST, "/api/v1/me/cards", noToken, CARD);
+		assertBody(forbidden, 403, CSRF_INVALID);
+		assertNoStore(forbidden);
 		assertBody(send(HttpMethod.POST, "/api/v1/me/cards", wrongToken, CARD), 403, CSRF_INVALID);
 		assertBody(send(HttpMethod.POST, "/api/v1/me/cards", noToken, "{}"), 403, CSRF_INVALID);
 		assertThat(activeCardCount(MEMBER_A)).isZero();
@@ -267,7 +288,10 @@ class MemberProfileIntegrationTest {
 	void onlyAllowedRoutesAreRegistered() throws Exception {
 		Session a = loginNew(MEMBER_A, "a@example.com");
 
-		assertThat(send(HttpMethod.GET, "/api/v1/card-products", a, null).getStatusCode().value()).isEqualTo(200);
+		ResponseEntity<String> products = send(HttpMethod.GET, "/api/v1/card-products", a, null);
+		assertThat(products.getStatusCode().value()).isEqualTo(200);
+		// no-store는 /api/v1/me 아래에만 붙는다. 공개 상품 조회는 바뀌지 않는다
+		assertThat(products.getHeaders().getCacheControl()).isNull();
 		assertThat(send(HttpMethod.GET, "/actuator/health", a, null).getStatusCode().value()).isEqualTo(200);
 
 		String[][] closed = { { "GET", "/api/v1/demo-users" }, { "GET", "/api/v1/me/orders" },
@@ -281,6 +305,10 @@ class MemberProfileIntegrationTest {
 		for (String[] route : closed) {
 			ResponseEntity<String> response = send(HttpMethod.valueOf(route[0]), route[1], a, "{}");
 			assertThat(response.getStatusCode().value()).as(route[0] + " " + route[1]).isEqualTo(404);
+			if (route[1].startsWith("/api/v1/me")) {
+				// 필터는 핸들러 조회 전에 돌므로 등록하지 않은 경로의 404에도 붙는다
+				assertNoStore(response);
+			}
 			// 로그인하지 않아도 401이 아니라 404다(경로 자체가 없다)
 			assertThat(send(HttpMethod.valueOf(route[0]), route[1], new Session(null, null), "{}").getStatusCode()
 				.value()).as("anonymous " + route[0] + " " + route[1]).isEqualTo(404);
@@ -350,9 +378,14 @@ class MemberProfileIntegrationTest {
 				memberId);
 	}
 
-	private static void assertNotFound(ResponseEntity<String> response) {
-		assertThat(response.getStatusCode().value()).isEqualTo(404);
-		assertThat(response.getBody()).doesNotContain("FORBIDDEN");
+	private static void assertNotFound(ResponseEntity<String> response) throws Exception {
+		// docs/api/cards.md: 없거나 다른 사용자의 카드는 404 USER_CARD_NOT_FOUND이고 FORBIDDEN은 쓰지 않는다
+		assertBody(response, 404, USER_CARD_NOT_FOUND);
+		assertNoStore(response);
+	}
+
+	private static void assertNoStore(ResponseEntity<String> response) {
+		assertThat(response.getHeaders().getCacheControl()).isEqualTo("no-store");
 	}
 
 	private static String userCardId(String body) {
