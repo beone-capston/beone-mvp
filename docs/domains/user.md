@@ -90,7 +90,7 @@ InvalidDemoUserHeaderException
 → 컨트롤러는 local·demo와 똑같이 CurrentUser만 받음
 ```
 
-회원 장부 생성: `MemberRegistrationService.verifyEmail`이 같은 트랜잭션에서 `MemberEmailVerifiedEvent`를 발행하고, `MemberUserService.onEmailVerified`가 장부가 없을 때만 만듭니다. 장부를 만들지 못하면 인증도 함께 취소됩니다. `auth`는 `user`를 알지 않고 이벤트만 발행합니다(`user` → `auth` 한 방향 의존). 이미 인증된 회원은 `V14`가 백필했습니다.
+회원 장부 생성: `MemberRegistrationService.verifyEmail`이 같은 트랜잭션에서 `MemberEmailVerifiedEvent`를 발행하고, `MemberUserService.onEmailVerified`가 장부가 없을 때만 만듭니다. 장부를 만들지 못하면 인증도 함께 취소됩니다. `auth`는 `user`를 알지 않고 이벤트만 발행합니다(`user` → `auth` 한 방향 의존). 이미 인증된 회원은 `V14`가 백필했습니다. `MemberUserService`는 프로필 지정이 없고 이벤트를 발행하는 `MemberRegistrationService`는 `local`·`demo`·`member`에 있으므로, `local`·`demo`에서도 이메일 인증을 마치면 회원 장부가 생깁니다. 시연 2행과는 별개 행이고 `/api/v1/demo-users`(`findByDemoUserIsNotNull`)와 시연 헤더 해석(`findByDemoUser`)에는 닿지 않습니다. 같은 로컬 DB를 `member` 프로필로 다시 띄우면 그 회원의 장부로 쓰입니다.
 
 ## 사용법: 새 `/me/...` 컨트롤러
 
@@ -109,7 +109,7 @@ class UserCardController {
 }
 ```
 
-- `CurrentUserResolver`는 `local`·`demo`, `MemberCurrentUserResolver`는 `member`에서만 등록됩니다. `CurrentUser`를 받는 컨트롤러는 이 중 열 프로필로 제한합니다. `member`에 여는 업무 API는 지금 `/api/v1/me`와 보유 카드뿐입니다(결정 37, D9 미결).
+- `CurrentUserResolver`는 `local`·`demo`, `MemberCurrentUserResolver`는 `member`에서만 등록됩니다. `CurrentUser`를 받는 컨트롤러는 이 중 열 프로필로 제한합니다. `member`에 여는 업무 API는 지금 `/api/v1/me`와 보유 카드뿐입니다(결정 37). 나머지 업무 API의 `member` 등록은 G3 범위입니다.
 - 기능 오류는 이 패키지의 `DemoUserExceptionHandler`처럼 기능 패키지에 예외와 `@Order`를 붙인 처리기를 둡니다([기능별 오류 처리](../api.md#기능별-오류-처리)). 공통 업무 예외는 두지 않습니다.
 
 ## 프로필과 CORS

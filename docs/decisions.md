@@ -590,8 +590,8 @@ PR #81(#80) 구현 중 2026-11-16 사용자가 고른 결정이다. 새 D-번호
 8. `partialFailures[].target` 값은 제안이며 CODEF 샌드박스 확인 뒤 확정한다.
 9. `preferences.md`의 「설정 조회」 표기를 절 제목으로 고친다.
 10. `mock-payments.md`의 멱등 요약을 공통 규약의 사용자 범위·지문으로 맞추고, 취소 흐름에 소유 확인을 넣는다.
-11. 화면과 API 연결: 백엔드 CORS 허용 목록과 프런트 `VITE_API_BASE_URL`을 쓴다. `local`·`demo` 프로필에서 origin `http://localhost:5173`, 메서드 `GET, POST, PUT, PATCH, DELETE, OPTIONS`, 헤더 `Content-Type, X-BeONE-Demo-User, Idempotency-Key`, 자격 증명 없음. Android 시연의 `adb reverse`는 5173·8080을 모두 쓴다.
-    - 2026-11-24 변경(결정 37 O2-L, 사용자 직접 선택): 로컬 회원 브라우저 경로(`member` 프로필)는 세션 쿠키(`__Host-`, `Secure`)를 같은 origin으로 보내야 하므로 Vite 프록시로 같은 origin을 쓴다. 기존 「Vite 프록시는 쓰지 않는다」는 이 경로에 한해 바뀐다. 백엔드 `local` CORS는 바꾸지 않는다. 프런트 설정(`vite.config`) 변경은 팀원 소유라 조율 대기다(N-FE-PROXY). 백엔드 작업(#157)은 프런트 파일을 바꾸지 않았다.
+11. 화면과 API 연결: 백엔드 CORS 허용 목록과 프런트 `VITE_API_BASE_URL`을 쓴다. Vite 프록시는 쓰지 않는다. `local`·`demo` 프로필에서 origin `http://localhost:5173`, 메서드 `GET, POST, PUT, PATCH, DELETE, OPTIONS`, 헤더 `Content-Type, X-BeONE-Demo-User, Idempotency-Key`, 자격 증명 없음. Android 시연의 `adb reverse`는 5173·8080을 모두 쓴다.
+    - 2026-11-24 변경(결정 37 O2-L, 사용자 직접 선택): 로컬 회원 브라우저 경로(`member` 프로필)는 세션 쿠키(`__Host-`, `Secure`)를 같은 origin으로 보내야 하므로 Vite 프록시로 같은 origin을 쓴다. 위 「Vite 프록시는 쓰지 않는다」는 이 경로에 한해서만 바뀌고 `local`·`demo` 경로에는 그대로 적용된다. 백엔드 `local` CORS는 바꾸지 않는다. 프런트 설정(`vite.config`) 변경은 팀원 소유라 조율 대기다(N-FE-PROXY). 백엔드 작업(#157)은 프런트 파일을 바꾸지 않았다.
 12. DB: 업무 테이블과 시드는 업무 API 담당이 소유하고 CODEF 저장 테이블은 CODEF 담당이 만든다. 엔진은 테이블이 없다. 카드 상품 테이블을 두지 않고 규칙 JSON을 원본으로 하며, 보유 카드는 `card_product_id` 문자열(선행 0 보존)로 참조한다. Flyway는 순번이고, 병합 직전 최신 `develop`을 merge해 번호가 겹치면 자기 파일을 올린 뒤 `integrationTest`를 실행한다. 저장소에 CI가 없어 사람이 지킨다.
 13. 패키지: `com.beone.api` 아래 기능별 패키지(`user`, `card`, `preference`, `monthlystate`, `order`, `recommendation`, `payment`, `ledger`)와 그 안의 `web`, `application`, `persistence`다. `ApiErrorCode`와 `common.web`은 웹 경계에서만 쓴다. 상세는 [구조 안내](architecture.md#업무-api-패키지-구조-d-23-미구현)에 있다.
 14. 잔여 제안 8건을 채택한다.
@@ -634,7 +634,8 @@ PR #81(#80) 구현 중 2026-11-16 사용자가 고른 결정이다. 새 D-번호
 - 401·403: `UNAUTHENTICATED`는 인증 API(현재 회원 세션 조회 등)와 `member` 프로필의 업무 API(결정 37 D5)에서 쓴다. `FORBIDDEN`은 예약만 하고 쓰지 않는다. 남의 자원은 404다.
 - CORS: D-23 11항의 허용 목록은 `local`·`demo` 계약이다. 공개 환경의 CORS는 이 저장소의 기록으로는 정해지지 않았다(저장소 밖 원문 미확인).
 - 후속 범위: 탈퇴, 이메일 변경, 로그인 상태의 비밀번호 변경.
-- 미결: 회원용 가상 포트폴리오(결정 37 D1b, G3 이후), 공개 회원의 CODEF 연결 범위, `member` 프로필에 열 업무 API 범위(D9), 공개 프로필 구성(O1~O3), 탈퇴·보존(D10). 미결 값을 구현에서 임의로 정하지 않는다. 회원 1명과 '내 카드' 장부의 관계는 아래 결정 37로 정했다.
+- 미결: 회원용 가상 포트폴리오(결정 37 D1b, G3 이후), Idempotency-Key 저장 단위(D8, 결정 37 D1a에서는 장부 단위가 곧 회원 단위라는 안이 유력하나 미확정), 공개 회원의 CODEF 연결 범위(D9), 공개 프로필 구성(O1~O3), 탈퇴·보존(D10). 미결 값을 구현에서 임의로 정하지 않는다. 회원 1명과 '내 카드' 장부의 관계는 아래 결정 37로 정했다.
+- 후속 구현(G3 범위): 보유 카드 밖의 나머지 업무 API(주문·예정 소비·추천·모의 승인·월간 상태·결제 설정·원장·CODEF)를 `member` 프로필에 등록하는 일. #157에서는 등록하지 않았다. 공개 회원에게 CODEF를 어디까지 열지는 위 D9로 따로 정한다.
 
 #### 결정 37: 회원과 업무 장부 연결
 
@@ -648,7 +649,7 @@ PR #81(#80) 구현 중 2026-11-16 사용자가 고른 결정이다. 새 D-번호
 - D6: `member` 프로필의 `/api/v1/me/**` POST·PUT·PATCH·DELETE는 `X-CSRF-TOKEN`이 필요하다. 실패하면 403 `CSRF_INVALID`이고 저장하지 않는다.
 - D7: `GET /api/v1/me` 응답 형태는 그대로이고, 회원 값은 `demoUser=null`, `portfolioType=REAL`, `readOnly=false`, `displayName='내 카드'`다.
 - O2-L: 로컬 회원 브라우저 경로는 Vite 프록시로 같은 origin을 쓴다(D-23 11항 변경, 프런트 조율 대기 N-FE-PROXY).
-- 구현 범위(#157): `member` 프로필은 인증 API 9개, `GET /api/v1/me`, 보유 카드 API(`/api/v1/me/cards/**`), 카드 상품 조회, health만 연다. 주문·추천·모의 승인·월간 상태·결제 설정·원장·CODEF·시연 사용자 목록은 등록하지 않아 404다(D9 미결). 메일은 기존 가짜 발송기를 쓴다.
+- 구현 범위(#157): `member` 프로필은 인증 API 9개, `GET /api/v1/me`, 보유 카드 API(`/api/v1/me/cards/**`), 카드 상품 조회, health만 연다. 주문·추천·모의 승인·월간 상태·결제 설정·원장·CODEF·시연 사용자 목록은 등록하지 않아 404다(나머지 업무 API의 `member` 등록은 G3 범위, 공개 회원의 CODEF 범위는 D9 미결). 이메일 인증을 마치면 프로필과 관계없이(`local`·`demo` 포함) 회원 장부가 생기지만 시연 응답·`/demo-users`에는 나오지 않는다. `member` 프로필의 `/api/v1/me`·`/api/v1/me/**` 응답에는 인증 API와 같이 `Cache-Control: no-store`를 붙인다(G1 D5 권장 4항). 메일은 기존 가짜 발송기를 쓴다.
 
 ### D-25 확정 정책
 

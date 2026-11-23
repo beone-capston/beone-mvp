@@ -43,7 +43,7 @@
 - [auth: 회원 인증 세션·CSRF](domains/auth.md)
   - 위치: `backend/src/main/java/com/beone/api/auth/` (`web`, `application`, `persistence`)
   - 책임: MySQL 서버 세션 `auth_sessions`(Flyway `V9`, 세션 ID는 SHA-256 해시만 저장), 세션 쿠키 `__Host-BEONE_SESSION`, `GET /api/v1/auth/csrf`와 `/api/v1/auth/**` POST의 CSRF 검사(#124, U1), 회원 `members`·1회용 토큰 `auth_tokens`·메일 요청 제한 `auth_mail_throttles`(Flyway `V11`)와 회원가입·인증메일 재요청·이메일 인증 완료(#128, U2, Argon2id, 가짜 메일 발송기), 로그인·로그아웃·현재 회원 세션 조회(#132, U3, 회원 세션 7일·30일·동시 5개, 로그인 실패 제한 `auth_login_throttles`·`auth_login_failures`, Flyway `V13`), 비밀번호 재설정 요청·완료(#138, U4, 재설정 토큰은 `auth_tokens`에 목적 `PASSWORD_RESET`으로 저장, 완료 시 그 회원의 모든 세션 종료, 새 테이블 없음). `local`·`demo`·`member` 프로필에서만 등록됩니다. `member` 프로필에서는 `/api/v1/me`·`/api/v1/me/**`의 세션·CSRF 검사(`MemberApiInterceptor`, 401 → 403, 미사용 7일 연장)를 하고 회원 ID를 요청 속성으로 넘기며, 이메일 인증 완료 때 `MemberEmailVerifiedEvent`를 발행합니다(#157). 시연 사용자 헤더와 `user` 패키지에 의존하지 않습니다(`user` → `auth` 한 방향).
-  - 범위 밖: `local`·`demo`에서 회원과 `/me` 업무 자원의 연결, `member`에 여는 나머지 업무 API(D9), 공개 프로필·CORS(O1~O3).
+  - 범위 밖: `local`·`demo`에서 회원과 `/me` 업무 자원의 연결, `member`에 여는 나머지 업무 API(G3 범위), 공개 회원의 CODEF 연결 범위(D9), 공개 프로필·CORS(O1~O3).
 
 도메인이 아닌 공통 웹 기반 코드:
 

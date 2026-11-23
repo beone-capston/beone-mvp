@@ -10,7 +10,7 @@
   - 서버 세션 테이블 `auth_sessions`(Flyway `V9__auth_sessions.sql`, 임시 번호)
   - 세션 쿠키 `__Host-BEONE_SESSION`의 발급·읽기
   - CSRF 토큰 조회 `GET /api/v1/auth/csrf`. 세션이 없으면 익명 세션을 발급합니다.
-  - `/api/v1/auth/**` POST 요청의 CSRF 검사와, 모든 인증 응답의 `Cache-Control: no-store`
+  - `/api/v1/auth/**` POST 요청의 CSRF 검사와, 모든 인증 응답의 `Cache-Control: no-store`(`member` 프로필에서는 `/api/v1/me`·`/api/v1/me/**` 응답에도)
   - CSRF 실패 응답 403 `CSRF_INVALID`
 - U2(#128)
   - 회원 테이블 `members`, 1회용 토큰 `auth_tokens`, 메일 요청 제한 기록 `auth_mail_throttles`(Flyway `V11__auth_members.sql`, 임시 번호)
@@ -32,7 +32,7 @@
 구현하지 않은 범위:
 
 - 실메일 발송·외부 공급자·메일 링크 주소 형식(미정)
-- `local`·`demo`에서 회원과 `/me` 업무 자원의 연결. 이 두 프로필은 시연 헤더 방식을 유지합니다. 회원 연결은 `member` 프로필의 `/me`·보유 카드까지이며, 나머지 업무 API(D9)와 회원용 가상 포트폴리오(D1b)는 미결입니다.
+- `local`·`demo`에서 회원과 `/me` 업무 자원의 연결. 이 두 프로필은 시연 헤더 방식을 유지합니다. 회원 연결은 `member` 프로필의 `/me`·보유 카드까지입니다. 나머지 업무 API의 `member` 등록은 G3 범위이고, 공개 회원의 CODEF 연결 범위(D9)와 회원용 가상 포트폴리오(D1b)는 미결입니다.
 - 공개 프로필 활성화와 공개 CORS(O1~O3 미결). 인증 부품은 `local`·`demo`·`member` 프로필에서만 등록됩니다.
 
 ## 핵심 용어
@@ -58,7 +58,7 @@ com.beone.api.auth
 │   ├── CsrfTokenResponse         응답 data(headerName, token)
 │   ├── SessionCookie             쿠키 이름, 읽기, Set-Cookie 문자열
 │   ├── AuthRequestInterceptor    /api/v1/auth/** POST CSRF 검사
-│   ├── AuthNoStoreFilter         /api/v1/auth/** 모든 응답(404·405 포함)에 no-store
+│   ├── AuthNoStoreFilter         /api/v1/auth/** 모든 응답(404·405 포함)에 no-store, member에서는 /api/v1/me/**에도
 │   ├── AuthWebConfiguration      위 인터셉터·필터 등록, local·demo·member
 │   ├── CsrfInvalidException      CSRF 실패(토큰 값을 담지 않음)
 │   ├── MemberRegistrationController 가입·인증메일 재요청·이메일 인증 완료, local·demo·member
@@ -250,4 +250,4 @@ curl -i -X POST http://localhost:8080/api/v1/auth/password-resets \
 - 가짜 발송기는 서버 메모리에만 메일을 두므로 로컬에서 실제로 인증을 끝까지 해 보려면 테스트를 써야 합니다. 링크 주소 형식은 미정입니다.
 - 재설정 요청 쿠키가 그 회원의 세션이면 그 세션도 지워집니다. 응답에는 다른 인증 POST처럼 갱신 쿠키가 붙지만 서버 세션은 없으므로 다음 요청 전에 `GET /api/v1/auth/csrf`로 새 세션을 받아야 합니다.
 - `V11`·`V13`은 임시 번호입니다. `develop`에 CODEF C3의 `V12__codef_syncs.sql`(#129)이 먼저 병합돼 지금 순서는 V9 → V10 → V11 → V12 → V13입니다. 최종 번호는 관리자가 병합 직전에 확인합니다.
-- 테스트: `SessionTokensTest`·`AnonymousSessionPropertiesTest`·`AuthSessionServiceTest`·`SessionCookieTest`(단위), `AuthCsrfApiWebTest`·`AuthCsrfProfileOffWebTest`(웹 슬라이스, 테스트 전용 POST 경로로 CSRF 검사), `AuthSessionIntegrationTest`(실제 HTTP·MySQL, V9 적용·해시 저장·만료). U2: `PasswordHasherTest`(Argon2 참조 구현 시험 벡터)·`EmailAddressesTest`·`MemberIdsTest`·`MailRequestThrottleTest`·`NewPasswordTest`(단위), `MemberRegistrationApiWebTest`(웹 슬라이스), `MemberRegistrationIntegrationTest`(실제 HTTP·MySQL, V11 적용·해시만 저장·계정 존재 비공개·토큰 30분·1회용·재발급 무효·60초 합산·동시 가입·인증과 재발급 경합·악센트 주소 구분·로그에 원문 없음). U3: `MemberLoginServiceTest`·`LoginAttemptThrottleTest`와 `AuthSessionServiceTest`·`SessionCookieTest` 추가분(단위), `MemberSessionApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `MemberSessionIntegrationTest`(실제 HTTP·MySQL, V13 적용·로그인 때 세션 ID·CSRF 교체와 이전 세션 폐기(병합 조건 ④)·7일·30일·동시 5개·로그아웃은 현재 세션만·계정 존재 비공개·15분 5회 잠금과 경계·동시 실패·서로 다른 회원 동시 로그인·계정 전환 동시 로그인·로그에 원문 없음). U4: `PasswordResetApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `PasswordResetIntegrationTest`(실제 HTTP·MySQL, 해시만 저장·계정 존재 비공개(미인증 계정에도 발송)·완료 시 그 회원의 모든 세션 종료와 다른 회원 세션 유지·미인증 유지·토큰 15분·1회용(같은 토큰 동시 사용 포함)·재발급 무효·다른 목적 토큰 상호 거부(U2 이월)·60초 합산·로그인 잠금 유지·이전 비밀번호 로그인과의 동시 경합·로그에 원문 없음). G2(#157): `AuthSessionServiceTest` 추가분(업무 요청 검사: 7일 연장·30일 상한·CSRF 실패 시 갱신 없음·401이 403보다 먼저), `MemberRegistrationIntegrationTest` 추가분(인증 완료 때 장부 생성), `MemberProfileIntegrationTest`(`member` 프로필 실제 HTTP·MySQL: 가입→인증→로그인→`/me`, 회원 A·B 카드 격리와 남의 카드 404, 시연 헤더 무시·시연 포트폴리오 접근 불가, 미인증·익명·만료·로그아웃 401, 업무 요청의 7일 연장·30일 상한·쿠키 재발급, CSRF 403·미저장과 401→403→400→404 순서, 동시 6번째 로그인, 미등록 업무 경로 404).
+- 테스트: `SessionTokensTest`·`AnonymousSessionPropertiesTest`·`AuthSessionServiceTest`·`SessionCookieTest`(단위), `AuthCsrfApiWebTest`·`AuthCsrfProfileOffWebTest`(웹 슬라이스, 테스트 전용 POST 경로로 CSRF 검사), `AuthSessionIntegrationTest`(실제 HTTP·MySQL, V9 적용·해시 저장·만료). U2: `PasswordHasherTest`(Argon2 참조 구현 시험 벡터)·`EmailAddressesTest`·`MemberIdsTest`·`MailRequestThrottleTest`·`NewPasswordTest`(단위), `MemberRegistrationApiWebTest`(웹 슬라이스), `MemberRegistrationIntegrationTest`(실제 HTTP·MySQL, V11 적용·해시만 저장·계정 존재 비공개·토큰 30분·1회용·재발급 무효·60초 합산·동시 가입·인증과 재발급 경합·악센트 주소 구분·로그에 원문 없음). U3: `MemberLoginServiceTest`·`LoginAttemptThrottleTest`와 `AuthSessionServiceTest`·`SessionCookieTest` 추가분(단위), `MemberSessionApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `MemberSessionIntegrationTest`(실제 HTTP·MySQL, V13 적용·로그인 때 세션 ID·CSRF 교체와 이전 세션 폐기(병합 조건 ④)·7일·30일·동시 5개·로그아웃은 현재 세션만·계정 존재 비공개·15분 5회 잠금과 경계·동시 실패·서로 다른 회원 동시 로그인·계정 전환 동시 로그인·로그에 원문 없음). U4: `PasswordResetApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `PasswordResetIntegrationTest`(실제 HTTP·MySQL, 해시만 저장·계정 존재 비공개(미인증 계정에도 발송)·완료 시 그 회원의 모든 세션 종료와 다른 회원 세션 유지·미인증 유지·토큰 15분·1회용(같은 토큰 동시 사용 포함)·재발급 무효·다른 목적 토큰 상호 거부(U2 이월)·60초 합산·로그인 잠금 유지·이전 비밀번호 로그인과의 동시 경합·로그에 원문 없음). G2(#157): `AuthSessionServiceTest` 추가분(업무 요청 검사: 7일 연장·30일 상한·CSRF 실패 시 갱신 없음·401이 403보다 먼저), `MemberRegistrationIntegrationTest` 추가분(인증 완료 때 장부 생성), `MemberApiNoStoreWebTest`(`member` 프로필 웹 슬라이스: 업무 경로 401·403·쿠키 재발급 200·미등록 404의 no-store), `MemberProfileIntegrationTest`(`member` 프로필 실제 HTTP·MySQL: 가입→인증→로그인→`/me`, 회원 A·B 카드 격리와 남의 카드 404, 시연 헤더 무시·시연 포트폴리오 접근 불가, 미인증·익명·만료·로그아웃 401, 업무 요청의 7일 연장·30일 상한·쿠키 재발급, CSRF 403·미저장과 401→403→400→404 순서, 동시 6번째 로그인, 미등록 업무 경로 404, 업무 응답 no-store, 남의 카드와 없는 카드의 404 본문 동일).

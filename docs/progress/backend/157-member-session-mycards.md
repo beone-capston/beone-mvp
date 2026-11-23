@@ -29,13 +29,15 @@
     - `MemberRegistrationService.verifyEmail`이 같은 트랜잭션에서 이벤트를 발행합니다.
     - `AuthSessionService.checkMemberRequest`: 401 → 쓰기 CSRF 403 → 통과 시 미사용 7일 연장(30일 상한)을 한 트랜잭션에서 합니다. CSRF가 실패하면 갱신하지 않습니다.
     - `MemberApiInterceptor`·`MemberApiWebConfiguration`: `/api/v1/me`, `/api/v1/me/**`에서 컨트롤러가 있는 경로만 검사하고 쿠키를 재발급합니다.
+    - `MemberApiWebConfiguration`이 인증 API의 `AuthNoStoreFilter`를 `/api/v1/me`, `/api/v1/me/*`에도 등록합니다. 성공·401·403·미등록 404 모두 `Cache-Control: no-store`입니다(R158 F1, G1 D5 권장 4항).
     - `MemberApiExceptionHandler`: 401·403을 인증 API와 같은 본문으로 냅니다.
     - `AuthenticatedMember`: 회원 ID를 요청 속성으로 넘깁니다.
     - 인증 부품 15개에 `member` 프로필을 더했습니다. 가짜 메일 발송기도 포함합니다.
   - `card`
     - `CurrentUserController`·`UserCardController`에 `member` 프로필을 더했습니다.
     - `/me` 응답의 `demoUser`는 회원이면 `null`입니다(형태 유지, D7).
-  - `member`에 등록하지 않은 것: 주문·예정 소비·추천·모의 승인·월간 상태·결제 설정·원장·CODEF·시연 사용자 목록·CORS. 로그인 여부와 관계없이 404입니다(D9 미결).
+  - `member`에 등록하지 않은 것: 주문·예정 소비·추천·모의 승인·월간 상태·결제 설정·원장·CODEF·시연 사용자 목록·CORS. 로그인 여부와 관계없이 404입니다. 이 업무 API의 `member` 등록은 G3 범위입니다.
+  - 회원 장부는 이메일 인증 때 프로필과 관계없이(`local`·`demo` 포함) 생깁니다. 시연 응답·`/demo-users`에는 나오지 않습니다(R158 F2).
 - 테스트
   - 단위
     - `CurrentUserTest`(3)
@@ -43,7 +45,7 @@
     - `CurrentUserModeGuardTest`(8)
     - `AuthSessionServiceTest` 추가 4
     - `UserCardServiceTest` 추가 1
-  - 웹 슬라이스: `DemoUserApiWebTest` 2건의 프로브 기대값에 `CurrentUser` 새 필드를 반영했습니다. 테스트 전용 경로이며 공개 응답은 그대로입니다.
+  - 웹 슬라이스: `MemberApiNoStoreWebTest`(4, `member` 프로필): 401·403·쿠키 재발급 200·미등록 404의 no-store. `DemoUserApiWebTest` 2건의 프로브 기대값에 `CurrentUser` 새 필드를 반영했습니다. 테스트 전용 경로이며 공개 응답은 그대로입니다.
   - 통합
     - `MemberProfileIntegrationTest`(8, `member` 프로필)
       - 가입 → 인증 → 로그인 → `/me`
@@ -54,15 +56,18 @@
       - CSRF 403·미저장과 401 → 403 → 400 → 404 순서
       - 동시 6번째 로그인
       - 미등록 경로 404
-    - `MemberUsersMigrationIntegrationTest`(2): 별도 스키마에 V13 적용 → 회원 → V14 순서로 백필을 확인하고, CHECK·UNIQUE·FK·RESTRICT를 확인합니다.
+      - 401·403·쿠키 재발급 200·미등록 404의 no-store, 상품 조회에는 없음(R158 F1)
+      - 남의 카드 404는 `USER_CARD_NOT_FOUND` 본문이 없는 카드와 같음(R158 F6)
+    - `MemberUsersMigrationIntegrationTest`(2): 별도 스키마에 V13 적용 → 회원 → V14 순서로 백필을 확인하고, CHECK·UNIQUE·FK·RESTRICT를 확인합니다. CHECK 위반은 메시지 문구 대신 MySQL 오류 코드 3819로 확인합니다(R158 F7).
     - `MemberRegistrationIntegrationTest` 추가 단언: 인증 완료 때 장부를 만듭니다.
     - auth 통합 테스트 3개의 정리 순서: RESTRICT 때문에 회원 장부를 먼저 지웁니다.
 - 검증 결과와 메모리 관측: PR 본문에 적습니다. `member` 프로필 통합 컨텍스트가 1개 늘었습니다. 컨텍스트 캐시 상한 4(#143)는 그대로입니다.
 - 남은 것
   - 프런트 Vite 프록시: 팀원 조율 대기(N-FE-PROXY, D-23 11항 변경 기록만 함)
   - 회원용 가상 포트폴리오(D1b, G3 이후)
-  - `member`에 열 나머지 업무 API(D9)
+  - `member`에 열 나머지 업무 API(G3 범위)
+  - 공개 회원의 CODEF 연결 범위(D9)
   - 공개 프로필 구성(O1~O3)
   - 탈퇴·보존(D10)
-  - D8
+  - Idempotency-Key 저장 단위(D8)
   - D3의 DB 갱신 빈도 제한: 이번에는 하지 않았습니다. 업무 요청마다 갱신합니다.
