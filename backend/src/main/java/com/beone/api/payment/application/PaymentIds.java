@@ -24,7 +24,11 @@ public enum PaymentIds {
 		this.format = Pattern.compile(Pattern.quote(prefix) + "[1-9][0-9]{0,18}");
 	}
 
-	/** DB 번호를 외부 ID로 쓴다. */
+	/**
+	 * DB 번호를 외부 ID로 쓴다.
+	 * @param id DB 번호
+	 * @return 외부 ID
+	 */
 	public String format(long id) {
 		if (id < 1) {
 			throw new IllegalArgumentException("id must be positive");

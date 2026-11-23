@@ -115,6 +115,9 @@ public class RecommendationService {
 
 	/**
 	 * 주문의 추천을 계산해 저장한다. 같은 주문이라도 부를 때마다 새 추천을 만든다.
+	 * @param user 현재 사용자
+	 * @param orderId 외부 주문 ID
+	 * @return 저장한 추천 문서
 	 * @throws com.beone.api.order.application.OrderNotFoundException 없거나 다른 사용자의 주문
 	 * @throws OrderAlreadyPaidException 이미 모의 승인된 주문
 	 */
@@ -126,6 +129,9 @@ public class RecommendationService {
 	/**
 	 * 모의 승인 직전 재계산. {@link #calculate}와 같은 계산·저장을 하고, 엔진이 낸 카드별 한도 버킷 차감액을 함께 돌려준다.
 	 * 모의 결제(payment)가 승인 카드의 차감액을 원장에 남기는 데 쓴다. recommendation 패키지가 이 작업(#116)에서 더한 유일한 공개 메서드다.
+	 * @param user 현재 사용자
+	 * @param orderId 외부 주문 ID
+	 * @return 저장한 추천과 카드별 차감액
 	 * @throws com.beone.api.order.application.OrderNotFoundException 없거나 다른 사용자의 주문
 	 * @throws OrderAlreadyPaidException 이미 모의 승인된 주문
 	 */
@@ -184,6 +190,9 @@ public class RecommendationService {
 
 	/**
 	 * 저장한 추천을 다시 계산하지 않고 돌려준다. 무효화 여부만 지금 상태와 비교해 판정한다.
+	 * @param user 현재 사용자
+	 * @param recommendationId 외부 추천 ID
+	 * @return 저장한 추천과 무효화 여부
 	 * @throws RecommendationNotFoundException 없거나 형식이 틀렸거나 다른 사용자의 추천
 	 */
 	@Transactional(readOnly = true)
@@ -200,6 +209,7 @@ public class RecommendationService {
 	/**
 	 * 저장한 추천 하나의 지금 무효화 사유. {@link #get}과 같은 지연 판정이다. 보유 카드 변경 응답의 무효화 목록에 쓴다(#120).
 	 * @param recommendationId 저장소 추천 번호
+	 * @param user 현재 사용자
 	 * @return 무효화 사유. 유효하거나 이 사용자의 추천이 아니면 비어 있다
 	 */
 	@Transactional(readOnly = true)

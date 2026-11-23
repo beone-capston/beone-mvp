@@ -30,7 +30,11 @@ public class PlannedSpendService {
 		this.orderClock = orderClock;
 	}
 
-	/** 현재 사용자의 이번 달 예정 소비를 요청 순서대로 돌려준다. */
+	/**
+	 * 현재 사용자의 이번 달 예정 소비를 요청 순서대로 돌려준다.
+	 * @param user 현재 사용자
+	 * @return 이번 달 예정 소비 목록
+	 */
 	@Transactional(readOnly = true)
 	public List<PlannedSpendDetail> list(CurrentUser user) {
 		return findCurrentMonth(user, this.orderClock.currentMonth());
@@ -38,6 +42,9 @@ public class PlannedSpendService {
 
 	/**
 	 * 현재 사용자의 예정 소비를 통째로 교체한다. 빈 목록이면 모두 지운다.
+	 * @param user 현재 사용자
+	 * @param items 교체할 예정 소비 목록
+	 * @return 저장한 예정 소비 목록
 	 * @throws PlannedDateOutOfMonthException 이번 달 밖 날짜가 있을 때. 웹 검증 뒤 달이 바뀐 경우이며 웹 처리기가 400으로 바꾼다
 	 * @throws IllegalArgumentException 5건을 넘을 때. 웹 경계에서 먼저 400으로 걸러지므로 여기서는 불변식 위반이다
 	 */

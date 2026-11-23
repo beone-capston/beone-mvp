@@ -78,12 +78,18 @@ public class SimulatedPaymentEntity {
 		this.benefitServiceIds = benefitServiceIds;
 	}
 
-	/** 원장 승인 행을 연결한다. 승인한 결제만 부른다. */
+	/**
+	 * 원장 승인 행을 연결한다. 승인한 결제만 부른다.
+	 * @param ledgerId 원장 승인 행 ID
+	 */
 	public void attachApprovalLedger(long ledgerId) {
 		this.approvalLedgerId = ledgerId;
 	}
 
-	/** 결제 ID를 받은 뒤 응답 본문을 채운다. */
+	/**
+	 * 결제 ID를 받은 뒤 응답 본문을 채운다.
+	 * @param documentJson 응답 본문 JSON
+	 */
 	public void attachDocument(String documentJson) {
 		this.documentJson = documentJson;
 	}
@@ -101,7 +107,10 @@ public class SimulatedPaymentEntity {
 		this.status = (total == this.amountWon) ? PaymentStatus.CANCELLED : PaymentStatus.PARTIALLY_CANCELLED;
 	}
 
-	/** 남은 취소 가능 금액. 실패한 결제는 0이다. */
+	/**
+	 * 남은 취소 가능 금액. 실패한 결제는 0이다.
+	 * @return 남은 취소 가능 금액(원)
+	 */
 	public long cancellableWon() {
 		return (this.status == PaymentStatus.FAILED) ? 0 : this.amountWon - this.cancelledWon;
 	}
