@@ -23,9 +23,9 @@ public class DemoUserService {
 		this.userRepository = userRepository;
 	}
 
-	/** 시연 사용자 목록을 {@link DemoUser} 선언 순서로 돌려준다. */
+	/** 시연 사용자 목록을 {@link DemoUser} 선언 순서로 돌려준다. 회원 장부는 넣지 않는다. */
 	public List<DemoUserProfile> listDemoUsers() {
-		return this.userRepository.findAll()
+		return this.userRepository.findByDemoUserIsNotNull()
 			.stream()
 			.sorted(Comparator.comparing(UserEntity::getDemoUser))
 			.map(DemoUserService::toProfile)
@@ -36,7 +36,7 @@ public class DemoUserService {
 	public CurrentUser currentUserOf(DemoUser demoUser) {
 		UserEntity user = this.userRepository.findByDemoUser(demoUser)
 			.orElseThrow(() -> new IllegalStateException("시연 사용자 시드가 없습니다."));
-		return new CurrentUser(user.getUserId(), user.getDemoUser());
+		return new CurrentUser(user.getUserId(), user.getDemoUser(), user.getPortfolioType(), user.isReadOnly());
 	}
 
 	private static DemoUserProfile toProfile(UserEntity user) {

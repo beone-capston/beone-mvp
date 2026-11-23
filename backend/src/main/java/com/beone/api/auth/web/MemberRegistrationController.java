@@ -14,10 +14,10 @@ import org.springframework.web.bind.annotation.RestController;
  * 회원가입·인증메일 재요청·이메일 인증 완료 API(docs/api/auth.md U2).
  *
  * <p>CSRF 검사는 인터셉터가 본문 검증보다 먼저 한다. 판정 순서는 403 {@code CSRF_INVALID} → 400 {@code INVALID_REQUEST} → 429
- * {@code RATE_LIMITED}다. 가입과 재요청은 계정 유무와 관계없이 같은 202다. {@code local}·{@code demo} 프로필 전용이다.
+ * {@code RATE_LIMITED}다. 가입과 재요청은 계정 유무와 관계없이 같은 202다. {@code local}·{@code demo}·{@code member} 프로필 전용이다.
  */
 @RestController
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 class MemberRegistrationController {
 
 	private final MemberRegistrationService registrationService;

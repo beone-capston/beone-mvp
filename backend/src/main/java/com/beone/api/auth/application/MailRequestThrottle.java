@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 거절된다.
  */
 @Component
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 public class MailRequestThrottle {
 
 	/** 같은 주소의 재발송 간격(사본). */

@@ -23,11 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>요청은 계정 유무와 관계없이 반환값이 없고(컨트롤러가 같은 202로 답함), 계정이 있으면 인증 여부와 관계없이 재설정 메일을
  * 보낸다(관리자 판단). 메일 60초 제한은 가입·인증메일 재요청과 같은 주소 기준으로 합산한다. 완료는 회원 행을 잠근 한 트랜잭션에서
  * 비밀번호를 바꾸고 그 회원의 모든 세션과 재설정 토큰을 지운다. 로그인도 같은 회원 행을 잠그므로, 동시에 이전 비밀번호로 만든
- * 세션이 남지 않는다. 이메일 인증 상태·로그인 실패 잠금은 바꾸지 않고 자동 로그인하지 않는다. {@code local}·{@code demo} 프로필
+ * 세션이 남지 않는다. 이메일 인증 상태·로그인 실패 잠금은 바꾸지 않고 자동 로그인하지 않는다. {@code local}·{@code demo}·{@code member} 프로필
  * 전용이다(결정 30).
  */
 @Service
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 public class PasswordResetService {
 
 	/** 비밀번호 재설정 토큰 유효 시간(사본). */

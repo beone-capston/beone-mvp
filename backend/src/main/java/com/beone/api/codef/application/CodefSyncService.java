@@ -44,7 +44,6 @@ import com.beone.api.codef.sync.CodefPerformanceReference;
 import com.beone.api.codef.sync.CodefTargetOutcome;
 import com.beone.api.codef.transport.CodefCallResult;
 import com.beone.api.user.application.CurrentUser;
-import com.beone.api.user.application.DemoUser;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -138,7 +137,7 @@ public class CodefSyncService {
 	 * @throws CodefUnavailableException 게이트웨이·키 없음, 세 대상 모두 실패
 	 */
 	public CodefSyncResult sync(CurrentUser user, LocalDate from, LocalDate to) {
-		if (user.demoUser() == DemoUser.VIRTUAL_PORTFOLIO) {
+		if (user.readOnly()) {
 			throw new CodefPortfolioReadOnlyException();
 		}
 		CodefSyncPeriod period = CodefSyncPeriod.resolve(from, to, LocalDate.now(this.clock));

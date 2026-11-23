@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>호출한 트랜잭션 안에서 처음부터 배타 행 잠금을 쥐므로 같은 이메일의 동시 로그인은 차례로 판정된다.
  */
 @Component
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 public class LoginAttemptThrottle {
 
 	/** 실패를 세는 기간과 잠금 기간(사용자 직접 결정). */
