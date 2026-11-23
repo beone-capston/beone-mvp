@@ -11,6 +11,7 @@ import com.beone.api.benefit.card.ServiceId;
  *
  * @param reasons 판정하지 않는 이유. 비어 있을 수 없다
  * @param selectionReasons 규칙 선택 단계에서 이미 확인 필요로 분리된 경우 그 사유 원문. 해당하지 않으면 비어 있다
+ * @param serviceId 서비스 식별자
  */
 public record UnsupportedService(ServiceId serviceId, Set<UnsupportedReason> reasons, List<String> selectionReasons) {
 

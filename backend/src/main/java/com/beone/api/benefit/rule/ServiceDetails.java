@@ -36,19 +36,27 @@ public record ServiceDetails(Optional<String> displayName, Optional<StackingBasi
 		}
 	}
 
-	/** 추가 값이 없는 서비스. 규칙 데이터를 읽는 로더는 이 값을 쓰지 않고 데이터의 값을 그대로 담는다. */
+	/**
+	 * 추가 값이 없는 서비스. 규칙 데이터를 읽는 로더는 이 값을 쓰지 않고 데이터의 값을 그대로 담는다.
+	 * @return 추가 값이 없는 상세
+	 */
 	public static ServiceDetails none() {
 		return new ServiceDetails(Optional.empty(), Optional.empty(), Optional.empty(), Set.of(), List.of());
 	}
 
 	/**
 	 * 주문 업종이 포함 관계 미확인 쌍의 코드이면 참. 그 주문에서 이 서비스의 대상 여부를 단정하지 않는다.
+	 * @param merchantClass 주문 업종
+	 * @return 포함 관계 미확인 쌍의 코드이면 {@code true}
 	 */
 	public boolean inclusionUnconfirmedFor(MerchantClass merchantClass) {
 		return inclusionUnconfirmed.stream().anyMatch(pair -> pair.merchantClass().equals(merchantClass));
 	}
 
-	/** 주문 입력으로 판정하지 못하는 제외 조건이 있으면 참. 그런 서비스의 확정 금액은 실제보다 클 수 있다(D-20). */
+	/**
+	 * 주문 입력으로 판정하지 못하는 제외 조건이 있으면 참. 그런 서비스의 확정 금액은 실제보다 클 수 있다(D-20).
+	 * @return 판정하지 못하는 제외 조건이 있으면 {@code true}
+	 */
 	public boolean hasUnevaluatedExclusions() {
 		return !unevaluatedExclusions.isEmpty();
 	}

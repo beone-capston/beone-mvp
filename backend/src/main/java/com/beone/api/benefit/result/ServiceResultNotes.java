@@ -18,6 +18,7 @@ import com.beone.api.benefit.rule.TermBasis;
  * @param fractionalWonTruncated 후보 금액을 계산하며 원 미만을 버렸으면 참
  * @param fractionalWonBasis 원 미만을 버렸을 때 그 처리의 근거 표시. 버리지 않았으면 비어 있다
  * @param unevaluatedExclusions 주문 입력에 없어 판정하지 못한 제외 조건
+ * @param serviceId 서비스 식별자
  */
 public record ServiceResultNotes(ServiceId serviceId, Optional<UsageBasis> usageBasis, boolean mayDifferFromActual,
 		Optional<String> usageNote, Optional<LimitReason> limitReason, boolean fractionalWonTruncated,

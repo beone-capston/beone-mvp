@@ -6,6 +6,9 @@ import java.util.Objects;
 
 /**
  * 값이 가리키는 기간. 시작일과 종료일을 포함하며 Asia/Seoul 기준 날짜다.
+ *
+ * @param from 시작일(포함)
+ * @param to 종료일(포함)
  */
 public record BasisPeriod(LocalDate from, LocalDate to) {
 

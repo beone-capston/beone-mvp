@@ -21,6 +21,7 @@ public sealed interface RecommendationOutcome {
 	 * @param marginOverRunnerUp 차선 카드와의 월간 혜택 차이. 확정된 경우에만 있다
 	 * @param conditional 미확인 상태 때문에 선택이 바뀔 수 있으면 참. 이때는 확정 최적 추천으로 표시하지 않는다(PRD FR-05, D-03).
 	 * 바뀔 수 있는지는 계산 단계가 판단하고 모델은 값만 보관한다.
+	 * @param card 선택한 카드
 	 */
 	record Selected(CardId card, Optional<SelectionBasis> basis, List<CardId> tiedCards,
 			Optional<Won> marginOverRunnerUp, boolean conditional) implements RecommendationOutcome {
@@ -53,6 +54,8 @@ public sealed interface RecommendationOutcome {
 
 	/**
 	 * 추천할 카드를 정하지 못한 결과(예: 쓸 수 있는 규칙이 없는 평가 C02).
+	 *
+	 * @param reason 카드를 정하지 못한 사유
 	 */
 	record NotDetermined(String reason) implements RecommendationOutcome {
 

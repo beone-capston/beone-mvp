@@ -22,7 +22,11 @@ public sealed interface MerchantTarget {
 	record AllMerchants() implements MerchantTarget {
 	}
 
-	/** 나열한 업종만. */
+	/**
+	 * 나열한 업종만.
+	 *
+	 * @param classes 대상 업종 집합
+	 */
 	record SpecificClasses(Set<MerchantClass> classes) implements MerchantTarget {
 
 		public SpecificClasses {

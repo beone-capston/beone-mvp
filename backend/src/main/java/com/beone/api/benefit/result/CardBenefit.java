@@ -22,6 +22,7 @@ import com.beone.api.benefit.rule.RuleVersionRef;
  * @param monthlyTotal 현재 주문을 이 카드로 결제할 때의 월간 총예상 혜택
  * @param services 현재 주문의 서비스별 혜택
  * @param remainingLimits 현재 주문 뒤 한도 묶음별 잔여 한도
+ * @param cardId 카드 상품 식별자
  */
 public record CardBenefit(CardId cardId, Optional<RuleVersionRef> appliedRule, ApplicationStatus status,
 		BenefitAmount currentOrderBenefit, BenefitAmount monthlyTotal, List<ServiceBenefit> services,

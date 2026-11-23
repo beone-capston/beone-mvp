@@ -11,6 +11,10 @@ import com.beone.api.benefit.state.BasisPeriod;
 /**
  * 한 출처의 원장 거래와 완전하다고 선언된 기간.
  * 보유하지 않은 카드의 거래도 받아 두며, 비교할 때는 제외한다(사례집 M10).
+ *
+ * @param source 원장 출처
+ * @param transactions 원장 거래 목록
+ * @param completePeriods 카드별 완전 기간 선언
  */
 public record Ledger(LedgerSource source, List<LedgerTransaction> transactions, List<LedgerCoverage> completePeriods) {
 
@@ -23,6 +27,9 @@ public record Ledger(LedgerSource source, List<LedgerTransaction> transactions, 
 	/**
 	 * 기간의 모든 날짜가 그 카드의 완전 기간 선언 안에 있으면 참.
 	 * 인접한 선언은 이어서 보고, 선언되지 않은 날이 하나라도 있으면 불완전하다.
+	 * @param cardId 카드 상품 식별자
+	 * @param period 확인할 기간
+	 * @return 기간 전체가 완전하면 {@code true}
 	 */
 	public boolean isComplete(CardId cardId, BasisPeriod period) {
 		for (LocalDate day = period.from(); !day.isAfter(period.to()); day = day.plusDays(1)) {
@@ -47,6 +54,9 @@ public record Ledger(LedgerSource source, List<LedgerTransaction> transactions, 
 	 * </ol>
 	 *
 	 * @param asOf 결과에 영향을 줄 수 있는 마지막 날짜. 실적 기간 종료일보다 앞설 수 없다
+	 * @param cardId 카드 상품 식별자
+	 * @param window 실적 기간
+	 * @return 취소 발생 근거
 	 */
 	public TriggerEvidence cancellationEvidence(CardId cardId, BasisPeriod window, LocalDate asOf) {
 		Objects.requireNonNull(cardId, "cardId");

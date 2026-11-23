@@ -8,6 +8,9 @@ import com.beone.api.benefit.card.CardId;
 /**
  * 결제 전 카드 선택 설정.
  * {@code AUTO_RECOMMEND}에서 대표 카드는 혜택이 같은 카드 사이의 동률 판정에만 쓴다(D-12 3단계).
+ *
+ * @param mode 카드 선택 방식
+ * @param representativeCard 대표 카드. 없으면 빈 값
  */
 public record SelectionPreference(SelectionMode mode, Optional<CardId> representativeCard) {
 

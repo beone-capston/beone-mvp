@@ -6,6 +6,9 @@ import com.beone.api.benefit.money.Won;
 
 /**
  * 전월 실적이 {@code minimumPerformance} 이상일 때 적용하는 월 한도액.
+ *
+ * @param minimumPerformance 적용 최소 전월 실적
+ * @param monthlyCap 월 한도액
  */
 public record LimitTier(Won minimumPerformance, Won monthlyCap) {
 

@@ -52,6 +52,15 @@ public record RulePolicy(RuleTerm<PerformanceWindow> performanceWindow,
 
 	/**
 	 * 포함 관계 표시가 없는 정책.
+	 * @param performanceWindow 전월 실적 산정 기간
+	 * @param performanceDateBasis 실적 기간 소속 기준일
+	 * @param cancellationAttribution 취소 금액을 실적에서 차감하는 달
+	 * @param performanceExcludedNatures 실적에서 제외하는 원장 거래 성격
+	 * @param performanceExcludedClasses 실적에서 제외하는 업종
+	 * @param excludesBenefitedSales 할인받은 매출을 실적에서 제외하는지 여부
+	 * @param limitPeriod 월 한도 기간
+	 * @param limitDeductionOrder 거래가 한도를 차감하는 순서
+	 * @param newCardGrace 신규 유예
 	 */
 	public RulePolicy(RuleTerm<PerformanceWindow> performanceWindow, RuleTerm<TransactionDateBasis> performanceDateBasis,
 			RuleTerm<CancellationAttribution> cancellationAttribution, Set<TransactionNature> performanceExcludedNatures,

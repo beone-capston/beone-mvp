@@ -19,6 +19,7 @@ import com.beone.api.benefit.money.Won;
  * @param remainingLimit 양수 후보를 줄일 남은 한도(D-18 K1). 한도가 없거나 금액이 0원이면 비어 있다
  * @param limitReason 한도 입력 때문에 판정하지 못한 사유. 있으면 금액은 확인 필요다
  * @param fractionalWonTruncated 금액을 계산하며 원 미만을 버렸으면 참(D-03)
+ * @param serviceId 서비스 식별자
  */
 public record ServiceCandidate(ServiceId serviceId, BenefitAmount standaloneAmount,
 		Set<ApplicationStatus> unmetConditions, Optional<Won> remainingLimit, Optional<LimitReason> limitReason,
@@ -59,6 +60,9 @@ public record ServiceCandidate(ServiceId serviceId, BenefitAmount standaloneAmou
 
 	/**
 	 * 한도·절사 표시가 없는 후보.
+	 * @param serviceId 서비스 식별자
+	 * @param standaloneAmount 이 서비스만 고를 때의 금액
+	 * @param unmetConditions 확인된 미충족 조건
 	 */
 	public ServiceCandidate(ServiceId serviceId, BenefitAmount standaloneAmount, Set<ApplicationStatus> unmetConditions) {
 		this(serviceId, standaloneAmount, unmetConditions, Optional.empty(), Optional.empty(), false);
@@ -70,6 +74,7 @@ public record ServiceCandidate(ServiceId serviceId, BenefitAmount standaloneAmou
 
 	/**
 	 * 한도를 적용한 금액. 채택 비교와 기여액은 이 금액을 쓴다(D-18 K3). 확인 필요 금액은 그대로 돌려준다.
+	 * @return 한도를 적용한 금액
 	 */
 	public BenefitAmount amountAfterLimit() {
 		if (remainingLimit.isEmpty()) {
