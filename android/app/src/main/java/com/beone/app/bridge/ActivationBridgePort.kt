@@ -17,9 +17,12 @@ class ActivationBridgePort(
         viewModel.requestAuthentication(authenticator)
     }
 
-    /** 활성 상태를 먼저 읽어 응답 대기 시간 만료를 반영한 뒤 요청 단계와 남은 시간을 읽는다. */
+    /**
+     * 응답 대기 시간 만료를 반영한 뒤 활성 상태와 남은 시간을 한 시점으로 함께 읽고, 이어서 요청 단계를 읽는다.
+     * 두 값을 따로 읽으면 사이에 만료되어 active=true·remainingMs=0이 나올 수 있다(#180).
+     */
     override fun currentState(): BridgeState {
-        val state = viewModel.state
-        return BridgeState.of(state, viewModel.requestPhase, viewModel.remainingMillis())
+        val snapshot = viewModel.activationSnapshot()
+        return BridgeState.of(snapshot.state, viewModel.requestPhase, snapshot.remainingMillis)
     }
 }

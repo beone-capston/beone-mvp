@@ -40,6 +40,12 @@ class VirtualCardActivationViewModel(
         return activation.remainingMillis()
     }
 
+    // 상태와 남은 시간을 같은 시점으로 함께 읽는다. 브리지 state 응답처럼 두 값을 같이 보낼 때 쓴다(#180).
+    fun activationSnapshot(): ActivationSnapshot {
+        refresh()
+        return activation.snapshot()
+    }
+
     // 라이브러리에 인증 요청을 전달했으면 true. 창 표시를 확인한 것은 아니다.
     // 대기 단계가 아니거나(인증 중·정리 중·정지) 기기에서 인증할 수 없으면 false.
     fun requestAuthentication(authenticator: DeviceAuthenticator): Boolean {
