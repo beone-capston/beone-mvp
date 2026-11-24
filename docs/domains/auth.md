@@ -127,6 +127,7 @@ com.beone.api.auth
 - [`MailRequestThrottle`](../../backend/src/main/java/com/beone/api/auth/application/MailRequestThrottle.java)은 이메일의 SHA-256 해시로 `auth_mail_throttles` 행을 만들거나 배타 잠금을 건 뒤(`INSERT ... ON DUPLICATE KEY UPDATE`) 잠금 읽기로 마지막 접수 시각을 봅니다. 60초 안이면 남은 초로 `MailRateLimitedException`을 던지고, 아니면 시각을 바꿉니다. 처음부터 배타 잠금을 쓰므로 같은 주소의 동시 요청은 차례로 판정되고 교착이 없습니다(공유 잠금 뒤 배타 잠금으로 올리던 첫 구현은 동시 시험에서 교착 500이 났습니다).
 - [`PasswordHasher`](../../backend/src/main/java/com/beone/api/auth/application/PasswordHasher.java)는 Bouncy Castle의 Argon2 구현으로 m=19456KiB·t=2·p=1, 솔트 16바이트, 해시 32바이트의 PHC 문자열을 만듭니다. `matches`는 저장값의 파라미터로 다시 계산해 상수 시간으로 비교하며 로그인 단위(U3)가 씁니다.
 - [`FakeAuthMailSender`](../../backend/src/main/java/com/beone/api/auth/application/FakeAuthMailSender.java)는 메일을 보내지 않고 최근 100통을 메모리에만 담습니다. 로그를 남기지 않고, 테스트가 `sentMails()`로 토큰을 꺼냅니다.
+- 가짜 발송기는 `local`·`demo`·`member`에서만 등록하고 공개 프로필 `prod`에서는 등록하지 않습니다(결정 38-6, #189). 실메일 발송기(N1 결정 대기)가 없으므로 실메일 결정 전에는 `prod`가 메일 발송기 빈이 없어 기동하지 않습니다.
 - 요청 본문은 [`MemberEmail`](../../backend/src/main/java/com/beone/api/auth/web/MemberEmail.java)(정규화 뒤 형식·254자)과 [`NewPassword`](../../backend/src/main/java/com/beone/api/auth/web/NewPassword.java)(11~32자, 영문·숫자·ASCII 특수기호 각 1개 이상, 그 밖의 문자 불가)로 검사하고, 정의하지 않은 필드는 [`UnknownFieldRejecting`](../../backend/src/main/java/com/beone/api/auth/web/UnknownFieldRejecting.java)이 400으로 만듭니다. 오류 응답과 `toString`에 비밀번호·토큰 값을 담지 않습니다.
 - 인증 부품은 `X-BeONE-Demo-User` 헤더와 `CurrentUserResolver`를 쓰지 않습니다. `user` 패키지와 의존 관계가 없습니다.
 

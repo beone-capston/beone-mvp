@@ -11,9 +11,12 @@ import org.springframework.stereotype.Component;
  * 메일을 실제로 보내지 않는 가짜 발송기. 보낸 메일을 메모리에만 담고 로그를 남기지 않는다. 테스트가 내용을 확인한다.
  *
  * <p>오래 켜 둔 시연 서버에서 메모리가 늘지 않도록 최근 {@value #CAPACITY}통만 둔다. {@code local}·{@code demo}·{@code member} 프로필 전용이다.
+ *
+ * <p>공개 프로필 {@code prod}(프로필 그룹으로 {@code member}가 함께 켜짐)에서는 등록하지 않는다(결정 38-6). 실메일 발송기(N1 결정 대기)가 없으므로
+ * {@code prod}는 {@link AuthMailSender} 빈이 없어 기동에 실패한다. 이 실패는 의도한 것이다.
  */
 @Component
-@Profile({ "local", "demo", "member" })
+@Profile("(local | demo | member) & !prod")
 public class FakeAuthMailSender implements AuthMailSender {
 
 	static final int CAPACITY = 100;
