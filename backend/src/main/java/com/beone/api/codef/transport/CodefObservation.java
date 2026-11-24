@@ -75,7 +75,8 @@ public final class CodefObservation {
 	/**
 	 * 카드사 아이디로 CODEF 계정을 등록한다. 상품 호출과 달리 로그인 입력을 싣는 유일한 경로다.
 	 *
-	 * <p>요청 형식(개인 카드, 아이디 로그인)은 비공개 실연동 전 근거 확인 대상이다. 본문은 로그에 남기지 않는다.
+	 * <p>요청 필드는 공식 SDK {@code codef-io/easycodef-java}(커밋 {@code ea96123})의 계정 생성 예제와 같다. {@code loginType} {@code 1}이 아이디 로그인이라는 설명은 확인하지 못했다.
+	 * 본문은 로그에 남기지 않는다.
 	 * @param organization 기관 코드
 	 * @param loginId 카드사 홈페이지 아이디
 	 * @param encryptedPassword CODEF 공개키로 암호화한 비밀번호(Base64). 평문을 받지 않는다
@@ -101,7 +102,7 @@ public final class CodefObservation {
 		return call(CodefAccountApi.ACCOUNT_DELETE, body, CodefProductResponseReader::readAccount);
 	}
 
-	// 개인(P) 카드(CD), 아이디 로그인(1). 근거 확인 대상.
+	// 공식 SDK 예제와 같은 값: 개인(P) 카드(CD), loginType 1. loginType 1의 의미 설명은 확인하지 못했다.
 	private static Map<String, String> account(String organization) {
 		Map<String, String> account = new HashMap<>();
 		account.put("countryCode", "KR");

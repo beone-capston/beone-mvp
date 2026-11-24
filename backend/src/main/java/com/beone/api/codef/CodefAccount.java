@@ -8,7 +8,8 @@ import tools.jackson.databind.JsonNode;
 /**
  * CODEF 계정 등록·삭제 응답의 {@code data}에서 보관하는 값. connectedId만 읽는다.
  *
- * <p>응답 형식({@code data.connectedId})은 비공개 실연동 전 근거 확인 대상이다. 저장소에는 계정 API의 공식 문서 사본이 아직 없다.
+ * <p>{@code data}에 {@code connectedId}가 있다는 것은 공식 SDK {@code codef-io/easycodef-java}(커밋 {@code ea96123}) README의 응답 예시와 같다. {@code successList}·{@code errorList}는
+ * 읽지 않는다.
  * 문자열 표현에 connectedId를 넣지 않는다.
  *
  * @param connectedId 연결 식별값. 누락·빈 문자열이면 빈 값

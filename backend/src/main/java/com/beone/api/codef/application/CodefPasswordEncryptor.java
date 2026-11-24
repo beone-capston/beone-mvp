@@ -22,7 +22,9 @@ import org.slf4j.LoggerFactory;
  * 카드사 비밀번호를 CODEF 공개키로 암호화한다(D-14 원칙 9). 실 게이트웨이({@code codef-live})만 쓴다.
  *
  * <p>공개키는 환경 변수 {@value #VARIABLE}(Base64 X.509 RSA 공개키)에서만 읽는다. 없거나 읽을 수 없으면 "설정 안 됨"이고, 등록은 CODEF를
- * 부르지 않고 실패한다. 암호화 방식(RSA/ECB/PKCS1Padding, 결과 Base64)은 비공개 실연동 전 근거 확인 대상이다. 평문 비밀번호의 바이트
+ * 부르지 않고 실패한다. 공개키 해석(Base64 → X.509)·암호화·결과 Base64는 공식 SDK {@code codef-io/easycodef-java}(커밋 {@code ea96123})의
+ * {@code EasyCodefUtil.encryptRSA}와 같다. SDK의 {@code "RSA"}는 JDK 기본 제공자에서 RSA/ECB/PKCS1Padding이고, 평문은 SDK가 기본 문자셋
+ * (Java 21에서 UTF-8)으로 바꾸므로 여기서는 UTF-8을 명시한다. 평문 비밀번호의 바이트
  * 사본은 암호화 직후 지운다. 값과 암호문은 로그·예외 문구에 넣지 않는다.
  */
 public final class CodefPasswordEncryptor {

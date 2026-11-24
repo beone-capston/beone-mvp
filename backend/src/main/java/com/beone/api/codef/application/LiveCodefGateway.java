@@ -31,7 +31,8 @@ import com.beone.api.codef.transport.CodefClient;
  *
  * <p>호출마다 관측을 하나 연다. 동기화 한 번은 API마다 한 번씩만 부르고, 실패해도 다시 부르지 않으며 리다이렉트를 따르지 않는다(전송 계층 규칙).
  * 근거 있는 결과 코드가 없어 연결 무효({@link CodefConnectionInvalidException})로 바꾸는 코드는 아직 없다. 상품 응답의 판정은
- * {@code codef.sync}가 한다. 계정 API의 경로·요청·응답 형식은 비공개 실연동 전 근거 확인 대상이다. 비밀번호·connectedId는 로그·예외 문구에
+ * {@code codef.sync}가 한다. 계정 API의 경로·요청·응답은 공식 SDK와 대조했고, 남은 확인 항목은 docs/domains/codef.md에 있다. 비밀번호·connectedId는
+ * 로그·예외 문구에
  * 넣지 않는다.
  */
 @Component
