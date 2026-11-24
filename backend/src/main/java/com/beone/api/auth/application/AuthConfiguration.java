@@ -5,10 +5,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
 /**
- * 회원 인증 설정값을 등록한다. {@code local}·{@code demo} 프로필 전용이다.
+ * 회원 인증 설정값을 등록한다. {@code local}·{@code demo}·{@code member} 프로필 전용이다.
  */
 @Configuration(proxyBeanMethods = false)
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 @EnableConfigurationProperties(AnonymousSessionProperties.class)
 public class AuthConfiguration {
 

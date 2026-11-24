@@ -10,7 +10,7 @@
   - 서버 세션 테이블 `auth_sessions`(Flyway `V9__auth_sessions.sql`, 임시 번호)
   - 세션 쿠키 `__Host-BEONE_SESSION`의 발급·읽기
   - CSRF 토큰 조회 `GET /api/v1/auth/csrf`. 세션이 없으면 익명 세션을 발급합니다.
-  - `/api/v1/auth/**` POST 요청의 CSRF 검사와, 모든 인증 응답의 `Cache-Control: no-store`
+  - `/api/v1/auth/**` POST 요청의 CSRF 검사와, 모든 인증 응답의 `Cache-Control: no-store`(`member` 프로필에서는 `/api/v1/me`·`/api/v1/me/**` 응답에도)
   - CSRF 실패 응답 403 `CSRF_INVALID`
 - U2(#128)
   - 회원 테이블 `members`, 1회용 토큰 `auth_tokens`, 메일 요청 제한 기록 `auth_mail_throttles`(Flyway `V11__auth_members.sql`, 임시 번호)
@@ -24,12 +24,16 @@
   - 비밀번호 재설정 요청 `POST /api/v1/auth/password-reset-requests`, 재설정 완료 `POST /api/v1/auth/password-resets`
   - 재설정 토큰(15분·1회용, 재발급 시 이전 토큰 무효)을 `auth_tokens`에 목적 `PASSWORD_RESET`으로 해시만 저장. 새 테이블·Flyway 파일 없음
   - 메일 60초 제한은 가입·인증메일 재요청과 합산, 계정 유무와 관계없이 같은 202. 완료하면 비밀번호를 바꾸고 그 회원의 모든 세션과 재설정 토큰을 무효화(D-24)
+- G2 첫 수직 기능(#157, [결정 37](../decisions.md#결정-37-회원과-업무-장부-연결))
+  - 로컬 회원 프로필 `member`: 인증 부품을 `local`·`demo`와 함께 이 프로필에도 등록(메일은 가짜 발송기)
+  - 이메일 인증 완료 때 같은 트랜잭션에서 `MemberEmailVerifiedEvent`를 발행해 회원의 '내 카드' 장부를 만들게 함(받는 쪽은 [user](user.md))
+  - `member`의 업무 API(`/api/v1/me`, `/api/v1/me/**`) 세션 검사: 401 `UNAUTHENTICATED` → 쓰기 CSRF 403 `CSRF_INVALID` 순서, 통과하면 미사용 7일 연장과 쿠키 재발급, 회원 ID를 요청 속성에 담음
 
 구현하지 않은 범위:
 
 - 실메일 발송·외부 공급자·메일 링크 주소 형식(미정)
-- 회원과 시연 사용자(`users`)·`/me` 업무 자원의 연결. 회원과 두 포트폴리오 모드의 관계가 D-24 미결이라 연결하지 않습니다.
-- 공개 프로필 활성화와 공개 CORS. 인증 부품은 `local`·`demo` 프로필에서만 등록됩니다.
+- `local`·`demo`에서 회원과 `/me` 업무 자원의 연결. 이 두 프로필은 시연 헤더 방식을 유지합니다. 회원 연결은 `member` 프로필의 `/me`·보유 카드까지입니다. 나머지 업무 API의 `member` 등록은 G3 범위이고, 공개 회원의 CODEF 연결 범위(D9)와 회원용 가상 포트폴리오(D1b)는 미결입니다.
+- 공개 프로필 활성화와 공개 CORS(O1~O3 미결). 인증 부품은 `local`·`demo`·`member` 프로필에서만 등록됩니다.
 
 ## 핵심 용어
 
@@ -50,40 +54,46 @@
 ```text
 com.beone.api.auth
 ├── web/
-│   ├── AuthCsrfController        GET /api/v1/auth/csrf, local·demo
+│   ├── AuthCsrfController        GET /api/v1/auth/csrf, local·demo·member
 │   ├── CsrfTokenResponse         응답 data(headerName, token)
 │   ├── SessionCookie             쿠키 이름, 읽기, Set-Cookie 문자열
 │   ├── AuthRequestInterceptor    /api/v1/auth/** POST CSRF 검사
-│   ├── AuthNoStoreFilter         /api/v1/auth/** 모든 응답(404·405 포함)에 no-store
-│   ├── AuthWebConfiguration      위 인터셉터·필터 등록, local·demo
+│   ├── AuthNoStoreFilter         /api/v1/auth/** 모든 응답(404·405 포함)에 no-store, member에서는 /api/v1/me/**에도
+│   ├── AuthWebConfiguration      위 인터셉터·필터 등록, local·demo·member
 │   ├── CsrfInvalidException      CSRF 실패(토큰 값을 담지 않음)
-│   ├── MemberRegistrationController 가입·인증메일 재요청·이메일 인증 완료, local·demo
+│   ├── MemberRegistrationController 가입·인증메일 재요청·이메일 인증 완료, local·demo·member
 │   ├── SignUpRequest·EmailVerificationRequestRequest·EmailVerificationRequest 요청 본문(정의하지 않은 필드는 400)
 │   ├── MemberEmail·NewPassword   이메일 형식·새 비밀번호 규칙 검사
 │   ├── UnknownFieldRejecting     정의하지 않은 필드 거부
 │   ├── AcceptedResponse          202 안내 문구
-│   ├── MemberSessionController   로그인·로그아웃·세션 조회, local·demo
+│   ├── MemberSessionController   로그인·로그아웃·세션 조회, local·demo·member
 │   ├── LoginRequest·LoginResponse·MemberSessionResponse 로그인 요청·응답, 세션 조회 응답(+09:00 시점)
 │   ├── InvalidCredentialsException·EmailNotVerifiedException·UnauthenticatedException·LoginRateLimitedException 401·403·401·429 예외
-│   ├── PasswordResetController   재설정 요청·완료, local·demo
+│   ├── PasswordResetController   재설정 요청·완료, local·demo·member
 │   ├── PasswordResetRequestRequest·PasswordResetRequest 요청 본문(정의하지 않은 필드는 400)
 │   ├── AuthErrorCode             인증 오류 코드(UNAUTHENTICATED, INVALID_CREDENTIALS, EMAIL_NOT_VERIFIED, CSRF_INVALID, AUTH_TOKEN_INVALID, RATE_LIMITED)
-│   └── AuthExceptionHandler      auth.web 컨트롤러의 기능별 처리기(@Order 최우선)
+│   ├── AuthExceptionHandler      auth.web 컨트롤러의 기능별 처리기(@Order 최우선)
+│   ├── MemberApiInterceptor      member 업무 API 세션·CSRF 검사, 쿠키 재발급(컨트롤러가 있는 경로만)
+│   ├── MemberApiWebConfiguration 위 인터셉터를 /api/v1/me, /api/v1/me/**에 등록, member
+│   ├── MemberApiExceptionHandler member 업무 API의 401·403을 인증 API와 같은 응답으로(전역, member)
+│   └── AuthenticatedMember       검사를 통과한 요청의 회원 ID(요청 속성), user 패키지가 읽음
 ├── application/
-│   ├── AuthSessionService        세션 발급·조회·만료 판정, 회원 세션 발급(동시 5개)·종료, local·demo
+│   ├── AuthSessionService        세션 발급·조회·만료 판정, 회원 세션 발급(동시 5개)·종료, member 업무 요청 검사(checkMemberRequest), local·demo·member
+│   ├── MemberRequestCheck        member 업무 요청 검사 결과(Authenticated·Unauthenticated·CsrfInvalid)
+│   ├── MemberEmailVerifiedEvent  이메일 인증 완료 이벤트(장부 생성용)
 │   ├── SessionTokens             세션 ID·CSRF 토큰 생성, SHA-256 해시, 상수 시간 비교
 │   ├── AnonymousSessionProperties 익명 세션 수명 설정값(미사용 2시간, 절대 상한 없음)
-│   ├── AuthConfiguration         설정값 등록, local·demo
+│   ├── AuthConfiguration         설정값 등록, local·demo·member
 │   ├── ActiveSession·IssuedSession 결과 타입(toString에서 원문 숨김)
-│   ├── MemberRegistrationService 가입·재요청·인증 완료, local·demo
-│   ├── PasswordResetService      재설정 요청·완료(전체 세션 종료), local·demo
+│   ├── MemberRegistrationService 가입·재요청·인증 완료, local·demo·member
+│   ├── PasswordResetService      재설정 요청·완료(전체 세션 종료), local·demo·member
 │   ├── AuthTokenMailer           1회용 토큰 발급(이전 토큰 삭제·해시 저장)과 커밋 뒤 메일, 가입·재설정이 함께 씀
 │   ├── MailRequestThrottle       같은 주소 60초 메일 요청 제한
 │   ├── PasswordHasher            Argon2id 해시·비교
 │   ├── EmailAddresses·MemberIds  이메일 정규화·검사, 회원 ID 발급
 │   ├── AuthMailSender·FakeAuthMailSender·AuthMail 메일 발송 포트, 가짜 발송기, 메일 내용
 │   ├── MailRateLimitedException·AuthTokenInvalidException 429·400 예외
-│   ├── MemberLoginService        로그인 판정·로그아웃·현재 세션, local·demo
+│   ├── MemberLoginService        로그인 판정·로그아웃·현재 세션, local·demo·member
 │   ├── LoginAttemptThrottle      같은 이메일 15분 5회 실패 잠금
 │   └── LoginResult·MemberSession·CurrentMemberSession 결과 타입
 └── persistence/
@@ -230,9 +240,9 @@ curl -i -X POST http://localhost:8080/api/v1/auth/password-resets \
 
 ## 제약과 현재 구현 범위
 
-- 인증 API는 `local`·`demo` 프로필 전용입니다. 공개 프로필의 활성화는 메일 공급자 결정 뒤에 정합니다.
+- 인증 API는 `local`·`demo`·`member` 프로필 전용입니다. `member`는 로컬 개발·테스트용 회원 프로필이며 공개 배포 프로필이 아닙니다. 공개 프로필 구성은 미결입니다(결정 37 O1).
 - `local`·`demo` CORS는 자격 증명을 허용하지 않아, 지금은 `localhost:5173` 화면에서 인증 API로 쿠키를 보낼 수 없습니다. API와 테스트는 동작합니다. 화면 연결 때 CORS를 따로 결정합니다.
-- 회원 세션은 업무 API의 현재 사용자 결정(`/me`·`CurrentUserResolver`·시연 헤더)에 연결하지 않았습니다(D-24 미결).
+- `local`·`demo`에서는 회원 세션을 업무 API의 현재 사용자 결정(`CurrentUserResolver`·시연 헤더)에 연결하지 않습니다. `member`에서는 `MemberApiInterceptor`와 `user.web.MemberCurrentUserResolver`가 회원 세션으로 정합니다(결정 37). 로컬 브라우저 연결은 Vite 프록시(같은 origin)로 하기로 했고 프런트 설정은 팀원 조율 대기입니다(N-FE-PROXY).
 - 만료 세션은 조회할 때와 그 회원이 다시 로그인할 때만 지웁니다. 주기적 정리는 없습니다.
 - 로그인 실패 제한은 이메일 기준이며 IP 기준은 없습니다. 없는 이메일의 잠금 상태 행(이메일 해시)도 남고, 정리 기한은 메일 제한 기록과 함께 미정입니다. 15분보다 오래된 실패 기록은 같은 이메일의 다음 실패 때 지웁니다.
 - 세션 조회는 서버 미사용 만료를 늘리지만 쿠키를 다시 심지 않습니다(사본 응답 헤더대로). 쿠키 `Max-Age`는 로그인 30일이나 마지막 POST·CSRF 조회의 값을 따릅니다.
@@ -240,4 +250,4 @@ curl -i -X POST http://localhost:8080/api/v1/auth/password-resets \
 - 가짜 발송기는 서버 메모리에만 메일을 두므로 로컬에서 실제로 인증을 끝까지 해 보려면 테스트를 써야 합니다. 링크 주소 형식은 미정입니다.
 - 재설정 요청 쿠키가 그 회원의 세션이면 그 세션도 지워집니다. 응답에는 다른 인증 POST처럼 갱신 쿠키가 붙지만 서버 세션은 없으므로 다음 요청 전에 `GET /api/v1/auth/csrf`로 새 세션을 받아야 합니다.
 - `V11`·`V13`은 임시 번호입니다. `develop`에 CODEF C3의 `V12__codef_syncs.sql`(#129)이 먼저 병합돼 지금 순서는 V9 → V10 → V11 → V12 → V13입니다. 최종 번호는 관리자가 병합 직전에 확인합니다.
-- 테스트: `SessionTokensTest`·`AnonymousSessionPropertiesTest`·`AuthSessionServiceTest`·`SessionCookieTest`(단위), `AuthCsrfApiWebTest`·`AuthCsrfProfileOffWebTest`(웹 슬라이스, 테스트 전용 POST 경로로 CSRF 검사), `AuthSessionIntegrationTest`(실제 HTTP·MySQL, V9 적용·해시 저장·만료). U2: `PasswordHasherTest`(Argon2 참조 구현 시험 벡터)·`EmailAddressesTest`·`MemberIdsTest`·`MailRequestThrottleTest`·`NewPasswordTest`(단위), `MemberRegistrationApiWebTest`(웹 슬라이스), `MemberRegistrationIntegrationTest`(실제 HTTP·MySQL, V11 적용·해시만 저장·계정 존재 비공개·토큰 30분·1회용·재발급 무효·60초 합산·동시 가입·인증과 재발급 경합·악센트 주소 구분·로그에 원문 없음). U3: `MemberLoginServiceTest`·`LoginAttemptThrottleTest`와 `AuthSessionServiceTest`·`SessionCookieTest` 추가분(단위), `MemberSessionApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `MemberSessionIntegrationTest`(실제 HTTP·MySQL, V13 적용·로그인 때 세션 ID·CSRF 교체와 이전 세션 폐기(병합 조건 ④)·7일·30일·동시 5개·로그아웃은 현재 세션만·계정 존재 비공개·15분 5회 잠금과 경계·동시 실패·서로 다른 회원 동시 로그인·계정 전환 동시 로그인·로그에 원문 없음). U4: `PasswordResetApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `PasswordResetIntegrationTest`(실제 HTTP·MySQL, 해시만 저장·계정 존재 비공개(미인증 계정에도 발송)·완료 시 그 회원의 모든 세션 종료와 다른 회원 세션 유지·미인증 유지·토큰 15분·1회용(같은 토큰 동시 사용 포함)·재발급 무효·다른 목적 토큰 상호 거부(U2 이월)·60초 합산·로그인 잠금 유지·이전 비밀번호 로그인과의 동시 경합·로그에 원문 없음).
+- 테스트: `SessionTokensTest`·`AnonymousSessionPropertiesTest`·`AuthSessionServiceTest`·`SessionCookieTest`(단위), `AuthCsrfApiWebTest`·`AuthCsrfProfileOffWebTest`(웹 슬라이스, 테스트 전용 POST 경로로 CSRF 검사), `AuthSessionIntegrationTest`(실제 HTTP·MySQL, V9 적용·해시 저장·만료). U2: `PasswordHasherTest`(Argon2 참조 구현 시험 벡터)·`EmailAddressesTest`·`MemberIdsTest`·`MailRequestThrottleTest`·`NewPasswordTest`(단위), `MemberRegistrationApiWebTest`(웹 슬라이스), `MemberRegistrationIntegrationTest`(실제 HTTP·MySQL, V11 적용·해시만 저장·계정 존재 비공개·토큰 30분·1회용·재발급 무효·60초 합산·동시 가입·인증과 재발급 경합·악센트 주소 구분·로그에 원문 없음). U3: `MemberLoginServiceTest`·`LoginAttemptThrottleTest`와 `AuthSessionServiceTest`·`SessionCookieTest` 추가분(단위), `MemberSessionApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `MemberSessionIntegrationTest`(실제 HTTP·MySQL, V13 적용·로그인 때 세션 ID·CSRF 교체와 이전 세션 폐기(병합 조건 ④)·7일·30일·동시 5개·로그아웃은 현재 세션만·계정 존재 비공개·15분 5회 잠금과 경계·동시 실패·서로 다른 회원 동시 로그인·계정 전환 동시 로그인·로그에 원문 없음). U4: `PasswordResetApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `PasswordResetIntegrationTest`(실제 HTTP·MySQL, 해시만 저장·계정 존재 비공개(미인증 계정에도 발송)·완료 시 그 회원의 모든 세션 종료와 다른 회원 세션 유지·미인증 유지·토큰 15분·1회용(같은 토큰 동시 사용 포함)·재발급 무효·다른 목적 토큰 상호 거부(U2 이월)·60초 합산·로그인 잠금 유지·이전 비밀번호 로그인과의 동시 경합·로그에 원문 없음). G2(#157): `AuthSessionServiceTest` 추가분(업무 요청 검사: 7일 연장·30일 상한·CSRF 실패 시 갱신 없음·401이 403보다 먼저), `MemberRegistrationIntegrationTest` 추가분(인증 완료 때 장부 생성), `MemberApiNoStoreWebTest`(`member` 프로필 웹 슬라이스: 업무 경로 401·403·쿠키 재발급 200·미등록 404의 no-store), `MemberProfileIntegrationTest`(`member` 프로필 실제 HTTP·MySQL: 가입→인증→로그인→`/me`, 회원 A·B 카드 격리와 남의 카드 404, 시연 헤더 무시·시연 포트폴리오 접근 불가, 미인증·익명·만료·로그아웃 401, 업무 요청의 7일 연장·30일 상한·쿠키 재발급, CSRF 403·미저장과 401→403→400→404 순서, 동시 6번째 로그인, 미등록 업무 경로 404, 업무 응답 no-store, 남의 카드와 없는 카드의 404 본문 동일).
