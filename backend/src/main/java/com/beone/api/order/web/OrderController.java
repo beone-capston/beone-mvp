@@ -18,10 +18,12 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 주문 생성·상세 조회 API(docs/api/orders.md). 현재 사용자는 {@link CurrentUser} 인자로만 받는다(D-09).
  *
- * <p>{@code local}·{@code demo} 프로필에서만 등록한다. 그 밖의 환경에서는 경로가 없어 404 {@code NOT_FOUND}다(시연 사용자 API와 같음).
+ * <p>{@code local}·{@code demo}·{@code member} 프로필에서 등록한다. 그 밖의 환경에서는 경로가 없어 404 {@code NOT_FOUND}다.
+ * {@code member}에서는 회원 세션의 장부가 현재 사용자이고, 세션 401·쓰기 CSRF 403·캐시 금지는 {@code /api/v1/me/**} 공통
+ * 인터셉터·필터가 컨트롤러 전에 처리한다(결정 37). 주문 목록 API는 없으므로 {@code GET /api/v1/me/orders}는 405다.
  */
 @RestController
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 @RequestMapping("/api/v1/me/orders")
 public class OrderController {
 

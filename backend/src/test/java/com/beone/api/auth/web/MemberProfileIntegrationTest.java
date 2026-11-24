@@ -59,6 +59,8 @@ class MemberProfileIntegrationTest {
 
 	private static final String CARD = "{\"displayName\":\"내 첫 카드\",\"cardProductId\":\"09174\"}";
 
+	private static final String METHOD_NOT_ALLOWED = "{\"code\":\"METHOD_NOT_ALLOWED\",\"message\":\"지원하지 않는 요청 방식입니다.\",\"errors\":[]}";
+
 	@LocalServerPort
 	int port;
 
@@ -263,8 +265,9 @@ class MemberProfileIntegrationTest {
 	}
 
 	/**
-	 * member 프로필은 인증 9개·/me·보유 카드·월간 상태·결제 설정·상품 조회·health만 연다. 나머지 업무 API는 로그인해도 404다. CODEF
-	 * 4개(D9 미결)와 시연 사용자 목록(결정 37 D2·D4)은 G3 뒤에도 404로 남는다.
+	 * member 프로필은 인증 9개·/me·보유 카드·월간 상태·결제 설정·주문·예정 소비·추천·상품 조회·health만 연다. 나머지 업무 API는
+	 * 로그인해도 404다. CODEF 4개(D9 미결)와 시연 사용자 목록(결정 37 D2·D4)은 G3 뒤에도 404로 남는다. 주문 경로는 POST만 있으므로
+	 * {@code GET /api/v1/me/orders}는 인증 전에 405 {@code METHOD_NOT_ALLOWED}다(docs/api.md 공통 실패 응답).
 	 */
 	@Test
 	void onlyAllowedRoutesAreRegistered() throws Exception {
@@ -276,10 +279,7 @@ class MemberProfileIntegrationTest {
 		assertThat(products.getHeaders().getCacheControl()).isNull();
 		assertThat(send(HttpMethod.GET, "/actuator/health", a, null).getStatusCode().value()).isEqualTo(200);
 
-		String[][] closed = { { "GET", "/api/v1/demo-users" }, { "GET", "/api/v1/me/orders" },
-				{ "POST", "/api/v1/me/orders" }, { "GET", "/api/v1/me/planned-spends" },
-				{ "POST", "/api/v1/me/orders/ord-1/recommendations" },
-				{ "GET", "/api/v1/me/recommendations/rec-1" },
+		String[][] closed = { { "GET", "/api/v1/demo-users" },
 				{ "POST", "/api/v1/me/orders/ord-1/simulated-payments" },
 				{ "GET", "/api/v1/me/ledger-transactions" }, { "GET", "/api/v1/me/codef/connection" },
 				{ "POST", "/api/v1/me/codef/connection" }, { "DELETE", "/api/v1/me/codef/connection" },
@@ -294,6 +294,14 @@ class MemberProfileIntegrationTest {
 			// 로그인하지 않아도 401이 아니라 404다(경로 자체가 없다)
 			assertThat(send(HttpMethod.valueOf(route[0]), route[1], Session.NONE, "{}").getStatusCode()
 				.value()).as("anonymous " + route[0] + " " + route[1]).isEqualTo(404);
+		}
+
+		// 목록 API가 없는 주문 경로의 GET은 핸들러가 없어 인터셉터 전에 405다. 로그인 여부와 관계없다
+		for (Session session : new Session[] { a, Session.NONE }) {
+			ResponseEntity<String> listOrders = send(HttpMethod.GET, "/api/v1/me/orders", session, null);
+			assertBody(listOrders, 405, METHOD_NOT_ALLOWED);
+			assertThat(listOrders.getHeaders().getAllow()).containsExactly(HttpMethod.POST);
+			assertNoStore(listOrders);
 		}
 	}
 

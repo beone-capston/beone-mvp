@@ -10,6 +10,7 @@
 - `GET /api/v1/me/orders/{orderId}`: 주문 상세. 없거나 다른 사용자의 주문은 404 `ORDER_NOT_FOUND`
 - `GET /api/v1/me/planned-spends`: 이번 달 예정 소비 목록
 - `PUT /api/v1/me/planned-spends`: 예정 소비 0~5건을 통째로 교체
+- 로컬 회원 프로필 `member` 등록(G3b #160): 네 API를 `member`에도 등록했습니다. 현재 사용자는 회원 세션의 '내 카드' 장부이고, 세션 401·쓰기 CSRF 403·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 컨트롤러 전에 처리합니다([docs/api.md 회원 세션](../api.md#회원-세션member-프로필), 결정 37). 주문 조회와 예정 소비 교체가 `user_id` 기준이므로 남의 주문·시연 장부의 주문은 없는 주문과 같은 404이고, 한 회원의 예정 소비 교체가 다른 장부의 행을 지우지 않습니다. 주문 경로에는 POST만 있어 `GET /api/v1/me/orders`는 405입니다. 서비스 코드는 바꾸지 않았습니다.
 - Flyway `V3__orders_planned_spends.sql`: `orders`·`planned_spends` 테이블. 시드는 없습니다. 번호는 병합 직전 다른 작업선과의 순서에 따라 바뀔 수 있습니다([D-23](../decisions.md#d-23-확정-정책) 12항).
 
 - 주문 상태 전이(#116): `CREATED → PAID → CANCELLED` 한 방향만 있습니다. 모의 승인(`payment`)이 성공하면 `PAID`가 되고 결제 ID(`simulatedPaymentId`, `pay-…`)를 함께 저장합니다. 전액 취소되면 `CANCELLED`입니다. 모의 실패(`FAILED`)와 부분취소는 주문 상태를 바꾸지 않습니다. 전이는 `payment`가 `OrderService.lockForPayment`·`markPaid`·`markCancelled`로만 하며, 셋 다 호출자 트랜잭션 안에서만 부를 수 있고(`MANDATORY`) 주문 행에 쓰기 잠금을 겁니다. 결제 ID는 문자열로 저장해 `order`가 `payment`를 참조하지 않습니다. 열은 Flyway `V8__simulated_payments_ledger.sql`이 더합니다.
@@ -36,7 +37,7 @@
 ```text
 com.beone.api.order
 ├── web/
-│   ├── OrderController · PlannedSpendController   API 4개, local·demo 프로필
+│   ├── OrderController · PlannedSpendController   API 4개, local·demo·member 프로필
 │   ├── CreateOrderRequest · PlannedSpendsRequest  요청 본문과 Bean Validation
 │   ├── CreatedOrderResponse · OrderDetailResponse · PlannedSpendsResponse  응답 data
 │   ├── StrictWonDeserializer · StrictDateDeserializer · StrictTimeDeserializer · StrictPaymentMethodDeserializer  필드 단위 엄격 역직렬화
@@ -63,8 +64,11 @@ com.beone.api.order
 ## 처리 흐름
 
 ```text
-POST /api/v1/me/orders (X-BeONE-Demo-User 헤더)
-→ CurrentUserResolver(user 패키지)가 CurrentUser 주입. 헤더 오류는 400 INVALID_REQUEST
+POST /api/v1/me/orders
+→ CurrentUserResolver(user 패키지)가 CurrentUser 주입
+   - local·demo: X-BeONE-Demo-User 헤더로 시연 사용자를 정함. 헤더 오류는 400 INVALID_REQUEST
+   - member: 헤더는 무시. 컨트롤러 전에 /api/v1/me/** 인터셉터가 세션 쿠키(없거나 만료면 401 UNAUTHENTICATED)와
+     쓰기 요청의 X-CSRF-TOKEN(틀리면 403 CSRF_INVALID)을 검사하고, 세션의 회원 장부를 현재 사용자로 씀
 → JSON 역직렬화: 금액은 JSON 정수만, 날짜 YYYY-MM-DD·시각 HH:mm:ss 문자열만 (아니면 400, errors [])
 → Bean Validation: 필수 필드, 금액 1 이상, merchantName 50자, merchantClass 허용 목록 (아니면 400, 필드 오류)
 → OrderService.create: user_id와 함께 저장, status=CREATED, createdAt=OrderClock.now()
@@ -110,7 +114,7 @@ LocalDate judgmentDate = order.orderDate(); // D-23 1항: 판정일은 주문일
 
 - `test`: [`OrderIdTest`](../../backend/src/test/java/com/beone/api/order/application/OrderIdTest.java)(ID 형식), [`OrderClockTest`](../../backend/src/test/java/com/beone/api/order/application/OrderClockTest.java)(서울 기준 달 경계), [`PlannedSpendServiceTest`](../../backend/src/test/java/com/beone/api/order/application/PlannedSpendServiceTest.java)(교체 직전 달 재확인), [`MerchantClassCatalogTest`](../../backend/src/test/java/com/beone/api/order/application/MerchantClassCatalogTest.java)(계약 예시 코드 허용, 대소문자·공백 거부), [`StrictDeserializerTest`](../../backend/src/test/java/com/beone/api/order/web/StrictDeserializerTest.java), [`OrderValueFormatsTest`](../../backend/src/test/java/com/beone/api/order/web/OrderValueFormatsTest.java)
 - `webTest`: [`OrderApiWebTest`](../../backend/src/test/java/com/beone/api/order/web/OrderApiWebTest.java)(계약 예시 응답, 계약 실패 목록 전부, 허용 밖 분류, 50자, 이번 달 경계, 시연 사용자 헤더 없음·잘못된 값)
-- `integrationTest`: [`OrderIntegrationTest`](../../backend/src/test/java/com/beone/api/order/OrderIntegrationTest.java)(V3 적용과 `ddl-auto: validate`, 실제 HTTP 저장·조회, 다른 시연 사용자 주문 404, 예정 소비 사용자별 분리·요청 순서·교체·지난달 행 처리, 거부된 PUT은 기존 값 유지)
+- `integrationTest`: [`OrderIntegrationTest`](../../backend/src/test/java/com/beone/api/order/OrderIntegrationTest.java)(V3 적용과 `ddl-auto: validate`, 실제 HTTP 저장·조회, 다른 시연 사용자 주문 404, 예정 소비 사용자별 분리·요청 순서·교체·지난달 행 처리, 거부된 PUT은 기존 값 유지), [`MemberOrderRecommendationIntegrationTest`](../../backend/src/test/java/com/beone/api/auth/web/MemberOrderRecommendationIntegrationTest.java)(`member`: 회원 장부 주문·예정 소비, 회원 A·B 분리, 남의 주문·없는 주문·형식 오류의 404 본문 동일, 시연 장부 주문 404와 시연 헤더 무시, 401, 쓰기 CSRF 403·미저장, 본문 400 미저장, no-store)
 
 ## 제약과 남은 위험
 

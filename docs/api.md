@@ -149,15 +149,15 @@ D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 업�
 
 ### 회원 세션(member 프로필)
 
-로컬 개발·테스트용 회원 프로필 `member`의 규칙입니다(결정 37, #157, G3a #159). 공개 배포 프로필 구성은 미결입니다(O1).
+로컬 개발·테스트용 회원 프로필 `member`의 규칙입니다(결정 37, #157, G3a #159, G3b #160). 공개 배포 프로필 구성은 미결입니다(O1).
 
 - 현재 사용자는 `__Host-BEONE_SESSION` 회원 세션 → 회원 → 회원의 '내 카드' 장부 순서로 정합니다(`MemberCurrentUserResolver`). `X-BeONE-Demo-User` 헤더는 읽지 않으므로 보내도 무시합니다.
 - `member`와 `local`·`demo`를 함께 켜면 기동에 실패합니다(현재 사용자 결정 방식은 하나만, D4).
 - 검사 순서: 401 `UNAUTHENTICATED`(쿠키 없음·익명 세션·만료·로그아웃) → 쓰기(POST·PUT·PATCH·DELETE)의 403 `CSRF_INVALID` → 본문 400 → 404입니다. 남의 자원은 404이고 `FORBIDDEN`은 쓰지 않습니다(D5·D6). CSRF 토큰은 `GET /api/v1/auth/csrf`로 받아 `X-CSRF-TOKEN` 헤더로 보냅니다. 실패하면 저장하지 않습니다.
 - 통과한 요청은 미사용 만료를 7일 늘리고 세션 쿠키를 새 `Max-Age`로 다시 심습니다. 로그인 뒤 최대 30일은 넘지 않습니다(D3).
 - 응답 헤더: `/api/v1/me`·`/api/v1/me/**`의 모든 응답(성공, 401·403, 등록하지 않은 경로의 404 포함)에 `Cache-Control: no-store`를 붙입니다. 인증 API와 같은 규칙이며(G1 D5 권장 4항), 업무 응답이 회원 개인 데이터와 세션 쿠키 재발급을 담기 때문입니다. `local`·`demo`의 업무 응답에는 붙이지 않습니다(기존 동작 유지).
-- 등록 경로: 인증 API 9개, `GET /api/v1/me`, 보유 카드 API(`/api/v1/me/cards/**`), 월간 상태 API 3개(`/api/v1/me/cards/{userCardId}/monthly-states/{month}` 조회·입력, `…/source-selections`), 결제 전 설정 API 2개(`/api/v1/me/payment-preference` 조회·변경), 카드 상품 조회, `/actuator/health`. 월간 상태·결제 전 설정은 G3a(#159)에서 등록했고 위 검사 순서·캐시 규칙과 회원 장부 단위 소유(남의 카드 404)를 그대로 따릅니다. 출처 충돌 계산 기준 선택(`source-selections`)은 `member`에서도 항상 409 `SOURCE_CONFLICT_NOT_FOUND`이고 저장하지 않습니다(결정 32 Q1). 결제 전 설정 변경은 기존 추천을 무효화하지 않습니다(결정 32 Q3).
-- 아직 등록하지 않은 경로: 주문·예정 소비·추천·모의 승인·원장·CODEF·시연 사용자 목록은 로그인 여부와 관계없이 404입니다. 주문·예정 소비·추천·모의 승인·원장의 `member` 등록은 G3 후속 범위입니다. 공개 회원의 CODEF 연결 범위는 별도 미결입니다(D9). 시연 사용자 목록은 `member`에 열지 않습니다(결정 37 D2·D4).
+- 등록 경로: 인증 API 9개, `GET /api/v1/me`, 보유 카드 API(`/api/v1/me/cards/**`), 월간 상태 API 3개(`/api/v1/me/cards/{userCardId}/monthly-states/{month}` 조회·입력, `…/source-selections`), 결제 전 설정 API 2개(`/api/v1/me/payment-preference` 조회·변경), 주문 API 2개(`POST /api/v1/me/orders`, `GET /api/v1/me/orders/{orderId}`), 예정 소비 API 2개(`/api/v1/me/planned-spends` 조회·교체), 추천 API 2개(`POST /api/v1/me/orders/{orderId}/recommendations`, `GET /api/v1/me/recommendations/{recommendationId}`), 카드 상품 조회, `/actuator/health`. 월간 상태·결제 전 설정은 G3a(#159), 주문·예정 소비·추천은 G3b(#160)에서 등록했고 위 검사 순서·캐시 규칙과 회원 장부 단위 소유(남의 카드·주문·추천 404)를 그대로 따릅니다. 추천 계산은 추천 행을 저장하는 POST라서 CSRF 토큰이 필요합니다. 출처 충돌 계산 기준 선택(`source-selections`)은 `member`에서도 항상 409 `SOURCE_CONFLICT_NOT_FOUND`이고 저장하지 않습니다(결정 32 Q1). 결제 전 설정 변경은 기존 추천을 무효화하지 않고(결정 32 Q3), 추천 제외 변경은 매핑 변경과 같은 `MAPPING_CHANGED`로 무효화합니다(결정 32 Q2). 주문 목록 API는 없으므로 `GET /api/v1/me/orders`는 로그인 여부와 관계없이 405 `METHOD_NOT_ALLOWED`입니다.
+- 아직 등록하지 않은 경로: 모의 승인·원장·CODEF·시연 사용자 목록은 로그인 여부와 관계없이 404입니다. 모의 승인·원장의 `member` 등록은 G3 후속 범위(G3c)입니다. 공개 회원의 CODEF 연결 범위는 별도 미결입니다(D9). 시연 사용자 목록은 `member`에 열지 않습니다(결정 37 D2·D4).
 - `local`·`demo`의 업무 API에는 세션·CSRF 검사를 걸지 않습니다(기존 동작 유지).
 
 ### 값 형식
@@ -257,6 +257,6 @@ D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 업�
 
 미구현·범위 밖:
 
-- 업무 API의 회원 세션 연동은 로컬 회원 프로필 `member`의 `/api/v1/me`, 보유 카드 API(#157), 월간 상태·결제 전 설정 API(G3a #159)까지만 구현했습니다(결정 37). 주문·예정 소비·추천·모의 승인·원장의 회원 연결은 G3 후속 범위이고, 공개 회원의 CODEF 연결 범위(D9)와 공개 프로필(O1~O3)은 미결입니다. `local`·`demo`는 시연 사용자 헤더로 현재 사용자를 정합니다. `FORBIDDEN`은 자리만 예약돼 있으며 쓰는 곳이 없습니다(D-09)
+- 업무 API의 회원 세션 연동은 로컬 회원 프로필 `member`의 `/api/v1/me`, 보유 카드 API(#157), 월간 상태·결제 전 설정 API(G3a #159), 주문·예정 소비·추천 API(G3b #160)까지만 구현했습니다(결정 37). 모의 승인·원장의 회원 연결은 G3 후속 범위(G3c)이고, 공개 회원의 CODEF 연결 범위(D9)와 공개 프로필(O1~O3)은 미결입니다. `local`·`demo`는 시연 사용자 헤더로 현재 사용자를 정합니다. `FORBIDDEN`은 자리만 예약돼 있으며 쓰는 곳이 없습니다(D-09)
 - DB·CODEF·AI 등 외부 연동 예외의 세부 분류(현재는 예상하지 못한 예외로 500 처리)
 - 서블릿 필터 단계 예외의 공통 응답

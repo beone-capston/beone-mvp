@@ -64,8 +64,8 @@ final class MemberApiTestClient {
 		this.jdbcTemplate.update("DELETE FROM auth_sessions");
 		this.jdbcTemplate.update("DELETE FROM auth_tokens");
 		this.jdbcTemplate.update("DELETE FROM auth_mail_throttles");
-		for (String table : new String[] { "payment_preferences", "recommendations", "orders", "monthly_states",
-				"user_cards" }) {
+		for (String table : new String[] { "payment_preferences", "recommendations", "orders", "planned_spends",
+				"monthly_states", "user_cards" }) {
 			this.jdbcTemplate.update("DELETE t FROM " + table + " t JOIN users u ON u.user_id = t.user_id"
 					+ " WHERE u.member_id IS NOT NULL");
 		}
@@ -129,6 +129,22 @@ final class MemberApiTestClient {
 		RestClient.RequestHeadersSpec<?> request = client().get().uri(path).header("X-BeONE-Demo-User", demoUser);
 		if (session.id() != null) {
 			request = request.header(HttpHeaders.COOKIE, cookie(session.id()));
+		}
+		return request.retrieve().toEntity(String.class);
+	}
+
+	/** 시연 헤더를 붙여 보낸다. 쓰기도 member 프로필에서는 헤더와 관계없이 회원 장부에 저장해야 한다(결정 37 D4). */
+	ResponseEntity<String> sendWithDemoHeader(HttpMethod method, String path, Session session, String body,
+			String demoUser) {
+		RestClient.RequestBodySpec request = client().method(method).uri(path).header("X-BeONE-Demo-User", demoUser);
+		if (session.id() != null) {
+			request = request.header(HttpHeaders.COOKIE, cookie(session.id()));
+		}
+		if (session.csrf() != null) {
+			request = request.header("X-CSRF-TOKEN", session.csrf());
+		}
+		if (body != null) {
+			request = request.contentType(MediaType.APPLICATION_JSON).body(body);
 		}
 		return request.retrieve().toEntity(String.class);
 	}

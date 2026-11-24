@@ -47,7 +47,8 @@ import org.springframework.test.context.ActiveProfiles;
  * <li>결제 전 설정 변경은 기존 추천을 무효화하지 않는다(결정 32 Q3). 월간 상태 재입력은 그 카드가 들어간 추천을
  * {@code MONTHLY_STATE_CHANGED}로 무효화한다(docs/api/recommendations.md)</li>
  * </ul>
- * 추천 API는 아직 member에 등록하지 않았으므로(G3b) 추천은 서비스로 직접 만들고 조회한다. 새 테스트 컨텍스트를 만들지 않도록
+ * G3a 당시 추천 API가 member에 없어 추천은 서비스로 직접 만들고 조회한다(API 확인은 G3b의
+ * {@link MemberOrderRecommendationIntegrationTest}). 새 테스트 컨텍스트를 만들지 않도록
  * {@link MemberProfileIntegrationTest}와 같은 프로필·가변 시계 조합을 쓴다. 시계는 서울 2026-11-18 10:00에서 시작한다.
  */
 @IntegrationTest

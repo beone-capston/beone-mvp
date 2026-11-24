@@ -10,8 +10,8 @@
 
 - `POST /api/v1/me/orders/{orderId}/recommendations`: 추천 계산. **201**과 계산 결과를 돌려줍니다. 같은 주문이라도 부를 때마다 새 추천 ID가 생깁니다.
 - `GET /api/v1/me/recommendations/{recommendationId}`: 저장한 결과 조회. 다시 계산하지 않고, 계산 응답에 `invalidated`·`invalidatedReason`만 더합니다.
-- 실패 응답: 404 `ORDER_NOT_FOUND`(없거나 다른 사용자의 주문), 409 `ORDER_ALREADY_PAID`(모의 승인된 주문), 404 `RECOMMENDATION_NOT_FOUND`(없거나 형식이 틀렸거나 다른 사용자의 추천). 시연 사용자 헤더가 없거나 틀리면 공통 처리기의 400 `INVALID_REQUEST`입니다.
-- `local`·`demo` 프로필에서만 등록합니다(다른 사용자 자원 API와 같음).
+- 실패 응답: 404 `ORDER_NOT_FOUND`(없거나 다른 사용자의 주문), 409 `ORDER_ALREADY_PAID`(모의 승인된 주문), 404 `RECOMMENDATION_NOT_FOUND`(없거나 형식이 틀렸거나 다른 사용자의 추천). `local`·`demo`에서는 시연 사용자 헤더가 없거나 틀리면 공통 처리기의 400 `INVALID_REQUEST`입니다. `member`는 헤더를 보지 않고 회원 세션으로 사용자를 정합니다(아래 항목).
+- `local`·`demo`·`member` 프로필에서 등록합니다. `member`(G3b #160)에서는 회원 세션의 '내 카드' 장부가 현재 사용자이고, 세션 401·CSRF 403·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 처리합니다(결정 37). 계산은 추천 행을 저장하는 POST라서 CSRF 토큰이 필요합니다. 남의 주문·추천과 시연 장부의 주문·추천은 없는 것과 같은 404입니다. 무효화 규칙(추천 제외 변경은 `MAPPING_CHANGED`, 결제 설정 변경은 무효화 없음, 결정 32 Q2·Q3)은 프로필과 관계없이 같습니다. 서비스 코드는 바꾸지 않았습니다.
 - Flyway `V7__recommendations.sql`: `recommendations`, `recommendation_card_bases`. 시드는 없습니다. 번호는 다른 작업선과 나눈 **임시 번호**이며, 병합 직전 관리자가 정한 순서에 따라 바뀔 수 있습니다(D-23 12항).
 
 구현하지 않은 범위는 [제약과 한계](#제약과-한계)에 모았습니다.
@@ -139,6 +139,7 @@ EngineResult result = engine.recommend(new EngineRequest(order.orderDate(),
 - **모의 승인(#116) 뒤 동작.** 주문 상태에 `PAID`·`CANCELLED`가 생겨 승인된 주문의 계산은 409 `ORDER_ALREADY_PAID`, 그 주문의 이전 추천 조회는 `ORDER_PAID` 무효화가 실제로 생깁니다(통합 테스트로 확인).
 - **#116에서 더한 공개 메서드는 `calculateForApproval` 하나뿐입니다.** 모의 승인([payment 안내](payment.md))이 승인 직전 재계산에 씁니다. 내부 계산은 `calculate`와 같고(같은 저장·같은 본문), 엔진 결과의 `usageEffects`(카드별 한도 버킷 차감액, 모르면 `null`)를 `RecommendationCalculation`에 함께 돌려줍니다. 원장이 승인 카드의 차감액을 저장할 때 씁니다. `calculate`의 동작·응답은 바꾸지 않았고 이 밖의 recommendation 변경은 없습니다.
 - **새 카드 등록은 무효화하지 않습니다.** 무효화는 계산 때 넘긴 카드만 비교합니다. 계산 뒤 새로 등록한 카드는 그 추천에 없었으므로 저장한 결과를 바꾸지 않습니다. 다시 계산하려면 POST를 다시 부릅니다.
+- **무효는 조회 시점 판정이라 되돌아갈 수 있습니다.** 카드 근거(매핑 상태·규칙 상품·추천 제외 여부)가 계산 당시 값으로 돌아가면, 예를 들어 추천 제외를 켰다 끄면, 그 사이 무효였던 추천이 다시 유효해집니다(`local`·`demo`도 같음). 정책을 정한 것이 아니라 현재 지연 판정 설계의 결과입니다.
 - **월간 상태 변경은 스냅샷 시각으로만 판정합니다.** 같은 초 안에 다시 입력하면 시각이 같아 변경으로 보지 않습니다. 월간 상태 시각이 초 단위이기 때문입니다.
 - **기준일 안내 noteCode 없음.** "기준일이 승인일이 아닌 카드" 안내([D-23](../decisions.md#d-23-확정-정책))는 엔진에 코드가 없고 계약도 정해지지 않아 만들지 않았습니다(결정 27 B2-2).
 - **가상 포트폴리오는 대부분 `확인 필요`입니다.** 월간 시드가 없어(결정 27 A3) 월간 상태를 입력하기 전까지 실적에 기대는 서비스를 판정하지 못합니다.
@@ -150,4 +151,4 @@ EngineResult result = engine.recommend(new EngineRequest(order.orderDate(),
 - 단위(#120 추가): `SnapshotUsageTest`(같은 버킷 가산, 미입력 버킷은 그 밖의 사용액, 모르는 차감액·취소는 확인 필요, 0 대체 없음), `RecommendationLinksTest`(최대 ID, 변경 전 유효 후보, `MAPPING_CHANGED`만 오름차순), `RecommendationServiceTest`의 스냅샷 뒤 차감액 엔진 입력 반영.
 - 단위: `RecommendationIdTest`(형식), `RecommendationNotesTest`(문구·모르는 코드 실패), `EngineInputAssemblerTest`(입력 변환, 0 대체 없음), `RecommendationServiceTest`(실제 규칙 파일로 평가 자료 C01 계산, `NOT_DETERMINED` 스냅샷 `null`, 무효화 우선순위, 다른 사용자·형식 오류 404, 모의 승인 판정, `calculateForApproval`이 같은 본문과 엔진 차감액을 `null` 그대로 돌려줌).
 - 웹(`controllers=` 한정): `RecommendationApiWebTest`(계약 예시 JSON, 404·409, 헤더 400), `RecommendationProfileOffWebTest`(프로필 밖 미등록).
-- 통합: `RecommendationIntegrationTest`(V7 적용, 계산·저장·조회, 사용자별 분리, 월간 상태 재입력·추천 제외·해제 무효화, 가상 포트폴리오의 `확인 필요`). 추천 행이 주문·보유 카드를 참조하므로 테스트 앞뒤로 지웁니다. `RecommendationLinksIntegrationTest`(#120: 주문 `latestRecommendationId`, 표시 이름·추천 제외·매핑 변경의 `invalidatedRecommendationIds`, 승인·취소 뒤 `afterSnapshot`, 실제 빈 연결).
+- 통합: `RecommendationIntegrationTest`(V7 적용, 계산·저장·조회, 사용자별 분리, 월간 상태 재입력·추천 제외·해제 무효화, 가상 포트폴리오의 `확인 필요`). 추천 행이 주문·보유 카드를 참조하므로 테스트 앞뒤로 지웁니다. `RecommendationLinksIntegrationTest`(#120: 주문 `latestRecommendationId`, 표시 이름·추천 제외·매핑 변경의 `invalidatedRecommendationIds`, 승인·취소 뒤 `afterSnapshot`, 실제 빈 연결). [`MemberOrderRecommendationIntegrationTest`](../../backend/src/test/java/com/beone/api/auth/web/MemberOrderRecommendationIntegrationTest.java)(`member`: 회원 A·B 분리, 남의 추천·없는 추천 404 본문 동일, 시연 장부 주문·추천 404, 401, 계산 CSRF 403·미저장, 추천 제외 변경·되돌림·매핑 해제의 `MAPPING_CHANGED`와 결제 설정 변경 뒤 유효(결정 32 Q2·Q3)를 API로 확인, 다른 회원 추천 불변). 모의 승인이 `member`에 없어 `ORDER_ALREADY_PAID`·`ORDER_PAID`는 G3c에서 확인합니다.
