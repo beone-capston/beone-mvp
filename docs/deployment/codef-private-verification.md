@@ -13,8 +13,11 @@
 | 항목 | 내용 | 상태 |
 |---|---|---|
 | 실 게이트웨이 | `LiveCodefGateway`, 프로필 조건 `member & codef-live & !prod`([codef 문서](../domains/codef.md#비공개-실연동-프로필-codef-live-lp-1-193)). `prod`와 함께 켜면 `PublicProfileGuard`가 기동을 멈춤 | develop 병합(#195) |
-| 호출 상한 카운터 | 프로세스를 넘는 호출 총량(LP-2) | PR #205 진행 중. 설정 이름은 병합된 코드 기준으로 이 문서에 채운다 |
+| 호출 상한 카운터 | 프로세스를 넘는 호출 총량(LP-2) | PR #205 진행 중. **설정 키 이름은 #205 병합 뒤 확정** |
+| 프로필 | `SPRING_PROFILES_ACTIVE=member,codef-live`(`prod` 없음) | 코드 기준(#195, `LiveCodefGateway.PROFILE`) |
 | 키 환경 변수 | `CODEF_CLIENT_ID`, `CODEF_CLIENT_SECRET`, `CODEF_PUBLIC_KEY`, `BEONE_CODEF_CONNECTED_ID_KEY`, `BEONE_CODEF_APPROVAL_HMAC_KEY`(이름만) | 코드 기준(#195) |
+| `beone.codef.*` 설정(비밀 아님) | `beone.codef.product-host`(기본 `https://sandbox.codef.io`, 허용 `sandbox`·`development`·`api.codef.io`), `beone.codef.connect-timeout`(기본 5초), `beone.codef.token-response-timeout`(기본 110초), `beone.codef.product-response-timeout`(기본 310초). 환경 변수로는 `BEONE_CODEF_PRODUCT_HOST` 등(Spring 완화 바인딩) | 코드 기준([`CodefTransportConfiguration`](../../backend/src/main/java/com/beone/api/codef/transport/CodefTransportConfiguration.java)) |
+| 실 계정용 상품 호스트 | 기본값은 샌드박스라 실 KB 계정에는 맞지 않을 수 있다. `development.codef.io`·`api.codef.io` 중 무엇을 쓸지는 **결정 필요**(키 발급 종류와 함께 사용자 확인) | 결정 필요 |
 
 ## 2. beone-codef 실행안
 
@@ -35,7 +38,8 @@ services:
       CODEF_PUBLIC_KEY: ${CODEF_PUBLIC_KEY:?}
       BEONE_CODEF_CONNECTED_ID_KEY: ${BEONE_CODEF_CONNECTED_ID_KEY:?}
       BEONE_CODEF_APPROVAL_HMAC_KEY: ${BEONE_CODEF_APPROVAL_HMAC_KEY:?}
-      # LP-2 상한 설정: #205 병합 뒤 이름을 채운다(API별 3회, N14)
+      BEONE_CODEF_PRODUCT_HOST: ${BEONE_CODEF_PRODUCT_HOST:?}   # 결정 필요(1절). 비밀 아님
+      # LP-2 상한 설정 키: #205 병합 뒤 확정(API별 3회, N14)
 ```
 
 ```bash
@@ -49,7 +53,7 @@ $C ps --format '{{.Name}} {{.Status}}'
 ### 2-2. 키 입력 (K2, 승인 ⑨)
 
 1. 운영 담당이 빈 파일을 만듭니다: `sudo install -d -m 750 /opt/beone/codef && sudo install -m 600 /dev/null /opt/beone/codef/.env`
-2. **사용자가 직접** `sudoedit /opt/beone/codef/.env`로 검증 DB 값(`MYSQL_*`), 이미지 태그(`BEONE_VERIFY_*`), 1절의 키 5개를 입력합니다. 로컬 검증 때와 같은 키를 씁니다.
+2. **사용자가 직접** `sudoedit /opt/beone/codef/.env`로 검증 DB 값(`MYSQL_*`), 이미지 태그(`BEONE_VERIFY_*`), 1절의 키 5개, 상품 호스트(`BEONE_CODEF_PRODUCT_HOST`)를 입력합니다. 로컬 검증 때와 같은 키를 씁니다.
 3. 에이전트와 운영 담당은 값을 보지 않습니다. 이름이 있는지만 확인합니다.
 
 ```bash
