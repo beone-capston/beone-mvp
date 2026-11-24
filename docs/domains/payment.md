@@ -9,8 +9,10 @@
 - `POST /api/v1/me/orders/{orderId}/simulated-payments`(201): 승인 직전에 추천을 다시 계산하고, 그 결과로 카드를 정해 승인합니다. 성공하면 자체 모의 원장에 승인 행을 남기고 주문을 `PAID`로 바꿉니다. 본문의 `simulateFailure: true`는 `FAILED` 결제(201)를 만들고, 원장·주문은 바꾸지 않습니다([D-23](../decisions.md#d-23-확정-정책) 4항).
 - `GET /api/v1/me/simulated-payments/{simulatedPaymentId}`: 승인 내용, 현재 상태, 남은 취소 가능 금액, 취소 목록.
 - `POST /api/v1/me/simulated-payments/{simulatedPaymentId}/cancellations`(201): 부분취소·전액취소. 원장에 음수 취소 행을 남기고, 실적·혜택·한도에 미치는 영향을 `확정`과 `확인 필요`로 나눠 돌려줍니다([D-17](../decisions.md)).
-- 두 POST의 `Idempotency-Key` 헤더(필수). 같은 키·같은 요청은 24시간 동안 처음 결과를 그대로 돌려줍니다.
-- `local`·`demo` 프로필에서만 등록합니다. 그 밖에서는 경로가 없어 404입니다. 그래서 `simulateFailure`도 시연 환경에서만 닿습니다.
+- 두 POST의 `Idempotency-Key` 헤더(필수). 같은 키·같은 요청은 24시간 동안 처음 결과를 그대로 돌려줍니다. 키는 장부(`user_id`)마다 저장합니다. 회원 환경에서는 회원 1명이 '내 카드' 장부 1개를 가지므로 장부 단위가 곧 회원 단위입니다(결정 38-2).
+- `local`·`demo`와 로컬 회원 프로필 `member`에서 등록합니다(`member`는 G3c #161). 그 밖에서는 경로가 없어 404입니다. `member`에서는 회원 세션의 '내 카드' 장부가 현재 사용자이고, 세션 401·쓰기 CSRF 403·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 컨트롤러 전에 처리합니다([docs/api.md 회원 세션](../api.md#회원-세션member-프로필), 결정 37). 소유 확인과 멱등 키가 모두 `user_id` 기준이라 회원 장부에도 그대로 적용되고 서비스 코드는 바꾸지 않았습니다.
+- `simulateFailure: true`는 `local`·`demo`에서만 받아 201 `FAILED`로 기록합니다. 그 밖(`member`)에서는 `SimulateFailurePolicy`가 서비스 호출 전에 400 `INVALID_REQUEST`로 거절하므로 주문·결제·원장·멱등 키를 저장하지 않습니다. `false`와 생략은 어느 프로필에서나 정상입니다(결정 38-1).
+- 회원 화면은 승인 후 결과만 보여 주는 흐름을 유지합니다(결정 38-4). 승인 API가 추천을 다시 계산해 카드를 정하므로 승인 전 추천 호출은 필요 없습니다. `seenRecommendationId`는 선택이며, 화면이 보내지 않으면 비교 없이 승인하고 `recalculation.changed=null`입니다.
 - Flyway `V8__simulated_payments_ledger.sql`(임시 번호, 병합 순서에 따라 바뀔 수 있음, D-23 12항).
 
 실패 응답(계약 목록 그대로):
@@ -26,7 +28,7 @@
 | 취소 금액 > 남은 취소 가능 금액 | 409 | `CANCELLATION_AMOUNT_EXCEEDED` |
 | 이미 전액 취소됨 | 409 | `PAYMENT_ALREADY_CANCELLED` |
 | 같은 키를 다른 요청에 다시 씀 | 409 | `IDEMPOTENCY_KEY_REUSED` |
-| 키 없음·빈 값·255자 초과, 시연 사용자 헤더 오류, 본문 형식 오류 | 400 | `INVALID_REQUEST` |
+| 키 없음·빈 값·255자 초과, 시연 사용자 헤더 오류, 본문 형식 오류, `local`·`demo` 밖의 `simulateFailure: true` | 400 | `INVALID_REQUEST` |
 
 ## 핵심 용어
 
@@ -43,6 +45,7 @@
 payment
 ├── web
 │   ├── SimulatedPaymentController        # API 3개, Idempotency-Key 검사, CurrentUser 인자만 받음
+│   ├── SimulateFailurePolicy             # simulateFailure를 local·demo에서만 받음(그 밖 true는 400)
 │   ├── ApprovalRequest / CancellationRequest
 │   ├── Strict*Deserializer               # 문자열 숫자·소수·문자열 불리언을 400으로
 │   ├── SimulatedPaymentErrorCode
@@ -88,7 +91,7 @@ payment
 → 응답 본문을 결제 행과 멱등 키에 저장
 ```
 
-승인 요청 예시(`local`·`demo` 프로필에서만 경로가 열립니다). 주문·추천 시드는 없으므로 `ord-5001`·`rec-3001`은 계약 예시 값입니다. 먼저 `POST /api/v1/me/orders`로 주문을, `POST /api/v1/me/orders/{orderId}/recommendations`로 추천을 만든 뒤 받은 ID로 바꿔 보냅니다. 본문은 생략하거나 `{}`로 보내도 되며, 그러면 본 추천 비교 없이 승인합니다.
+승인 요청 예시(`local`·`demo`의 시연 헤더 방식. `member`에서는 헤더 대신 회원 세션 쿠키와 `X-CSRF-TOKEN`을 보냅니다). 주문·추천 시드는 없으므로 `ord-5001`·`rec-3001`은 계약 예시 값입니다. 먼저 `POST /api/v1/me/orders`로 주문을 만들고 받은 ID로 바꿔 보냅니다. 본문은 생략하거나 `{}`로 보내도 되며, 그러면 본 추천 비교 없이 승인합니다(`changed=null`). 아래 예시처럼 `seenRecommendationId`를 보내는 것은 이미 계산한 추천과 비교하고 싶을 때만입니다.
 
 ```bash
 curl -X POST "http://localhost:8080/api/v1/me/orders/ord-5001/simulated-payments" \
@@ -147,11 +150,15 @@ curl -X POST "http://localhost:8080/api/v1/me/orders/ord-5001/simulated-payments
 - 09174는 취소 귀속이 약관에서 확정되지 않아 실적 영향이 항상 `확인 필요`입니다.
 - 멱등 키 행은 24시간이 지나면 다음 같은 키 요청 때 지웁니다. 주기적 정리 작업은 없습니다.
 - 실제 결제·환불, CODEF 승인내역 연결은 없습니다.
+- 회원 가상 장부(결정 37 D1b)는 구현하지 않았습니다. 결정 38-3으로 회원 MVP는 '내 카드'만 제공하고, 회원 가상 장부를 도입하면 멱등 키 저장 단위(결정 38-2)를 다시 검토합니다.
+- 승인 전 추천 화면은 만들지 않습니다(결정 38-4). 프런트의 `member` 호출 대응은 팀원 조율 대상입니다.
 
 ## 테스트
 
 - 단위(#122): `SimulatedPaymentServiceTest`에 잠금 순서(주문 행 → 보유 카드 행 → 멱등 키 조회 → 재계산), 이미 승인된 주문의 재생·409와 취소가 카드를 잠그지 않음을 더했습니다.
 - 단위: `CardChoiceTest`, `RecalculationComparisonTest`, `CancellationImpactsTest`, `PaymentIdsTest`, `FingerprintTest`, `IdempotencyStoreTest`, `SimulatedPaymentServiceTest`(실제 4종 규칙 파일, 저장소 대역). 기대값은 계약 예시(`pay-7001`·`cn-8001`·`lt-9001`·`lt-9002`, 10,000원 중 4,000원 취소 → 6,000원)에서 먼저 옮겼습니다.
+- 단위: `SimulateFailurePolicyTest`(`local`·`demo`는 `true` 허용, `member`·프로필 없음은 `true`만 거부, `false`·생략은 모두 허용).
 - 웹(`controllers=` 한정): `SimulatedPaymentApiWebTest`(계약 예시 JSON, 실패 응답 전부, 키·헤더·본문 400), `SimulatedPaymentProfileOffWebTest`(프로필 밖 404).
 - 통합(#122): `SimulatedPaymentCardLockIntegrationTest`(09174 GREAT, 대표 카드 고정). 차례 승인과 동시 승인 모두 뒤 승인의 재계산이 앞 승인의 원장을 읽어 "GREAT 사용액 모름"이 되고 원장 차감액은 `null` 그대로임을 확인합니다. 동시 승인은 테스트 트랜잭션이 카드 행을 잠근 채 두 승인을 보내고, 두 연결이 카드 잠금 조회에서 기다리는 것을 `information_schema.PROCESSLIST`로 확인한 뒤 풀어 서버에서 겹침을 보장합니다(래치, sleep 없음). 재생 시험은 전액 취소의 앞부분(카드 공유 잠금 → 주문 행 잠금)을 테스트 트랜잭션으로 재현하고, 공유 잠금이 쥐어진 동안 같은 키 재생(201, 같은 본문)과 다른 키 409가 끝나는지 봅니다. 카드 잠금 호출을 빼면 동시 승인 시험이, 재생에도 카드를 잠그면 재생 시험이 실패함을 로컬에서 확인했습니다.
 - 통합: `SimulatedPaymentIntegrationTest`(V8 적용, 평가 자료 C01 승인·원장 행·주문 `PAID`, 같은 키 재생·다른 지문 409·다른 키 409, 추천 `ORDER_PAID` 무효화, 부분·전액 취소와 09271 `RECEIPT_MONTH` 확정 영향, 모의 실패 뒤 새 키 승인, 사용자별 분리).
+- 통합(`member`, G3c #161): [`MemberPaymentIntegrationTest`](../../backend/src/test/java/com/beone/api/auth/web/MemberPaymentIntegrationTest.java). 회원 장부 승인·원장·재생(201, 같은 본문)·같은 키 다른 본문 409·다른 키 `ORDER_ALREADY_PAID`·추천 `ORDER_PAID`, 회원 A·B 같은 키 독립과 남의 것·없는 것 404 본문 동일, 24시간 안 재생·24시간 뒤 승인 409와 부분 취소 재실행(현재 동작 고정), `simulateFailure: true` 400·주문·결제·원장·키 미저장(400이 404보다 먼저)과 `false`·빈 본문·본문 없음 201(결정 38-1), 무효가 된 추천 승인과 결정 32 Q4 한계(대표 카드만 바꾸면 차이 없음), 추천 → 승인 사이 세션 만료 401·미저장과 재로그인 뒤 처리, 로그아웃·재로그인 뒤 재생, 401·CSRF 403·미저장, 시연 장부 404와 시연 헤더 무시.

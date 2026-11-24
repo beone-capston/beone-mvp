@@ -8,9 +8,10 @@
 
 - `POST /api/v1/me/orders`(201): 주문 생성. 상태는 `CREATED`
 - `GET /api/v1/me/orders/{orderId}`: 주문 상세. 없거나 다른 사용자의 주문은 404 `ORDER_NOT_FOUND`
+- `GET /api/v1/me/orders`: 내 주문 목록(결정 38-5, #178). 현재 사용자 장부의 주문만 생성 시각·주문 번호 내림차순으로 `page`·`size`만큼 돌려주고 `hasNext`로 다음 페이지를 알린다
 - `GET /api/v1/me/planned-spends`: 이번 달 예정 소비 목록
 - `PUT /api/v1/me/planned-spends`: 예정 소비 0~5건을 통째로 교체
-- 로컬 회원 프로필 `member` 등록(G3b #160): 네 API를 `member`에도 등록했습니다. 현재 사용자는 회원 세션의 '내 카드' 장부이고, 세션 401·쓰기 CSRF 403·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 컨트롤러 전에 처리합니다([docs/api.md 회원 세션](../api.md#회원-세션member-프로필), 결정 37). 주문 조회와 예정 소비 교체가 `user_id` 기준이므로 남의 주문·시연 장부의 주문은 없는 주문과 같은 404이고, 한 회원의 예정 소비 교체가 다른 장부의 행을 지우지 않습니다. 주문 경로에는 POST만 있어 `GET /api/v1/me/orders`는 405입니다. 서비스 코드는 바꾸지 않았습니다.
+- 로컬 회원 프로필 `member` 등록(G3b #160): 네 API(지금은 목록 조회를 더해 다섯)를 `member`에도 등록했습니다. 현재 사용자는 회원 세션의 '내 카드' 장부이고, 세션 401·쓰기 CSRF 403·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 컨트롤러 전에 처리합니다([docs/api.md 회원 세션](../api.md#회원-세션member-프로필), 결정 37). 주문 조회와 예정 소비 교체가 `user_id` 기준이므로 남의 주문·시연 장부의 주문은 없는 주문과 같은 404이고, 한 회원의 예정 소비 교체가 다른 장부의 행을 지우지 않습니다. 서비스 코드는 바꾸지 않았습니다. 목록 조회(#178)가 생긴 뒤에도 주문 모음 경로의 `PUT`·`PATCH`·`DELETE`는 405입니다.
 - Flyway `V3__orders_planned_spends.sql`: `orders`·`planned_spends` 테이블. 시드는 없습니다. 번호는 병합 직전 다른 작업선과의 순서에 따라 바뀔 수 있습니다([D-23](../decisions.md#d-23-확정-정책) 12항).
 
 - 주문 상태 전이(#116): `CREATED → PAID → CANCELLED` 한 방향만 있습니다. 모의 승인(`payment`)이 성공하면 `PAID`가 되고 결제 ID(`simulatedPaymentId`, `pay-…`)를 함께 저장합니다. 전액 취소되면 `CANCELLED`입니다. 모의 실패(`FAILED`)와 부분취소는 주문 상태를 바꾸지 않습니다. 전이는 `payment`가 `OrderService.lockForPayment`·`markPaid`·`markCancelled`로만 하며, 셋 다 호출자 트랜잭션 안에서만 부를 수 있고(`MANDATORY`) 주문 행에 쓰기 잠금을 겁니다. 결제 ID는 문자열로 저장해 `order`가 `payment`를 참조하지 않습니다. 열은 Flyway `V8__simulated_payments_ledger.sql`이 더합니다.
@@ -20,7 +21,8 @@
 구현하지 않은 범위:
 
 - 예정 소비의 추천 반영(D-18 K4). 응답의 `usedInRecommendation`은 항상 `false`입니다.
-- 주문 수정. 입력을 바꾸려면 새 주문을 만듭니다(계약).
+- 주문 수정·삭제. 입력을 바꾸려면 새 주문을 만듭니다(계약).
+- 주문 목록의 상태 필터·전체 건수(결정 38-5 범위 밖, 필요하면 후속).
 
 ## 핵심 용어
 
@@ -74,6 +76,12 @@ POST /api/v1/me/orders
 → OrderService.create: user_id와 함께 저장, status=CREATED, createdAt=OrderClock.now()
 → 201 {"data": {... "orderId": "ord-<번호>"}}
 
+GET /api/v1/me/orders?page=0&size=20
+→ OrderListParameters: 십진 숫자만, page 0~1000·size 1~50 (생략하면 0·20, 아니면 400 INVALID_REQUEST, 필드 이름만)
+→ OrderService.list → OrderRepository.findByUserId(userId, PageRequest(page, size, createdAt DESC, orderId DESC))
+   - Slice라서 size+1건을 읽어 hasNext를 정하고 전체 건수는 세지 않음. 다른 사용자의 주문은 조건에서 빠짐
+→ 200 {"data": {"items": [요약 ...], "page", "size", "hasNext"}}. 주문이 없으면 items []
+
 GET /api/v1/me/orders/{orderId}
 → OrderId.parse: "ord-" + 선행 0 없는 번호가 아니면 바로 "없는 주문"
 → OrderRepository.findByOrderIdAndUserId: 다른 사용자의 주문은 찾지 않음
@@ -91,6 +99,7 @@ PUT /api/v1/me/planned-spends
 다른 업무 패키지(예: 추천)는 주문을 `OrderService.get(currentUser, orderId)`로 읽습니다. 형식 오류·없음·다른 사용자 주문은 모두 `OrderNotFoundException`입니다.
 
 ```java
+OrderPage page = orderService.list(currentUser, 0, OrderPage.DEFAULT_SIZE); // 최신 주문 20건
 OrderDetail order = orderService.get(currentUser, "ord-5001");
 LocalDate judgmentDate = order.orderDate(); // D-23 1항: 판정일은 주문일
 ```
@@ -108,13 +117,14 @@ LocalDate judgmentDate = order.orderDate(); // D-23 1항: 판정일은 주문일
 - **허용 밖 `merchantClass`**: 계약의 "허용 값은 merchant-classes.txt 기준", "입력 검증은 업무 API가 한다"에 따라 400 `INVALID_REQUEST`입니다(필드 오류 `허용된 가맹점 분류가 아닙니다.`). 목록은 새 파서를 만들지 않고 규칙 로더와 같은 공개 파서 `benefit.rule.loading.MerchantClassAllowlist.parse`를 읽기 전용으로 써서 해석 규칙이 갈라지지 않게 했습니다. `benefit` 코드는 바꾸지 않았습니다.
 - **엄격 역직렬화**: Jackson 기본 설정은 `"10000"`·`10000.5`를 숫자로 바꿔 받고, 날짜에 시각이 붙어도 받습니다. 공유 Jackson 설정을 바꾸지 않고 order DTO 필드에만 역직렬화기를 붙여 계약의 "소수·문자열 금액은 400"과 값 형식을 지킵니다. `paymentMethod`도 이름 문자열만 받습니다(Jackson 기본은 숫자를 열거 순번으로 받을 수 있음, PR #107 리뷰). 이 경로의 400은 `errors: []`입니다(공통 처리기의 역직렬화 실패 처리).
 - **달 경계**: 웹 검증과 서비스가 "이번 달"을 각각 읽으므로 서울 기준 말일 자정 직전 요청은 검증 통과 뒤 달이 바뀔 수 있습니다. 서비스가 교체 직전에 다시 확인해 기존 값을 지우지 않고 400 `INVALID_REQUEST`(`{"field":"items","message":"이번 달 날짜여야 합니다."}`)로 끝냅니다(PR #107 리뷰).
+- **주문 목록(결정 38-5, #178)**: 계약은 구현 전에 관리자 확인을 받았습니다. 커서 대신 `page`·`size`를 쓴 이유는 불투명 커서의 인코딩·검증이 필요 없고 MVP의 사용자별 주문 수가 작기 때문입니다. 페이지를 넘기는 사이 새 주문이 생기면 앞 페이지의 마지막 주문이 다음 페이지에 다시 보일 수 있어 화면이 `orderId`로 거릅니다. 목록 요약([`OrderListResponse`](../../backend/src/main/java/com/beone/api/order/web/OrderListResponse.java))은 상세 응답에서 필드를 골랐고, 주문마다 추천을 따로 찾아야 하는 `latestRecommendationId`는 뺐습니다. 범위 상수는 [`OrderPage`](../../backend/src/main/java/com/beone/api/order/application/OrderPage.java)에 있습니다. 기존 `idx_orders_user_id`로 충분해 Flyway 인덱스는 추가하지 않았습니다.
 - **응답 문자열 형식**: Jackson의 ISO 출력은 초가 0이면 초를 생략하므로(`10:40`), 시각·생성 시각은 `HH:mm:ss`·`+09:00` 형식 문자열로 직접 만듭니다.
 
 ## 테스트
 
-- `test`: [`OrderIdTest`](../../backend/src/test/java/com/beone/api/order/application/OrderIdTest.java)(ID 형식), [`OrderClockTest`](../../backend/src/test/java/com/beone/api/order/application/OrderClockTest.java)(서울 기준 달 경계), [`PlannedSpendServiceTest`](../../backend/src/test/java/com/beone/api/order/application/PlannedSpendServiceTest.java)(교체 직전 달 재확인), [`MerchantClassCatalogTest`](../../backend/src/test/java/com/beone/api/order/application/MerchantClassCatalogTest.java)(계약 예시 코드 허용, 대소문자·공백 거부), [`StrictDeserializerTest`](../../backend/src/test/java/com/beone/api/order/web/StrictDeserializerTest.java), [`OrderValueFormatsTest`](../../backend/src/test/java/com/beone/api/order/web/OrderValueFormatsTest.java)
-- `webTest`: [`OrderApiWebTest`](../../backend/src/test/java/com/beone/api/order/web/OrderApiWebTest.java)(계약 예시 응답, 계약 실패 목록 전부, 허용 밖 분류, 50자, 이번 달 경계, 시연 사용자 헤더 없음·잘못된 값)
-- `integrationTest`: [`OrderIntegrationTest`](../../backend/src/test/java/com/beone/api/order/OrderIntegrationTest.java)(V3 적용과 `ddl-auto: validate`, 실제 HTTP 저장·조회, 다른 시연 사용자 주문 404, 예정 소비 사용자별 분리·요청 순서·교체·지난달 행 처리, 거부된 PUT은 기존 값 유지), [`MemberOrderRecommendationIntegrationTest`](../../backend/src/test/java/com/beone/api/auth/web/MemberOrderRecommendationIntegrationTest.java)(`member`: 회원 장부 주문·예정 소비, 회원 A·B 분리, 남의 주문·없는 주문·형식 오류의 404 본문 동일, 시연 장부 주문 404와 시연 헤더 무시, 401, 쓰기 CSRF 403·미저장, 본문 400 미저장, no-store)
+- `test`: [`OrderIdTest`](../../backend/src/test/java/com/beone/api/order/application/OrderIdTest.java)(ID 형식), [`OrderClockTest`](../../backend/src/test/java/com/beone/api/order/application/OrderClockTest.java)(서울 기준 달 경계), [`PlannedSpendServiceTest`](../../backend/src/test/java/com/beone/api/order/application/PlannedSpendServiceTest.java)(교체 직전 달 재확인), [`MerchantClassCatalogTest`](../../backend/src/test/java/com/beone/api/order/application/MerchantClassCatalogTest.java)(계약 예시 코드 허용, 대소문자·공백 거부), [`StrictDeserializerTest`](../../backend/src/test/java/com/beone/api/order/web/StrictDeserializerTest.java), [`OrderValueFormatsTest`](../../backend/src/test/java/com/beone/api/order/web/OrderValueFormatsTest.java), [`OrderServiceListTest`](../../backend/src/test/java/com/beone/api/order/application/OrderServiceListTest.java)(목록: 사용자 ID·정렬·`Slice` 전달, 범위 밖 거부)
+- `webTest`: [`OrderApiWebTest`](../../backend/src/test/java/com/beone/api/order/web/OrderApiWebTest.java)(계약 예시 응답, 계약 실패 목록 전부, 허용 밖 분류, 50자, 이번 달 경계, 시연 사용자 헤더 없음·잘못된 값, 목록의 `page`·`size` 경계와 형식 오류, 모음 경로 `PUT`·`PATCH`·`DELETE` 405)
+- `integrationTest`: [`OrderIntegrationTest`](../../backend/src/test/java/com/beone/api/order/OrderIntegrationTest.java)(V3 적용과 `ddl-auto: validate`, 실제 HTTP 저장·조회, 다른 시연 사용자 주문 404, 예정 소비 사용자별 분리·요청 순서·교체·지난달 행 처리, 거부된 PUT은 기존 값 유지, 목록의 시연 사용자별 분리·최신순, 저장소 목록 조회의 `user_id` 범위와 `hasNext`), [`MemberOrderRecommendationIntegrationTest`](../../backend/src/test/java/com/beone/api/auth/web/MemberOrderRecommendationIntegrationTest.java)(`member`: 회원 장부 주문·예정 소비, 회원 A·B 분리, 남의 주문·없는 주문·형식 오류의 404 본문 동일, 시연 장부 주문 404와 시연 헤더 무시, 401, 쓰기 CSRF 403·미저장, 본문 400 미저장, no-store, 목록의 A·B 격리·시연 장부 미노출·동률 정렬·페이지 경계·빈 목록·401 → 400)
 
 ## 제약과 남은 위험
 

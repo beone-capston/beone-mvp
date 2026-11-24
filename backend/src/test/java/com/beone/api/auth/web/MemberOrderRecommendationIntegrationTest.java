@@ -37,7 +37,7 @@ import org.springframework.test.context.ActiveProfiles;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * G3b: {@code member} 프로필에 등록한 주문 API 2개, 예정 소비 API 2개, 추천 API 2개를 실제 HTTP·MySQL로 확인한다. 세션 401·쓰기
+ * G3b: {@code member} 프로필에 등록한 주문 API 2개(결정 38-5 목록 조회를 더해 3개), 예정 소비 API 2개, 추천 API 2개를 실제 HTTP·MySQL로 확인한다. 세션 401·쓰기
  * CSRF 403·{@code Cache-Control: no-store}는 #158의 인터셉터·필터가 경로 기준으로 처리하므로, 그것이 새로 연 경로에도 실제로
  * 적용되는지 단언한다.
  *
@@ -46,7 +46,8 @@ import tools.jackson.databind.json.JsonMapper;
  * <li>응답 형식·오류 코드: docs/api/orders.md, docs/api/recommendations.md, docs/api/cards.md(추천 제외·매핑 변경)</li>
  * <li>401 → CSRF 403 → 본문 400 → 404, 남의 자원 404(결정 37 D5·D6), 시연 헤더 무시(D4), no-store(결정 37 구현 범위)</li>
  * <li>추천 제외 변경·매핑 변경은 {@code MAPPING_CHANGED}(결정 32 Q2), 결제 전 설정 변경은 무효화 없음(결정 32 Q3)</li>
- * <li>{@code GET /api/v1/me/orders}는 목록 API가 없어 405 {@code METHOD_NOT_ALLOWED}(docs/api.md 공통 실패 응답)</li>
+ * <li>{@code GET /api/v1/me/orders}는 본인 장부 주문만 생성 시각·주문 번호 내림차순으로 나눠 준다(결정 38-5, docs/api/orders.md 내 주문
+ * 목록 조회). 다른 메서드는 405로 남는다({@link MemberProfileIntegrationTest#onlyAllowedRoutesAreRegistered})</li>
  * </ul>
  * 모의 승인은 아직 member에 등록하지 않았으므로(G3c) {@code ORDER_ALREADY_PAID}·{@code ORDER_PAID}는 여기서 확인하지 않는다. 새 테스트
  * 컨텍스트를 만들지 않도록 {@link MemberProfileIntegrationTest}와 같은 프로필·가변 시계 조합을 쓴다. 시계는 서울 2026-11-18 10:00에서
@@ -304,11 +305,114 @@ class MemberOrderRecommendationIntegrationTest {
 			.isEqualTo(200);
 	}
 
-	/** 쿠키가 없거나 익명 CSRF 세션이면 6개 경로 모두 401이고, 401이 CSRF 403·본문 400보다 먼저다. */
+	/** 목록은 회원 장부의 주문만 담는다. 남의 주문·시연 장부 주문은 보이지 않고 시연 헤더도 무시한다. 주문이 없으면 200과 빈 배열이다. */
+	@Test
+	void orderListShowsOnlyOwnMemberLedger() {
+		Session a = this.members.loginNew(MEMBER_A, "a@example.com");
+		Session b = this.members.loginNew(MEMBER_B, "b@example.com");
+		String empty = "{\"data\":{\"items\":[],\"page\":0,\"size\":20,\"hasNext\":false}}";
+		ResponseEntity<String> none = send(HttpMethod.GET, ORDERS, a, null);
+		assertBody(none, 200, empty);
+		assertNoStore(none);
+
+		CurrentUser demo = this.demoUserService.currentUserOf(DemoUser.MY_CARDS);
+		String demoOrder = this.orderService
+			.create(demo, new NewOrder(10000, LocalDate.of(2026, 11, 18), null, "시연", "ORDINARY_DOMESTIC",
+					PaymentMethod.DIRECT))
+			.orderId();
+		this.demoOrderIds.add(Long.parseLong(demoOrder.substring("ord-".length())));
+		String first = createOrder(a);
+		String second = createOrder(a);
+		String orderOfB = createOrder(b);
+
+		ResponseEntity<String> listOfA = send(HttpMethod.GET, ORDERS, a, null);
+		assertThat(listOfA.getStatusCode().value()).isEqualTo(200);
+		assertNoStore(listOfA);
+		assertThat(orderIds(listOfA)).containsExactlyInAnyOrder(first, second);
+		assertThat(orderIds(send(HttpMethod.GET, ORDERS, b, null))).containsExactly(orderOfB);
+		// 시연 헤더를 붙여도 회원 장부 목록이다
+		assertThat(orderIds(this.members.getWithDemoHeader(ORDERS, a, "MY_CARDS"))).containsExactlyInAnyOrder(first,
+				second);
+		assertThat(orderIds(this.members.getWithDemoHeader(ORDERS, b, "VIRTUAL_PORTFOLIO")))
+			.containsExactly(orderOfB);
+
+		// 요약 필드는 상세 조회와 같은 값이다
+		Map<String, Object> detail = data(send(HttpMethod.GET, ORDERS + "/" + second, a, null));
+		Map<String, Object> item = items(listOfA).stream()
+			.filter(row -> second.equals(row.get("orderId")))
+			.findFirst()
+			.orElseThrow();
+		assertThat(item).containsOnlyKeys("orderId", "amountWon", "orderDate", "merchantName", "merchantClass",
+				"status", "createdAt", "simulatedPaymentId");
+		for (String key : item.keySet()) {
+			assertThat(item.get(key)).as(key).isEqualTo(detail.get(key));
+		}
+	}
+
+	/**
+	 * 정렬은 생성 시각 내림차순, 같은 시각이면 주문 번호 내림차순이다. 동률을 만들려고 저장 뒤 {@code created_at}을 직접 고친다. 페이지 경계에서
+	 * {@code hasNext}는 크기보다 한 건 더 있는지로 정해지고, 마지막 페이지를 지나면 빈 배열이다.
+	 */
+	@Test
+	void orderListIsSortedDeterministicallyAndPaged() {
+		Session a = this.members.loginNew(MEMBER_A, "a@example.com");
+		List<String> created = new ArrayList<>();
+		for (int i = 0; i < 5; i++) {
+			created.add(createOrder(a));
+		}
+		String[] at = { "2026-11-18 10:00:00", "2026-11-18 10:05:00", "2026-11-18 10:05:00", "2026-11-18 10:05:00",
+				"2026-11-18 09:00:00" };
+		for (int i = 0; i < 5; i++) {
+			this.jdbcTemplate.update("UPDATE orders SET created_at = ? WHERE order_id = ?", at[i],
+					Long.parseLong(created.get(i).substring("ord-".length())));
+		}
+		// 10:05 동률 3건은 번호 내림차순(4번째·3번째·2번째), 그다음 10:00(1번째), 09:00(5번째)
+		List<String> expected = List.of(created.get(3), created.get(2), created.get(1), created.get(0),
+				created.get(4));
+
+		ResponseEntity<String> all = send(HttpMethod.GET, ORDERS, a, null);
+		assertThat(orderIds(all)).containsExactlyElementsOf(expected);
+		assertThat(items(all).get(0).get("createdAt")).isEqualTo("2026-11-18T10:05:00+09:00");
+		// 같은 요청은 항상 같은 순서다
+		assertThat(send(HttpMethod.GET, ORDERS, a, null).getBody()).isEqualTo(all.getBody());
+
+		assertPage(a, "?page=0&size=2", expected.subList(0, 2), 0, 2, true);
+		assertPage(a, "?page=1&size=2", expected.subList(2, 4), 1, 2, true);
+		assertPage(a, "?page=2&size=2", expected.subList(4, 5), 2, 2, false);
+		assertPage(a, "?page=3&size=2", List.of(), 3, 2, false);
+		// 정확히 크기만큼 남으면 다음 페이지는 없다. 한 건이라도 더 있으면 있다
+		assertPage(a, "?size=5", expected, 0, 5, false);
+		assertPage(a, "?size=4", expected.subList(0, 4), 0, 4, true);
+		assertPage(a, "?page=1&size=4", expected.subList(4, 5), 1, 4, false);
+		assertPage(a, "?page=1000&size=50", List.of(), 1000, 50, false);
+	}
+
+	/** 세션이 있으면 범위 밖 쿼리는 400이고 필드 이름만 담는다. 세션이 없으면 쿼리가 틀려도 401이 먼저다. */
+	@Test
+	void orderListRejectsInvalidQueryAfterAuthentication() {
+		Session a = this.members.loginNew(MEMBER_A, "a@example.com");
+		createOrder(a);
+		for (String[] query : new String[][] { { "page=-1", "page" }, { "page=1001", "page" }, { "size=0", "size" },
+				{ "size=51", "size" }, { "size=abc", "size" } }) {
+			ResponseEntity<String> response = send(HttpMethod.GET, ORDERS + "?" + query[0], a, null);
+			assertBody(response, 400, "{\"code\":\"INVALID_REQUEST\",\"message\":\"요청 값을 확인해 주세요.\","
+					+ "\"errors\":[{\"field\":\"" + query[1] + "\",\"message\":\"형식이 올바르지 않습니다.\"}]}");
+			assertNoStore(response);
+
+			for (Session session : new Session[] { Session.NONE, this.members.anonymous() }) {
+				ResponseEntity<String> unauthenticated = send(HttpMethod.GET, ORDERS + "?" + query[0], session, null);
+				assertBody(unauthenticated, 401, UNAUTHENTICATED);
+				assertNoStore(unauthenticated);
+			}
+		}
+	}
+
+	/** 쿠키가 없거나 익명 CSRF 세션이면 7개 경로 모두 401이고, 401이 CSRF 403·본문 400보다 먼저다. */
 	@Test
 	void unauthenticatedRequestsAreUnauthorizedBeforeCsrfAndBodyValidation() {
 		Session anonymous = this.members.anonymous();
-		Object[][] routes = { { HttpMethod.POST, ORDERS, "{}" }, { HttpMethod.GET, ORDERS + "/ord-1", null },
+		Object[][] routes = { { HttpMethod.POST, ORDERS, "{}" }, { HttpMethod.GET, ORDERS, null },
+				{ HttpMethod.GET, ORDERS + "/ord-1", null },
 				{ HttpMethod.GET, PLANNED, null }, { HttpMethod.PUT, PLANNED, "{}" },
 				{ HttpMethod.POST, recommendations("ord-1"), null },
 				{ HttpMethod.GET, recommendation("rec-1"), null } };
@@ -492,6 +596,26 @@ class MemberOrderRecommendationIntegrationTest {
 
 	private ResponseEntity<String> send(HttpMethod method, String path, Session session, String body) {
 		return this.members.send(method, path, session, body);
+	}
+
+	private void assertPage(Session session, String query, List<String> expectedIds, int page, int size,
+			boolean hasNext) {
+		ResponseEntity<String> response = send(HttpMethod.GET, ORDERS + query, session, null);
+		assertNoStore(response);
+		Map<String, Object> data = data(response);
+		assertThat(orderIds(response)).as(query).containsExactlyElementsOf(expectedIds);
+		assertThat(data.get("page")).as(query).isEqualTo(page);
+		assertThat(data.get("size")).as(query).isEqualTo(size);
+		assertThat(data.get("hasNext")).as(query).isEqualTo(hasNext);
+	}
+
+	@SuppressWarnings("unchecked")
+	private static List<Map<String, Object>> items(ResponseEntity<String> response) {
+		return (List<Map<String, Object>>) data(response).get("items");
+	}
+
+	private static List<String> orderIds(ResponseEntity<String> response) {
+		return items(response).stream().map(item -> (String) item.get("orderId")).toList();
 	}
 
 	private static String recommendations(String orderId) {

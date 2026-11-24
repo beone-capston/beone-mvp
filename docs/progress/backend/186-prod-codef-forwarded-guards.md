@@ -17,3 +17,6 @@
 - 검증: `./gradlew test webTest` 통과(단위 1411, 웹 401 = #185의 393 + 이번 8, 실패·skip 0). 통합 테스트·Docker·서버·실CODEF는 쓰지 않았습니다.
 - 하지 않은 것: 제품 코드 변경, CODEF 공개 전환(별도 승인), prod 통합 테스트(L3), Fake 메일 차단(L2), 서버·nginx 반영
 - 남은 것: #185 병합 뒤 `develop` 동기화, L2·L3
+
+## 2026-11-25 · #185 병합 뒤 develop 동기화
+- #185가 `develop` `875611d`로 squash 병합돼 `origin/develop`을 merge했습니다(rebase 없음). 충돌은 `docs/progress/backend/README.md` 목록뿐이고 #185 유래 줄은 `develop` 쪽을 남기고 #186 줄만 살렸습니다. 제품 코드 변경은 여전히 없습니다.
