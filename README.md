@@ -146,6 +146,15 @@ cd android
 ./gradlew assembleDebug testDebugUnitTest lintDebug
 ```
 
+release 빌드도 키 없이 확인할 수 있습니다. 서명 환경 변수가 없으면 서명 없는 APK(`app-release-unsigned.apk`)를 만듭니다.
+
+```bash
+cd android
+./gradlew assembleRelease testReleaseUnitTest lintRelease
+```
+
+release 서명 값은 환경 변수 `BEONE_RELEASE_STORE_FILE`·`BEONE_RELEASE_STORE_PASSWORD`·`BEONE_RELEASE_KEY_ALIAS`·`BEONE_RELEASE_KEY_PASSWORD`로만 받습니다(값은 저장소·파일에 적지 않습니다). 배포용 빌드는 `-Pbeone.release.requireSigning=true`를 붙여 값이 빠지면 실패하게 합니다. 키 생성·보관·백업·versionCode 규칙은 N8 결정·승인 대기이며, 실제 서명 빌드는 아직 하지 않았습니다([release 서명 환경 변수](docs/android/webview-shell.md#release-서명-환경-변수)).
+
 debug 빌드에는 실기기 인증 확인용 **B:ONE 인증 점검** 화면이 함께 설치됩니다(release 미포함). 확인 항목은 [`docs/android/device-checklist.md`](docs/android/device-checklist.md)에 있습니다.
 
 계측 테스트(`connectedAndroidTest`)는 아직 작성하지 않았습니다. 추가하면 기기 또는 에뮬레이터를 연결해 실행합니다. 생체인증·기기 PIN·60초 활성화의 최종 확인은 에뮬레이터가 아닌 실제 Android 기기에서 합니다 ([PRD FR-06](docs/PRD.md)).
