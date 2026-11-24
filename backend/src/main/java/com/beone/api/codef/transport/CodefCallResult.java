@@ -60,6 +60,8 @@ public sealed interface CodefCallResult<T> {
 
 		/** 관측 1회의 호출 상한을 넘어 호출하지 않았다. */
 		CALL_LIMIT_REACHED,
+		/** 프로세스를 넘는 호출 총량(검증 기간 창)이 없거나 다 써서 호출하지 않았다(LP-2). */
+		BUDGET_EXHAUSTED,
 
 		/** 시간 안에 응답을 다 받지 못했다. 상대가 처리했는지 알 수 없다. */
 		TIMEOUT,
