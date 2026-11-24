@@ -55,6 +55,7 @@
 - #160 → 커밋·push(#158은 develop 병합됨, PR은 G3a PR #162 병합 뒤): G3b(결정 36·37). 로컬 회원 프로필 `member`에 주문 2개·예정 소비 2개·추천 2개를 등록(컨트롤러 `@Profile`만 변경, 서비스·DB 불변, 결정 32 Q2·Q3를 `member` API로 확인, `GET /me/orders` 405). #159 브랜치 위에 쌓은 작업. [기록](160-member-order-recommendation.md)
 - #165 → `develop` 동기화 뒤 PR: G3c 분리(결정 37). 로컬 회원 프로필 `member`에 원장 조회 1개만 등록(컨트롤러 `@Profile`만 변경, 서비스·DB 불변). 모의 결제 3개는 N-G3-2·D8 결정 대기로 미등록이며 `feat/161`에 보존. #160 브랜치 위에 쌓은 작업. [기록](165-member-ledger.md)
 - #169 → 커밋·push(PR은 #168 병합 뒤): G4 B1·B2(결정 36·37). `docs/api.md` 회원 세션 절에 웹 클라이언트 호출 규칙(쿠키 포함·쓰기 CSRF 토큰·시연 헤더 무시·401 재로그인/403 토큰 재발급·no-store·결제 미등록)을 현재 구현 그대로 정리하고, 같은 origin 구성은 N-G4-ORIGIN·N-FE-PROXY 결정 대기로 표시. `VIRTUAL_PORTFOLIO` 헤더 주문이 회원 '내 카드' 장부에 저장되는 회귀 테스트 1건(코드·DB 불변). #165 브랜치 위에 쌓은 작업. [기록](169-member-web-client-rules.md)
+- #183 → draft PR: G5 L1 공개 프로필 골격(결정 38-6·7). `spring.profiles.group.prod: member`로 회원 부품 재사용, `application-prod.yml`(전달 헤더 미해석·flyway clean 비활성, 비밀값 없음), `PublicProfileGuard`(`prod`+`local`·`demo` 또는 `member` 없는 `prod`는 기동 실패). prod는 실메일 발송기(N1 결정 대기) 없이는 공개 배포 불가이며 Fake 메일 차단(L2)·compose(L8)는 후속. [기록](183-prod-profile-skeleton.md)
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.

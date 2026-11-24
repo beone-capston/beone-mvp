@@ -52,6 +52,10 @@
   - 책임: 성공·실패 응답 형식, 공통 오류 코드, 요청 오류·예상하지 못한 오류의 HTTP 응답 변환과 안전한 로그, `local`·`demo` 프로필의 CORS 허용 목록(`LocalDemoCorsConfiguration`, D-23 11항).
   - 의존 방향: 컨트롤러·예외 처리기 같은 웹 경계에서만 사용합니다. 도메인 코드는 이 패키지에 의존하지 않습니다.
   - 설명 문서: [API 공통 응답·오류 처리](api.md)
+- `common.config`: 공개 프로필 `prod` 골격과 조합 검사(#183, 결정 38-6·7, G5 L1)
+  - 위치: `backend/src/main/java/com/beone/api/common/config/`, 설정 `backend/src/main/resources/application.yml`·`application-prod.yml`
+  - 책임: `prod`는 공개 환경용 프로필입니다. `application.yml`의 프로필 그룹(`spring.profiles.group.prod: member`, 한 프로필을 켜면 지정한 프로필도 함께 켜지는 Spring 설정)으로 회원 세션·소유권·CSRF·no-store 부품(`member`)을 그대로 재사용합니다. `application-prod.yml`은 전달 헤더(`X-Forwarded-*`)를 해석하지 않도록 `server.forward-headers-strategy: none`, 운영 DB 보호를 위해 `spring.flyway.clean-disabled: true`를 둡니다. actuator는 기존 `health`·상세 없음을 그대로 쓰고, 비밀값은 두지 않습니다(DB 접속 정보는 기존 환경 변수). [`PublicProfileGuard`](../backend/src/main/java/com/beone/api/common/config/PublicProfileGuard.java)는 `prod`가 `local`·`demo`와 함께 켜지거나 그룹이 풀려 `member` 없이 켜지면 빈을 만들기 전에 기동을 멈춥니다(`CurrentUserModeGuard`와 같은 방식, 먼저 실행).
+  - 현재 범위: 골격만 있습니다. **`prod`는 실메일 발송기(N1 결정 대기) 없이는 공개 배포할 수 없습니다.** 지금은 `member`에 켜진 가짜 메일 발송기 `FakeAuthMailSender`가 `prod`에도 켜지며, 공개에서 빼는 작업은 후속(L2)입니다. compose의 프로필 지정, 서버·nginx 반영, DB 주소·공개 origin 검사는 하지 않았습니다.
 
 ## 사용자 식별과 업무 API
 
