@@ -24,3 +24,8 @@
 - develop 동기화 뒤(`8d52959`): `./gradlew test webTest --rerun-tasks` 통과(단위 1424, 웹 427), 이어서 `./gradlew integrationTest --rerun-tasks`를 단독 실행해 통과(통합 196). 실패·skip 0.
 - 실행 전 `docker ps` 정상, deploy 컨테이너 4개 보존, 다른 suite 없음. 실행 중 컨테이너 메모리 합(deploy 4개 포함)을 2초마다 쟀고 peak 3,976MiB로 한도 4,760MiB를 넘지 않았습니다. 동기화 전 같은 실행의 peak는 3,979MiB, 새 통합 테스트 단독 실행 peak는 2,604MiB였습니다.
 - Testcontainers MySQL이 사라지는 간헐 실패는 이번에 나지 않았습니다. Docker 정리는 하지 않았습니다.
+
+## 2026-11-25 · #187 병합 뒤 develop 동기화
+- PR #187(L4·L5)이 `develop` `e5342b3`로 병합돼 `origin/develop`을 merge했습니다(rebase 없음). 충돌은 progress README 목록뿐이고 #186·#189 두 줄을 모두 살렸습니다. 코드 충돌은 없습니다.
+- #187이 더한 `docs/domains/codef.md` 「공개(prod) 범위」 절의 "prod 프로필 통합 확인은 후속(G5 L3)" 문장을 이 PR의 `PublicProfileIntegrationTest`가 확인한다는 사실로 고쳤습니다(`/me`의 `codefConnected: false` 단언).
+- 검증: `./gradlew test webTest --rerun-tasks` 통과(단위 1424, 웹 435 = 직전 427 + #187의 8, 실패·skip 0). 코드 충돌이 없어 `integrationTest`는 생략했습니다(직전 head `65af834`에서 196 통과).
