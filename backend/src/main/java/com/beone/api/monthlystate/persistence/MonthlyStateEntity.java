@@ -76,7 +76,20 @@ public class MonthlyStateEntity {
 		this.stateMonth = stateMonth;
 	}
 
-	/** 그 달의 값 전체를 바꾼다. 인자 {@code null}은 미입력이다. */
+	/**
+	 * 그 달의 값 전체를 바꾼다. 인자 {@code null}은 미입력이다.
+	 * @param cardProductId 저장 시점 카드 상품 ID
+	 * @param snapshotAt 저장 시각
+	 * @param previousMonthWon 전월 실적
+	 * @param previousMonthFrom 전월 실적 기간 시작일
+	 * @param previousMonthTo 전월 실적 기간 종료일
+	 * @param otherBucketsUsedWon 나머지 한도 묶음 사용액
+	 * @param otherBucketsFrom 나머지 사용액 기간 시작일
+	 * @param otherBucketsTo 나머지 사용액 기간 종료일
+	 * @param registeredOn 카드 등록일
+	 * @param noServiceSelection 택1 선택 없음을 입력했으면 참
+	 * @param noSelectionEffectiveFrom 선택 없음 적용일
+	 */
 	public void replace(String cardProductId, LocalDateTime snapshotAt, Long previousMonthWon,
 			LocalDate previousMonthFrom, LocalDate previousMonthTo, Long otherBucketsUsedWon, LocalDate otherBucketsFrom,
 			LocalDate otherBucketsTo, LocalDate registeredOn, boolean noServiceSelection,

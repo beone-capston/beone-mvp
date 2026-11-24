@@ -98,6 +98,7 @@ X-BeONE-Demo-User: MY_CARDS
 - `attributionMonth.status` · `CONFIRMED` / `NEEDS_CONFIRMATION`. 2차 CODEF 취소 행은 접수일이 없어 `NEEDS_CONFIRMATION`(D-17)
 - `coverage[]` · 카드·출처별 완전성(제안). `source`를 생략하면 출처마다 한 항목씩 담고, 출처를 합쳐 계산하지 않는다. `source`를 지정하면 그 출처만 담는다
 - `coverage[].incompleteReasons[]` · 2차 CODEF: `PARTIAL_CANCELLATION_SUSPECTED` / `NO_MATCHING_APPROVAL` / `MULTIPLE_MATCHING_APPROVALS` / `UNDETERMINED_ROW` / `DUPLICATE_KEY_AMBIGUOUS`. 해당 카드·해당 기간에만 표시한다
+- 현재 구현: `SIMULATION`은 `complete=true`다. CODEF 동기화는 도메인 원장에 행을 넣지 않으므로(결정 R8 미연결 유지) `CODEF`는 행이 없고 `complete=false`, `incompleteReasons=[]`다. 위 2차 사유 값은 아직 채우지 않는다(사용자 확인, 결정 32 Q5, 2026-11-18). 자세한 내용은 [ledger 도메인 문서](../domains/ledger.md#조회-규칙)를 본다
 - 1차에서 원장 행으로 전월 실적·버킷 사용액을 자동 산출하지 않는다(D-16)
 
 ### 실패 응답

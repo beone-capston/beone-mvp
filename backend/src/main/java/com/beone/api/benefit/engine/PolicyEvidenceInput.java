@@ -20,7 +20,10 @@ public record PolicyEvidenceInput(String cancellation, String benefitedSales) {
 		EngineChecks.requireOneOf(VALUES, benefitedSales, "benefitedSales");
 	}
 
-	/** 확인하지 못한 근거. 실적 정책 조건을 무시하지 않는다. */
+	/**
+	 * 확인하지 못한 근거. 실적 정책 조건을 무시하지 않는다.
+	 * @return 근거를 확인하지 못한 입력
+	 */
 	public static PolicyEvidenceInput undetermined() {
 		return new PolicyEvidenceInput("UNDETERMINED", "UNDETERMINED");
 	}

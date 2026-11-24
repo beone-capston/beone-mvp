@@ -60,7 +60,11 @@ public class LedgerWriter {
 		return save(entry);
 	}
 
-	/** 승인 행의 버킷 차감액을 저장 순서대로 돌려준다. */
+	/**
+	 * 승인 행의 버킷 차감액을 저장 순서대로 돌려준다.
+	 * @param ledgerId 승인 원장 행 ID
+	 * @return 버킷 차감액 목록
+	 */
 	@Transactional(readOnly = true)
 	public List<LedgerUsageEffect> usageEffectsOf(long ledgerId) {
 		return this.usageEffectRepository.findByLedgerIdOrderByUsageEffectIdAsc(ledgerId)

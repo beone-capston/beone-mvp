@@ -31,12 +31,18 @@ public class MailThrottleEntity {
 		return this.emailHash;
 	}
 
-	/** 마지막 접수 시각. 방금 만든 행이면 {@code null}. */
+	/**
+	 * 마지막 접수 시각. 방금 만든 행이면 {@code null}.
+	 * @return 마지막 접수 시각, 방금 만든 행이면 {@code null}
+	 */
 	public LocalDateTime getLastRequestedAt() {
 		return this.lastRequestedAt;
 	}
 
-	/** 요청을 접수한 시각으로 기록한다. */
+	/**
+	 * 요청을 접수한 시각으로 기록한다.
+	 * @param requestedAt 요청을 접수한 시각
+	 */
 	public void accept(LocalDateTime requestedAt) {
 		this.lastRequestedAt = requestedAt;
 	}

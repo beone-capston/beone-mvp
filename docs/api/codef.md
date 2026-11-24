@@ -42,6 +42,7 @@ X-BeONE-Demo-User: MY_CARDS
 
 - `status` · `NOT_CONNECTED` / `CONNECTED` / `RECONNECT_REQUIRED`
 - `connectedId`·아이디·비밀번호는 응답에 없다
+- 가상 포트폴리오 사용자는 연결이 없으므로 200 `NOT_CONNECTED`다. 조회는 읽기 요청이라 409 `PORTFOLIO_READ_ONLY`를 쓰지 않는다. 409는 아래 연결·해제·동기화 같은 쓰기 요청에만 쓴다(사용자 확인, 결정 32 Q7, 2026-11-18)
 
 ### 실패 응답
 

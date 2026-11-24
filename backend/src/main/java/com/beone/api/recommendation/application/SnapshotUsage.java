@@ -22,7 +22,8 @@ import com.beone.api.ledger.application.LedgerUsageEffect;
  * ("limitBucketUsages에 없는 한도 묶음의 사용액")대로 {@code otherBucketsUsedWon}에 더한다. 더할 값이 미입력이면 미입력 그대로다.</li>
  * <li>차감액을 모르는({@code null}) 승인이 있거나, 차감액이 0이 아닌 승인을 스냅샷 뒤에 취소했으면 그 버킷은 {@code 확인 필요}다. 4종
  * 규칙 모두 한도 복원 확정 규칙이 없기 때문이다(D-17). 스냅샷 전 승인을 스냅샷 뒤 취소한 경우도 같다. 0으로 대신하지 않는다.</li>
- * <li>엔진 입구에 이 경우의 모름 사유가 없어 {@code NOT_ENTERED}로 넘긴다(엔진 사유 추가 후보).</li>
+ * <li>이 경우는 엔진 입구에 {@code POST_SNAPSHOT_ACTIVITY_UNRESOLVED}로 넘긴다(결정 32 Q6). 사용자는 값을 입력했으므로
+ * {@code NOT_ENTERED}가 아니다. 스냅샷 값이 원래 미입력이면 그 값을 그대로 둔다.</li>
  * <li>값을 더해도 출처는 {@code MANUAL}, 기준 기간·시각은 스냅샷 값 그대로다.</li>
  * </ul>
  */
@@ -69,7 +70,7 @@ final class SnapshotUsage {
 		List<BucketUsageInput> adjusted = new ArrayList<>();
 		for (BucketUsageInput bucket : buckets) {
 			String id = bucket.limitBucketId();
-			adjusted.add(new BucketUsageInput(id, unresolved.contains(id) ? StateInput.notEntered()
+			adjusted.add(new BucketUsageInput(id, unresolved.contains(id) ? unresolvedOrSame(bucket.usedWon())
 					: plus(bucket.usedWon(), added.getOrDefault(id, 0L))));
 		}
 		return new Adjusted(adjusted, otherUnresolved ? unresolvedOrSame(otherBuckets) : plus(otherBuckets, otherAdded));
@@ -84,8 +85,9 @@ final class SnapshotUsage {
 				value.updatedAt(), true, null);
 	}
 
+	// 원래 모르는 값(미입력 등)은 사유를 그대로 두고, 입력한 값만 스냅샷 뒤 활동 영향 불확정으로 바꾼다.
 	private static StateInput<Long> unresolvedOrSame(StateInput<Long> value) {
-		return (value.value() == null) ? value : StateInput.notEntered();
+		return (value.value() == null) ? value : StateInput.postSnapshotActivityUnresolved();
 	}
 
 	/**

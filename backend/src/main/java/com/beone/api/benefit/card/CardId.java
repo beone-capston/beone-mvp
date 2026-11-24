@@ -3,6 +3,8 @@ package com.beone.api.benefit.card;
 /**
  * 내부 카드 상품 식별자(예: {@code 09271}).
  * 앞자리 0을 유지하고 숫자가 아닌 문자열 순서로 비교한다(D-12).
+ *
+ * @param value 카드 상품 식별자 원문
  */
 public record CardId(String value) implements Comparable<CardId> {
 

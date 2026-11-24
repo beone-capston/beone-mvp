@@ -484,7 +484,9 @@ X-BeONE-Demo-User: MY_CARDS
 - 형식은 「추천 계산」과 같다
 - 이 조회는 과거 입력과 규칙 버전의 재현 기록이다. 승인 직전 검증을 대신하지 않는다
 - `invalidated` · Boolean · 매핑 변경·월간 상태 재입력 등으로 이 결과를 승인 근거로 쓸 수 없게 됐는지
-- `invalidatedReason` · String|null · `MAPPING_CHANGED` / `MONTHLY_STATE_CHANGED` / `ORDER_PAID`
+- `invalidatedReason` · String|null · `MAPPING_CHANGED` / `MONTHLY_STATE_CHANGED` / `ORDER_PAID`. 여럿이면 `ORDER_PAID` → `MAPPING_CHANGED` → `MONTHLY_STATE_CHANGED` 순으로 하나만 담는다
+  - `MAPPING_CHANGED`는 계산 당시 비교에 넣은 보유 카드의 비교 대상 여부가 바뀐 경우다. 매핑 상태·규칙 상품 변경, 카드 등록 해제, 추천 제외(`excludedFromRecommendation`) 변경을 모두 이 값으로 묶는다. 추천 제외 변경용 사유 값은 따로 없다(사용자 확인, 결정 32 Q2, 2026-11-18)
+  - 결제 설정(`selectionMode`·대표 카드) 변경은 기존 추천을 무효로 만들지 않는다. 추천의 `selectionMode`·`fixedCardComparison`은 계산 당시 설정 기준으로 남고, 모의 승인 때 서버가 그때의 결제 설정으로 다시 계산해 승인 카드를 정한다(사용자 확인, 결정 32 Q3, 2026-11-18)
 
 ### 실패 응답
 
