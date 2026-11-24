@@ -16,10 +16,12 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 카드 월간 상태 조회·수동 입력·출처 충돌 계산 기준 선택 API 3개(docs/api/monthly-states.md). 현재 사용자는 {@link CurrentUser} 인자로만 받는다(D-09).
  *
- * <p>{@code local}·{@code demo} 프로필에서만 등록한다. 경로 {@code month} 형식은 서비스 호출 전에 확인한다.
+ * <p>{@code local}·{@code demo}·{@code member} 프로필에서 등록한다. {@code member}에서는 회원 세션의 장부가 현재 사용자이고, 세션 401·쓰기
+ * CSRF 403·캐시 금지는 {@code /api/v1/me/**} 공통 인터셉터·필터가 컨트롤러 전에 처리한다(결정 37). 출처 충돌 선택의 409·미저장 제한은
+ * 프로필과 관계없이 같다(결정 32 Q1, 결정 36). 경로 {@code month} 형식은 서비스 호출 전에 확인한다.
  */
 @RestController
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 @RequestMapping("/api/v1/me/cards/{userCardId}/monthly-states/{month}")
 public class MonthlyStateController {
 

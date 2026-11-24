@@ -49,6 +49,7 @@
 - #138 → PR: 회원 인증 U4 비밀번호 재설정 요청·완료(`auth` 패키지, 새 Flyway 없음, 재설정 토큰 15분·1회용 해시 저장, 메일 60초 합산, 완료 시 그 회원의 모든 세션 종료, 관리자 판단: 미인증 계정에도 발송·로그인 잠금 유지, [기록](138-auth-password-reset.md))
 - #141 → PR: 업무·인증 API 구현 상태 문구 정합(문서만, S1A R1~R8: `docs/api/README.md`·개별 문서 5행·`docs/api.md` 세 곳·`docs/domains/ledger.md` CODEF 완전성, 정책 변경 없음, [기록](141-api-status-sync.md))
 - #157 → PR: G2 첫 수직 기능(결정 37). 로컬 회원 프로필 `member`에서 회원 세션 → 회원 → '내 카드' 장부로 현재 사용자를 정하고 `GET /api/v1/me`·보유 카드 API를 회원별로 연결(Flyway `V14` `users.member_id`·백필, `CurrentUser` readOnly 기준, 401 → CSRF 403 → 400 → 404, 업무 요청 7일 연장, 프로필 동시 사용 시 기동 실패, 나머지 업무 API는 `member`에 미등록). `develop` 대상, 병합 전. [기록](157-member-session-mycards.md)
+- #159 → 커밋·push(PR은 #158 병합 뒤): G3a(결정 36·37). 로컬 회원 프로필 `member`에 월간 상태 3개(출처 충돌 선택 C1 포함)·결제 전 설정 2개를 등록(컨트롤러 `@Profile`만 변경, 서비스·DB 불변, C1 409·미저장 유지, 결제 설정 변경은 추천 무효화 없음). #158 브랜치 위에 쌓은 작업. [기록](159-member-monthly-preference.md)
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.

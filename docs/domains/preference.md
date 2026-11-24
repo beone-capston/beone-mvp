@@ -11,6 +11,7 @@
 - `GET /api/v1/me/payment-preference`: 설정 조회. 설정한 적이 없으면 `AUTO_RECOMMEND`, 대표 카드 `null`, `updatedAt` `null`
 - `PUT /api/v1/me/payment-preference`: 설정 변경. 가상 포트폴리오 사용자도 바꿀 수 있습니다(docs/api.md 업무 오류 코드 아래 문장)
 - 보유 카드 `PATCH /api/v1/me/cards/{userCardId}`(추천 제외)·`DELETE`(해제)의 409 `REPRESENTATIVE_CARD_IN_USE`와 자동 추천 모드 대표 카드 해제 시 비우기
+- 로컬 회원 프로필 `member` 등록(G3a #159): 같은 컨트롤러를 `member`에도 등록했습니다. 현재 사용자는 회원 세션의 '내 카드' 장부이고, 세션 401·쓰기 CSRF 403·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 컨트롤러 전에 처리합니다([docs/api.md 회원 세션](../api.md#회원-세션member-프로필), 결정 37). 설정은 `user_id` 기준이므로 회원마다 나뉘고, 새 회원은 행 없이 미설정 표시입니다. 남의 카드나 시연 장부의 카드를 대표 카드로 고르면 404 `USER_CARD_NOT_FOUND`입니다. 설정 변경은 기존 추천을 무효화하지 않습니다(결정 32 Q3). 서비스 코드는 바꾸지 않았습니다.
 - Flyway `V6__payment_preferences.sql`: `payment_preferences` 테이블. 시드는 없습니다. 번호는 다른 작업선과 나눈 **임시 번호**이며 병합 직전 관리자가 정한 순서에 따라 바뀔 수 있습니다(D-23 12항).
 
 구현하지 않은 범위:
@@ -32,7 +33,7 @@ D-23 13항의 `web`/`application`/`persistence` 구조입니다.
 ```text
 com.beone.api.preference
 ├── web/
-│   ├── PaymentPreferenceController            API 2개, local·demo 프로필
+│   ├── PaymentPreferenceController            API 2개, local·demo·member 프로필
 │   ├── PaymentPreferenceRequest               요청 본문. 대표 카드 필드 누락과 null을 구분, 모드·대표 카드 조합 검사
 │   ├── StrictTextDeserializer                 문자열 필드에 숫자·불리언 거부
 │   ├── PaymentPreferenceResponse              응답 data(+09:00 시각 문자열)
@@ -115,5 +116,5 @@ preference 쪽에서 `UserCardController`를 지목하는 처리기를 두는 �
 ## 테스트
 
 - `test`: [`PaymentPreferenceServiceTest`](../../backend/src/test/java/com/beone/api/preference/application/PaymentPreferenceServiceTest.java)(미설정 표시, 카드 행 잠금 → 사용자 행 잠금 → 카드 조회 → 저장 순서, 형식 오류·없는 카드 404, 매핑 미확인·지원 안 함·추천 제외 409, 가상 포트폴리오 카드 허용), [`PaymentPreferenceCardGuardTest`](../../backend/src/test/java/com/beone/api/preference/application/PaymentPreferenceCardGuardTest.java)(보호 표의 모든 칸, 잠금 순서)
-- `webTest`: [`PaymentPreferenceApiWebTest`](../../backend/src/test/java/com/beone/api/preference/web/PaymentPreferenceApiWebTest.java)(계약 예시 응답, 실패 응답 전부, 헤더 없음·잘못된 값), [`PaymentPreferenceProfileOffWebTest`](../../backend/src/test/java/com/beone/api/preference/web/PaymentPreferenceProfileOffWebTest.java)(local·demo 밖 404), `UserCardApiWebTest`의 409 두 사례
-- `integrationTest`: [`PaymentPreferenceIntegrationTest`](../../backend/src/test/java/com/beone/api/preference/PaymentPreferenceIntegrationTest.java)(Flyway `V6` 적용, 저장·조회, 보유 카드 API 409와 해제 시 비우기, 사용자별 분리, 카드 변경과 같은 잠금 순서에서 교착 없음, DB 검사 제약)
+- `webTest`: [`PaymentPreferenceApiWebTest`](../../backend/src/test/java/com/beone/api/preference/web/PaymentPreferenceApiWebTest.java)(계약 예시 응답, 실패 응답 전부, 헤더 없음·잘못된 값), [`PaymentPreferenceProfileOffWebTest`](../../backend/src/test/java/com/beone/api/preference/web/PaymentPreferenceProfileOffWebTest.java)(등록 프로필 밖 404), `UserCardApiWebTest`의 409 두 사례
+- `integrationTest`: [`PaymentPreferenceIntegrationTest`](../../backend/src/test/java/com/beone/api/preference/PaymentPreferenceIntegrationTest.java)(Flyway `V6` 적용, 저장·조회, 보유 카드 API 409와 해제 시 비우기, 사용자별 분리, 카드 변경과 같은 잠금 순서에서 교착 없음, DB 검사 제약), [`MemberMonthlyStatePreferenceIntegrationTest`](../../backend/src/test/java/com/beone/api/auth/web/MemberMonthlyStatePreferenceIntegrationTest.java)(`member`: 회원 A·B 분리, 시연 카드 404, 401, CSRF 403·미저장, 남의 카드와 없는 카드의 404 본문 동일, 설정 변경 뒤 추천 유효, no-store)
