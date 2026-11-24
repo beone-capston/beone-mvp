@@ -70,6 +70,7 @@ services:
 
   verify-web:
     image: ${BEONE_VERIFY_NGINX_IMAGE:?set to the nginx image already on the server}
+    pull_policy: never             # 서버에 있는 이미지만 쓴다. 없으면 실패
     depends_on:
       verify-backend:
         condition: service_healthy
