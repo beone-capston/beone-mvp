@@ -13,6 +13,7 @@ const response = (input: OrderInput, id = 'ord-5001'): CreatedOrder => ({
   ...input, orderId: id, status: 'CREATED', createdAt: '2026-11-24T15:00:00+09:00',
 })
 const detail = (order: CreatedOrder) => ({ ...order, simulatedPaymentId: null, latestRecommendationId: null })
+const csrf = () => Response.json({ data: { headerName: 'X-CSRF-TOKEN', token: 'csrf-1' } })
 const click = (name: string | RegExp) => fireEvent.click(screen.getByRole('button', { name }))
 const fill = (input: HTMLElement, value: string) => fireEvent.change(input, { target: { value } })
 
@@ -72,20 +73,23 @@ it.each(['DIRECT', 'ELIGIBLE_SIMPLE_PAY', 'AUTOPAY'])('주문 계약대로 %s를
   const input = validateOrder({ ...draft, paymentMethod }).input!
   const order = response(input)
   const fetchMock = vi.fn()
+    .mockResolvedValueOnce(csrf())
     .mockResolvedValueOnce(Response.json({ data: order }, { status: 201 }))
     .mockResolvedValueOnce(Response.json({ data: detail(order) }))
   vi.stubGlobal('fetch', fetchMock)
 
   expect(await orderApi.create('VIRTUAL_PORTFOLIO', input)).toEqual(order)
   expect(await orderApi.detail('VIRTUAL_PORTFOLIO', order.orderId)).toEqual(detail(order))
+  // 회원 세션 계약: 같은 origin 상대 경로, 쿠키 포함, 쓰기 전 CSRF 토큰(docs/api.md 웹 클라이언트 호출 규칙)
   expect(fetchMock.mock.calls).toEqual([
-    [expect.stringMatching(/\/api\/v1\/me\/orders$/), expect.objectContaining({
-      method: 'POST', credentials: 'omit',
-      headers: { 'X-BeONE-Demo-User': 'VIRTUAL_PORTFOLIO', 'Content-Type': 'application/json' },
+    ['/api/v1/auth/csrf', expect.objectContaining({ method: 'GET', credentials: 'include' })],
+    ['/api/v1/me/orders', expect.objectContaining({
+      method: 'POST', credentials: 'include',
+      headers: { 'X-BeONE-Demo-User': 'VIRTUAL_PORTFOLIO', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': 'csrf-1' },
       body: JSON.stringify(input),
     })],
-    [expect.stringMatching(/\/api\/v1\/me\/orders\/ord-5001$/), expect.objectContaining({
-      method: 'GET', credentials: 'omit', headers: { 'X-BeONE-Demo-User': 'VIRTUAL_PORTFOLIO' },
+    ['/api/v1/me/orders/ord-5001', expect.objectContaining({
+      method: 'GET', credentials: 'include', headers: { 'X-BeONE-Demo-User': 'VIRTUAL_PORTFOLIO' },
     })],
   ])
 })
@@ -93,6 +97,28 @@ it.each(['DIRECT', 'ELIGIBLE_SIMPLE_PAY', 'AUTOPAY'])('주문 계약대로 %s를
 it.each([['ORDER_NOT_FOUND', 'missing'], ['NOT_FOUND', 'unavailable']])('404 %s를 구분한다', async (code, kind) => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ code, errors: [] }, { status: 404 })))
   await expect(orderApi.detail('MY_CARDS', 'ord-1')).rejects.toMatchObject({ kind })
+})
+
+it.each([
+  [401, 'UNAUTHENTICATED', 'unauthenticated'],
+  [403, 'CSRF_INVALID', 'csrf'],
+  [405, 'METHOD_NOT_ALLOWED', 'unavailable'],
+  [404, 'NOT_FOUND', 'unavailable'],
+])('공통 오류 %i %s를 상태와 code로 구분한다', async (status, code, kind) => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ code, errors: [] }, { status })))
+  const signedOut = vi.fn()
+  window.addEventListener('beone:unauthenticated', signedOut)
+  await expect(orderApi.detail('MY_CARDS', 'ord-1')).rejects.toMatchObject({ kind })
+  window.removeEventListener('beone:unauthenticated', signedOut)
+  expect(signedOut).toHaveBeenCalledTimes(status === 401 ? 1 : 0)
+})
+
+it('CSRF 토큰을 받지 못하면 주문을 보내지 않는다', async () => {
+  const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({ code: 'INTERNAL_SERVER_ERROR' }, { status: 500 }))
+  vi.stubGlobal('fetch', fetchMock)
+  await expect(orderApi.create('MY_CARDS', validateOrder(draft).input!)).rejects.toMatchObject({ kind: 'csrf' })
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/auth/csrf')
 })
 
 it('검색어 지우기, 선택값 유지, 시트 닫기와 폼 필수 검증을 지원한다', () => {

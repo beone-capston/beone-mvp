@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { onUnauthenticated } from '../api/client'
 import { AuthApiError, authApi } from './api'
 import { AuthForm } from './AuthForm'
 import './auth.css'
@@ -38,6 +39,9 @@ export function AuthEntry({ children }: { children: ReactNode }) {
     })
     return () => controller.abort()
   }, [attempt, mockLogin, resetToken])
+
+  // 업무 API가 401을 받으면 진행 중 화면을 버리고 로그인 화면으로 돌아간다
+  useEffect(() => onUnauthenticated(() => setState('signed-out')), [])
 
   if (state === 'signed-in') return children
 

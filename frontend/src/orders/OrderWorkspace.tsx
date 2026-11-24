@@ -67,6 +67,7 @@ function lookupMessage(error: unknown) {
   switch (error instanceof OrderRequestError ? error.kind : 'unexpected') {
     case 'missing': return '주문을 찾을 수 없어요.'
     case 'unavailable': return '현재 환경에서 주문 API를 사용할 수 없어요.'
+    case 'unauthenticated': return '로그인이 끝났어요. 다시 로그인해 주세요.'
     case 'network': return '주문을 조회할 수 없어요. 연결을 확인하고 다시 시도해 주세요.'
     case 'server': return '서버 오류로 주문을 조회하지 못했어요.'
     default: return '주문 조회 응답을 확인할 수 없어요.'
@@ -136,6 +137,8 @@ export function OrderWorkspace({ mode, api, active, onSelect, paidIds, sampleOrd
         validation: '주문 입력값을 확인해 주세요.',
         missing: '주문 생성 경로를 확인할 수 없어요.',
         unavailable: '현재 환경에서 주문 생성 API를 사용할 수 없어요.',
+        unauthenticated: '로그인이 끝났어요. 다시 로그인해 주세요.',
+        csrf: '보안 확인에 실패해 주문을 보내지 않았어요. 다시 시도해 주세요.',
         network: '연결이 끊겨 주문 생성 여부를 확인하지 못했어요. 다시 시도하면 주문이 중복될 수 있어요.',
         server: '서버 오류로 생성 여부를 확인하지 못했어요. 다시 시도하면 주문이 중복될 수 있어요.',
         unexpected: '주문 생성 응답을 확인하지 못했어요. 다시 시도하면 주문이 중복될 수 있어요.',

@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { notifyUnauthenticated } from '../api/client'
 import { AuthEntry } from './AuthEntry'
 import { AuthForm } from './AuthForm'
 
@@ -226,6 +227,18 @@ describe('회원 인증 진입', () => {
     expect(await screen.findByText('메인화면')).toBeInTheDocument()
     expect(localStorage.length).toBe(0)
     expect(sessionStorage.length).toBe(0)
+  })
+})
+
+describe('업무 API 401', () => {
+  it('세션이 끝났다는 알림을 받으면 메인화면을 버리고 로그인 화면으로 돌아간다', async () => {
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValueOnce(success({ ...member, authenticatedAt: date, expiresAt: date, absoluteExpiresAt: date }))
+    mount()
+    expect(await screen.findByText('메인화면')).toBeInTheDocument()
+    act(() => notifyUnauthenticated())
+    expect(screen.queryByText('메인화면')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '로그인' })).toBeInTheDocument()
   })
 })
 

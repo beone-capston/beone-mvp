@@ -4,8 +4,8 @@
 
 - [PaymentFlow](../../frontend/src/payment/PaymentFlow.tsx)는 사용 준비, 처리 중, 결과, 결과 미확인을 관리합니다. 동일 시도의 재확인은 최대 24시간 동안 같은 주문·요청 본문·멱등 키를 사용합니다.
 - [인증 선택](../../frontend/src/payment/deviceAuth.ts)은 개발용 타이머 또는 [BeoneBridge v1](../android/bridge-contract-candidate.md)을 사용합니다. 기기 결과는 결제 서버 요청에 포함되지 않습니다.
-- [결제 계약](../../frontend/src/payment/contract.ts)과 [서버 어댑터](../../frontend/src/payment/paymentApi.ts)는 승인, 단건 조회와 추천 조회를 구분합니다. 승인 결과를 받은 뒤 추천 조회에 실패해도 승인 결과는 유지됩니다. 대표 카드 고정의 선택 근거는 서버에서 `null`일 수 있습니다.
+- [결제 계약](../../frontend/src/payment/contract.ts)과 [서버 어댑터](../../frontend/src/payment/paymentApi.ts)는 승인, 단건 조회와 추천 조회를 구분합니다. 승인 결과를 받은 뒤 추천 조회에 실패해도 승인 결과는 유지됩니다. 대표 카드 고정의 선택 근거는 서버에서 `null`일 수 있습니다. 서버 어댑터는 주문 API와 같은 공통 규칙(같은 출처, 쿠키 포함, 시연 헤더 유지)을 쓰고, 승인 POST에는 CSRF 토큰과 `Idempotency-Key`를 함께 보냅니다. 본문은 `{}`이며 `simulateFailure`는 보내지 않습니다. 토큰을 받지 못하면 승인을 보내지 않고 결과 미확인으로 두지 않습니다.
 - [목 어댑터](../../frontend/src/payment/mockPayment.ts)는 피처 테스트를 위한 독립적인 메모리 저장소입니다. 목 주문과 서버 주문은 화면 상태에서 출처를 구분하고 목 주문은 서버 승인에 보낼 수 없습니다. 목 승인은 화면에서만 주문 상태를 갱신합니다.
 - [PaymentResult](../../frontend/src/payment/PaymentResult.tsx)는 승인 ID와 카드 ID로 결과와 추천 상세를 표시합니다. 비교가 로딩되지 않았거나 카드명이 없는 경우 ID를 표시합니다. 결과에서 주문 목록으로 돌아갈 때 같은 주문의 상태만 갱신합니다.
 
-실행 방법은 [README](../../README.md#개발용-가상카드-및-모의-승인)를 참고합니다. 실제 회원 세션을 쓰는 업무 API 연결, 모의 취소, 실기기 연동 검증은 이번 변경 범위 밖입니다.
+실행 방법은 [README](../../README.md#개발용-가상카드-및-모의-승인)를 참고합니다. 회원 세션 계약(쿠키·CSRF·401 처리)은 적용했지만 실제 `member` 백엔드와 브라우저로 연결한 확인, 모의 취소, 실기기 연동 검증은 아직 하지 않았습니다.

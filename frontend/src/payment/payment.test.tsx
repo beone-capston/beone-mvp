@@ -15,6 +15,7 @@ const attempt: Attempt = {
   key: 'test-key', startedAt: 1, preference: defaultPreference(), scenario: 'approved',
   mode: 'MY_CARDS', body: {}, selection: { source: 'mock', order: sampleOrder },
 }
+const csrf = () => Response.json({ data: { headerName: 'X-CSRF-TOKEN', token: 'csrf-1' } })
 const click = (name: string | RegExp) => fireEvent.click(screen.getByRole('button', { name }))
 const tapCard = () => click('올라운드 티타늄카드 가상카드 인증')
 function prepare() {
@@ -198,21 +199,50 @@ it('확정 FAILED는 같은 키로 재생되고 새 키로 다른 결과를 받�
 
 it('서버 승인에는 계약 헤더와 본문만 보내며 대표 카드의 null 선택 근거를 허용한다', async () => {
   const result = await createMockPaymentGateway(0).approve({ ...attempt, scenario: 'fixed' })
-  const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({ data: result }, { status: 201 }))
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(csrf())
+    .mockResolvedValueOnce(Response.json({ data: result }, { status: 201 }))
   vi.stubGlobal('fetch', fetchMock)
   expect(await apiPaymentGateway.approve({ ...attempt, selection: { ...attempt.selection, source: 'server' } }))
     .toEqual(expect.objectContaining({ selectionBasis: null }))
-  expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/orders\/ord-5001\/simulated-payments$/),
-    expect.objectContaining({ method: 'POST', credentials: 'omit', body: '{}', headers: {
+  // 회원 세션 계약: 쿠키 포함, CSRF 토큰과 Idempotency-Key, 본문 {}(simulateFailure 미전송)
+  expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/auth/csrf', expect.objectContaining({ credentials: 'include' }))
+  expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/me/orders/ord-5001/simulated-payments',
+    expect.objectContaining({ method: 'POST', credentials: 'include', body: '{}', headers: {
       'Content-Type': 'application/json', 'Idempotency-Key': 'test-key', 'X-BeONE-Demo-User': 'MY_CARDS',
+      'X-CSRF-TOKEN': 'csrf-1',
     } }))
   await expect(apiPaymentGateway.approve(attempt)).rejects.toMatchObject({ code: 'MOCK_ORDER' })
-  expect(fetchMock).toHaveBeenCalledTimes(1)
+  expect(fetchMock).toHaveBeenCalledTimes(2)
 })
 
 it('잘못된 201 승인 응답은 확정 실패 대신 결과 미확인으로 처리한다', async () => {
   const result = await createMockPaymentGateway(0).approve(attempt)
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ data: { ...result, orderId: 'wrong' } }, { status: 201 })))
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(csrf())
+    .mockResolvedValueOnce(Response.json({ data: { ...result, orderId: 'wrong' } }, { status: 201 })))
   await expect(apiPaymentGateway.approve({ ...attempt, selection: { ...attempt.selection, source: 'server' } }))
     .rejects.toMatchObject({ uncertain: true, status: 201 })
+})
+
+it('CSRF 토큰을 받지 못하면 승인을 보내지 않고 결과 미확인으로 두지 않는다', async () => {
+  const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError('offline'))
+  vi.stubGlobal('fetch', fetchMock)
+  await expect(apiPaymentGateway.approve({ ...attempt, selection: { ...attempt.selection, source: 'server' } }))
+    .rejects.toMatchObject({ code: 'CSRF_UNAVAILABLE', uncertain: false })
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+})
+
+it.each([
+  [401, 'UNAUTHENTICATED', 1],
+  [403, 'CSRF_INVALID', 0],
+  [405, 'METHOD_NOT_ALLOWED', 0],
+])('승인 %i %s는 저장되지 않은 확정 오류이고 401만 로그인 화면 전환을 알린다', async (status, code, notified) => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(csrf())
+    .mockResolvedValueOnce(Response.json({ code, message: 'x', errors: [] }, { status })))
+  const signedOut = vi.fn()
+  window.addEventListener('beone:unauthenticated', signedOut)
+  await expect(apiPaymentGateway.approve({ ...attempt, selection: { ...attempt.selection, source: 'server' } }))
+    .rejects.toMatchObject({ code, status, uncertain: false })
+  window.removeEventListener('beone:unauthenticated', signedOut)
+  expect(signedOut).toHaveBeenCalledTimes(notified)
 })

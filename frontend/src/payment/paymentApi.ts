@@ -1,9 +1,7 @@
+import { apiBaseUrl, commonFailure, fetchCsrfHeader, notifyUnauthenticated } from '../api/client'
 import type { PortfolioMode } from '../data/portfolio'
 import { PaymentError } from './contract'
 import type { Approval, PaymentDetail, PaymentGateway, Recommendation } from './contract'
-
-const base = (import.meta.env.VITE_API_BASE_URL ??
-  (import.meta.env.DEV ? 'http://localhost:8080' : '')).replace(/\/+$/, '')
 
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value)
@@ -50,15 +48,18 @@ function recommendation(v: unknown): v is Recommendation {
 }
 
 async function read(mode: PortfolioMode, path: string, post?: { key: string; body: object }): Promise<unknown> {
+  // 시연 헤더는 local·demo용이다. member·prod는 읽지 않는다. 빌드 분기는 N18 결정 대기
   const headers: Record<string, string> = { 'X-BeONE-Demo-User': mode }
   if (post) {
-    headers['Content-Type'] = 'application/json'
-    headers['Idempotency-Key'] = post.key
+    // 승인은 CSRF 토큰을 받은 뒤에만 보낸다. 받지 못하면 보내지 않았으므로 결과가 불확실하지 않다
+    const csrf = await fetchCsrfHeader()
+    if (!csrf) throw new PaymentError('CSRF_UNAVAILABLE')
+    Object.assign(headers, { 'Content-Type': 'application/json', 'Idempotency-Key': post.key }, csrf)
   }
   let response: Response
   try {
-    response = await fetch(base + '/api/v1/me/' + path, {
-      method: post ? 'POST' : 'GET', headers, credentials: 'omit', cache: 'no-store',
+    response = await fetch(apiBaseUrl + '/api/v1/me/' + path, {
+      method: post ? 'POST' : 'GET', headers, credentials: 'include', cache: 'no-store',
       body: post ? JSON.stringify(post.body) : undefined, signal: AbortSignal.timeout(15000),
     })
   } catch {
@@ -67,6 +68,7 @@ async function read(mode: PortfolioMode, path: string, post?: { key: string; bod
   const body: unknown = await response.json().catch(() => null)
   if (!response.ok) {
     const code = record(body) && string(body.code) ? body.code : 'UNEXPECTED'
+    if (commonFailure(response.status, code) === 'unauthenticated') notifyUnauthenticated()
     throw new PaymentError(code, response.status, Boolean(post) && response.status >= 500)
   }
   if (response.status !== (post ? 201 : 200) || !record(body) || !('data' in body)) {
