@@ -15,6 +15,7 @@ React 화면을 Android 앱 안에서 보여줄 WebView의 기본 구조입니�
 | release 로딩과 정확한 origin | 구현(#88, PR #89 병합). release 시작 주소 `https://beonepay.site/`, 신뢰 origin `https://beonepay.site` 하나. 빌드 설정 단위 테스트만 실행, 실기기 미확인([아래](#release-로딩-이력과-현재-방향)) |
 | 웹 ↔ 네이티브 브리지 | 구현(#88, PR #89 병합), 단위 테스트: `window.BeoneBridge`는 신뢰 origin 규칙에 맞는 프레임(같은 origin의 iframe 포함)에 노출되고, Android 핸들러는 최상위 프레임의 메시지만 처리하며 하위 프레임 메시지에는 응답하지 않음([v1 계약](bridge-contract-candidate.md), PR #87 병합). `WEB_MESSAGE_LISTENER`를 지원하지 않는 WebView에서는 브리지를 붙이지 않으며, 그때의 안내·차단은 계약 밖·미정. 실제 프런트엔드·실기기 미확인([진행 기록](../progress/android/88-android-bridge-local.md)) |
 | 기기 인증(#22)과의 연결 | 구현(#88), 단위 테스트. WebView 셸 화면(`MainActivity`)이 브리지를 통해 `VirtualCardActivationViewModel`과 연결됨. 대기 시간 120초·10초는 근거 없는 잠정값이며 실기기 관측 전 미확정. debug 인증 점검 화면은 브리지와 연결되지 않은 별도 화면 |
+| release 서명 | 환경 변수 주입 골격만 구현(#182). 값이 없으면 서명 없는 release APK를 만들고, `-Pbeone.release.requireSigning=true`일 때만 서명 값 누락을 실패로 만듦. 실제 서명 빌드·키는 없음([아래](#release-서명-환경-변수)) |
 | 실기기·계측 테스트 | 계측 테스트 미실행. 실기기는 2026-11-06 임시 fixture 화면으로 일부만 관측([아래 표](#실기기에서-확인할-항목)), #88 브리지·release는 미확인 |
 
 ## 빌드별 설정
@@ -89,6 +90,36 @@ SSL 오류 → 연결 취소
 - **현재 방향:** 공개 HTTPS 화면을 엽니다. 시작 경로 `/`는 프런트 배포 뒤 바뀔 수 있고 origin은 그대로입니다([브리지 계약 7절](bridge-contract-candidate.md)).
 - **이력:** #25·#26 병합 당시에는 release 주소를 설정하지 않아 아무 페이지도 불러오지 않았습니다.
 - **이력(현재 방침 아님):** 앱 에셋(`WebViewAssetLoader`, `https://appassets.androidplatform.net`)은 과거 권장안으로, 2026-11-04 D-21 당시 release 설계로 정했습니다. 그때 2026-11-16 시연은 debug 빌드, 개발 서버, `adb reverse`(5173, 8080)로 하기로 했습니다.
+
+## release 서명 환경 변수
+
+release 빌드의 서명 값은 저장소 밖에서 환경 변수로만 받습니다(결정 38-9, #182). 서명은 APK를 만든 사람을 증명하는 키 서명이며, 키 파일(keystore)과 비밀번호는 Git·`gradle.properties`·로그·`BuildConfig`에 넣지 않습니다. debug 빌드는 지금처럼 Android 기본 debug 키로 서명합니다.
+
+| 환경 변수 | 뜻 |
+| --- | --- |
+| `BEONE_RELEASE_STORE_FILE` | 키 저장소 파일 경로(저장소 밖) |
+| `BEONE_RELEASE_STORE_PASSWORD` | 키 저장소 비밀번호 |
+| `BEONE_RELEASE_KEY_ALIAS` | 키 별칭 |
+| `BEONE_RELEASE_KEY_PASSWORD` | 키 비밀번호 |
+
+- 4개가 모두 있을 때만 release `signingConfig`를 만듭니다. 하나라도 없거나 빈 값이면 서명 없이 빌드하고 `app/build/outputs/apk/release/app-release-unsigned.apk`가 생깁니다. 키가 없는 로컬·리뷰 환경에서도 `./gradlew assembleRelease testReleaseUnitTest lintRelease`가 성공합니다.
+- 배포용 빌드는 Gradle 속성 `-Pbeone.release.requireSigning=true`를 붙입니다. 이때 값이 하나라도 없으면 구성 단계에서 빌드가 실패하고, 실패 메시지에는 빠진 변수 **이름만** 나옵니다. 이 속성은 구성 단계에서 확인하므로 같은 명령의 debug 작업도 함께 실패합니다.
+
+```bash
+# android/ — 값은 셸에서 직접 넣는다. 파일·저장소에 적지 않는다.
+export BEONE_RELEASE_STORE_FILE=...      # 저장소 밖 경로
+export BEONE_RELEASE_STORE_PASSWORD=...
+export BEONE_RELEASE_KEY_ALIAS=...
+export BEONE_RELEASE_KEY_PASSWORD=...
+./gradlew assembleRelease -Pbeone.release.requireSigning=true
+```
+
+현재 구현 범위와 남은 일:
+
+- 구현: 위 환경 변수 주입과 누락 시 동작([`app/build.gradle.kts`](../../android/app/build.gradle.kts)). 키 없는 빌드와 누락 실패만 확인했습니다.
+- **N8 결정·승인 대기:** 키 생성, 키 보관 위치·담당, 백업, versionCode 증가 규칙. 정해지기 전에는 키를 만들거나 실제 서명 빌드를 하지 않습니다.
+- 승인 대기: 서명 빌드 실행, APK 전달·설치·adb, 실기기 확인. 스토어 배포는 MVP 밖입니다(결정 38-9).
+- D-21의 'W4·W5 시험용 로컬 debug 키 서명 release 허용'(커밋·배포 금지)은 별도 이력이며, 이 환경 변수 경로로 시험할지도 승인 때 정합니다.
 
 ## 실기기에서 확인할 항목
 

@@ -1,6 +1,6 @@
 # #189 공개(prod) 프로필 가짜 메일 차단과 prod 통합 테스트 (G5 L2·L3)
 
-브랜치 `feat/189-prod-public-guards`, 시작 기준 `origin/feat/183-prod-profile-skeleton` `21103a01`(PR #185, 병합 대기). #185 병합 뒤 `develop` 동기화가 필요합니다.
+브랜치 `feat/189-prod-public-guards`, 시작 기준 `origin/feat/183-prod-profile-skeleton` `21103a01`(PR #185). #185가 `develop` `875611d`로 병합된 뒤 `origin/develop`을 merge해 지금 기준은 `develop`입니다.
 
 ## 2026-11-25 · 가짜 메일 prod 제외, prod 웹 슬라이스·통합 테스트
 
@@ -15,3 +15,7 @@
   - 문서: `docs/domains/auth.md`(가짜 발송기 범위), `docs/architecture.md`(#185가 더한 `common.config` 절의 prod 메일 상태)
 - 하지 않은 것: 실메일 구현·의존성, 서버·compose 반영, frontend·Android.
 - 결정 33 컨텍스트 캐시(maxSize=4)에 `prod,member` 통합 컨텍스트가 1개 늘어납니다. 메모리 관측은 아래 검증 기록에 적습니다.
+
+## 2026-11-25 · #185 병합 뒤 develop 동기화
+- `origin/develop`(`875611d`)을 merge했습니다(rebase 없음). 충돌은 `docs/architecture.md`의 `common.config` 현재 범위 문장(develop 문장에 이번 prod 메일 상태를 반영)과 progress README 목록입니다.
+- `docs/architecture.md`·progress README는 PR #187(L4·L5)과도 겹칩니다. #187이 먼저 병합되면 다시 동기화가 필요할 수 있습니다.
