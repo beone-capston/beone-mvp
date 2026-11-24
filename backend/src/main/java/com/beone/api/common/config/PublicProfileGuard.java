@@ -41,7 +41,7 @@ public class PublicProfileGuard implements BeanFactoryPostProcessor, Environment
 	/**
 	 * 활성 프로필 조합을 검사한다. {@code prod}가 꺼져 있으면 아무것도 하지 않는다.
 	 * @param environment 실행 환경
-	 * @throws IllegalStateException {@code prod}가 {@code local}·{@code demo}와 함께 켜졌거나 {@code member} 없이 켜진 경우
+	 * @throws IllegalStateException {@code prod}가 {@code local}·{@code demo}·{@code codef-live}와 함께 켜졌거나 {@code member} 없이 켜진 경우
 	 */
 	static void check(Environment environment) {
 		if (!environment.acceptsProfiles(Profiles.of("prod"))) {
@@ -49,6 +49,10 @@ public class PublicProfileGuard implements BeanFactoryPostProcessor, Environment
 		}
 		if (environment.acceptsProfiles(Profiles.of("local | demo"))) {
 			throw new IllegalStateException("prod 프로필은 local·demo 프로필과 함께 켤 수 없습니다(공개 환경의 시연 부품 차단, 결정 38-6).");
+		}
+		// CODEF 실 게이트웨이 프로필은 비공개 검증 전용이다. 실 게이트웨이 조건(!prod)과 별개로 조합 자체를 막는다
+		if (environment.acceptsProfiles(Profiles.of("codef-live"))) {
+			throw new IllegalStateException("prod 프로필은 codef-live 프로필과 함께 켤 수 없습니다(CODEF는 공개 환경에 등록하지 않음, 결정 38-8).");
 		}
 		if (!environment.acceptsProfiles(Profiles.of("member"))) {
 			throw new IllegalStateException(
