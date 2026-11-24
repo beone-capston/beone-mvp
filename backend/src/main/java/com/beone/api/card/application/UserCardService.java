@@ -11,8 +11,8 @@ import java.util.function.Supplier;
 import com.beone.api.card.persistence.UserCardEntity;
 import com.beone.api.card.persistence.UserCardRepository;
 import com.beone.api.user.application.CurrentUser;
-import com.beone.api.user.application.DemoUserProfile;
-import com.beone.api.user.application.DemoUserService;
+import com.beone.api.user.application.UserProfile;
+import com.beone.api.user.application.UserProfileService;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -38,7 +38,7 @@ public class UserCardService {
 
 	private final CardProductService cardProductService;
 
-	private final DemoUserService demoUserService;
+	private final UserProfileService userProfileService;
 
 	private final RepresentativeCardGuard representativeCardGuard;
 
@@ -52,7 +52,7 @@ public class UserCardService {
 	 * 대표 카드 확장 지점 빈이 없으면 {@link RepresentativeCardGuard#NONE}을, {@link Clock} 빈이 하나 있으면 그것을 쓴다.
 	 * @param userCardRepository 보유 카드 저장소
 	 * @param cardProductService 상품 존재 확인
-	 * @param demoUserService 시연 사용자 표시 정보·읽기 전용 여부
+	 * @param userProfileService 현재 사용자 표시 정보
 	 * @param representativeCardGuard 결제 전 설정(A4)의 대표 카드 검사
 	 * @param invalidationLookup 무효화된 추천 조회 포트. 추천이 보유 카드에 의존하므로 순환을 피하려고 부를 때 찾는다(#120)
 	 * @param connectionLookup CODEF 연결 여부 조회 포트. codef가 보유 카드에 의존하므로 같은 이유로 부를 때 찾는다(#136)
@@ -60,10 +60,10 @@ public class UserCardService {
 	 */
 	@Autowired
 	public UserCardService(UserCardRepository userCardRepository, CardProductService cardProductService,
-			DemoUserService demoUserService, ObjectProvider<RepresentativeCardGuard> representativeCardGuard,
+			UserProfileService userProfileService, ObjectProvider<RepresentativeCardGuard> representativeCardGuard,
 			ObjectProvider<RecommendationInvalidationLookup> invalidationLookup,
 			ObjectProvider<CodefConnectionLookup> connectionLookup, ObjectProvider<Clock> clock) {
-		this(userCardRepository, cardProductService, demoUserService,
+		this(userCardRepository, cardProductService, userProfileService,
 				representativeCardGuard.getIfAvailable(() -> RepresentativeCardGuard.NONE),
 				() -> invalidationLookup.getIfAvailable(() -> RecommendationInvalidationLookup.NONE),
 				() -> connectionLookup.getIfAvailable(() -> CodefConnectionLookup.NONE),
@@ -71,12 +71,12 @@ public class UserCardService {
 	}
 
 	UserCardService(UserCardRepository userCardRepository, CardProductService cardProductService,
-			DemoUserService demoUserService, RepresentativeCardGuard representativeCardGuard,
+			UserProfileService userProfileService, RepresentativeCardGuard representativeCardGuard,
 			Supplier<RecommendationInvalidationLookup> invalidationLookup,
 			Supplier<CodefConnectionLookup> connectionLookup, Clock clock) {
 		this.userCardRepository = Objects.requireNonNull(userCardRepository, "userCardRepository");
 		this.cardProductService = Objects.requireNonNull(cardProductService, "cardProductService");
-		this.demoUserService = Objects.requireNonNull(demoUserService, "demoUserService");
+		this.userProfileService = Objects.requireNonNull(userProfileService, "userProfileService");
 		this.representativeCardGuard = Objects.requireNonNull(representativeCardGuard, "representativeCardGuard");
 		this.invalidationLookup = Objects.requireNonNull(invalidationLookup, "invalidationLookup");
 		this.connectionLookup = Objects.requireNonNull(connectionLookup, "connectionLookup");
@@ -91,7 +91,7 @@ public class UserCardService {
 	 */
 	@Transactional(readOnly = true)
 	public CurrentUserSummary summarize(CurrentUser user) {
-		return new CurrentUserSummary(profileOf(user),
+		return new CurrentUserSummary(this.userProfileService.profileOf(user),
 				this.userCardRepository.countByUserIdAndReleasedAtIsNull(user.userId()),
 				this.connectionLookup.get().isConnected(user));
 	}
@@ -258,18 +258,11 @@ public class UserCardService {
 		return this.userCardRepository.saveAndFlush(entity).getUserCardId();
 	}
 
-	private void requireWritable(CurrentUser user) {
-		if (profileOf(user).readOnly()) {
+	// 쓰기 가능 여부는 현재 사용자의 readOnly로 판단한다(시연 사용자 구분이 없는 회원 장부 포함, 결정 37)
+	private static void requireWritable(CurrentUser user) {
+		if (user.readOnly()) {
 			throw new PortfolioReadOnlyException();
 		}
-	}
-
-	private DemoUserProfile profileOf(CurrentUser user) {
-		return this.demoUserService.listDemoUsers()
-			.stream()
-			.filter(profile -> profile.demoUser() == user.demoUser())
-			.findFirst()
-			.orElseThrow(() -> new IllegalStateException("시연 사용자 시드가 없습니다."));
 	}
 
 	private UserCardEntity find(CurrentUser user, String userCardId) {

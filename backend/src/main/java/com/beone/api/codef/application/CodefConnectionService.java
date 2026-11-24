@@ -11,7 +11,6 @@ import java.util.Optional;
 import com.beone.api.codef.persistence.CodefConnectionEntity;
 import com.beone.api.codef.persistence.CodefConnectionRepository;
 import com.beone.api.user.application.CurrentUser;
-import com.beone.api.user.application.DemoUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -178,7 +177,7 @@ public class CodefConnectionService {
 	}
 
 	private static void requireWritable(CurrentUser user) {
-		if (user.demoUser() == DemoUser.VIRTUAL_PORTFOLIO) {
+		if (user.readOnly()) {
 			throw new CodefPortfolioReadOnlyException();
 		}
 	}

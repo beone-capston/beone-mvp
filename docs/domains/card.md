@@ -45,8 +45,8 @@ com.beone.api.card
 │   ├── InvalidAsOfException          asOf 형식 오류(입력값을 담지 않음)
 │   ├── CardProductErrorCode          CARD_PRODUCT_NOT_FOUND
 │   ├── CardProductExceptionHandler   형식 오류 → 400, 없는 상품 → 404 (@Order 최우선)
-│   ├── CurrentUserController         GET /api/v1/me (local·demo)
-│   ├── UserCardController            /api/v1/me/cards 5개 (local·demo)
+│   ├── CurrentUserController         GET /api/v1/me (local·demo·member)
+│   ├── UserCardController            /api/v1/me/cards 5개 (local·demo·member)
 │   ├── RegisterUserCardRequest·ChangeMappingRequest·UpdateUserCardRequest  요청 본문과 필드 사이 규칙
 │   ├── UnknownFieldRejecting         알 수 없는 필드(카드번호 등) → 400
 │   ├── CardDisplayName·CrossFieldChecked·StrictBooleanDeserializer  표시 이름·필드 사이·참거짓 검증
@@ -116,7 +116,9 @@ GET /api/v1/card-products/09174?asOf=2026-11-03
 
 ## 보유 카드
 
-현재 사용자(`X-BeONE-Demo-User` 헤더로 정함, [user 안내](user.md))의 보유 카드를 다룹니다. 컨트롤러는 `CurrentUser` 인자만 받고 헤더를 직접 읽지 않으며, `local`·`demo` 프로필에서만 등록됩니다(그 밖은 404). `GET /api/v1/me`는 보유 카드 수가 필요해 이 패키지에 두었고 `user` 패키지의 `DemoUserService.listDemoUsers()`로 표시 정보를 읽습니다(`user` 코드는 바꾸지 않음).
+현재 사용자의 보유 카드를 다룹니다. 현재 사용자는 `local`·`demo`에서 `X-BeONE-Demo-User` 헤더로, 로컬 회원 프로필 `member`에서 회원 세션으로 정합니다([user 안내](user.md), 결정 37). 컨트롤러는 `CurrentUser` 인자만 받고 헤더·쿠키를 직접 읽지 않으며, `local`·`demo`·`member` 프로필에서만 등록됩니다(그 밖은 404). `GET /api/v1/me`는 보유 카드 수가 필요해 이 패키지에 두었고 `user` 패키지의 `UserProfileService.profileOf`로 `users` 행의 표시 정보를 읽습니다. 회원이면 `demoUser`가 `null`입니다(결정 37 D7).
+
+쓰기 가능 여부는 `CurrentUser.readOnly()`로 판단합니다(가상 포트폴리오만 `true`). `member` 프로필에서는 이 검사 앞에 auth의 세션·CSRF 검사가 있어 순서가 401 → CSRF 403 → 본문 400 → 404입니다([공통 규약](../api.md#회원-세션member-프로필)). 회원 장부는 쓰기 가능이므로 409 `PORTFOLIO_READ_ONLY`는 나지 않습니다.
 
 ### 처리 흐름
 

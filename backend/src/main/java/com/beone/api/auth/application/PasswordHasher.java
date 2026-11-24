@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
  * 저장하거나 로그에 남기지 않는다. {@link #matches}는 로그인 단위(U3)가 쓴다.
  */
 @Component
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 public class PasswordHasher {
 
 	static final int MEMORY_KIB = 19456;

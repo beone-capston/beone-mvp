@@ -13,6 +13,7 @@ import com.beone.api.auth.persistence.MemberEntity;
 import com.beone.api.auth.persistence.MemberRepository;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,10 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>계정 존재·인증 상태를 결과로 드러내지 않는다. 가입과 재요청은 어떤 경우든 반환값이 없고(컨트롤러가 같은 202로 답함), 실제 발송
  * 여부만 다르다. 가입은 기존 계정일 때도 비밀번호 해시를 계산해 응답 시간 차이를 줄인다. 원문 비밀번호·토큰은 로그에 남기지 않는다.
- * {@code local}·{@code demo} 프로필 전용이다(관리자 승인, 결정 30).
+ * {@code local}·{@code demo}·{@code member} 프로필 전용이다(관리자 승인, 결정 30).
  */
 @Service
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 public class MemberRegistrationService {
 
 	/** 이메일 인증 토큰 유효 시간(사본). */
@@ -41,21 +42,25 @@ public class MemberRegistrationService {
 
 	private final AuthTokenMailer tokenMailer;
 
+	private final ApplicationEventPublisher events;
+
 	private final Clock clock;
 
 	@Autowired
 	public MemberRegistrationService(MemberRepository members, AuthTokenRepository tokens, MailRequestThrottle throttle,
-			PasswordHasher passwordHasher, AuthTokenMailer tokenMailer, ObjectProvider<Clock> clock) {
-		this(members, tokens, throttle, passwordHasher, tokenMailer, clock.getIfUnique(Clock::systemUTC));
+			PasswordHasher passwordHasher, AuthTokenMailer tokenMailer, ApplicationEventPublisher events,
+			ObjectProvider<Clock> clock) {
+		this(members, tokens, throttle, passwordHasher, tokenMailer, events, clock.getIfUnique(Clock::systemUTC));
 	}
 
 	MemberRegistrationService(MemberRepository members, AuthTokenRepository tokens, MailRequestThrottle throttle,
-			PasswordHasher passwordHasher, AuthTokenMailer tokenMailer, Clock clock) {
+			PasswordHasher passwordHasher, AuthTokenMailer tokenMailer, ApplicationEventPublisher events, Clock clock) {
 		this.members = Objects.requireNonNull(members, "members");
 		this.tokens = Objects.requireNonNull(tokens, "tokens");
 		this.throttle = Objects.requireNonNull(throttle, "throttle");
 		this.passwordHasher = Objects.requireNonNull(passwordHasher, "passwordHasher");
 		this.tokenMailer = Objects.requireNonNull(tokenMailer, "tokenMailer");
+		this.events = Objects.requireNonNull(events, "events");
 		this.clock = Objects.requireNonNull(clock, "clock").withZone(AuthSessionService.ZONE);
 	}
 
@@ -100,7 +105,7 @@ public class MemberRegistrationService {
 
 	/**
 	 * 이메일 인증 토큰으로 이메일 소유를 확인한다. 인증 상태만 바꾸고 비밀번호·세션은 건드리지 않는다. 그 회원의 인증 토큰은 모두
-	 * 무효가 된다.
+	 * 무효가 된다. 같은 트랜잭션에서 {@link MemberEmailVerifiedEvent}를 발행해 회원의 업무 장부를 만든다(결정 37 D1a).
 	 * @param token 원문 토큰(43자 형식 검사를 마친 값)
 	 * @throws AuthTokenInvalidException 없음·만료·사용됨·목적 불일치
 	 */
@@ -118,6 +123,7 @@ public class MemberRegistrationService {
 			.orElseThrow(AuthTokenInvalidException::new);
 		member.markEmailVerified(now);
 		this.tokens.deleteByMemberIdAndPurpose(member.getMemberId(), AuthTokenPurpose.EMAIL_VERIFICATION);
+		this.events.publishEvent(new MemberEmailVerifiedEvent(member.getMemberId()));
 	}
 
 	private void sendVerificationMail(MemberEntity member, LocalDateTime now) {

@@ -38,9 +38,9 @@ import com.beone.api.card.application.UserCardView;
 import com.beone.api.support.WebSliceTest;
 import com.beone.api.user.application.CurrentUser;
 import com.beone.api.user.application.DemoUser;
-import com.beone.api.user.application.DemoUserProfile;
 import com.beone.api.user.application.DemoUserService;
 import com.beone.api.user.application.PortfolioType;
+import com.beone.api.user.application.UserProfile;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -142,7 +142,7 @@ class UserCardApiWebTest {
 	@Test
 	void currentUserReturnsContractBody() throws Exception {
 		given(this.userCardService.summarize(MY_CARDS)).willReturn(new CurrentUserSummary(
-				new DemoUserProfile(DemoUser.MY_CARDS, "내 카드", PortfolioType.REAL, false), 2, false));
+				new UserProfile(DemoUser.MY_CARDS, "내 카드", PortfolioType.REAL, false), 2, false));
 
 		MvcResult result = perform(get("/api/v1/me").header(HEADER, "MY_CARDS"));
 
