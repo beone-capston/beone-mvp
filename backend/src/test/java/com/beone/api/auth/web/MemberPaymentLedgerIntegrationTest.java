@@ -334,8 +334,8 @@ class MemberPaymentLedgerIntegrationTest {
 			.assertIsMatch(approved.getBody(), approve(a, order, "key-a", null).getBody());
 		assertThat(countOf("payment_cancellations", MEMBER_A)).isOne();
 
-		// 24시간 뒤: 승인은 주문이 PAID라 409, 부분 취소는 새 요청으로 다시 실행된다
-		this.clock.advance(Duration.ofMinutes(2));
+		// 24시간 뒤(경계 24h00m을 피해 24h01m 경과): 승인은 주문이 PAID라 409, 부분 취소는 새 요청으로 다시 실행된다
+		this.clock.advance(Duration.ofMinutes(3));
 		assertError(approve(a, order, "key-a", null), 409, "ORDER_ALREADY_PAID");
 		ResponseEntity<String> again = cancel(a, payment, "key-c", "{\"amountWon\":40000}");
 		assertThat(again.getStatusCode().value()).isEqualTo(201);
