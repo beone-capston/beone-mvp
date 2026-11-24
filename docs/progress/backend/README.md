@@ -48,6 +48,7 @@
 - #136 → PR: F1(`GET /api/v1/me` `codefConnected`를 연결 행 존재로 반영, card 조회 포트 `CodefConnectionLookup`·codef 구현, README에 CODEF 키 이름, `.env.example`은 가드레일로 후속, `DemoUserIntegrationTest` 간헐 실패 조사 기록만). `develop` 대상, 병합 전. [작업 기록](136-codef-connected.md)
 - #138 → PR: 회원 인증 U4 비밀번호 재설정 요청·완료(`auth` 패키지, 새 Flyway 없음, 재설정 토큰 15분·1회용 해시 저장, 메일 60초 합산, 완료 시 그 회원의 모든 세션 종료, 관리자 판단: 미인증 계정에도 발송·로그인 잠금 유지, [기록](138-auth-password-reset.md))
 - #141 → PR: 업무·인증 API 구현 상태 문구 정합(문서만, S1A R1~R8: `docs/api/README.md`·개별 문서 5행·`docs/api.md` 세 곳·`docs/domains/ledger.md` CODEF 완전성, 정책 변경 없음, [기록](141-api-status-sync.md))
+- #151 → PR: 엔진 입구 사유 `POST_SNAPSHOT_ACTIVITY_UNRESOLVED` 추가(결정 32 Q6, 스냅샷 뒤 모르는 차감액·취소로 확인 필요가 된 입력값만, 진짜 미입력은 `NOT_ENTERED`, 금액·판정·응답 불변, Flyway 없음). `develop` 대상, 병합 전. [작업 기록](151-engine-unknown-reason.md)
 - #157 → PR: G2 첫 수직 기능(결정 37). 로컬 회원 프로필 `member`에서 회원 세션 → 회원 → '내 카드' 장부로 현재 사용자를 정하고 `GET /api/v1/me`·보유 카드 API를 회원별로 연결(Flyway `V14` `users.member_id`·백필, `CurrentUser` readOnly 기준, 401 → CSRF 403 → 400 → 404, 업무 요청 7일 연장, 프로필 동시 사용 시 기동 실패, 나머지 업무 API는 `member`에 미등록). `develop` 대상, 병합 전. [기록](157-member-session-mycards.md)
 
 ## 사용자 확인 사항
