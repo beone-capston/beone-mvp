@@ -17,7 +17,7 @@ android {
 
     buildTypes {
         debug {
-            // 개발 서버 주소. 기기에서는 `adb reverse tcp:5173 tcp:5173`으로 연결한다.
+            // 개발 서버 주소. 실기기는 `adb reverse`로 5173(화면)·8080(API)을 둘 다 연결한다(D-23 11항. member 같은 origin 프록시는 결정 37 O2-L, 프런트 설정 대기 N-FE-PROXY).
             val devServerOverride = providers.gradleProperty("beone.devServerUrl")
             val devServerUrl = devServerOverride.getOrElse("http://localhost:5173/")
             // 주소를 바꾼 빌드인지 테스트가 구분할 수 있게 둔다.
