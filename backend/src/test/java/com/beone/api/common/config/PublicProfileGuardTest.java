@@ -1,5 +1,9 @@
 package com.beone.api.common.config;
 
+import java.util.Map;
+
+import com.beone.api.codef.application.EnvironmentApprovalFingerprintKeySource;
+import com.beone.api.codef.application.EnvironmentConnectedIdKeySource;
 import com.beone.api.user.web.CurrentUserModeGuard;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -10,6 +14,8 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.StandardEnvironment;
+import org.springframework.core.env.SystemEnvironmentPropertySource;
 import org.springframework.mock.env.MockEnvironment;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,6 +34,11 @@ class PublicProfileGuardTest {
 	private static final String PROD_WITH_DEMO_MESSAGE = "prod 프로필은 local·demo 프로필과 함께 켤 수 없습니다";
 
 	private static final String PROD_WITHOUT_MEMBER_MESSAGE = "prod 프로필은 member 프로필과 함께 켜져야 합니다";
+
+	private static final String CODEF_MESSAGE = "prod 프로필에는 CODEF 키·토큰 환경 변수를 둘 수 없습니다";
+
+	/** 실제 키가 아닌 가짜 값. 예외 메시지에 들어가지 않는지 확인하려고 알아보기 쉬운 문자열을 쓴다. */
+	private static final String FAKE_VALUE = "fake-codef-value-should-not-appear";
 
 	private final ApplicationContextRunner runner = new ApplicationContextRunner()
 		.withBean(PublicProfileGuard.class)
@@ -110,6 +121,56 @@ class PublicProfileGuardTest {
 		assertThatThrownBy(() -> guardedApplication().profiles("prod", "local").run())
 			.isInstanceOf(IllegalStateException.class)
 			.hasMessageContaining(PROD_WITH_DEMO_MESSAGE);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "CODEF_CLIENT_ID", "CODEF_CLIENT_SECRET", "BEONE_CODEF_APPROVAL_HMAC_KEY",
+			"BEONE_CODEF_CONNECTED_ID_KEY" })
+	void prodWithACodefSecretVariableFailsStartupNamingOnlyTheVariable(String variable) {
+		this.runner.withPropertyValues("spring.profiles.active=prod,member", variable + "=" + FAKE_VALUE).run(context -> {
+			assertThat(context).hasFailed();
+			assertThat(context.getStartupFailure()).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining(CODEF_MESSAGE)
+				.hasMessageContaining(variable)
+				.message()
+				.doesNotContain(FAKE_VALUE);
+		});
+	}
+
+	@Test
+	void codefVariablesSetAsOperatingSystemEnvironmentAreDetectedEvenWhenBlank() {
+		StandardEnvironment environment = new StandardEnvironment();
+		environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+		environment.getPropertySources()
+			.addFirst(new SystemEnvironmentPropertySource(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
+					Map.of("CODEF_CLIENT_SECRET", FAKE_VALUE, "BEONE_CODEF_CONNECTED_ID_KEY", "")));
+		environment.setActiveProfiles("prod", "member");
+
+		assertThatIllegalStateException().isThrownBy(() -> PublicProfileGuard.check(environment))
+			.withMessageContaining("CODEF_CLIENT_SECRET, BEONE_CODEF_CONNECTED_ID_KEY")
+			.withMessageNotContaining(FAKE_VALUE);
+	}
+
+	@Test
+	void prodWithoutCodefVariablesStillStarts() {
+		this.runner.withPropertyValues("spring.profiles.active=prod,member", "beone.codef.product-host=https://example.test")
+			.run(context -> assertThat(context).hasNotFailed());
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "member", "local", "demo" })
+	void codefVariablesAreAllowedOutsideProd(String profiles) {
+		this.runner
+			.withPropertyValues("spring.profiles.active=" + profiles, "CODEF_CLIENT_ID=" + FAKE_VALUE,
+					"CODEF_CLIENT_SECRET=" + FAKE_VALUE, "BEONE_CODEF_APPROVAL_HMAC_KEY=" + FAKE_VALUE,
+					"BEONE_CODEF_CONNECTED_ID_KEY=" + FAKE_VALUE)
+			.run(context -> assertThat(context).hasNotFailed());
+	}
+
+	@Test
+	void checkedNamesMatchTheNamesCodefReads() {
+		assertThat(PublicProfileGuard.CODEF_SECRET_VARIABLES).contains(EnvironmentApprovalFingerprintKeySource.VARIABLE,
+				EnvironmentConnectedIdKeySource.VARIABLE);
 	}
 
 	/** 두 가드만 등록하고 실제 application.yml·application-prod.yml을 읽는 최소 애플리케이션. */
