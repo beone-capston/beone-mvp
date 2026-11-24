@@ -388,8 +388,27 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
 - **조회 요청**: 보유카드·실적은 `organization`·`connectedId`, 승인내역은 여기에 `startDate`·`endDate`(yyyyMMdd)·`orderBy`(`0`)를 더합니다(샌드박스 확인 절차와 같은 값, 근거 확인 대상). 응답 판정은 기존 `codef.sync`가 합니다. 근거 있는 결과 코드가 없어 연결 무효(재연결 필요)로 바꾸는 대응은 아직 없습니다.
 - **키**: 환경 변수 이름만 씁니다(`CODEF_CLIENT_ID`·`CODEF_CLIENT_SECRET`·`CODEF_PUBLIC_KEY`·`BEONE_CODEF_CONNECTED_ID_KEY`·`BEONE_CODEF_APPROVAL_HMAC_KEY`). 시험은 합성 값만 씁니다. 비밀번호·connectedId·암호문은 로그·예외 문구에 넣지 않습니다.
 - **저장 분리(R8)**: 동기화 결과는 기존과 같이 CODEF 전용 테이블과 `user_cards`(`CODEF`, `UNMAPPED`)에만 저장하고 `ledger_transactions`는 바꾸지 않습니다.
-- **하지 않은 것**: 실호출, 실키·환경 비밀 파일, 서버 접속, prod 등록, 프로세스를 넘는 호출 상한(LP-2), 추가 인증(2-way), 카드소지확인 지원.
+- **하지 않은 것**: 실호출, 실키·환경 비밀 파일, 서버 접속, prod 등록, 추가 인증(2-way), 카드소지확인 지원. 프로세스를 넘는 호출 상한은 아래 LP-2 절.
 - **테스트**: 단위 `LiveCodefGatewayTest`(암호문만 전송·복호화 확인, 결과 코드 대응, 5xx·시간 초과·연결 끊김 재호출 0, 리다이렉트 미추적, 키·공개키 없으면 요청 0, 요청 본문, 삭제), `CodefLiveProfileTest`(프로필 조합별 게이트웨이·컨트롤러 등록), `PublicProfileGuardTest`(prod + codef-live 실패), 웹 `CodefLiveProfileWebTest`(4경로가 회원 인터셉터 뒤 401), 통합 `CodefLiveMemberIntegrationTest`(회원 세션·CSRF로 연결 → 동기화 → 해제, 스텁 요청 수 전체, 원장 불변, 다른 회원 분리, 5xx 재호출 0). 통합 시험은 전송 계층 클라이언트를 스텁 주소·합성 키 빈으로 바꾸고 합성 공개키 빈을 넣습니다(테스트 전용 주입).
+
+## 프로세스를 넘는 호출 총량 (LP-2, #196)
+
+비공개 검증 기간 전체의 CODEF 호출 수를 서버 재기동과 관계없이 제한합니다(N14, 결정 10·39-4). 관측 1회 상한(`CodefObservation.CALL_LIMIT = 3`)과 별개이며 둘 다 허락해야 보냅니다.
+
+- **저장**: `codef_call_budgets`(V15)에 API 이름(`TOKEN`, `ACCOUNT_CREATE`, `ACCOUNT_DELETE`, `HELD_CARDS`, `APPROVALS`, `CARD_PERFORMANCES`)과 창 시작 시각별 누적 시도 수를 둡니다. 사용자 데이터·원장과 섞지 않습니다(R8).
+- **동작**: [JdbcCodefCallBudget](../../backend/src/main/java/com/beone/api/codef/application/JdbcCodefCallBudget.java)이 전송 계층의 요청 직전에 불립니다(`CodefCallBudget`). 행이 없으면 0으로 만든 뒤 `used < 상한`일 때만 1을 더하는 갱신 한 문장으로 확인과 증가를 함께 하므로 동시 요청에도 상한을 넘지 않습니다. 거절이면 요청을 보내지 않고 결과는 `BUDGET_EXHAUSTED`이며, 연결·동기화 API는 기존과 같이 `CODEF_UNAVAILABLE`(502)입니다. 허락한 뒤 요청이 실패해도 되돌리지 않습니다(시도 수). 캐시된 토큰을 쓰면 토큰 총량은 쓰지 않습니다.
+- **설정과 기본값**: `beone.codef.budget.per-api`(API별 최대), `beone.codef.budget.window-start`·`window-end`(ISO-8601 오프셋 시각, 시작 포함·끝 제외). 환경 변수로는 `BEONE_CODEF_BUDGET_PER_API`·`BEONE_CODEF_BUDGET_WINDOW_START`·`BEONE_CODEF_BUDGET_WINDOW_END`입니다. **하나라도 없거나 읽을 수 없거나 지금이 창 밖이면 닫힘(호출 0)입니다.** 코드에는 숫자 기본값이 없습니다. 실수로 설정을 빠뜨렸을 때 상한 없이 열리지 않게 하려는 것이고, N14 값은 운영자가 검증 때 넣습니다.
+- **검증 환경 권장 설정(결정 39-4)**: 검증 기간에 연결 1회와 동기화 1회를 하므로 API별 3회로 둡니다. 예시(값은 검증 일정에 맞춰 바꿈):
+
+  ```bash
+  BEONE_CODEF_BUDGET_PER_API=3
+  BEONE_CODEF_BUDGET_WINDOW_START=2026-12-01T00:00:00+09:00
+  BEONE_CODEF_BUDGET_WINDOW_END=2026-12-08T00:00:00+09:00
+  ```
+
+  창을 새로 정하면(시작 시각이 바뀌면) 새 행으로 다시 셉니다. 검증 뒤에는 설정을 지워 닫습니다.
+- **범위**: `member & codef-live & !prod`에서만 빈이 있습니다. 그 밖의 프로필은 전송 계층을 쓰는 게이트웨이가 없어 세지 않습니다(`CodefCallBudget.UNLIMITED`). 비용 상한은 다루지 않습니다.
+- **테스트**: 단위 `CodefCallBudgetTransportTest`(토큰·상품·계정 거절 시 요청 0, 캐시 토큰은 묻지 않음, 관측 상한 먼저), `CodefCallBudgetSettingsTest`(없음·잘못된 값 닫힘, 창 경계), `CodefLiveProfileTest`(codef-live에서만 등록), 통합 `CodefCallBudgetIntegrationTest`(16개 동시 요청에 3건만 허락, 같은 DB를 쓰는 새 애플리케이션 컨텍스트에서도 누적 유지, API별 분리, 창 경계와 새 창, 설정 없음 시 행 0, 상한 도달 뒤 스텁 요청 0). `CodefLiveMemberIntegrationTest`는 시험 시계를 포함하는 창과 API별 3을 설정해 씁니다.
 
 ## 제약과 후속 작업
 
