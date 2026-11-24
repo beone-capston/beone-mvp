@@ -1,7 +1,8 @@
 package com.beone.api.codef.application;
 
 /**
- * CODEF 계정 연결 경계. 이 버전에는 local·demo용 {@link FakeCodefGateway}만 있고 실 HTTP 구현은 없다(결정 30).
+ * CODEF 계정 연결 경계. local·demo용 {@link FakeCodefGateway}와 비공개 검증 프로필용 {@link LiveCodefGateway}(#193, 실호출은 별도 승인)가
+ * 있다(결정 30·38-8).
  *
  * <p>구현은 비밀번호를 저장·로그·예외 문구에 남기지 않는다. 실 구현은 받은 즉시 CODEF 공개키로 암호화해 보내야 한다(D-14 원칙 9).
  * 자동 재시도는 하지 않는다.
