@@ -246,6 +246,75 @@ class AuthSessionServiceTest {
 		verify(this.repository).delete(expired);
 	}
 
+	// 회원 프로필 업무 요청 검사(결정 37 D3·D5·D6)
+
+	@Test
+	void memberRequestReadExtendsIdleExpiryBySevenDaysWithoutCsrf() {
+		String id = SessionTokens.newSessionId();
+		AuthSessionEntity member = memberRow(id, NOW.minusDays(1), NOW.plusDays(6), NOW.plusDays(29));
+		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(member));
+
+		MemberRequestCheck check = this.service.checkMemberRequest(id, null, false);
+
+		assertThat(check).isEqualTo(new MemberRequestCheck.Authenticated("usr-1", id, Duration.ofDays(7)));
+		assertThat(member.getLastUsedAt()).isEqualTo(NOW);
+		assertThat(member.getIdleExpiresAt()).isEqualTo(NOW.plusDays(7));
+		assertThat(check.toString()).doesNotContain(id);
+	}
+
+	@Test
+	void memberRequestIdleExpiryNeverPassesAbsoluteExpiry() {
+		String id = SessionTokens.newSessionId();
+		AuthSessionEntity late = memberRow(id, NOW.minusDays(27), NOW.plusDays(1), NOW.plusDays(3));
+		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(late));
+
+		assertThat(this.service.checkMemberRequest(id, null, false))
+			.isEqualTo(new MemberRequestCheck.Authenticated("usr-1", id, Duration.ofDays(3)));
+		assertThat(late.getIdleExpiresAt()).isEqualTo(NOW.plusDays(3));
+	}
+
+	@Test
+	void memberRequestWriteNeedsMatchingCsrfAndDoesNotTouchOnFailure() {
+		String id = SessionTokens.newSessionId();
+		AuthSessionEntity member = memberRow(id, NOW.minusDays(1), NOW.plusDays(6), NOW.plusDays(29));
+		given(this.repository.findBySessionHash(SessionTokens.hash(id))).willReturn(Optional.of(member));
+
+		assertThat(this.service.checkMemberRequest(id, null, true)).isEqualTo(new MemberRequestCheck.CsrfInvalid());
+		assertThat(this.service.checkMemberRequest(id, SessionTokens.csrfTokenOf(SessionTokens.newSessionId()), true))
+			.isEqualTo(new MemberRequestCheck.CsrfInvalid());
+		assertThat(member.getLastUsedAt()).isEqualTo(NOW.minusDays(1));
+
+		assertThat(this.service.checkMemberRequest(id, SessionTokens.csrfTokenOf(id), true))
+			.isInstanceOf(MemberRequestCheck.Authenticated.class);
+		assertThat(member.getLastUsedAt()).isEqualTo(NOW);
+	}
+
+	@Test
+	void memberRequestIsUnauthenticatedBeforeCsrfForAnonymousMissingOrExpiredSession() {
+		// 401이 CSRF 403보다 먼저다: 회원 세션이 아니면 CSRF 토큰이 틀려도 401이다
+		assertThat(this.service.checkMemberRequest(null, null, true)).isEqualTo(new MemberRequestCheck.Unauthenticated());
+		assertThat(this.service.checkMemberRequest("bad", null, true)).isEqualTo(new MemberRequestCheck.Unauthenticated());
+
+		String unknown = SessionTokens.newSessionId();
+		given(this.repository.findBySessionHash(SessionTokens.hash(unknown))).willReturn(Optional.empty());
+		assertThat(this.service.checkMemberRequest(unknown, null, true))
+			.isEqualTo(new MemberRequestCheck.Unauthenticated());
+
+		String anonymousId = SessionTokens.newSessionId();
+		AuthSessionEntity anonymous = row(anonymousId, NOW.minusMinutes(10), NOW.plusMinutes(50), null);
+		given(this.repository.findBySessionHash(SessionTokens.hash(anonymousId))).willReturn(Optional.of(anonymous));
+		assertThat(this.service.checkMemberRequest(anonymousId, SessionTokens.csrfTokenOf(anonymousId), true))
+			.isEqualTo(new MemberRequestCheck.Unauthenticated());
+		assertThat(anonymous.getLastUsedAt()).isEqualTo(NOW.minusMinutes(10));
+
+		String expiredId = SessionTokens.newSessionId();
+		AuthSessionEntity expired = memberRow(expiredId, NOW.minusDays(7), NOW, NOW.plusDays(20));
+		given(this.repository.findBySessionHash(SessionTokens.hash(expiredId))).willReturn(Optional.of(expired));
+		assertThat(this.service.checkMemberRequest(expiredId, null, false))
+			.isEqualTo(new MemberRequestCheck.Unauthenticated());
+		verify(this.repository).delete(expired);
+	}
+
 	@Test
 	void issueMemberDeletesPreviousAndExpiredSessionsAndKeepsAtMostFive() {
 		String previous = SessionTokens.newSessionId();

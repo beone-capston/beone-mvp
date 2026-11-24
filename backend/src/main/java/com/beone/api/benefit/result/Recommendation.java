@@ -9,6 +9,9 @@ import com.beone.api.benefit.card.CardId;
 
 /**
  * 추천 입력 하나에 대한 카드별 결과와 선택 결과.
+ *
+ * @param cardBenefits 후보 카드별 결과
+ * @param outcome 카드 선택 결과
  */
 public record Recommendation(List<CardBenefit> cardBenefits, RecommendationOutcome outcome) {
 

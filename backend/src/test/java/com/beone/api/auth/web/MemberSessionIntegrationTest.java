@@ -96,6 +96,8 @@ class MemberSessionIntegrationTest {
 		this.jdbcTemplate.update("DELETE FROM auth_login_throttles");
 		this.jdbcTemplate.update("DELETE FROM auth_sessions");
 		this.jdbcTemplate.update("DELETE FROM auth_tokens");
+		// 회원 장부(users.member_id, V14)가 회원을 RESTRICT로 참조하므로 먼저 지운다
+		this.jdbcTemplate.update("DELETE FROM users WHERE member_id IS NOT NULL");
 		this.jdbcTemplate.update("DELETE FROM members");
 		this.jdbcTemplate.update("DELETE FROM auth_mail_throttles");
 	}

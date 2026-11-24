@@ -73,7 +73,10 @@ public class CardProductService {
 		}
 	}
 
-	/** Asia/Seoul 기준 오늘. */
+	/**
+	 * Asia/Seoul 기준 오늘.
+	 * @return Asia/Seoul 기준 오늘 날짜
+	 */
 	public LocalDate today() {
 		return LocalDate.now(this.clock.withZone(SEOUL));
 	}

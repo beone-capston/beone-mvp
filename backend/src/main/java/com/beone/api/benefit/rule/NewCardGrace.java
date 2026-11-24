@@ -13,6 +13,10 @@ import com.beone.api.benefit.money.Won;
  * 신규 카드 유예. 유예 기간 동안 대상 서비스는 전월 실적을 최소 {@code deemedPerformance}로 본다(D-03).
  * 09174의 값은 문서 결과와 같은 효과의 모델 표현이며 문서 문구가 아니다.
  *
+ * @param span 유예 기간을 세는 방식
+ * @param days 유예 일수. 등록일 기준 일수 유예일 때만 있다
+ * @param deemedPerformance 유예 기간에 간주하는 최소 전월 실적
+ * @param services 유예를 적용하는 서비스
  * @param partialPerformance 전월 실적이 0원보다 크고 간주 실적보다 작을 때의 처리(D-20)
  */
 public record NewCardGrace(GraceSpan span, Optional<Integer> days, Won deemedPerformance, Set<ServiceId> services,
@@ -46,6 +50,7 @@ public record NewCardGrace(GraceSpan span, Optional<Integer> days, Won deemedPer
 	 *
 	 * @param registeredAt 카드 등록일. 주문일보다 늦지 않아야 한다
 	 * @param orderDate 주문일
+	 * @return 주문일이 유예 기간 안이면 {@code true}
 	 */
 	public boolean covers(LocalDate registeredAt, LocalDate orderDate) {
 		LocalDate lastDay = switch (span) {

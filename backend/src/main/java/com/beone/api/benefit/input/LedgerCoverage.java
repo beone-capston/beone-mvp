@@ -8,6 +8,9 @@ import com.beone.api.benefit.state.BasisPeriod;
 /**
  * 원장이 카드의 해당 기간 거래를 빠짐없이 갖고 있다는 선언.
  * 선언되지 않은 기간은 완전하다고 보지 않으므로, 그 기간에서 산출한 값은 {@code UNKNOWN}으로 둔다(D-04).
+ *
+ * @param cardId 카드 상품 식별자
+ * @param period 완전하다고 선언한 기간
  */
 public record LedgerCoverage(CardId cardId, BasisPeriod period) {
 

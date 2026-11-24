@@ -33,6 +33,10 @@ public class IdempotencyStore {
 
 	/**
 	 * 같은 키의 이전 성공 응답을 찾는다. 보존 기간이 지난 키는 지우고 없는 것으로 본다.
+	 * @param userId 사용자 ID
+	 * @param key Idempotency-Key 값
+	 * @param fingerprint 요청 지문
+	 * @param now 보존 기간을 판단할 현재 시각
 	 * @return 같은 지문이면 저장한 응답 JSON
 	 * @throws IdempotencyKeyReusedException 같은 키·다른 지문
 	 */
@@ -56,6 +60,11 @@ public class IdempotencyStore {
 
 	/**
 	 * 성공 응답을 키에 연결해 저장한다.
+	 * @param userId 사용자 ID
+	 * @param key Idempotency-Key 값
+	 * @param fingerprint 요청 지문
+	 * @param responseJson 저장할 성공 응답 JSON
+	 * @param now 저장 시각
 	 * @throws IdempotencyKeyReusedException 같은 키를 다른 요청이 먼저 저장함
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)

@@ -11,6 +11,7 @@ import com.beone.api.benefit.rule.TermBasis;
 /**
  * 서비스 결과와 함께 보여 줄 표시 값(D-03, D-18 K1, D-20). 금액을 바꾸지 않는다.
  *
+ * @param serviceId 서비스 식별자
  * @param usageBasis 한도가 있는 서비스의 사용액 기준. 한도가 없으면 비어 있다
  * @param mayDifferFromActual 실제 카드사 차감과 다를 수 있으면 참. 한도가 있는 모든 서비스(0원 결과 포함)에서 참이다
  * @param usageNote 사용액 기준 문장. 한도가 없으면 비어 있다

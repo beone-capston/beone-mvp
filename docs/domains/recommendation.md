@@ -101,7 +101,7 @@ EngineResult result = engine.recommend(new EngineRequest(order.orderDate(),
 - 가상 포트폴리오 카드(`SYNTHETIC`)는 매핑 상태 없이 카드 상품 ID를 넘깁니다. 그 밖의 카드는 `USER_CONFIRMED`일 때만 매핑 상품 ID를 넘깁니다. 후보 상품 ID는 1차에 없으므로 넘기지 않습니다.
 - 월간 상태의 `UNKNOWN`은 `notEntered()`, `MANUAL`은 값·기준 기간·서울 시각(+09:00)을 그대로 넘깁니다. 기준 기간이 맞는지는 엔진이 판정하므로 `PERIOD_MISMATCH`를 만들지 않습니다.
 - 카드 사용 등록일은 그 달 월간 상태의 `registeredOn`입니다(계약 "코드 `HeldCard.registeredAt`").
-- **스냅샷 뒤 모의 승인 반영(#120, [`SnapshotUsage`](../../backend/src/main/java/com/beone/api/recommendation/application/SnapshotUsage.java))**: 월간 상태에 `snapshotAt`이 있으면 `ledger`의 `LedgerQueryService.activityAfter`로 같은 카드·기록 시각이 스냅샷보다 뒤인 원장 행(승인은 거래일이 주문 월, 취소는 원 승인의 거래일이 주문 월)을 읽어 더합니다([D-16](../decisions.md#d-15d-16d-17-확정-정책)). 승인 차감액은 `limitBucketUsages`에 입력한 같은 버킷에, 입력하지 않은 버킷의 차감액은 `otherBucketsUsedWon`에 더합니다. 더할 값이 미입력이면 미입력 그대로이고, `snapshotAt`이 없으면 원장을 읽지 않습니다. 출처는 `MANUAL`, 기준 기간·시각은 스냅샷 값 그대로입니다. 차감액을 모르는 승인이 있거나, 차감액이 0이 아닌 승인(스냅샷 전 승인 포함)을 스냅샷 뒤 취소했으면 그 버킷은 `notEntered()`로 넘겨 `확인 필요`가 됩니다. 4종 모두 한도 복원 확정 규칙이 없기 때문이며([D-17](../decisions.md#d-15d-16d-17-확정-정책)) 0으로 대신하지 않습니다(관리자 승인 규칙).
+- **스냅샷 뒤 모의 승인 반영(#120, [`SnapshotUsage`](../../backend/src/main/java/com/beone/api/recommendation/application/SnapshotUsage.java))**: 월간 상태에 `snapshotAt`이 있으면 `ledger`의 `LedgerQueryService.activityAfter`로 같은 카드·기록 시각이 스냅샷보다 뒤인 원장 행(승인은 거래일이 주문 월, 취소는 원 승인의 거래일이 주문 월)을 읽어 더합니다([D-16](../decisions.md#d-15d-16d-17-확정-정책)). 승인 차감액은 `limitBucketUsages`에 입력한 같은 버킷에, 입력하지 않은 버킷의 차감액은 `otherBucketsUsedWon`에 더합니다. 더할 값이 미입력이면 미입력 그대로이고, `snapshotAt`이 없으면 원장을 읽지 않습니다. 출처는 `MANUAL`, 기준 기간·시각은 스냅샷 값 그대로입니다. 차감액을 모르는 승인이 있거나, 차감액이 0이 아닌 승인(스냅샷 전 승인 포함)을 스냅샷 뒤 취소했으면 그 버킷은 `postSnapshotActivityUnresolved()`(사유 `POST_SNAPSHOT_ACTIVITY_UNRESOLVED`, #151)로 넘겨 `확인 필요`가 됩니다. 사용자가 값을 입력했으므로 `NOT_ENTERED`가 아닙니다. 스냅샷 값이 원래 미입력이면 `notEntered()` 그대로 둡니다. 엔진은 두 사유를 같은 모름으로 계산하며 사유는 응답에 나가지 않습니다. 4종 모두 한도 복원 확정 규칙이 없기 때문이며([D-17](../decisions.md#d-15d-16d-17-확정-정책)) 0으로 대신하지 않습니다(관리자 승인 규칙).
 - 적용일 없는 택1 선택은 엔진 계약대로 `usable=true`·`effectiveFrom=null`로 넘기고, 엔진이 `확인 필요`로 처리합니다.
 
 ## 응답으로 옮기는 규칙
@@ -134,7 +134,7 @@ EngineResult result = engine.recommend(new EngineRequest(order.orderDate(),
 ## 제약과 한계
 
 - **카드·주문 쪽 추천 연결(#120).** card·order가 recommendation을 직접 읽으면 순환하므로, 받는 쪽에 둔 조회 포트(`card`의 `RecommendationInvalidationLookup`, `order`의 `LatestRecommendationLookup`)를 [`RecommendationLinks`](../../backend/src/main/java/com/beone/api/recommendation/application/RecommendationLinks.java)가 구현합니다. 무효화 판정은 조회와 같은 지연 판정(`RecommendationService.invalidationOf`)을 씁니다. 보유 카드 쪽은 포트를 부를 때 찾으므로 빈 생성 순환도 없습니다.
-- **엔진 사유 추가 후보.** 스냅샷 뒤 취소·모르는 차감액 때문에 확인 필요가 된 버킷은 엔진 입구에 맞는 모름 사유가 없어 `NOT_ENTERED`로 넘깁니다. 결과는 `확인 필요`로 맞지만 사유가 정확하지 않습니다. 엔진(`benefit`)에 사유를 더하는 일은 별도 작업입니다.
+- **스냅샷 뒤 활동 사유(#151, 결정 32 Q6).** 스냅샷 뒤 취소·모르는 차감액 때문에 확인 필요가 된 버킷은 엔진 입구 사유 `POST_SNAPSHOT_ACTIVITY_UNRESOLVED`로 넘깁니다(이전에는 `NOT_ENTERED`). 이 사유는 엔진 내부 입력값이고 추천 응답·저장 문서에 나가지 않으므로 공개 계약은 바뀌지 않았습니다. 한도 복원 규칙은 여전히 없습니다(D-17).
 - **#120의 사용액 반영은 자체 모의 원장만 봅니다.** CODEF 실제 조회 거래는 2차 범위입니다. 1차 4종 규칙 중 BASE 같은 한도 없는 서비스는 버킷 차감액이 없어 반영할 것이 없습니다.
 - **모의 승인(#116) 뒤 동작.** 주문 상태에 `PAID`·`CANCELLED`가 생겨 승인된 주문의 계산은 409 `ORDER_ALREADY_PAID`, 그 주문의 이전 추천 조회는 `ORDER_PAID` 무효화가 실제로 생깁니다(통합 테스트로 확인).
 - **#116에서 더한 공개 메서드는 `calculateForApproval` 하나뿐입니다.** 모의 승인([payment 안내](payment.md))이 승인 직전 재계산에 씁니다. 내부 계산은 `calculate`와 같고(같은 저장·같은 본문), 엔진 결과의 `usageEffects`(카드별 한도 버킷 차감액, 모르면 `null`)를 `RecommendationCalculation`에 함께 돌려줍니다. 원장이 승인 카드의 차감액을 저장할 때 씁니다. `calculate`의 동작·응답은 바꾸지 않았고 이 밖의 recommendation 변경은 없습니다.

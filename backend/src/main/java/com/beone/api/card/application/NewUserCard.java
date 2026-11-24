@@ -18,7 +18,10 @@ public record NewUserCard(String displayName, String cardProductId, boolean notS
 		}
 	}
 
-	/** 저장할 매핑 상태. 상품을 고르면 {@code USER_CONFIRMED}, 4종이 아니면 {@code NOT_SUPPORTED}, 둘 다 없으면 {@code UNMAPPED}. */
+	/**
+	 * 저장할 매핑 상태. 상품을 고르면 {@code USER_CONFIRMED}, 4종이 아니면 {@code NOT_SUPPORTED}, 둘 다 없으면 {@code UNMAPPED}.
+	 * @return 저장할 매핑 상태
+	 */
 	public MappingStatus mappingStatus() {
 		if (this.cardProductId != null) {
 			return MappingStatus.USER_CONFIRMED;

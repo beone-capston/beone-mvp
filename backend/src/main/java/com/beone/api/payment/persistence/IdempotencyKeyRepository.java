@@ -9,7 +9,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
  */
 public interface IdempotencyKeyRepository extends JpaRepository<IdempotencyKeyEntity, Long> {
 
-	/** 이 사용자의 키 하나를 찾는다. */
+	/**
+	 * 이 사용자의 키 하나를 찾는다.
+	 * @param userId 사용자 ID
+	 * @param idempotencyKey Idempotency-Key 값
+	 * @return 저장된 키, 없으면 빈 값
+	 */
 	Optional<IdempotencyKeyEntity> findByUserIdAndIdempotencyKey(Long userId, String idempotencyKey);
 
 }

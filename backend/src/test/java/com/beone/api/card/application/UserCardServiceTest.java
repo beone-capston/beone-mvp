@@ -25,9 +25,9 @@ import com.beone.api.card.persistence.UserCardEntity;
 import com.beone.api.card.persistence.UserCardRepository;
 import com.beone.api.user.application.CurrentUser;
 import com.beone.api.user.application.DemoUser;
-import com.beone.api.user.application.DemoUserProfile;
-import com.beone.api.user.application.DemoUserService;
 import com.beone.api.user.application.PortfolioType;
+import com.beone.api.user.application.UserProfile;
+import com.beone.api.user.application.UserProfileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -45,6 +45,9 @@ class UserCardServiceTest {
 	private static final CurrentUser MY_CARDS = new CurrentUser(1L, DemoUser.MY_CARDS);
 
 	private static final CurrentUser PORTFOLIO = new CurrentUser(2L, DemoUser.VIRTUAL_PORTFOLIO);
+
+	/** 회원 장부(결정 37 D1a): 시연 사용자 구분이 없고 쓰기 가능하다. */
+	private static final CurrentUser MEMBER = new CurrentUser(3L, null, PortfolioType.REAL, false);
 
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 17, 10, 30, 0);
 
@@ -69,12 +72,15 @@ class UserCardServiceTest {
 		this.guard = mock(RepresentativeCardGuard.class);
 		this.invalidations = mock(RecommendationInvalidationLookup.class);
 		this.connections = mock(CodefConnectionLookup.class);
-		DemoUserService demoUserService = mock(DemoUserService.class);
-		given(demoUserService.listDemoUsers()).willReturn(List.of(
-				new DemoUserProfile(DemoUser.MY_CARDS, "내 카드", PortfolioType.REAL, false),
-				new DemoUserProfile(DemoUser.VIRTUAL_PORTFOLIO, "가상 포트폴리오", PortfolioType.SYNTHETIC, true)));
+		UserProfileService userProfileService = mock(UserProfileService.class);
+		given(userProfileService.profileOf(MY_CARDS))
+			.willReturn(new UserProfile(DemoUser.MY_CARDS, "내 카드", PortfolioType.REAL, false));
+		given(userProfileService.profileOf(PORTFOLIO))
+			.willReturn(new UserProfile(DemoUser.VIRTUAL_PORTFOLIO, "가상 포트폴리오", PortfolioType.SYNTHETIC, true));
+		given(userProfileService.profileOf(MEMBER))
+			.willReturn(new UserProfile(null, "내 카드", PortfolioType.REAL, false));
 		given(this.repository.saveAndFlush(any())).willAnswer(invocation -> withId(invocation.getArgument(0), 1001L));
-		this.service = new UserCardService(this.repository, this.cardProductService, demoUserService, this.guard,
+		this.service = new UserCardService(this.repository, this.cardProductService, userProfileService, this.guard,
 				() -> this.invalidations, () -> this.connections,
 				Clock.fixed(Instant.parse("2026-11-17T01:30:00Z"), ZoneOffset.UTC));
 	}
@@ -86,7 +92,16 @@ class UserCardServiceTest {
 		given(this.repository.countByUserIdAndReleasedAtIsNull(2L)).willReturn(4L);
 
 		assertThat(this.service.summarize(PORTFOLIO)).isEqualTo(new CurrentUserSummary(
-				new DemoUserProfile(DemoUser.VIRTUAL_PORTFOLIO, "가상 포트폴리오", PortfolioType.SYNTHETIC, true), 4, false));
+				new UserProfile(DemoUser.VIRTUAL_PORTFOLIO, "가상 포트폴리오", PortfolioType.SYNTHETIC, true), 4, false));
+	}
+
+	@Test
+	void summarizeMemberLedgerHasNoDemoUser() {
+		// 결정 37 D7: 회원 장부는 시연 사용자 구분 없이 '내 카드'·실제·쓰기 가능
+		given(this.repository.countByUserIdAndReleasedAtIsNull(3L)).willReturn(1L);
+
+		assertThat(this.service.summarize(MEMBER))
+			.isEqualTo(new CurrentUserSummary(new UserProfile(null, "내 카드", PortfolioType.REAL, false), 1, false));
 	}
 
 	@Test

@@ -19,7 +19,11 @@ public record RecommendationCalculation(RecommendationDocument document, List<Bu
 		bucketDeductions = List.copyOf(bucketDeductions);
 	}
 
-	/** 한 카드의 차감액만 계산 순서대로 돌려준다. */
+	/**
+	 * 한 카드의 차감액만 계산 순서대로 돌려준다.
+	 * @param userCardId 보유 카드 외부 ID
+	 * @return 그 카드의 차감액 목록
+	 */
 	public List<BucketDeduction> deductionsOf(String userCardId) {
 		return this.bucketDeductions.stream().filter(deduction -> deduction.userCardId().equals(userCardId)).toList();
 	}

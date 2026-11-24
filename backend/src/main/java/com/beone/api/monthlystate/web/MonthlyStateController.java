@@ -47,6 +47,11 @@ public class MonthlyStateController {
 	/**
 	 * 출처 충돌 계산 기준 선택(관리자 판단 P10). 지금은 충돌이 생기는 경로가 없어 서비스가 항상 409 {@code SOURCE_CONFLICT_NOT_FOUND}로
 	 * 끝난다. 200 응답 본문은 충돌 후보가 생길 때 서비스와 함께 만든다({@link MonthlyStateService#selectSource}의 확장 지점).
+	 * @param currentUser 현재 사용자
+	 * @param userCardId 보유 카드 ID 외부 표현
+	 * @param month 대상 달({@code yyyy-MM})
+	 * @param request 계산 기준 선택 요청
+	 * @return 지금은 반환하지 않는다. 서비스가 항상 예외로 끝난다
 	 */
 	@PutMapping("/source-selections")
 	public ResponseEntity<Void> selectSource(CurrentUser currentUser, @PathVariable String userCardId,

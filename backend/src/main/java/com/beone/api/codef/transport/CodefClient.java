@@ -28,6 +28,7 @@ public final class CodefClient {
 
 	/**
 	 * 관측 1회를 연다. 호출 상한은 관측마다 따로 센다.
+	 * @return 새 관측
 	 */
 	public CodefObservation startObservation() {
 		return new CodefObservation(tokens, http);

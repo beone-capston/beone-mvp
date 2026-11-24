@@ -22,7 +22,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * 뒤에만 보낸다. 커밋에 실패하면 쓸 수 없는 토큰이 메일로 나가지 않는다. 회원 행을 잠근 트랜잭션 안에서만 부른다.
  */
 @Component
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 public class AuthTokenMailer {
 
 	private final AuthTokenRepository tokens;
