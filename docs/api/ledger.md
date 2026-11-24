@@ -10,6 +10,8 @@
 
 카드·월별 원장 거래와, 그 기간 원장이 완전한지를 조회하는 API.
 
+프로필: 이 API는 `local`·`demo`와 로컬 회원 프로필 `member`에 등록돼 있습니다(#165). 아래 `X-BeONE-Demo-User` 헤더는 `local`·`demo`의 방식입니다. `member`에서는 헤더 대신 회원 세션 쿠키(`__Host-BEONE_SESSION`)로 현재 사용자를 정하고, 검사 순서는 401 `UNAUTHENTICATED` → 400 → 404이며 모든 응답에 `Cache-Control: no-store`가 붙습니다([회원 세션 규칙](../api.md#회원-세션member-프로필)). 원장은 회원 장부마다 나뉘고, 다른 회원·시연 장부의 카드로 거르면 없는 카드와 같은 404 `USER_CARD_NOT_FOUND`입니다. `member`에는 CODEF 경로가 없고 CODEF 원장도 연결하지 않았습니다(R8). 모의 결제 API는 N-G3-2·D8 결정 대기로 `member`에 등록하지 않았으므로, 지금 `member` 원장에는 API로 행이 생기지 않습니다.
+
 ### Request Header
 
 ```text
