@@ -17,7 +17,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * <p>{@code no-store}는 인증 API와 같은 규칙으로 성공·실패(401·403·404·405 포함) 모든 응답에 붙인다. 업무 응답은 회원의 개인 데이터와
  * 세션 쿠키 재발급({@code Set-Cookie})을 담기 때문이다.
  *
- * <p>{@code member}는 로컬 개발·테스트용 회원 프로필이다. 공개 배포 프로필 구성(O1)은 미결이다.
+ * <p>{@code member}는 로컬 개발·테스트용 회원 프로필이다. 공개 프로필 {@code prod}는 프로필 그룹으로 이 구성을 재사용한다
+ * (결정 38-6, 조합 검사는 {@code PublicProfileGuard}). prod는 실메일 발송기(N1 결정 대기) 없이는 공개 배포할 수 없다.
  */
 @Configuration(proxyBeanMethods = false)
 @Profile("member")

@@ -1,6 +1,10 @@
 spring:
   application:
     name: beone-api
+  profiles:
+    group:
+      # 공개 프로필 prod는 회원 부품(member)을 재사용한다(결정 38-6). 조합 검사는 PublicProfileGuard
+      prod: member
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3307/beone}
     username: ${DB_USERNAME}
