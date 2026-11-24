@@ -19,11 +19,12 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 /**
- * 합성 응답을 돌려주는 로컬 서버. 외부를 호출하지 않고 받은 요청을 기록한다.
+ * 합성 응답을 돌려주는 로컬 서버. 외부를 호출하지 않고 받은 요청을 기록한다. 루프백({@code 127.0.0.1})에만 묶는다.
+ * 실 게이트웨이 시험(codef.application, 회원 통합 시험)도 같이 쓰므로 공개한다.
  */
-final class CodefStubServer implements AutoCloseable {
+public final class CodefStubServer implements AutoCloseable {
 
-	static final String TOKEN_PATH = "/oauth/token";
+	public static final String TOKEN_PATH = "/oauth/token";
 
 	private final HttpServer server;
 
@@ -35,23 +36,23 @@ final class CodefStubServer implements AutoCloseable {
 
 	private final CountDownLatch release = new CountDownLatch(1);
 
-	CodefStubServer() throws IOException {
+	public CodefStubServer() throws IOException {
 		server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 		server.setExecutor(executor);
 		server.createContext("/", this::handle);
 		server.start();
 	}
 
-	void respond(String path, int status, String body) {
+	public void respond(String path, int status, String body) {
 		responders.put(path, exchange -> reply(exchange, status, body));
 	}
 
-	void respondWith(String path, Responder responder) {
+	public void respondWith(String path, Responder responder) {
 		responders.put(path, responder);
 	}
 
 	/** 응답하지 않고 기다린다. 시간 초과 시험용이다. */
-	void neverRespond(String path) {
+	public void neverRespond(String path) {
 		responders.put(path, exchange -> awaitRelease());
 	}
 
@@ -66,15 +67,15 @@ final class CodefStubServer implements AutoCloseable {
 	}
 
 	/** 요청을 읽은 뒤 응답 없이 연결을 끊는다. */
-	void dropConnection(String path) {
+	public void dropConnection(String path) {
 		responders.put(path, HttpExchange::close);
 	}
 
-	List<Received> requests() {
+	public List<Received> requests() {
 		return List.copyOf(received);
 	}
 
-	List<Received> requestsTo(String path) {
+	public List<Received> requestsTo(String path) {
 		List<Received> matching = new ArrayList<>();
 		for (Received request : received) {
 			if (request.path().equals(path)) {
@@ -84,7 +85,7 @@ final class CodefStubServer implements AutoCloseable {
 		return matching;
 	}
 
-	CodefTransportSettings settings(Duration responseTimeout) {
+	public CodefTransportSettings settings(Duration responseTimeout) {
 		URI host = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
 		return new CodefTransportSettings(host.resolve(TOKEN_PATH), host, Duration.ofSeconds(2), responseTimeout, responseTimeout);
 	}
@@ -96,7 +97,7 @@ final class CodefStubServer implements AutoCloseable {
 		executor.shutdownNow();
 	}
 
-	static void reply(HttpExchange exchange, int status, String body) throws IOException {
+	public static void reply(HttpExchange exchange, int status, String body) throws IOException {
 		byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
 		exchange.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);
 		if (bytes.length > 0) {
@@ -127,15 +128,15 @@ final class CodefStubServer implements AutoCloseable {
 	}
 
 	@FunctionalInterface
-	interface Responder {
+	public interface Responder {
 
 		void respond(HttpExchange exchange) throws IOException;
 
 	}
 
-	record Received(String method, String path, String query, Headers headers, String body) {
+	public record Received(String method, String path, String query, Headers headers, String body) {
 
-		String header(String name) {
+		public String header(String name) {
 			return headers.getFirst(name);
 		}
 

@@ -1,6 +1,7 @@
 package com.beone.api.codef.transport;
 
-import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -10,6 +11,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.beone.api.codef.CodefAccount;
 import com.beone.api.codef.CodefApproval;
 import com.beone.api.codef.CodefCardPerformance;
 import com.beone.api.codef.CodefHeldCard;
@@ -48,7 +50,8 @@ public final class CodefObservation {
 
 	private final CodefHttp http;
 
-	private final Map<CodefApi, Integer> productCalls = new EnumMap<>(CodefApi.class);
+	/** 상품 API({@link CodefApi})와 계정 API({@link CodefAccountApi})마다 따로 센다. */
+	private final Map<Enum<?>, Integer> productCalls = new HashMap<>();
 
 	private int tokenCalls;
 
@@ -69,8 +72,51 @@ public final class CodefObservation {
 		return call(CodefApi.CARD_PERFORMANCES, parameters, CodefProductResponseReader::readCardPerformances);
 	}
 
+	/**
+	 * 카드사 아이디로 CODEF 계정을 등록한다. 상품 호출과 달리 로그인 입력을 싣는 유일한 경로다.
+	 *
+	 * <p>요청 형식(개인 카드, 아이디 로그인)은 비공개 실연동 전 근거 확인 대상이다. 본문은 로그에 남기지 않는다.
+	 * @param organization 기관 코드
+	 * @param loginId 카드사 홈페이지 아이디
+	 * @param encryptedPassword CODEF 공개키로 암호화한 비밀번호(Base64). 평문을 받지 않는다
+	 * @return 호출 결과
+	 */
+	public CodefCallResult<CodefAccount> createAccount(String organization, String loginId, String encryptedPassword) {
+		Map<String, String> account = account(organization);
+		account.put("id", loginId);
+		account.put("password", encryptedPassword);
+		String body = MAPPER.writeValueAsString(Map.of("accountList", List.of(account)));
+		return call(CodefAccountApi.ACCOUNT_CREATE, body, CodefProductResponseReader::readAccount);
+	}
+
+	/**
+	 * CODEF 계정을 삭제한다. 로그인 입력은 싣지 않는다.
+	 * @param organization 기관 코드
+	 * @param connectedId 정리할 연결 식별값
+	 * @return 호출 결과
+	 */
+	public CodefCallResult<CodefAccount> deleteAccount(String organization, String connectedId) {
+		String body = MAPPER
+			.writeValueAsString(Map.of("connectedId", connectedId, "accountList", List.of(account(organization))));
+		return call(CodefAccountApi.ACCOUNT_DELETE, body, CodefProductResponseReader::readAccount);
+	}
+
+	// 개인(P) 카드(CD), 아이디 로그인(1). 근거 확인 대상.
+	private static Map<String, String> account(String organization) {
+		Map<String, String> account = new HashMap<>();
+		account.put("countryCode", "KR");
+		account.put("businessType", "CD");
+		account.put("clientType", "P");
+		account.put("organization", organization);
+		account.put("loginType", "1");
+		return account;
+	}
+
 	private <T> CodefCallResult<T> call(CodefApi api, Map<String, String> parameters, Reader<T> reader) {
-		String body = requestBody(parameters);
+		return call(api, requestBody(parameters), reader);
+	}
+
+	private <T> CodefCallResult<T> call(Enum<?> api, String body, Reader<T> reader) {
 		if (tokens.isEmpty()) {
 			return failed(api, Stage.TOKEN, Reason.CREDENTIALS_MISSING, OptionalInt.empty());
 		}
@@ -92,10 +138,11 @@ public final class CodefObservation {
 		return send(api, token, body, reader);
 	}
 
-	private <T> CodefCallResult<T> send(CodefApi api, String token, String body, Reader<T> reader) {
+	private <T> CodefCallResult<T> send(Enum<?> api, String token, String body, Reader<T> reader) {
 		CodefHttp.Reply reply;
 		try {
-			reply = http.postProduct(token, api, body);
+			reply = (api instanceof CodefApi product) ? http.postProduct(token, product, body)
+					: http.postAccount(token, (CodefAccountApi) api, body);
 		}
 		catch (CodefHttp.Failure failure) {
 			return failed(api, Stage.PRODUCT, failure.reason(), OptionalInt.empty());
@@ -109,7 +156,7 @@ public final class CodefObservation {
 		return new CodefCallResult.Answered<>(response);
 	}
 
-	private static <T> CodefCallResult<T> failed(CodefApi api, Stage stage, Reason reason, OptionalInt status) {
+	private static <T> CodefCallResult<T> failed(Enum<?> api, Stage stage, Reason reason, OptionalInt status) {
 		log.warn("codef call failed api={} stage={} reason={}", api, stage, reason);
 		return new CodefCallResult.Failed<>(stage, reason, status);
 	}
@@ -137,11 +184,11 @@ public final class CodefObservation {
 		return RESULT_CODE.matcher(code.get()).matches() ? code.get() : "UNRECOGNIZED";
 	}
 
-	private synchronized boolean productCallRemains(CodefApi api) {
+	private synchronized boolean productCallRemains(Enum<?> api) {
 		return productCalls.getOrDefault(api, 0) < CALL_LIMIT;
 	}
 
-	private synchronized boolean acquireProductCall(CodefApi api) {
+	private synchronized boolean acquireProductCall(Enum<?> api) {
 		if (!productCallRemains(api)) {
 			return false;
 		}

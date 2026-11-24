@@ -58,6 +58,19 @@ public final class CodefProductResponseReader {
 		return read(status, body, CodefCardResponseParser::parseCardPerformances);
 	}
 
+	/**
+	 * 계정 등록·삭제 응답을 전송 단계에서 나눈다. 상품 응답과 같은 규칙(401·그 밖의 상태·URL 디코딩)을 따른다.
+	 *
+	 * @param status HTTP 상태 코드
+	 * @param body 응답 본문. 200이 아니면 읽지 않는다
+	 * @return 상태별 결과
+	 * @throws NullPointerException 본문이 null인 경우
+	 * @throws IllegalArgumentException 상태 코드가 100~599 밖인 경우
+	 */
+	public static CodefProductResponse<CodefAccount> readAccount(int status, String body) {
+		return read(status, body, CodefCardResponseParser::parseAccount);
+	}
+
 	static void requireStatus(int status) {
 		if (status < 100 || status > 599) {
 			throw new IllegalArgumentException("status must be between 100 and 599");

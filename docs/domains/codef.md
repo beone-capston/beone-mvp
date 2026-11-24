@@ -274,6 +274,8 @@ codef/
 │   ├── ConnectedIdKeySource     암호화 키 공급. 운영 구현 EnvironmentConnectedIdKeySource(환경 변수)
 │   ├── CodefGateway             CODEF 계정 등록·정리 경계(인터페이스)
 │   ├── FakeCodefGateway         local·demo용 가짜. 합성 아이디로 실패 재현, 그 밖은 합성 connectedId
+│   ├── LiveCodefGateway         codef-live용 실 게이트웨이(#193). 전송 계층으로 계정 등록·삭제·상품 3종
+│   ├── CodefPasswordEncryptor   카드사 비밀번호를 CODEF 공개키(CODEF_PUBLIC_KEY)로 암호화(#193)
 │   ├── CodefRegistration        등록 결과: Registered·LoginRejected·CardVerificationRequired·Unavailable
 │   ├── CodefRegistrations       결과 코드 분류 → 등록 결과 대응표
 │   ├── CodefConnectionStatusLookup card의 CodefConnectionLookup 구현. 연결 행이 있으면 GET /api/v1/me codefConnected=true(#136)
@@ -367,11 +369,24 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
 
 공개 프로필 `prod`(회원 프로필 `member`를 프로필 그룹으로 함께 켬, #183)에서는 **CODEF 연결·조회 API를 등록하지 않습니다.** 결정 38-8에 따라 비공개 실연동 검증을 마치기 전에는 미등록이며, 공개 전환은 별도 승인으로만 합니다.
 
-- **지금 상태**: `CodefConnectionController`·`CodefSyncController`·`FakeCodefGateway`는 `@Profile({"local","demo"})` 그대로입니다. prod에서는 `GET`·`POST`·`DELETE /api/v1/me/codef/connection`, `POST /api/v1/me/codef/syncs` 네 경로가 세션 유무와 관계없이 404 `NOT_FOUND`이고, `CodefGateway`·`CodefSyncGateway` 구현 Bean이 없습니다. 이 동작을 바꾸는 제품 코드는 없으며 테스트로만 고정했습니다.
+- **지금 상태**: `CodefConnectionController`·`CodefSyncController`는 `@Profile({"local","demo","member & codef-live & !prod"})`(#193), `FakeCodefGateway`는 `@Profile({"local","demo"})`입니다. `!prod` 조건과 별개로 `PublicProfileGuard`가 `prod`와 `codef-live` 조합의 기동을 멈춥니다. prod에서는 `GET`·`POST`·`DELETE /api/v1/me/codef/connection`, `POST /api/v1/me/codef/syncs` 네 경로가 세션 유무와 관계없이 404 `NOT_FOUND`이고, `CodefGateway`·`CodefSyncGateway` 구현 Bean이 없습니다. 이 동작을 바꾸는 제품 코드는 없으며 테스트로만 고정했습니다.
 - **기능 플래그 없음**: 설정 값 하나로 prod에서 CODEF를 여는 경로는 만들지 않습니다. `PublicProfileGuard`도 프로필 조합만 봅니다.
 - **현재 사용자 응답**: 연결 행이 생길 길이 없으므로 `GET /api/v1/me`의 `codefConnected`는 `false`입니다. member 프로필 값은 `MemberProfileIntegrationTest`가, prod 프로필 값은 `PublicProfileIntegrationTest`(G5 L3, #189)가 확인합니다.
 - **공개 전환 방식(미구현)**: 비공개 실연동 검증(사용자 PC의 로컬 환경, 실키·실계정은 별도 승인)과 공개 전환 승인 뒤, **코드 PR**로 `@Profile` 표현식을 바꾸고 아래 테스트의 기대값을 새 계약에 맞춰 고칩니다. 비공개 검증 환경과 전환 표현식의 모양은 결정 전입니다.
 - **테스트**: 웹 `CodefPublicProfileWebTest`(`@ActiveProfiles("prod")`, 4경로 404·no-store, 컨트롤러 2개·가짜 게이트웨이 Bean 없음, prod가 member로 펼쳐지고 local·demo는 꺼짐). 가짜 게이트웨이는 웹 슬라이스 스캔 대상이 아니라 `@Import`로 직접 넣어 프로필 조건으로 빠지는지 봅니다.
+
+## 비공개 실연동 프로필 codef-live (LP-1, #193)
+
+비공개 실연동 검증(결정 38-8)을 위해 실 게이트웨이를 전용 프로필 `codef-live`에 둡니다. **이 단계에서 실제 CODEF 호출은 하지 않았고, 실호출은 별도 승인(N9 검증 환경, N14 호출 상한) 뒤에만 합니다.** 시험은 모두 루프백(`127.0.0.1`) 스텁 HTTP입니다.
+
+- **켜지는 조건**: `member & codef-live & !prod`. 이때만 [LiveCodefGateway](../../backend/src/main/java/com/beone/api/codef/application/LiveCodefGateway.java)(`CodefGateway`·`CodefSyncGateway` 구현)와 CODEF 경로 4개가 등록됩니다. 현재 사용자는 회원 세션으로 정하고(기존 `CurrentUser` 해석), 쓰기는 CSRF를 따르며, 연결은 사용자별 행이라 다른 회원에게는 `NOT_CONNECTED`·409입니다. `member`만 켜면 미등록(404), local·demo는 가짜 게이트웨이 그대로입니다. `prod`와 함께 켜면 `PublicProfileGuard`가 기동을 멈춥니다.
+- **호출 방식**: 기존 전송 계층(`CodefClient`·`CodefObservation`)을 그대로 씁니다. 호출마다 관측을 하나 열고, 동기화 한 번은 API마다 한 번씩 부릅니다. 실패(시간 초과·5xx·연결 끊김)해도 다시 부르지 않고 리다이렉트를 따르지 않습니다. 토큰은 메모리 캐시를 공유합니다. 호스트 허용 목록(공식 HTTPS 호스트 또는 루프백 HTTP)도 그대로입니다.
+- **계정 등록·삭제(근거 확인 필요)**: 전송 계층에 계정 API(`CodefAccountApi`: `/v1/account/create`·`/v1/account/delete`)를 더했습니다. 요청은 `accountList`에 개인(`P`) 카드(`CD`), 아이디 로그인(`1`), 기관 코드를 담고, 비밀번호는 [CodefPasswordEncryptor](../../backend/src/main/java/com/beone/api/codef/application/CodefPasswordEncryptor.java)가 공개키(`CODEF_PUBLIC_KEY`, Base64 X.509)로 RSA/ECB/PKCS1Padding 암호화한 Base64 값만 싣습니다. 응답은 `data.connectedId`를 읽고 결과 분류는 기존 `CodefRegistrations` 표를 씁니다. **이 경로·요청·응답 형식과 암호화 방식은 저장소에 공식 문서 사본이 없어 비공개 실연동 전 근거 확인 대상입니다.** 공개키가 없거나 읽지 못하면 CODEF를 부르지 않고 `CODEF_UNAVAILABLE`입니다.
+- **조회 요청**: 보유카드·실적은 `organization`·`connectedId`, 승인내역은 여기에 `startDate`·`endDate`(yyyyMMdd)·`orderBy`(`0`)를 더합니다(샌드박스 확인 절차와 같은 값, 근거 확인 대상). 응답 판정은 기존 `codef.sync`가 합니다. 근거 있는 결과 코드가 없어 연결 무효(재연결 필요)로 바꾸는 대응은 아직 없습니다.
+- **키**: 환경 변수 이름만 씁니다(`CODEF_CLIENT_ID`·`CODEF_CLIENT_SECRET`·`CODEF_PUBLIC_KEY`·`BEONE_CODEF_CONNECTED_ID_KEY`·`BEONE_CODEF_APPROVAL_HMAC_KEY`). 시험은 합성 값만 씁니다. 비밀번호·connectedId·암호문은 로그·예외 문구에 넣지 않습니다.
+- **저장 분리(R8)**: 동기화 결과는 기존과 같이 CODEF 전용 테이블과 `user_cards`(`CODEF`, `UNMAPPED`)에만 저장하고 `ledger_transactions`는 바꾸지 않습니다.
+- **하지 않은 것**: 실호출, 실키·환경 비밀 파일, 서버 접속, prod 등록, 프로세스를 넘는 호출 상한(LP-2), 추가 인증(2-way), 카드소지확인 지원.
+- **테스트**: 단위 `LiveCodefGatewayTest`(암호문만 전송·복호화 확인, 결과 코드 대응, 5xx·시간 초과·연결 끊김 재호출 0, 리다이렉트 미추적, 키·공개키 없으면 요청 0, 요청 본문, 삭제), `CodefLiveProfileTest`(프로필 조합별 게이트웨이·컨트롤러 등록), `PublicProfileGuardTest`(prod + codef-live 실패), 웹 `CodefLiveProfileWebTest`(4경로가 회원 인터셉터 뒤 401), 통합 `CodefLiveMemberIntegrationTest`(회원 세션·CSRF로 연결 → 동기화 → 해제, 스텁 요청 수 전체, 원장 불변, 다른 회원 분리, 5xx 재호출 0). 통합 시험은 전송 계층 클라이언트를 스텁 주소·합성 키 빈으로 바꾸고 합성 공개키 빈을 넣습니다(테스트 전용 주입).
 
 ## 제약과 후속 작업
 
