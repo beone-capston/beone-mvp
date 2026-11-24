@@ -35,6 +35,7 @@
 | [`deploy/compose.yaml`](../../deploy/compose.yaml) | MySQL 8.4.11 + backend. 호스트 포트 공개 없음, 필수 값이 없으면 실패 |
 | [`deploy/scripts/build-image.sh`](../../deploy/scripts/build-image.sh) | 이미지 빌드와 식별자 출력 |
 | [`deploy/scripts/verify-local.sh`](../../deploy/scripts/verify-local.sh) | 로컬의 분리된 검증 프로젝트에서 V2~V13 확인 |
+| [`deploy/scripts/smoke-member.sh`](../../deploy/scripts/smoke-member.sh) | `member` 프로필 회원 API 스모크(합성 회원 2명, S1~S18). `<BASE_URL>`을 받아 PASS·FAIL 표를 내고 실패하면 종료 코드 1. 이메일 인증 단계는 검증 DB에서 인증 완료 상태를 만든 뒤 계속한다(`SMOKE_VERIFY_HOOK` 또는 안내 SQL). `--self-test`는 서버 없이 응답 필드 읽기만 점검 |
 
 - 백엔드는 Docker 내부 이름 `mysql:3306`과 앱 전용 계정(`MYSQL_USER`)으로 접속합니다. root 비밀번호는 MySQL 초기화에만 쓰고 백엔드에 넘기지 않습니다.
 - 초기 자원 값은 제안값입니다: MySQL·backend 각각 메모리 1GiB, JVM 힙은 컨테이너 메모리의 70%, InnoDB 버퍼 256MiB, 로그는 10MB×3개 회전. 실제 서버(4GiB)에서의 적합성은 적용 후 확인합니다.
