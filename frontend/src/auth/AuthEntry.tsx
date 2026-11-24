@@ -22,40 +22,37 @@ export function AuthEntry({ children }: { children: ReactNode }) {
       return
     }
     if (mockLogin) return
-    let active = true
-
-    authApi.session().then(
-      () => { if (active) setState('signed-in') },
-      (error: unknown) => {
-        if (!active) return
-        const signedOut = error instanceof AuthApiError &&
-          error.status === 401 && error.code === 'UNAUTHENTICATED'
-        setState(signedOut ? 'signed-out' : 'unavailable')
-      },
-    )
-
-    return () => { active = false }
+    const controller = new AbortController()
+    // StrictMode cleans up the rehearsal effect before its microtask runs.
+    queueMicrotask(() => {
+      if (controller.signal.aborted) return
+      authApi.session(controller.signal).then(
+        () => { if (!controller.signal.aborted) setState('signed-in') },
+        (error: unknown) => {
+          if (controller.signal.aborted) return
+          const signedOut = error instanceof AuthApiError &&
+            error.status === 401 && error.code === 'UNAUTHENTICATED'
+          setState(signedOut ? 'signed-out' : 'unavailable')
+        },
+      )
+    })
+    return () => controller.abort()
   }, [attempt, mockLogin, resetToken])
 
   if (state === 'signed-in') return children
 
   return (
     <main className="auth-shell">
-      {state === 'checking' ? (
-        <div className="auth-frame auth-session">
-          <p role="status">로그인 상태를 확인하고 있어요.</p>
-        </div>
-      ) : (
-        <AuthForm
-          mockLogin={mockLogin}
-          resetToken={resetToken}
-          onLogin={() => setState('signed-in')}
-          onRetrySession={state === 'unavailable' ? () => {
-            setState('checking')
-            setAttempt(value => value + 1)
-          } : undefined}
-        />
-      )}
+      <AuthForm
+        mockLogin={mockLogin}
+        resetToken={resetToken}
+        sessionChecking={state === 'checking'}
+        onLogin={() => setState('signed-in')}
+        onRetrySession={state === 'unavailable' ? () => {
+          setState('checking')
+          setAttempt(value => value + 1)
+        } : undefined}
+      />
     </main>
   )
 }

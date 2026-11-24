@@ -34,7 +34,7 @@ function fill(label: string, value: string) {
 
 async function enterLogin() {
   mount()
-  await screen.findByRole('heading', { name: '로그인' })
+  await waitFor(() => expect(screen.getByRole('button', { name: '로그인' })).toBeEnabled())
   fill('이메일', ' TEST+tag@EXAMPLE.COM ')
   fill('비밀번호', ' a ')
 }
@@ -88,13 +88,13 @@ describe('회원 인증 진입', () => {
       .mockRejectedValueOnce(new TypeError())
       .mockResolvedValueOnce(failure(401, 'UNAUTHENTICATED'))
     mount()
-    expect(await screen.findByText('로그인 상태를 확인할 수 없어요.')).toBeInTheDocument()
+    expect(await screen.findByText('로그인 상태를 확인하지 못했어요.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '로그인' })).toBeInTheDocument()
     submit('회원가입')
     expect(screen.getByRole('heading', { name: '회원가입' })).toBeInTheDocument()
     submit('다시 시도')
-    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
-    expect(screen.queryByText('로그인 상태를 확인할 수 없어요.')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: '이메일 인증하고 가입하기' })).toBeEnabled())
+    expect(screen.queryByText('로그인 상태를 확인하지 못했어요.')).not.toBeInTheDocument()
   })
 
   it('쿠키·CSRF와 함께 이메일을 정규화하고 짧은 로그인 비밀번호 원문을 전송한다', async () => {
