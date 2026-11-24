@@ -162,10 +162,10 @@ D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 업�
 
 #### 웹 클라이언트 호출 규칙(member)
 
-웹 화면이 `member` 프로필의 업무 API를 부를 때 따라야 하는 규칙입니다. 위 회원 세션 규칙을 호출하는 쪽에서 본 것으로, 현재 백엔드 구현 그대로이며 새 정책이 아닙니다(결정 37 D3·D4·D5·D6, #169). 프런트 코드는 아직 이 규칙을 따르지 않으며 고치는 일은 팀원 조율 대상입니다.
+웹 화면이 `member` 프로필의 업무 API를 부를 때 따라야 하는 규칙입니다. 위 회원 세션 규칙을 호출하는 쪽에서 본 것으로, 현재 백엔드 구현 그대로이며 새 정책이 아닙니다(결정 37 D3·D4·D5·D6, #169). 프런트의 공통 클라이언트(`frontend/src/api/client.ts`)가 이 규칙을 따릅니다.
 
 - **쿠키 포함:** 모든 호출에 세션 쿠키 `__Host-BEONE_SESSION`을 함께 보냅니다(`fetch`의 `credentials`를 `'omit'`으로 두지 않습니다). 쿠키는 `HttpOnly`라서 화면 코드가 읽거나 저장하지 않습니다. 위 등록 경로의 업무 API는 쿠키가 없으면 401입니다. 등록하지 않은 경로는 쿠키와 관계없이 404, 등록 경로에 허용하지 않는 메서드(예: `DELETE /api/v1/me/orders`)는 쿠키와 관계없이 405입니다.
-- **같은 origin 전제:** 이 쿠키는 `__Host-`·`Secure`·`SameSite=Lax`이고, `member`에는 CORS 허용이 없습니다(`local`·`demo` CORS는 자격 증명을 허용하지 않고 `X-CSRF-TOKEN`도 허용 헤더가 아닙니다). 그래서 화면과 API가 같은 origin일 때만 동작합니다. 로컬은 결정 37 O2-L에 따라 Vite 프록시(`frontend/vite.config.ts`의 `/api` → `http://localhost:8080`)를 씁니다. 회원 웹 화면의 호출 origin(배포 때 같은 호스트로 둘지, 교차 origin과 CORS 자격 증명으로 갈지)은 N-G4-ORIGIN 결정 대기이며, 배포 구성은 확정되지 않았습니다.
+- **같은 origin 전제:** 이 쿠키는 `__Host-`·`Secure`·`SameSite=Lax`이고, `member`에는 CORS 허용이 없습니다(`local`·`demo` CORS는 자격 증명을 허용하지 않고 `X-CSRF-TOKEN`도 허용 헤더가 아닙니다). 그래서 화면과 API가 같은 origin일 때만 동작합니다. 로컬은 결정 37 O2-L에 따라 Vite 프록시(`frontend/vite.config.ts`의 `/api` → `http://localhost:8080`)를 씁니다. 배포는 결정 38 7항(O2)에 따라 `https://beonepay.site` 웹과 `/api`를 같은 HTTPS 주소로 둡니다. 공개 서버의 프록시 구성은 아직 적용하지 않았습니다.
 - **쓰기 요청의 CSRF 토큰:** POST·PUT·PATCH·DELETE 전에 `GET /api/v1/auth/csrf`로 토큰을 받아 `X-CSRF-TOKEN` 헤더에 담습니다. 토큰은 세션에 묶이므로 로그인·로그아웃 뒤에는 다시 받습니다([`docs/api/auth.md`](api/auth.md)). 토큰을 URL·localStorage·로그에 남기지 않습니다. 추천 계산(`POST /api/v1/me/orders/{orderId}/recommendations`)도 쓰기라서 토큰이 필요합니다. GET에는 필요 없습니다.
 - **시연 헤더 무시:** `member`는 `X-BeONE-Demo-User`를 읽지 않습니다. `MY_CARDS`·`VIRTUAL_PORTFOLIO` 어느 값을 보내도 장부 선택에 쓰이지 않고, 모든 요청은 로그인한 회원의 '내 카드' 장부 하나로 처리합니다(D4). 예를 들어 `VIRTUAL_PORTFOLIO` 헤더를 붙인 `POST /api/v1/me/orders`도 회원의 '내 카드' 장부에 저장되고 시연 가상 포트폴리오 장부에는 저장되지 않습니다(`MemberOrderRecommendationIntegrationTest`). 회원 가상 포트폴리오(D1b)는 회원 MVP에서 제공하지 않는 후순위입니다(결정 38-3).
 - **오류 분기:** 등록 경로·허용 메서드의 검사 순서는 401 → 403 → 400 → 404입니다. 경로·메서드 판정은 세션 검사보다 먼저라서, 등록하지 않은 경로는 로그인 여부와 관계없이 404, 허용하지 않는 메서드는 로그인 여부와 관계없이 405 `METHOD_NOT_ALLOWED`입니다(`MemberProfileIntegrationTest`).
