@@ -149,31 +149,31 @@ D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 업�
 
 ### 회원 세션(member 프로필)
 
-로컬 개발·테스트용 회원 프로필 `member`의 규칙입니다(결정 37, #157, G3a #159, G3b #160, 원장 조회 #165). 공개 배포 프로필 구성은 미결입니다(O1).
+로컬 개발·테스트용 회원 프로필 `member`의 규칙입니다(결정 37, #157, G3a #159, G3b #160, 원장 조회 #165, 모의 결제 G3c #161·결정 38). 공개 배포 프로필 구성은 미결입니다(O1).
 
 - 현재 사용자는 `__Host-BEONE_SESSION` 회원 세션 → 회원 → 회원의 '내 카드' 장부 순서로 정합니다(`MemberCurrentUserResolver`). `X-BeONE-Demo-User` 헤더는 읽지 않으므로 보내도 무시합니다.
 - `member`와 `local`·`demo`를 함께 켜면 기동에 실패합니다(현재 사용자 결정 방식은 하나만, D4).
 - 검사 순서: 401 `UNAUTHENTICATED`(쿠키 없음·익명 세션·만료·로그아웃) → 쓰기(POST·PUT·PATCH·DELETE)의 403 `CSRF_INVALID` → 본문 400 → 404입니다. 남의 자원은 404이고 `FORBIDDEN`은 쓰지 않습니다(D5·D6). CSRF 토큰은 `GET /api/v1/auth/csrf`로 받아 `X-CSRF-TOKEN` 헤더로 보냅니다. 실패하면 저장하지 않습니다.
 - 통과한 요청은 미사용 만료를 7일 늘리고 세션 쿠키를 새 `Max-Age`로 다시 심습니다. 로그인 뒤 최대 30일은 넘지 않습니다(D3).
 - 응답 헤더: `/api/v1/me`·`/api/v1/me/**`의 모든 응답(성공, 401·403, 등록하지 않은 경로의 404 포함)에 `Cache-Control: no-store`를 붙입니다. 인증 API와 같은 규칙이며(G1 D5 권장 4항), 업무 응답이 회원 개인 데이터와 세션 쿠키 재발급을 담기 때문입니다. `local`·`demo`의 업무 응답에는 붙이지 않습니다(기존 동작 유지).
-- 등록 경로: 인증 API 9개, `GET /api/v1/me`, 보유 카드 API(`/api/v1/me/cards/**`), 월간 상태 API 3개(`/api/v1/me/cards/{userCardId}/monthly-states/{month}` 조회·입력, `…/source-selections`), 결제 전 설정 API 2개(`/api/v1/me/payment-preference` 조회·변경), 주문 API 2개(`POST /api/v1/me/orders`, `GET /api/v1/me/orders/{orderId}`), 예정 소비 API 2개(`/api/v1/me/planned-spends` 조회·교체), 추천 API 2개(`POST /api/v1/me/orders/{orderId}/recommendations`, `GET /api/v1/me/recommendations/{recommendationId}`), 원장 조회 API 1개(`GET /api/v1/me/ledger-transactions`), 카드 상품 조회, `/actuator/health`. 월간 상태·결제 전 설정은 G3a(#159), 주문·예정 소비·추천은 G3b(#160), 원장 조회는 #165에서 등록했고 위 검사 순서·캐시 규칙과 회원 장부 단위 소유(남의 카드·주문·추천 404)를 그대로 따릅니다. 추천 계산은 추천 행을 저장하는 POST라서 CSRF 토큰이 필요합니다. 출처 충돌 계산 기준 선택(`source-selections`)은 `member`에서도 항상 409 `SOURCE_CONFLICT_NOT_FOUND`이고 저장하지 않습니다(결정 32 Q1). 결제 전 설정 변경은 기존 추천을 무효화하지 않고(결정 32 Q3), 추천 제외 변경은 매핑 변경과 같은 `MAPPING_CHANGED`로 무효화합니다(결정 32 Q2). 주문 목록 API는 없으므로 `GET /api/v1/me/orders`는 로그인 여부와 관계없이 405 `METHOD_NOT_ALLOWED`입니다.
-- 아직 등록하지 않은 경로: 모의 결제 3개(승인·조회·취소)·CODEF·시연 사용자 목록은 로그인 여부와 관계없이 404입니다. 모의 결제 묶음은 `simulateFailure` 처리(N-G3-2)와 `Idempotency-Key` 저장 단위 표기(D8) 결정 대기로 `member`에 등록하지 않았습니다. 그래서 `member` 원장에는 아직 행을 만드는 API가 없습니다. 공개 회원의 CODEF 연결 범위는 별도 미결입니다(D9). 시연 사용자 목록은 `member`에 열지 않습니다(결정 37 D2·D4).
+- 등록 경로: 인증 API 9개, `GET /api/v1/me`, 보유 카드 API(`/api/v1/me/cards/**`), 월간 상태 API 3개(`/api/v1/me/cards/{userCardId}/monthly-states/{month}` 조회·입력, `…/source-selections`), 결제 전 설정 API 2개(`/api/v1/me/payment-preference` 조회·변경), 주문 API 3개(`POST /api/v1/me/orders`, `GET /api/v1/me/orders`(목록, 결정 38-5), `GET /api/v1/me/orders/{orderId}`), 예정 소비 API 2개(`/api/v1/me/planned-spends` 조회·교체), 추천 API 2개(`POST /api/v1/me/orders/{orderId}/recommendations`, `GET /api/v1/me/recommendations/{recommendationId}`), 원장 조회 API 1개(`GET /api/v1/me/ledger-transactions`), 모의 결제 API 3개(`POST /api/v1/me/orders/{orderId}/simulated-payments`, `GET /api/v1/me/simulated-payments/{simulatedPaymentId}`, `POST /api/v1/me/simulated-payments/{simulatedPaymentId}/cancellations`), 카드 상품 조회, `/actuator/health`. 월간 상태·결제 전 설정은 G3a(#159), 주문·예정 소비·추천은 G3b(#160), 원장 조회는 #165, 모의 결제는 G3c(#161, 결정 38)에서 등록했고 위 검사 순서·캐시 규칙과 회원 장부 단위 소유(남의 카드·주문·추천·결제 404)를 그대로 따릅니다. 모의 승인·취소는 저장하는 POST라서 CSRF 토큰과 `Idempotency-Key`가 필요합니다. `member`에서 `simulateFailure: true`는 400 `INVALID_REQUEST`이고 저장하지 않으며, `false`·생략은 정상 승인입니다(결정 38-1). 추천 계산은 추천 행을 저장하는 POST라서 CSRF 토큰이 필요합니다. 출처 충돌 계산 기준 선택(`source-selections`)은 `member`에서도 항상 409 `SOURCE_CONFLICT_NOT_FOUND`이고 저장하지 않습니다(결정 32 Q1). 결제 전 설정 변경은 기존 추천을 무효화하지 않고(결정 32 Q3), 추천 제외 변경은 매핑 변경과 같은 `MAPPING_CHANGED`로 무효화합니다(결정 32 Q2). 주문 목록 조회는 회원 장부의 주문만 최신순으로 나눠 주고(결정 38-5, [orders](api/orders.md)), 주문은 수정·삭제하지 않으므로 `PUT`·`PATCH`·`DELETE /api/v1/me/orders`는 로그인 여부와 관계없이 405 `METHOD_NOT_ALLOWED`입니다.
+- 아직 등록하지 않은 경로: CODEF·시연 사용자 목록은 로그인 여부와 관계없이 404입니다. 공개 회원의 CODEF 연결 범위는 별도 미결입니다(D9). 시연 사용자 목록은 `member`에 열지 않습니다(결정 37 D2·D4).
 - `local`·`demo`의 업무 API에는 세션·CSRF 검사를 걸지 않습니다(기존 동작 유지).
 
 #### 웹 클라이언트 호출 규칙(member)
 
 웹 화면이 `member` 프로필의 업무 API를 부를 때 따라야 하는 규칙입니다. 위 회원 세션 규칙을 호출하는 쪽에서 본 것으로, 현재 백엔드 구현 그대로이며 새 정책이 아닙니다(결정 37 D3·D4·D5·D6, #169). 프런트 코드는 아직 이 규칙을 따르지 않으며 고치는 일은 팀원 조율 대상입니다.
 
-- **쿠키 포함:** 모든 호출에 세션 쿠키 `__Host-BEONE_SESSION`을 함께 보냅니다(`fetch`의 `credentials`를 `'omit'`으로 두지 않습니다). 쿠키는 `HttpOnly`라서 화면 코드가 읽거나 저장하지 않습니다. 위 등록 경로의 업무 API는 쿠키가 없으면 401입니다. 등록하지 않은 경로는 쿠키와 관계없이 404, 등록 경로에 허용하지 않는 메서드(예: `GET /api/v1/me/orders`)는 쿠키와 관계없이 405입니다.
+- **쿠키 포함:** 모든 호출에 세션 쿠키 `__Host-BEONE_SESSION`을 함께 보냅니다(`fetch`의 `credentials`를 `'omit'`으로 두지 않습니다). 쿠키는 `HttpOnly`라서 화면 코드가 읽거나 저장하지 않습니다. 위 등록 경로의 업무 API는 쿠키가 없으면 401입니다. 등록하지 않은 경로는 쿠키와 관계없이 404, 등록 경로에 허용하지 않는 메서드(예: `DELETE /api/v1/me/orders`)는 쿠키와 관계없이 405입니다.
 - **같은 origin 전제:** 이 쿠키는 `__Host-`·`Secure`·`SameSite=Lax`이고, `member`에는 CORS 허용이 없습니다(`local`·`demo` CORS는 자격 증명을 허용하지 않고 `X-CSRF-TOKEN`도 허용 헤더가 아닙니다). 그래서 화면과 API가 같은 origin일 때만 동작합니다. 같은 origin을 어떻게 구성할지는 결정 대기입니다. 로컬은 결정 37 O2-L에서 Vite 프록시를 쓰기로 했지만 프런트 설정(`vite.config`)은 팀원 조율 대기이고(N-FE-PROXY), 회원 웹 화면의 호출 origin(배포 때 같은 호스트로 둘지, 교차 origin과 CORS 자격 증명으로 갈지)은 N-G4-ORIGIN 결정 대기입니다. 둘 다 확정된 구성이 아닙니다.
 - **쓰기 요청의 CSRF 토큰:** POST·PUT·PATCH·DELETE 전에 `GET /api/v1/auth/csrf`로 토큰을 받아 `X-CSRF-TOKEN` 헤더에 담습니다. 토큰은 세션에 묶이므로 로그인·로그아웃 뒤에는 다시 받습니다([`docs/api/auth.md`](api/auth.md)). 토큰을 URL·localStorage·로그에 남기지 않습니다. 추천 계산(`POST /api/v1/me/orders/{orderId}/recommendations`)도 쓰기라서 토큰이 필요합니다. GET에는 필요 없습니다.
-- **시연 헤더 무시:** `member`는 `X-BeONE-Demo-User`를 읽지 않습니다. `MY_CARDS`·`VIRTUAL_PORTFOLIO` 어느 값을 보내도 장부 선택에 쓰이지 않고, 모든 요청은 로그인한 회원의 '내 카드' 장부 하나로 처리합니다(D4). 예를 들어 `VIRTUAL_PORTFOLIO` 헤더를 붙인 `POST /api/v1/me/orders`도 회원의 '내 카드' 장부에 저장되고 시연 가상 포트폴리오 장부에는 저장되지 않습니다(`MemberOrderRecommendationIntegrationTest`). 회원 가상 포트폴리오(D1b)는 미결입니다(N-G3-1).
+- **시연 헤더 무시:** `member`는 `X-BeONE-Demo-User`를 읽지 않습니다. `MY_CARDS`·`VIRTUAL_PORTFOLIO` 어느 값을 보내도 장부 선택에 쓰이지 않고, 모든 요청은 로그인한 회원의 '내 카드' 장부 하나로 처리합니다(D4). 예를 들어 `VIRTUAL_PORTFOLIO` 헤더를 붙인 `POST /api/v1/me/orders`도 회원의 '내 카드' 장부에 저장되고 시연 가상 포트폴리오 장부에는 저장되지 않습니다(`MemberOrderRecommendationIntegrationTest`). 회원 가상 포트폴리오(D1b)는 회원 MVP에서 제공하지 않는 후순위입니다(결정 38-3).
 - **오류 분기:** 등록 경로·허용 메서드의 검사 순서는 401 → 403 → 400 → 404입니다. 경로·메서드 판정은 세션 검사보다 먼저라서, 등록하지 않은 경로는 로그인 여부와 관계없이 404, 허용하지 않는 메서드는 로그인 여부와 관계없이 405 `METHOD_NOT_ALLOWED`입니다(`MemberProfileIntegrationTest`).
   - 401 `UNAUTHENTICATED`: 회원 세션이 없거나 끝났습니다(쿠키 없음·익명 CSRF 세션·만료·로그아웃·다른 로그인으로 종료). 다시 로그인하게 합니다. 토큰을 다시 받아도 해결되지 않습니다.
   - 403 `CSRF_INVALID`: 회원 세션은 유효하지만 쓰기 요청의 토큰이 없거나 다릅니다. `GET /api/v1/auth/csrf`로 토큰을 다시 받은 뒤 다시 시도합니다. 403이면 저장하지 않았으므로 다시 보내도 중복 저장되지 않습니다.
   - 400은 본문·파라미터 오류, 404는 없는 자원이나 남의 자원입니다(남의 자원도 `FORBIDDEN`이 아니라 404).
 - **캐시:** `/api/v1/me`·`/api/v1/me/**`의 모든 응답은 `Cache-Control: no-store`입니다. 화면도 이 응답을 별도 캐시에 남기지 않습니다.
-- **결제 API 미등록:** 모의 결제 3개(승인·조회·취소)는 N-G3-2·D8 결정 대기로 `member`에 등록하지 않았습니다. `member`에서 부르면 로그인 여부와 관계없이 404이며, 결제 호출 규칙(`Idempotency-Key`·자동 재전송 여부 포함)은 등록할 때 정합니다.
+- **모의 결제 호출:** 모의 결제 3개(승인·조회·취소)는 G3c(#161, 결정 38)에서 `member`에 등록했습니다. 승인·취소 POST는 위 쿠키·CSRF 토큰과 함께 `Idempotency-Key` 헤더가 필요합니다(없으면 400). 같은 키·같은 본문은 24시간 동안 처음 결과를 그대로 돌려주고, 같은 키·다른 본문은 409 `IDEMPOTENCY_KEY_REUSED`입니다([중복 방지](#중복-방지)). 401·403으로 거절된 요청은 결제·원장·멱등 키를 저장하지 않으므로, 다시 로그인하거나 토큰을 다시 받은 뒤 같은 키로 보내도 이중 결제가 생기지 않습니다(`MemberPaymentIntegrationTest`). 자동 재전송을 할지는 화면 쪽에서 정하지 않았습니다. `simulateFailure: true`는 `member`에서 400 `INVALID_REQUEST`이므로 보내지 않습니다. `false`·생략은 정상입니다(결정 38-1). `seenRecommendationId`는 선택 필드이며, 보내지 않으면 서버가 비교 없이 승인하고 `recalculation.changed=null`입니다(결정 38-4).
 
 ### 값 형식
 
@@ -186,7 +186,7 @@ D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 업�
 ### 중복 방지
 
 - 모의 승인·취소는 `Idempotency-Key` 헤더가 필수입니다. 없으면 400입니다.
-- 키는 24시간 보존하고 현재 사용자(시연 사용자)별로 저장합니다. 다른 사용자의 같은 키는 별개입니다. 키에 연결하는 요청 지문은 사용자, HTTP 메서드, 경로(자원 ID 포함), 본문으로 구성합니다. 같은 키와 같은 지문은 같은 결과를 돌려주고, 같은 키와 다른 지문은 409 `IDEMPOTENCY_KEY_REUSED`입니다.
+- 키는 24시간 보존하고 현재 사용자의 장부(`user_id`)별로 저장합니다. 다른 사용자의 같은 키는 별개입니다. `local`·`demo`에서는 시연 사용자별, 회원 환경(`member`)에서는 회원의 '내 카드' 장부별입니다. 회원 1명은 '내 카드' 장부 1개만 가지므로 회원 환경에서는 장부 단위가 곧 회원 단위입니다(결정 38-2, 결정 37 D1a). 회원 가상 장부를 도입하면 이 단위를 다시 검토합니다. 키에 연결하는 요청 지문은 사용자, HTTP 메서드, 경로(자원 ID 포함), 본문으로 구성합니다. 같은 키와 같은 지문은 같은 결과를 돌려주고, 같은 키와 다른 지문은 409 `IDEMPOTENCY_KEY_REUSED`입니다.
 
 ### 업무 오류 코드
 
@@ -272,6 +272,6 @@ D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 업�
 
 미구현·범위 밖:
 
-- 업무 API의 회원 세션 연동은 로컬 회원 프로필 `member`의 `/api/v1/me`, 보유 카드 API(#157), 월간 상태·결제 전 설정 API(G3a #159), 주문·예정 소비·추천 API(G3b #160), 원장 조회 API(#165)까지만 구현했습니다(결정 37). 모의 결제의 회원 연결은 N-G3-2·D8 결정 대기로 미등록이고, 공개 회원의 CODEF 연결 범위(D9)와 공개 프로필(O1~O3)은 미결입니다. `local`·`demo`는 시연 사용자 헤더로 현재 사용자를 정합니다. `FORBIDDEN`은 자리만 예약돼 있으며 쓰는 곳이 없습니다(D-09)
+- 업무 API의 회원 세션 연동은 로컬 회원 프로필 `member`의 `/api/v1/me`, 보유 카드 API(#157), 월간 상태·결제 전 설정 API(G3a #159), 주문·예정 소비·추천 API(G3b #160), 원장 조회 API(#165), 모의 결제 API(G3c #161, 결정 38)까지 구현했습니다(결정 37). 공개 회원의 CODEF 연결 범위(D9)와 공개 프로필(O1~O3)은 미결입니다. `local`·`demo`는 시연 사용자 헤더로 현재 사용자를 정합니다. `FORBIDDEN`은 자리만 예약돼 있으며 쓰는 곳이 없습니다(D-09)
 - DB·CODEF·AI 등 외부 연동 예외의 세부 분류(현재는 예상하지 못한 예외로 500 처리)
 - 서블릿 필터 단계 예외의 공통 응답

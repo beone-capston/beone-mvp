@@ -10,18 +10,20 @@ class VirtualCardActivation(
     private var lastInactiveReason: InactiveReason = InactiveReason.NOT_AUTHENTICATED
 
     val state: ActivationState
-        get() {
-            val current = active ?: return ActivationState.Inactive(lastInactiveReason)
-            if (elapsedRealtimeMillis() >= current.expiresAtMillis) {
-                deactivate(InactiveReason.EXPIRED)
-                return ActivationState.Inactive(InactiveReason.EXPIRED)
-            }
-            return current
-        }
+        get() = snapshot().state
 
-    fun remainingMillis(): Long {
-        val current = state as? ActivationState.Active ?: return 0L
-        return (current.expiresAtMillis - elapsedRealtimeMillis()).coerceAtLeast(0L)
+    fun remainingMillis(): Long = snapshot().remainingMillis
+
+    // 시계를 한 번만 읽어 그 시점으로 상태와 남은 시간을 함께 계산한다(#180).
+    // 두 값을 따로 읽으면 사이에 만료 시점을 넘겨 활성이면서 남은 시간 0인 조합이 생길 수 있다.
+    fun snapshot(): ActivationSnapshot {
+        val current = active ?: return ActivationSnapshot(ActivationState.Inactive(lastInactiveReason), 0L)
+        val now = elapsedRealtimeMillis()
+        if (now >= current.expiresAtMillis) {
+            deactivate(InactiveReason.EXPIRED)
+            return ActivationSnapshot(ActivationState.Inactive(InactiveReason.EXPIRED), 0L)
+        }
+        return ActivationSnapshot(current, current.expiresAtMillis - now)
     }
 
     // 인증 중인 요청의 결과만 넘겨받는다. 어느 요청의 결과인지는 AuthRequestGate가 판정한다.
@@ -75,6 +77,12 @@ class VirtualCardActivation(
         const val ACTIVE_DURATION_MILLIS: Long = 60_000L
     }
 }
+
+// 한 시점의 활성 상태와 남은 시간. 비활성이면 남은 시간은 0, 활성이면 0보다 크다.
+data class ActivationSnapshot(
+    val state: ActivationState,
+    val remainingMillis: Long,
+)
 
 sealed interface ActivationState {
 

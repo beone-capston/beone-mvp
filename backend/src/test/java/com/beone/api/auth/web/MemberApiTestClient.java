@@ -2,6 +2,8 @@ package com.beone.api.auth.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Map;
+
 import com.beone.api.auth.application.PasswordHasher;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -56,7 +58,8 @@ final class MemberApiTestClient {
 	}
 
 	/**
-	 * 회원 테이블과 회원 장부가 가진 업무 행을 지운다. 외래 키 순서대로 지우며 시연 장부(member_id NULL)의 행은 건드리지 않는다.
+	 * 회원 테이블과 회원 장부가 가진 업무 행을 지운다. 외래 키 순서대로 지우며 시연 장부(member_id NULL)의 행은 건드리지 않는다. 모의
+	 * 결제·취소·원장 행은 주문·보유 카드를 지울 때 외래 키 연쇄 삭제로 함께 지워진다.
 	 */
 	void clearMemberData() {
 		this.jdbcTemplate.update("DELETE FROM auth_login_failures");
@@ -64,8 +67,8 @@ final class MemberApiTestClient {
 		this.jdbcTemplate.update("DELETE FROM auth_sessions");
 		this.jdbcTemplate.update("DELETE FROM auth_tokens");
 		this.jdbcTemplate.update("DELETE FROM auth_mail_throttles");
-		for (String table : new String[] { "payment_preferences", "recommendations", "orders", "planned_spends",
-				"monthly_states", "user_cards" }) {
+		for (String table : new String[] { "idempotency_keys", "payment_preferences", "recommendations", "orders",
+				"planned_spends", "monthly_states", "user_cards" }) {
 			this.jdbcTemplate.update("DELETE t FROM " + table + " t JOIN users u ON u.user_id = t.user_id"
 					+ " WHERE u.member_id IS NOT NULL");
 		}
@@ -112,6 +115,29 @@ final class MemberApiTestClient {
 
 	ResponseEntity<String> send(HttpMethod method, String path, Session session, String body) {
 		RestClient.RequestBodySpec request = client().method(method).uri(path);
+		if (session.id() != null) {
+			request = request.header(HttpHeaders.COOKIE, cookie(session.id()));
+		}
+		if (session.csrf() != null) {
+			request = request.header("X-CSRF-TOKEN", session.csrf());
+		}
+		if (body != null && method != HttpMethod.GET && method != HttpMethod.DELETE) {
+			request = request.contentType(MediaType.APPLICATION_JSON).body(body);
+		}
+		return request.retrieve().toEntity(String.class);
+	}
+
+	/**
+	 * 추가 요청 헤더(예: {@code Idempotency-Key}, 시연 헤더)를 붙여 보낸다. 값이 {@code null}인 헤더는 보내지 않는다.
+	 */
+	ResponseEntity<String> sendWithHeaders(HttpMethod method, String path, Session session, String body,
+			Map<String, String> headers) {
+		RestClient.RequestBodySpec request = client().method(method).uri(path);
+		for (Map.Entry<String, String> header : headers.entrySet()) {
+			if (header.getValue() != null) {
+				request = request.header(header.getKey(), header.getValue());
+			}
+		}
 		if (session.id() != null) {
 			request = request.header(HttpHeaders.COOKIE, cookie(session.id()));
 		}

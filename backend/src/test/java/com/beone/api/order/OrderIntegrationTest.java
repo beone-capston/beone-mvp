@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.beone.api.order.application.OrderClock;
+import com.beone.api.order.persistence.OrderEntity;
+import com.beone.api.order.persistence.OrderRepository;
 import com.beone.api.support.IntegrationTest;
 import com.beone.api.user.application.DemoUser;
 import com.beone.api.user.persistence.UserRepository;
@@ -20,6 +22,9 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -55,6 +60,9 @@ class OrderIntegrationTest {
 
 	@Autowired
 	UserRepository userRepository;
+
+	@Autowired
+	OrderRepository orderRepository;
 
 	@BeforeEach
 	void clearOrderTables() {
@@ -110,6 +118,57 @@ class OrderIntegrationTest {
 			assertThat(response.getStatusCode().value()).isEqualTo(404);
 			JsonAssert.comparator(JsonCompareMode.STRICT).assertIsMatch(notFound, response.getBody());
 		}
+	}
+
+	/**
+	 * 결정 38-5 목록 조회(local): 시연 헤더의 사용자 주문만 최신순으로 담는다. 고정 시계라 생성 시각이 모두 같으므로 주문 번호 내림차순이다.
+	 */
+	@Test
+	void orderListShowsOnlyTheDemoUsersOrdersNewestFirst() {
+		String first = (String) data(send("POST", "/api/v1/me/orders", "MY_CARDS", ORDER_BODY).getBody()).get("orderId");
+		String second = (String) data(send("POST", "/api/v1/me/orders", "MY_CARDS", ORDER_BODY).getBody())
+			.get("orderId");
+		String portfolio = (String) data(send("POST", "/api/v1/me/orders", "VIRTUAL_PORTFOLIO", ORDER_BODY).getBody())
+			.get("orderId");
+		String item = """
+				{"orderId":"%s","amountWon":10000,"orderDate":"2026-11-03","merchantName":"스타벅스 송도점",
+				 "merchantClass":"STARBUCKS_STORE","status":"CREATED","createdAt":"2026-11-17T12:00:00+09:00",
+				 "simulatedPaymentId":null}""";
+
+		ResponseEntity<String> list = send("GET", "/api/v1/me/orders", "MY_CARDS", null);
+
+		assertThat(list.getStatusCode().value()).isEqualTo(200);
+		JsonAssert.comparator(JsonCompareMode.STRICT).assertIsMatch("{\"data\":{\"items\":[" + item.formatted(second)
+				+ "," + item.formatted(first) + "],\"page\":0,\"size\":20,\"hasNext\":false}}", list.getBody());
+		JsonAssert.comparator(JsonCompareMode.STRICT).assertIsMatch("{\"data\":{\"items\":["
+				+ item.formatted(portfolio) + "],\"page\":0,\"size\":1,\"hasNext\":false}}",
+				send("GET", "/api/v1/me/orders?size=1", "VIRTUAL_PORTFOLIO", null).getBody());
+	}
+
+	/**
+	 * 저장소 목록 조회는 조건에 {@code user_id}가 들어간다. 다른 사용자의 행이 더 많이 있어도 이 사용자의 행만 담고, 크기보다 한 건 더 있으면
+	 * {@code hasNext}다(결정 38-5 관리자 확인 조건).
+	 */
+	@Test
+	void repositoryListIsScopedToTheUser() {
+		for (int i = 0; i < 3; i++) {
+			send("POST", "/api/v1/me/orders", "VIRTUAL_PORTFOLIO", ORDER_BODY);
+		}
+		send("POST", "/api/v1/me/orders", "MY_CARDS", ORDER_BODY);
+		send("POST", "/api/v1/me/orders", "MY_CARDS", ORDER_BODY);
+		long myCards = userId(DemoUser.MY_CARDS);
+		Sort order = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("orderId"));
+
+		Slice<OrderEntity> first = this.orderRepository.findByUserId(myCards, PageRequest.of(0, 1, order));
+		Slice<OrderEntity> second = this.orderRepository.findByUserId(myCards, PageRequest.of(1, 1, order));
+		Slice<OrderEntity> all = this.orderRepository.findByUserId(myCards, PageRequest.of(0, 50, order));
+
+		assertThat(first.getContent()).singleElement().extracting(OrderEntity::getUserId).isEqualTo(myCards);
+		assertThat(first.hasNext()).isTrue();
+		assertThat(second.getContent()).singleElement().extracting(OrderEntity::getUserId).isEqualTo(myCards);
+		assertThat(second.hasNext()).isFalse();
+		assertThat(all.getContent()).hasSize(2).allSatisfy(row -> assertThat(row.getUserId()).isEqualTo(myCards));
+		assertThat(first.getContent().get(0).getOrderId()).isGreaterThan(second.getContent().get(0).getOrderId());
 	}
 
 	@Test
