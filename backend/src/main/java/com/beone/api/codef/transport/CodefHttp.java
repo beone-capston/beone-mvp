@@ -1,6 +1,5 @@
 package com.beone.api.codef.transport;
 
-import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -59,7 +58,16 @@ final class CodefHttp {
 	}
 
 	Reply postProduct(String accessToken, CodefApi api, String jsonBody) throws Failure {
-		HttpRequest request = HttpRequest.newBuilder(productUri(api))
+		return postJson(accessToken, api.path(), jsonBody);
+	}
+
+	Reply postAccount(String accessToken, CodefAccountApi api, String jsonBody) throws Failure {
+		return postJson(accessToken, api.path(), jsonBody);
+	}
+
+	// 상품·계정 API는 같은 호스트에 같은 방식(Bearer, JSON)으로 보낸다.
+	private Reply postJson(String accessToken, String path, String jsonBody) throws Failure {
+		HttpRequest request = HttpRequest.newBuilder(settings.productHost().resolve(path))
 			.header("Authorization", "Bearer " + accessToken)
 			.header("Content-Type", PRODUCT_CONTENT_TYPE)
 			.POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8))
@@ -69,10 +77,6 @@ final class CodefHttp {
 
 	HttpClient client() {
 		return client;
-	}
-
-	private URI productUri(CodefApi api) {
-		return settings.productHost().resolve(api.path());
 	}
 
 	private Reply send(HttpRequest request, Duration timeout) throws Failure {
