@@ -669,6 +669,7 @@ PR #81(#80) 구현 중 2026-11-16 사용자가 고른 결정이다. 새 D-번호
 
 - Android release 앱의 시작 주소는 `https://beonepay.site/`이고, 탐색과 브리지의 신뢰 origin은 `https://beonepay.site` 하나다. `www.beonepay.site`, 와일드카드, `http://` origin은 넣지 않는다.
 - 문서상 채택이다. 현재 코드의 release `WEB_START_URL`은 빈 문자열이며, 코드 반영은 별도 이슈다. release 앱 실기기 확인은 별도 승인이다.
+  - 2026-11-24 확인: #88 이후 release `WEB_START_URL`은 `https://beonepay.site/`(`android/app/build.gradle.kts:31`)이며 위 문장은 당시 기록이다. 확정 주소는 이 보충의 D-25 결정이고, 위 줄은 현재 빌드 설정 사실이다. release 앱 실기기 확인은 여전히 별도 승인이다.
 - 서버가 정적 확인 화면만 제공하는 동안에는 앱 화면의 실제 시작 경로가 정해지지 않았다. 경로 `/`는 현재 결정이며 프런트 배포 뒤 바뀔 수 있다.
 - 브리지 계약 전체는 [D-21](#d-21-확정-정책)의 2026-11-16 보충과 [계약 문서](android/bridge-contract-candidate.md)를 따른다.
 
