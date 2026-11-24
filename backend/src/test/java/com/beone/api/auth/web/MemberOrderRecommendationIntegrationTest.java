@@ -270,6 +270,40 @@ class MemberOrderRecommendationIntegrationTest {
 		assertThat(countDemo("recommendations")).isEqualTo(demoRecommendations);
 	}
 
+	/**
+	 * 웹 화면의 '가상 포트폴리오' 탭이 보내는 {@code VIRTUAL_PORTFOLIO} 헤더를 붙인 주문도 회원의 '내 카드'(REAL) 장부에 저장하고, 시연 가상
+	 * 포트폴리오 장부에는 저장하지 않는다(결정 37 D4, G4 조사 M4). 회원 가상 포트폴리오(D1b)는 미결(N-G3-1)이라 회원 장부는 하나다.
+	 */
+	@Test
+	void virtualPortfolioDemoHeaderOrderIsStoredInMemberMyCardsLedger() {
+		Session a = this.members.loginNew(MEMBER_A, "a@example.com");
+		int demoVirtualOrders = countDemoUser("orders", "VIRTUAL_PORTFOLIO");
+		int demoMyCardsOrders = countDemoUser("orders", "MY_CARDS");
+
+		ResponseEntity<String> created = this.members.sendWithDemoHeader(HttpMethod.POST, ORDERS, a, ORDER,
+				"VIRTUAL_PORTFOLIO");
+		assertThat(created.getStatusCode().value()).isEqualTo(201);
+		assertNoStore(created);
+		String orderId = field(created, "orderId");
+
+		// 저장된 행의 장부는 회원 A의 REAL 장부다
+		Map<String, Object> owner = this.jdbcTemplate.queryForMap(
+				"SELECT u.member_id, u.demo_user, u.portfolio_type FROM orders o JOIN users u ON u.user_id = o.user_id"
+						+ " WHERE o.order_id = ?",
+				Long.parseLong(orderId.substring("ord-".length())));
+		assertThat(owner).containsEntry("member_id", MEMBER_A)
+			.containsEntry("demo_user", null)
+			.containsEntry("portfolio_type", "REAL");
+		assertThat(countOf("orders", MEMBER_A)).isOne();
+		assertThat(countDemoUser("orders", "VIRTUAL_PORTFOLIO")).isEqualTo(demoVirtualOrders);
+		assertThat(countDemoUser("orders", "MY_CARDS")).isEqualTo(demoMyCardsOrders);
+
+		// 헤더 없이도, 다른 시연 헤더로도 같은 회원 장부에서 읽힌다
+		assertThat(send(HttpMethod.GET, ORDERS + "/" + orderId, a, null).getStatusCode().value()).isEqualTo(200);
+		assertThat(this.members.getWithDemoHeader(ORDERS + "/" + orderId, a, "MY_CARDS").getStatusCode().value())
+			.isEqualTo(200);
+	}
+
 	/** 쿠키가 없거나 익명 CSRF 세션이면 6개 경로 모두 401이고, 401이 CSRF 403·본문 400보다 먼저다. */
 	@Test
 	void unauthenticatedRequestsAreUnauthorizedBeforeCsrfAndBodyValidation() {
@@ -448,6 +482,12 @@ class MemberOrderRecommendationIntegrationTest {
 		return this.jdbcTemplate.queryForObject(
 				"SELECT COUNT(*) FROM " + table + " t JOIN users u ON u.user_id = t.user_id WHERE u.member_id IS NULL",
 				Integer.class);
+	}
+
+	private int countDemoUser(String table, String demoUser) {
+		return this.jdbcTemplate.queryForObject(
+				"SELECT COUNT(*) FROM " + table + " t JOIN users u ON u.user_id = t.user_id WHERE u.demo_user = ?",
+				Integer.class, demoUser);
 	}
 
 	private ResponseEntity<String> send(HttpMethod method, String path, Session session, String body) {
