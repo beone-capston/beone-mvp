@@ -62,6 +62,7 @@
 - #189 → PR: 공개(prod) 프로필 가짜 메일 차단과 prod 통합 테스트(G5 L2·L3, #185 병합 뒤 develop 기준, 실메일 결정(N1) 전에는 prod 기동 불가, [기록](189-prod-public-guards.md))
 - #191 → draft PR: LP-4 prod에 CODEF 키·토큰 환경 변수가 있으면 기동 실패(결정 38-8, `PublicProfileGuard` 규칙 추가, 값 미열람, 공개 전환 승인 시 제거, [기록](191-prod-codef-env-guard.md))
 - #193 → draft PR: LP-1 CODEF 실 게이트웨이 `codef-live` 프로필(`member & codef-live & !prod`, 스텁 HTTP 시험만, 실호출 없음, prod + codef-live 기동 실패, 계정 API 형식 근거 확인 필요, [기록](193-codef-live-gateway.md))
+- #196 → draft PR: LP-2 CODEF 프로세스를 넘는 호출 총량(`codef_call_budgets` V15, API·창별 원자적 증가, 설정 없으면 호출 0, 권장 API별 3, #195 병합 `455b0e8` 뒤 develop 동기화, [기록](196-codef-call-budget.md))
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.
