@@ -30,6 +30,9 @@ sudo docker network ls --format '{{.Name}}' | grep -E '^beone'
 `<정적 루트>`, `<인증서 경로>`는 1절 대조 결과로 채웁니다. 기존 `server` 블록의 `listen`·`ssl_*`·certbot 경로(`/.well-known/acme-challenge/`)는 **그대로 유지**하고, `location`만 아래처럼 바꾸는 것이 목표입니다.
 
 ```nginx
+# http 문맥(conf.d 파일 최상위)에 둔다. 인증 링크 경로의 query(token)를 접근 로그에 남기지 않는 형식(N2 조건)
+log_format beone_noquery '$remote_addr - [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent';
+
 server {
     listen 443 ssl;
     server_name beonepay.site;
@@ -46,6 +49,18 @@ server {
 
     location / {
         try_files $uri $uri/ /index.html;   # SPA. 화면 경로(/email-verification 등)를 index.html로
+    }
+
+    # 이메일 인증·비밀번호 재설정 링크(?token=). N2 조건(관리 판단: query 방식 유지)이라 N4와 별개로 넣는다
+    location = /email-verification {
+        add_header Referrer-Policy "no-referrer" always;
+        access_log /var/log/nginx/access.log beone_noquery;   # 로그 경로는 1절 대조 결과의 기존 값
+        try_files /index.html =404;
+    }
+    location = /password-reset {
+        add_header Referrer-Policy "no-referrer" always;
+        access_log /var/log/nginx/access.log beone_noquery;
+        try_files /index.html =404;
     }
 
     location /api/ {
@@ -67,7 +82,9 @@ server {
 ```
 
 - 앱은 `X-Forwarded-*`를 해석하지 않습니다(`forward-headers-strategy: none`). 쿠키의 `Secure`도 요청 scheme과 관계없이 붙습니다. 그래도 로그·후속 변경에 대비해 nginx에서 전달 헤더를 덮어씁니다.
-  - 검증 환경(`deploy/verify/nginx.conf`)도 같은 방식이고, 위조 헤더를 보내도 Set-Cookie가 같다는 것을 스모크 S17로 확인했습니다.
+  - 같은 방식을 쓰는 검증 환경 설정(`deploy/verify/nginx.conf`)은 **PR #206에서 추가하며 아직 develop에 병합되지 않았습니다.** 스모크 스크립트(`deploy/scripts/smoke-member.sh`)도 **PR #199로 미병합**입니다.
+  - 위조 헤더를 보내도 Set-Cookie가 같다는 S17 관측은 **C2 후보(`ef01309`) 검증 환경**(로컬 사전 스모크와 운영 담당의 서버 루프백 `beone-verify` 실행)에서 나온 것입니다. 공개 서버에 반영됐다는 증거가 아닙니다. 공개 반영 뒤에는 P5에서 다시 확인합니다.
+- **N2 조건:** 인증 링크 경로(`/email-verification`, `/password-reset`)는 `Referrer-Policy: no-referrer`를 붙이고, 공개 접근 로그에 이 경로의 query를 남기지 않습니다. 위 초안은 `$request` 대신 `$uri`를 쓰는 로그 형식으로 처리했습니다. 기존 서버 `access_log` 경로와 형식은 1절에서 대조해 맞춥니다.
 - 반영하면 지금의 정적 안내 화면은 SPA로 바뀝니다. 안내 화면은 4절 백업이 원복 대상입니다.
 
 ## 3. 두 Compose 프로젝트 연결
@@ -87,17 +104,18 @@ server {
 |---|---|---|---|
 | P3 | 설정 백업: `sudo tar -czf /opt/beone-backup/pre-mvp-<UTC>.tgz /opt/beone/compose.yaml /opt/beone/nginx/conf.d <정적 루트>` | tgz 존재, 크기 > 0 | 진행 안 함 |
 | P4 | `prod` backend 기동·정적 웹 배치(별도 절차) | `beone-app` healthy | 앱만 원복 |
-| P5-1 | 설정 수정 → `sudo docker compose -p beone exec nginx nginx -t` | `syntax is ok`, `test is successful` | 파일을 백업본으로 되돌림 |
-| P5-2 | `sudo docker compose -p beone exec nginx nginx -s reload` | 아래 확인 통과 | 원복 |
-| P5-3 | 확인: `curl -sI https://beonepay.site/` 200, `curl -s -o /dev/null -w '%{http_code}' https://beonepay.site/api/v1/me` 401, `https://beonepay.site/actuator/health` 404, `http://` 301, certbot 갱신 타이머 유지 | 모두 기대값 | 원복 |
-| P5-4 | `deploy/scripts/smoke-member.sh https://beonepay.site`(합성 회원, T-a는 운영 DB에 쓰지 않으므로 **결정 필요**: 공개 환경의 인증은 실메일 N1로 한다) | 전 항목 PASS | 원복 |
+| P5-1 | 설정 수정 → `sudo docker compose -f /opt/beone/compose.yaml -p beone exec nginx nginx -t` | `syntax is ok`, `test is successful` | 파일을 백업본으로 되돌림 |
+| P5-2 | `sudo docker compose -f /opt/beone/compose.yaml -p beone exec nginx nginx -s reload` | 아래 확인 통과 | 원복 |
+| P5-3 | 확인: `curl -sI https://beonepay.site/` 200, `curl -s -o /dev/null -w '%{http_code}' https://beonepay.site/api/v1/me` 401, `https://beonepay.site/actuator/health` 404, `http://` 301, certbot 갱신 타이머 유지, `curl -sI 'https://beonepay.site/email-verification?token=x'`에 `Referrer-Policy: no-referrer`, 접근 로그의 해당 줄에 `token=` 없음 | 모두 기대값 | 원복 |
+| P5-4 | **준비 완료 단계 아님(TODO).** 회원 API 스모크는 공개용 실메일 인증 스모크를 별도로 구현·검증한 뒤에 정한다. 현재 `smoke-member.sh`(#199, 미병합)는 `member` 검증 환경 전용이다. 실메일 대신 검증 DB T-a 훅을 전제로 하고, 운영 DB에는 T-a를 쓰지 않으므로 공개 `prod`에 그대로 실행하지 않는다 | 공개용 스모크가 준비되면 기대값을 정한다 | — |
 
 **원복**
 
 ```bash
 exec bash
 sudo tar -xzf /opt/beone-backup/pre-mvp-<UTC>.tgz -C /
-sudo docker compose -p beone exec nginx nginx -t && sudo docker compose -p beone exec nginx nginx -s reload
+PUB='sudo docker compose -f /opt/beone/compose.yaml -p beone'
+$PUB exec nginx nginx -t && $PUB exec nginx nginx -s reload
 curl -sI https://beonepay.site/ | head -1    # 200, 이전 안내 화면
 ```
 
@@ -109,4 +127,5 @@ curl -sI https://beonepay.site/ | head -1    # 200, 이전 안내 화면
 |---|---|
 | N4 보안 헤더·요청 제한·본문 크기 | 결정 대기. 권장안은 인증 경로만 제한, HSTS를 짧게 시작, CSP는 Report-Only로 먼저(ROADMAP 8절) |
 | 프로젝트 연결 방식(3절 A·B) | 승인 ⑧에서 결정 |
-| 공개 환경 스모크의 회원 인증 | 실메일(N1, 결정 39-6) 구현 뒤. 운영 DB에는 T-a를 쓰지 않음 |
+| 공개 환경 스모크의 회원 인증 | TODO. 실메일(N1, 결정 39-6) 구현 뒤 공개용 실메일 인증 스모크를 별도로 구현·검증한다. 운영 DB에는 T-a를 쓰지 않음 |
+| 검증 환경 근거(#206·#199) | 미병합. 병합되면 이 문서의 참조를 병합된 경로로 확정 |
