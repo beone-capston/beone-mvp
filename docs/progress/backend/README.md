@@ -61,6 +61,7 @@
 - #186 → draft PR: G5 L4·L5 prod 웹 슬라이스 고정(결정 38-7·8, 테스트·문서만, #185 병합 뒤 develop 동기화). prod에서 CODEF 4경로 404·컨트롤러·가짜 게이트웨이 Bean 없음(`CodefPublicProfileWebTest`), `X-Forwarded-*`를 보내도 쿠키·본문·`Location` 불변과 `ForwardedHeaderFilter` 없음(`ForwardedHeadersPublicWebTest`). `docs/domains/codef.md` 공개(prod) 범위 절. 공개 전환은 별도 승인. [기록](186-prod-codef-forwarded-guards.md)
 - #189 → PR: 공개(prod) 프로필 가짜 메일 차단과 prod 통합 테스트(G5 L2·L3, #185 병합 뒤 develop 기준, 실메일 결정(N1) 전에는 prod 기동 불가, [기록](189-prod-public-guards.md))
 - #191 → draft PR: LP-4 prod에 CODEF 키·토큰 환경 변수가 있으면 기동 실패(결정 38-8, `PublicProfileGuard` 규칙 추가, 값 미열람, 공개 전환 승인 시 제거, [기록](191-prod-codef-env-guard.md))
+- #207 → draft PR: N1 prod SMTP 인증 메일 발송기(결정 39-6, 설정 누락 시 prod 기동 실패, 스텁 SMTP 시험만, 실계정 발송 미확인, 링크 경로 결정 28·기준 주소 N2 미결, [기록](207-prod-smtp-mail-sender.md))
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.
