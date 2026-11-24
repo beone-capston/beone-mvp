@@ -42,8 +42,9 @@ import org.springframework.test.context.ActiveProfiles;
  * <li>G1 D5 권장 4항: {@code /api/v1/me}·{@code /api/v1/me/**}의 응답(401·403·쿠키를 다시 심는 200·미등록 404)에는
  * {@code Cache-Control: no-store}가 붙는다. 인증 API와 같은 규칙이다(docs/api/auth.md)</li>
  * </ul>
- * member 프로필에 아직 등록하지 않은 업무 API(주문·예정 소비·추천·모의 승인·원장·CODEF·시연 사용자 목록)는 404다. 월간 상태·결제 설정은
- * G3a에서 등록했고 {@link MemberMonthlyStatePreferenceIntegrationTest}가 확인한다. 시계는 주입한 가변 시계로 서울 2026-11-18 10:00에서
+ * member 프로필에 등록하지 않은 업무 API(CODEF·시연 사용자 목록)는 404다. 월간 상태·결제 설정은 G3a, 주문·예정 소비·추천은 G3b,
+ * 모의 결제·원장은 G3c에서 등록했고 {@link MemberMonthlyStatePreferenceIntegrationTest},
+ * {@link MemberOrderRecommendationIntegrationTest}, {@link MemberPaymentLedgerIntegrationTest}가 확인한다. 시계는 주입한 가변 시계로 서울 2026-11-18 10:00에서
  * 시작한다.
  */
 @IntegrationTest
@@ -265,9 +266,9 @@ class MemberProfileIntegrationTest {
 	}
 
 	/**
-	 * member 프로필은 인증 9개·/me·보유 카드·월간 상태·결제 설정·주문·예정 소비·추천·상품 조회·health만 연다. 나머지 업무 API는
-	 * 로그인해도 404다. CODEF 4개(D9 미결)와 시연 사용자 목록(결정 37 D2·D4)은 G3 뒤에도 404로 남는다. 주문 경로는 POST만 있으므로
-	 * {@code GET /api/v1/me/orders}는 인증 전에 405 {@code METHOD_NOT_ALLOWED}다(docs/api.md 공통 실패 응답).
+	 * member 프로필은 인증 9개·/me·보유 카드·월간 상태·결제 설정·주문·예정 소비·추천·모의 결제·원장·상품 조회·health만 연다. 나머지
+	 * 업무 API는 로그인해도 404다. CODEF 4개(D9 미결)와 시연 사용자 목록(결정 37 D2·D4)은 G3 뒤에도 404로 남는다. 주문 경로는
+	 * POST만 있으므로 {@code GET /api/v1/me/orders}는 인증 전에 405 {@code METHOD_NOT_ALLOWED}다(docs/api.md 공통 실패 응답).
 	 */
 	@Test
 	void onlyAllowedRoutesAreRegistered() throws Exception {
@@ -279,9 +280,7 @@ class MemberProfileIntegrationTest {
 		assertThat(products.getHeaders().getCacheControl()).isNull();
 		assertThat(send(HttpMethod.GET, "/actuator/health", a, null).getStatusCode().value()).isEqualTo(200);
 
-		String[][] closed = { { "GET", "/api/v1/demo-users" },
-				{ "POST", "/api/v1/me/orders/ord-1/simulated-payments" },
-				{ "GET", "/api/v1/me/ledger-transactions" }, { "GET", "/api/v1/me/codef/connection" },
+		String[][] closed = { { "GET", "/api/v1/demo-users" }, { "GET", "/api/v1/me/codef/connection" },
 				{ "POST", "/api/v1/me/codef/connection" }, { "DELETE", "/api/v1/me/codef/connection" },
 				{ "POST", "/api/v1/me/codef/syncs" } };
 		for (String[] route : closed) {

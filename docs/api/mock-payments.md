@@ -4,6 +4,8 @@
 
 공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 구현 상태는 [README](README.md#업무-api-1차-명세)의 상태 항목을 봅니다.
 
+프로필: 세 API는 `local`·`demo`와 로컬 회원 프로필 `member`에 등록돼 있습니다(G3c #161). 아래 `X-BeONE-Demo-User` 헤더는 `local`·`demo`의 방식입니다. `member`에서는 헤더 대신 회원 세션 쿠키(`__Host-BEONE_SESSION`)로 현재 사용자를 정하고 승인·취소 POST에 `X-CSRF-TOKEN`이 필요합니다. 검사 순서는 401 `UNAUTHENTICATED` → 403 `CSRF_INVALID` → 400 → 404 → 409이고 모든 응답에 `Cache-Control: no-store`가 붙습니다([회원 세션 규칙](../api.md#회원-세션member-프로필)). 401·403으로 거절된 요청은 결제·원장·멱등 키를 저장하지 않으므로 같은 키로 다시 보낼 수 있습니다. 다른 회원의 주문·결제·추천은 없는 것과 같은 404입니다. `member`는 `local`·`demo`가 아니므로 `simulateFailure: true`는 400 `INVALID_REQUEST`이고 결제·멱등 키를 저장하지 않습니다(`false`·생략은 정상). 이 처리는 아래 요청 본문의 문언 기준이며 사용자 확인(N-G3-2)을 기다립니다.
+
 ## POST /api/v1/me/orders/{orderId}/simulated-payments — 모의 승인 요청
 
 - [1차] 주문을 서버가 다시 계산해 모의 승인하고 원장에 한 번만 기록한다. 사용자가 본 추천과 다르면 차이를 담는다(D-14 ⑥⑦).

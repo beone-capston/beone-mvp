@@ -18,7 +18,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * local·demo 밖(프로필 없음)에서는 모의 결제 API가 등록되지 않아 404 {@code NOT_FOUND}다(다른 사용자 자원 API와 같음).
+ * local·demo·member 밖(프로필 없음)에서는 모의 결제 API가 등록되지 않아 404 {@code NOT_FOUND}다(다른 사용자 자원 API와 같음).
  */
 @WebSliceTest(controllers = SimulatedPaymentController.class)
 class SimulatedPaymentProfileOffWebTest {

@@ -4,6 +4,8 @@
 
 공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 구현 상태는 [README](README.md#업무-api-1차-명세)의 상태 항목을 봅니다.
 
+프로필: 이 API는 `local`·`demo`와 로컬 회원 프로필 `member`에 등록돼 있습니다(G3c #161). 아래 `X-BeONE-Demo-User` 헤더는 `local`·`demo`의 방식입니다. `member`에서는 헤더 대신 회원 세션 쿠키(`__Host-BEONE_SESSION`)로 현재 사용자를 정하고, 검사 순서는 401 `UNAUTHENTICATED` → 400 → 404이며 모든 응답에 `Cache-Control: no-store`가 붙습니다([회원 세션 규칙](../api.md#회원-세션member-프로필)). 원장은 회원 장부마다 나뉘고, 다른 회원·시연 장부의 카드로 거르면 없는 카드와 같은 404 `USER_CARD_NOT_FOUND`입니다. `member`에는 CODEF 경로가 없고 CODEF 원장도 연결하지 않았으므로(R8) 자체 모의 거래(`SIMULATION`) 행만 나옵니다.
+
 ## GET /api/v1/me/ledger-transactions — 원장 조회
 
 - [1차] 모의 승인·취소 원장과 기간별 완전성(불완전 사유)을 조회한다. 2차에서는 CODEF 원장 행도 출처를 구분해 함께 보여 준다.
