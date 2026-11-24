@@ -7,6 +7,11 @@ import { PortfolioModeTabs } from './components/PortfolioModeTabs'
 import { Sheet } from './components/Sheet'
 import { defaultPreference, mockCardSource } from './data/portfolio'
 import type { CardSource, PaymentPreference, PortfolioMode, WalletCard } from './data/portfolio'
+import { OrderWorkspace } from './orders/OrderWorkspace'
+import { orderApi } from './orders/orderApi'
+import type { OrderApi } from './orders/orderApi'
+import { formatWon, orderName } from './orders/order'
+import type { CreatedOrder } from './orders/order'
 import { authMessages, useNativeAuth } from './hooks/useNativeAuth'
 
 const menus = ['혜택', '빠른결제', '모의결제'] as const
@@ -16,13 +21,15 @@ interface ModeState {
   preference: PaymentPreference
 }
 
-function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
+function App({ cardSource = mockCardSource, orders = orderApi }: { cardSource?: CardSource; orders?: OrderApi }) {
   const [menu, setMenu] = useState<Menu>('빠른결제')
   const [mode, setMode] = useState<PortfolioMode>('MY_CARDS')
   const [modes, setModes] = useState<Record<PortfolioMode, ModeState>>({
     MY_CARDS: { activeIndex: 0, preference: defaultPreference() },
     VIRTUAL_PORTFOLIO: { activeIndex: 0, preference: defaultPreference() },
   })
+  const [selectedOrders, setSelectedOrders] = useState<Partial<Record<PortfolioMode, CreatedOrder>>>({})
+  const selectedOrder = selectedOrders[mode]
   const [notice, setNotice] = useState('')
   const [services, setServices] = useState<WalletCard | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
@@ -41,6 +48,12 @@ function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
   function selectMenu(value: Menu) {
     setMenu(value)
     setNotice('')
+  }
+
+  function openSelectedOrder(orderMode: PortfolioMode, order: CreatedOrder) {
+    setSelectedOrders(current => ({ ...current, [orderMode]: order }))
+    selectMenu('빠른결제')
+    window.scrollTo(0, 0)
   }
 
   function updatePreference(preference: PaymentPreference) {
@@ -63,7 +76,7 @@ function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
             B<span className="brand-colon">:</span>ONE
           </span>
         </a>
-        {myMode && (
+        {myMode && menu !== '모의결제' && (
           <div className="header-actions">
             <button
               aria-label="카드 추가"
@@ -85,9 +98,9 @@ function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
         )}
       </header>
 
-      <PortfolioModeTabs mode={mode} onChange={selectMode} />
+      {menu !== '모의결제' && <PortfolioModeTabs mode={mode} onChange={selectMode} />}
       <main id="main">
-        <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode}>
+        <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode} hidden={menu === '모의결제'}>
           {menu === '빠른결제' ? (
             <section className="quick-payment" key={mode}>
               <h1 className="sr-only">B:ONE 빠른결제</h1>
@@ -96,6 +109,12 @@ function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
                   ? '디자인 확인용 샘플 카드입니다. 실제 등록 카드가 아닙니다.'
                   : '가상 포트폴리오 시연용 카드입니다.'}
               </p>
+              {selectedOrder && (
+                <div className="quick-selected-order" aria-label="선택한 가상 주문">
+                  <strong>{orderName(selectedOrder)}</strong>
+                  <span>{formatWon(selectedOrder.amountWon)}원</span>
+                </div>
+              )}
               <div className="card-section-heading">
                 <h2>
                   나의 카드 <span>{cards.length}</span>
@@ -140,22 +159,22 @@ function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
               )}
               <p className="simulation-disclaimer">실제 결제 및 금융거래는 발생하지 않습니다.</p>
             </section>
-          ) : (
+          ) : menu === '혜택' ? (
             <section className="placeholder-page">
-              <Icon name={menu === '혜택' ? 'benefit' : 'simulation'} />
-              <h1>{menu}</h1>
-              <p>
-                {menu === '혜택'
-                  ? '달별로 받은 혜택과 결제 정보를 확인할 수 있는 공간이에요.'
-                  : '가상의 주문으로 결제를 시뮬레이션하는 공간이에요.'}
-              </p>
+              <Icon name="benefit" />
+              <h1>혜택</h1>
+              <p>달별로 받은 혜택과 결제 정보를 확인할 수 있는 공간이에요.</p>
               <span>준비 중이에요</span>
               <button className="primary-button" onClick={() => selectMenu('빠른결제')}>
                 빠른결제로 돌아가기
               </button>
             </section>
-          )}
+          ) : null}
         </div>
+        {(['MY_CARDS', 'VIRTUAL_PORTFOLIO'] as const).map(orderMode => (
+          <OrderWorkspace key={orderMode} mode={orderMode} api={orders}
+            active={menu === '모의결제' && mode === orderMode} onSelect={openSelectedOrder} />
+        ))}
       </main>
 
       <nav
@@ -240,7 +259,7 @@ function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
               >
                 모의결제 화면 열기
               </button>
-              <small>주문 API와 모의 승인 요청은 아직 연결되지 않았습니다.</small>
+              <small>모의 승인 요청은 아직 연결되지 않았습니다.</small>
             </div>
           )}
         </Sheet>
