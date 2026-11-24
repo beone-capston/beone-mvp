@@ -60,6 +60,7 @@
 - #183 → draft PR: G5 L1 공개 프로필 골격(결정 38-6·7). `spring.profiles.group.prod: member`로 회원 부품 재사용, `application-prod.yml`(전달 헤더 미해석·flyway clean 비활성, 비밀값 없음), `PublicProfileGuard`(`prod`+`local`·`demo` 또는 `member` 없는 `prod`는 기동 실패). prod는 실메일 발송기(N1 결정 대기) 없이는 공개 배포 불가이며 Fake 메일 차단(L2)·compose(L8)는 후속. [기록](183-prod-profile-skeleton.md)
 - #186 → draft PR: G5 L4·L5 prod 웹 슬라이스 고정(결정 38-7·8, 테스트·문서만, #185 병합 뒤 develop 동기화). prod에서 CODEF 4경로 404·컨트롤러·가짜 게이트웨이 Bean 없음(`CodefPublicProfileWebTest`), `X-Forwarded-*`를 보내도 쿠키·본문·`Location` 불변과 `ForwardedHeaderFilter` 없음(`ForwardedHeadersPublicWebTest`). `docs/domains/codef.md` 공개(prod) 범위 절. 공개 전환은 별도 승인. [기록](186-prod-codef-forwarded-guards.md)
 - #189 → PR: 공개(prod) 프로필 가짜 메일 차단과 prod 통합 테스트(G5 L2·L3, #185 병합 뒤 develop 기준, 실메일 결정(N1) 전에는 prod 기동 불가, [기록](189-prod-public-guards.md))
+- #191 → draft PR: LP-4 prod에 CODEF 키·토큰 환경 변수가 있으면 기동 실패(결정 38-8, `PublicProfileGuard` 규칙 추가, 값 미열람, 공개 전환 승인 시 제거, [기록](191-prod-codef-env-guard.md))
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.

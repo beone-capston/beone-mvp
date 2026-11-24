@@ -368,7 +368,7 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
 공개 프로필 `prod`(회원 프로필 `member`를 프로필 그룹으로 함께 켬, #183)에서는 **CODEF 연결·조회 API를 등록하지 않습니다.** 결정 38-8에 따라 비공개 실연동 검증을 마치기 전에는 미등록이며, 공개 전환은 별도 승인으로만 합니다.
 
 - **지금 상태**: `CodefConnectionController`·`CodefSyncController`·`FakeCodefGateway`는 `@Profile({"local","demo"})` 그대로입니다. prod에서는 `GET`·`POST`·`DELETE /api/v1/me/codef/connection`, `POST /api/v1/me/codef/syncs` 네 경로가 세션 유무와 관계없이 404 `NOT_FOUND`이고, `CodefGateway`·`CodefSyncGateway` 구현 Bean이 없습니다. 이 동작을 바꾸는 제품 코드는 없으며 테스트로만 고정했습니다.
-- **기능 플래그 없음**: 설정 값 하나로 prod에서 CODEF를 여는 경로는 만들지 않습니다. `PublicProfileGuard`도 프로필 조합만 봅니다.
+- **기능 플래그 없음**: 설정 값 하나로 prod에서 CODEF를 여는 경로는 만들지 않습니다. `PublicProfileGuard`는 프로필 조합과 함께, `prod`에 CODEF 키·토큰 환경 변수 이름이 있으면 기동을 멈춥니다(값은 읽지 않음, #191, 아래 제약 절).
 - **현재 사용자 응답**: 연결 행이 생길 길이 없으므로 `GET /api/v1/me`의 `codefConnected`는 `false`입니다. member 프로필 값은 `MemberProfileIntegrationTest`가, prod 프로필 값은 `PublicProfileIntegrationTest`(G5 L3, #189)가 확인합니다.
 - **공개 전환 방식(미구현)**: 비공개 실연동 검증(사용자 PC의 로컬 환경, 실키·실계정은 별도 승인)과 공개 전환 승인 뒤, **코드 PR**로 `@Profile` 표현식을 바꾸고 아래 테스트의 기대값을 새 계약에 맞춰 고칩니다. 비공개 검증 환경과 전환 표현식의 모양은 결정 전입니다.
 - **테스트**: 웹 `CodefPublicProfileWebTest`(`@ActiveProfiles("prod")`, 4경로 404·no-store, 컨트롤러 2개·가짜 게이트웨이 Bean 없음, prod가 member로 펼쳐지고 local·demo는 꺼짐). 가짜 게이트웨이는 웹 슬라이스 스캔 대상이 아니라 `@Import`로 직접 넣어 프로필 조건으로 빠지는지 봅니다.
@@ -378,6 +378,7 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
 - 실적 기간·충족 여부·현재이용금액을 BeONE 상태값(`StateValue`, `StateSource.CODEF`)으로 바꾸는 것은 후보 매핑일 뿐 확정하지 않습니다(D-04: [결정 기록](../decisions.md)의 상태 출처 결정). 기관마다 전월·당월 제공 범위가 다르다는 문서 설명이 있습니다(비씨: 시작일자 기준 전월, 신한: 당월, 현대·롯데: 전월·당월).
 - 카드명·발급사로 실제 상품(SKU)을 확정하지 않습니다(D-01: [결정 기록](../decisions.md)의 카드 상품 식별 결정, `CANDIDATE` 유지).
 - 조회 가능 기간(예: 승인내역 국민·삼성 최근 12개월, 신한·롯데 최근 6개월 등)과 기관별 필수 파라미터는 문서 참고일 뿐 코드화하지 않았습니다.
+- 공개 프로필 `prod`에 CODEF 키·토큰 환경 변수(`CODEF_CLIENT_ID`, `CODEF_CLIENT_SECRET`, `BEONE_CODEF_APPROVAL_HMAC_KEY`, `BEONE_CODEF_CONNECTED_ID_KEY`)가 있으면 `PublicProfileGuard`가 기동을 멈춥니다(결정 38-8, #191). 값은 읽지 않고 메시지에 이름만 넣으며, 빈 값으로 선언만 해도 멈춥니다. 키는 비공개 검증 서버에만 둡니다. **공개 전환이 승인되면 이 규칙을 걷어내야 합니다.**
 - 취소 표현은 KB의 형태 기술만 있습니다([KB 문서](codef-kb.md#취소-표현-구분)). 실승인금액·승인과 취소의 매칭·원장·실적·한도 반영 규칙과 추가 분류는 만들지 않습니다. 성공 분류가 있어도 `data`를 계산에 쓸 수 있는지는 별도 판단입니다.
 
 ## 관련 문서
