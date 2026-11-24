@@ -19,3 +19,8 @@
 ## 2026-11-25 · #185 병합 뒤 develop 동기화
 - `origin/develop`(`875611d`)을 merge했습니다(rebase 없음). 충돌은 `docs/architecture.md`의 `common.config` 현재 범위 문장(develop 문장에 이번 prod 메일 상태를 반영)과 progress README 목록입니다.
 - `docs/architecture.md`·progress README는 PR #187(L4·L5)과도 겹칩니다. #187이 먼저 병합되면 다시 동기화가 필요할 수 있습니다.
+
+## 검증 기록
+- develop 동기화 뒤(`8d52959`): `./gradlew test webTest --rerun-tasks` 통과(단위 1424, 웹 427), 이어서 `./gradlew integrationTest --rerun-tasks`를 단독 실행해 통과(통합 196). 실패·skip 0.
+- 실행 전 `docker ps` 정상, deploy 컨테이너 4개 보존, 다른 suite 없음. 실행 중 컨테이너 메모리 합(deploy 4개 포함)을 2초마다 쟀고 peak 3,976MiB로 한도 4,760MiB를 넘지 않았습니다. 동기화 전 같은 실행의 peak는 3,979MiB, 새 통합 테스트 단독 실행 peak는 2,604MiB였습니다.
+- Testcontainers MySQL이 사라지는 간헐 실패는 이번에 나지 않았습니다. Docker 정리는 하지 않았습니다.
