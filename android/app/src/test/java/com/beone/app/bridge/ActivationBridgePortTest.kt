@@ -151,6 +151,34 @@ class ActivationBridgePortTest {
         assertEquals(state(false, 0, "NOT_AUTHENTICATED", false), send(AUTH_REQUEST))
     }
 
+    // #180 재현: 시계를 읽을 때마다 1ms씩 진행하는 단계 시계로, 상태를 읽은 뒤 남은 시간을 읽기 전에 만료 시점을 넘긴다.
+    // 기대값은 계약에서 정했다: 활성이면 남은 시간 > 0, 남은 시간 0이면 비활성(PRD §4.3, D-21 C3, 브리지 v1 B5).
+    // 시작 시점은 만료 2ms 전이므로 한 시점으로 계산하면 활성·남은 시간 1ms 또는 비활성·0 중 하나여야 한다.
+    @Test
+    fun stateAndRemainingComeFromOneClockReadWhenExpiryPassesBetweenReads() {
+        var clock = 1_000L
+        var tick = 0L
+        val steppingViewModel = VirtualCardActivationViewModel(
+            {
+                val read = clock
+                clock += tick
+                read
+            },
+            AuthResponseTimeouts(),
+        )
+        val port = ActivationBridgePort(steppingViewModel, FakeAuthenticator())
+        port.requestAuthentication()
+        steppingViewModel.onAuthOutcome(AuthOutcome.Succeeded(AuthMethod.BIOMETRIC))
+        val expiresAt = 1_000L + 60_000L
+        clock = expiresAt - 2
+        tick = 1
+
+        val bridge = port.currentState()
+
+        assertEquals("active=${bridge.active} remainingMs=${bridge.remainingMs}", bridge.active, bridge.remainingMs > 0L)
+        assertEquals(BridgeState(true, 1L, "ACTIVE", "BIOMETRIC", false), bridge)
+    }
+
     @Test
     fun jsObjectNameIsUserDecision() {
         // 사용자 결정 2026-11-16: window.BeoneBridge.postMessage(...)

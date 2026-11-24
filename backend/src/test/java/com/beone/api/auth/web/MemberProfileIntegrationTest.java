@@ -42,10 +42,10 @@ import org.springframework.test.context.ActiveProfiles;
  * <li>G1 D5 권장 4항: {@code /api/v1/me}·{@code /api/v1/me/**}의 응답(401·403·쿠키를 다시 심는 200·미등록 404)에는
  * {@code Cache-Control: no-store}가 붙는다. 인증 API와 같은 규칙이다(docs/api/auth.md)</li>
  * </ul>
- * member 프로필에 등록하지 않은 업무 API(모의 결제 3개·CODEF·시연 사용자 목록)는 404다. 모의 결제는 N-G3-2·D8 결정 대기로
- * 미등록이다. 월간 상태·결제 설정은 G3a, 주문·예정 소비·추천은 G3b, 원장 조회는 #165에서 등록했고
- * {@link MemberMonthlyStatePreferenceIntegrationTest}, {@link MemberOrderRecommendationIntegrationTest},
- * {@link MemberLedgerIntegrationTest}가 확인한다. 시계는 주입한 가변 시계로 서울 2026-11-18 10:00에서 시작한다.
+ * member 프로필에 등록하지 않은 업무 API(CODEF·시연 사용자 목록)는 404다. 월간 상태·결제 설정은 G3a, 주문·예정 소비·추천은 G3b,
+ * 원장 조회는 #165, 모의 결제 3개는 G3c(#161, 결정 38)에서 등록했고 {@link MemberMonthlyStatePreferenceIntegrationTest},
+ * {@link MemberOrderRecommendationIntegrationTest}, {@link MemberLedgerIntegrationTest},
+ * {@link MemberPaymentIntegrationTest}가 확인한다. 시계는 주입한 가변 시계로 서울 2026-11-18 10:00에서 시작한다.
  */
 @IntegrationTest
 @ActiveProfiles("member")
@@ -266,10 +266,9 @@ class MemberProfileIntegrationTest {
 	}
 
 	/**
-	 * member 프로필은 인증 9개·/me·보유 카드·월간 상태·결제 설정·주문·예정 소비·추천·원장 조회·상품 조회·health만 연다. 나머지
-	 * 업무 API는 로그인해도 404다. 모의 결제 3개(N-G3-2·D8 결정 대기), CODEF 4개(D9 미결)와 시연 사용자 목록(결정 37 D2·D4)은
-	 * 404로 남는다. 주문 경로는 POST만 있으므로 {@code GET /api/v1/me/orders}는 인증 전에 405 {@code METHOD_NOT_ALLOWED}다(docs/api.md
-	 * 공통 실패 응답).
+	 * member 프로필은 인증 9개·/me·보유 카드·월간 상태·결제 설정·주문·예정 소비·추천·원장 조회·모의 결제·상품 조회·health만 연다.
+	 * 나머지 업무 API는 로그인해도 404다. CODEF 4개(D9 미결)와 시연 사용자 목록(결정 37 D2·D4)은 404로 남는다. 주문 모음 경로는 GET(목록, 결정 38-5)·POST만 있으므로 {@code PUT}·{@code PATCH}·{@code DELETE /api/v1/me/orders}는
+	 * 인증 전에 405 {@code METHOD_NOT_ALLOWED}다(docs/api.md 공통 실패 응답). GET 목록은 로그인하면 200, 아니면 401이다.
 	 */
 	@Test
 	void onlyAllowedRoutesAreRegistered() throws Exception {
@@ -281,10 +280,7 @@ class MemberProfileIntegrationTest {
 		assertThat(products.getHeaders().getCacheControl()).isNull();
 		assertThat(send(HttpMethod.GET, "/actuator/health", a, null).getStatusCode().value()).isEqualTo(200);
 
-		String[][] closed = { { "GET", "/api/v1/demo-users" },
-				{ "POST", "/api/v1/me/orders/ord-1/simulated-payments" },
-				{ "GET", "/api/v1/me/simulated-payments/pay-1" },
-				{ "POST", "/api/v1/me/simulated-payments/pay-1/cancellations" }, { "GET", "/api/v1/me/codef/connection" },
+		String[][] closed = { { "GET", "/api/v1/demo-users" }, { "GET", "/api/v1/me/codef/connection" },
 				{ "POST", "/api/v1/me/codef/connection" }, { "DELETE", "/api/v1/me/codef/connection" },
 				{ "POST", "/api/v1/me/codef/syncs" } };
 		for (String[] route : closed) {
@@ -299,12 +295,22 @@ class MemberProfileIntegrationTest {
 				.value()).as("anonymous " + route[0] + " " + route[1]).isEqualTo(404);
 		}
 
-		// 목록 API가 없는 주문 경로의 GET은 핸들러가 없어 인터셉터 전에 405다. 로그인 여부와 관계없다
-		for (Session session : new Session[] { a, Session.NONE }) {
-			ResponseEntity<String> listOrders = send(HttpMethod.GET, "/api/v1/me/orders", session, null);
-			assertBody(listOrders, 405, METHOD_NOT_ALLOWED);
-			assertThat(listOrders.getHeaders().getAllow()).containsExactly(HttpMethod.POST);
-			assertNoStore(listOrders);
+		// 주문 목록 GET은 등록된 경로라 로그인하면 200, 아니면 401이다(결정 38-5)
+		ResponseEntity<String> listOrders = send(HttpMethod.GET, "/api/v1/me/orders", a, null);
+		assertThat(listOrders.getStatusCode().value()).isEqualTo(200);
+		assertNoStore(listOrders);
+		assertBody(send(HttpMethod.GET, "/api/v1/me/orders", Session.NONE, null), 401, UNAUTHENTICATED);
+
+		// 주문은 수정·삭제하지 않으므로 모음 경로의 PUT·PATCH·DELETE는 핸들러가 없어 인터셉터 전에 405다. 로그인 여부와 관계없다
+		for (HttpMethod method : new HttpMethod[] { HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE }) {
+			for (Session session : new Session[] { a, Session.NONE }) {
+				ResponseEntity<String> notAllowed = send(method, "/api/v1/me/orders", session, "{}");
+				assertBody(notAllowed, 405, METHOD_NOT_ALLOWED);
+				assertThat(notAllowed.getHeaders().getAllow()).as(method.name())
+					.contains(HttpMethod.GET, HttpMethod.POST)
+					.doesNotContain(HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE);
+				assertNoStore(notAllowed);
+			}
 		}
 	}
 

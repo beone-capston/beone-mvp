@@ -4,6 +4,10 @@
 
 공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 구현 상태는 [README](README.md#업무-api-1차-명세)의 상태 항목을 봅니다.
 
+프로필: 세 API는 `local`·`demo`와 로컬 회원 프로필 `member`에 등록돼 있습니다(G3c #161, 결정 38). 아래 `X-BeONE-Demo-User` 헤더는 `local`·`demo`의 방식입니다. `member`에서는 헤더 대신 회원 세션 쿠키(`__Host-BEONE_SESSION`)로 현재 사용자를 정하고 승인·취소 POST에 `X-CSRF-TOKEN`이 필요합니다. 검사 순서는 401 `UNAUTHENTICATED` → 403 `CSRF_INVALID` → 400 → 404 → 409이고 모든 응답에 `Cache-Control: no-store`가 붙습니다([회원 세션 규칙](../api.md#회원-세션member-프로필)). 401·403으로 거절된 요청은 결제·원장·멱등 키를 저장하지 않으므로 같은 키로 다시 보낼 수 있습니다. `Idempotency-Key`는 장부(`user_id`)마다 저장하므로 회원 A·B의 같은 키는 서로 독립입니다. 회원 1명은 '내 카드' 장부 1개만 가지므로 회원 환경에서는 장부 단위가 곧 회원 단위입니다(결정 38-2, [`decisions.md` 결정 38](../decisions.md#결정-38-g3-회원-모의-결제와-승인-흐름)). 다른 회원의 주문·결제·추천은 없는 것과 같은 404입니다. `member`에서는 `simulateFailure: true`만 400 `INVALID_REQUEST`이고 주문·결제·원장·멱등 키를 저장하지 않습니다. `false`와 미입력은 정상 승인입니다(결정 38-1).
+
+화면 흐름: 회원 화면은 승인 후 결과만 보여 주는 흐름을 유지합니다(결정 38-4). 서버는 승인할 때 추천을 다시 계산해 카드를 정하므로, 화면이 승인 전에 추천을 보여 주지 않아도 승인할 수 있습니다. `seenRecommendationId`는 선택 필드이며, 화면이 보내지 않으면 비교 없이 승인하고 `recalculation.changed=null`입니다. 이것은 결함이 아닙니다.
+
 ## POST /api/v1/me/orders/{orderId}/simulated-payments — 모의 승인 요청
 
 - [1차] 주문을 서버가 다시 계산해 모의 승인하고 원장에 한 번만 기록한다. 사용자가 본 추천과 다르면 차이를 담는다(D-14 ⑥⑦).
@@ -45,7 +49,7 @@ Idempotency-Key: 6f1c2a9e-3b7d-4c10-9e55-2d4b8a7f0c31
 }
 ```
 
-- `simulateFailure` · Boolean · 선택. `true`면 내부 테스트 실패를 일으킨다(D-23). `local`·`demo` 프로필에서만 받고 그 밖에는 400 `INVALID_REQUEST`다. 카드사 거절이 아니다.
+- `simulateFailure` · Boolean · 선택. `true`면 내부 테스트 실패를 일으킨다(D-23). `true`는 `local`·`demo` 프로필에서만 받고 그 밖(`member` 포함)에서는 400 `INVALID_REQUEST`다. `false`와 미입력은 모든 프로필에서 정상이다(2026-11-24 보충, 결정 38-1). 카드사 거절이 아니다.
 
 #### 필수 필드
 
@@ -132,6 +136,7 @@ seenRecommendationId
 - **400 `INVALID_REQUEST`**: 요청값이 올바르지 않은 경우
   - `Idempotency-Key` 누락
   - `local`·`demo` 프로필 밖에서 `simulateFailure` 사용
+    - 2026-11-24 보충(결정 38-1): `member`는 `true`만 400이고 저장하지 않는다. `false`·미입력은 정상이다.
 
 - **404 `ORDER_NOT_FOUND`**: 없거나 다른 사용자의 주문
 

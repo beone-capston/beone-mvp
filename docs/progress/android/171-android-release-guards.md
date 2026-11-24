@@ -31,6 +31,7 @@ U5 기대값은 구현이 아니라 계약에서 정했습니다. 활성 시간�
 ### 발견한 것(고치지 않음)
 
 - U5의 고정 시계 테스트는 통과합니다. 다만 [`ActivationBridgePort.currentState`](../../../android/app/src/main/java/com/beone/app/bridge/ActivationBridgePort.kt)는 활성 상태와 남은 시간을 시계를 두 번 읽어 구합니다. 첫 읽기에서 활성(남은 1ms)이고 두 번째 읽기 전에 1ms가 지나면 `active=true`·`remainingMs=0`이 만들어질 수 있음을 커밋하지 않은 임시 테스트로 확인했습니다. 실기기에서 관측한 것은 아니며, 제품 코드 변경이 필요하므로 이 작업에서 다루지 않았습니다.
+  - [#180](https://github.com/beone-capston/beone-mvp/issues/180)에서 수정([단계 기록](180-activation-state-snapshot.md)).
 
 ### 범위 밖으로 남긴 것
 
