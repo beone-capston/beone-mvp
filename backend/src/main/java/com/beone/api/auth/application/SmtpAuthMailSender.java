@@ -11,8 +11,9 @@ import org.springframework.mail.javamail.JavaMailSender;
 /**
  * 인증 메일을 SMTP로 보낸다(N1, 결정 39-6). 공개 프로필 {@code prod}에서만 {@link SmtpMailConfiguration}이 만든다.
  *
- * <p>본문 링크는 설정한 기준 주소(N2 권장안: 요청의 Host 헤더를 쓰지 않음)에 화면 경로와 토큰을 붙인다. 토큰은 URL 조각({@code #token=})에 두어
- * 웹 서버 접근 로그·Referer에 실리지 않게 한다. 화면 경로와 토큰 위치는 결정 28의 미결 항목이라 바뀔 수 있다.
+ * <p>본문 링크는 설정한 기준 주소(N2 권장안: 요청의 Host 헤더를 쓰지 않음)에 화면 경로와 토큰을 붙인다. 경로와 토큰 위치는 frontend의 기존
+ * 화면 계약(query 방식 {@code /password-reset?token=}, {@code /email-verification?token=})을 따른다. query 토큰은 공개 프록시 접근
+ * 로그에 남을 수 있어, URL 조각({@code #token=})으로 바꿀지는 frontend와 함께 정할 결정 28·N2 후속 과제다.
  *
  * <p>발송이 실패해도 예외를 밖으로 던지지 않고 다시 보내지 않는다. 가입·재요청·재설정 요청은 실제 발송 여부와 관계없이 같은 202이고 메일 도착을
  * 보장하지 않는다는 기존 계약(docs/api/auth.md)을 그대로 따른다. 실패 로그에는 목적, 마스킹한 수신자, 예외 종류만 남기고 토큰·링크·예외 문구는
@@ -20,11 +21,11 @@ import org.springframework.mail.javamail.JavaMailSender;
  */
 public class SmtpAuthMailSender implements AuthMailSender {
 
-	/** 이메일 인증 화면 경로. 결정 28의 미결 항목이다. */
-	static final String VERIFICATION_PATH = "/verify-email#token=";
+	/** 이메일 인증 화면 경로(frontend 계약, query 토큰). */
+	static final String VERIFICATION_PATH = "/email-verification?token=";
 
-	/** 비밀번호 재설정 화면 경로. 결정 28의 미결 항목이다. */
-	static final String PASSWORD_RESET_PATH = "/reset-password#token=";
+	/** 비밀번호 재설정 화면 경로(frontend {@code AuthEntry}의 기존 계약, query 토큰). */
+	static final String PASSWORD_RESET_PATH = "/password-reset?token=";
 
 	private static final Logger log = LoggerFactory.getLogger(SmtpAuthMailSender.class);
 

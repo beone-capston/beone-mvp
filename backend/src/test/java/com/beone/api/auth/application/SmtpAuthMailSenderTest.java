@@ -55,7 +55,7 @@ class SmtpAuthMailSenderTest {
 	}
 
 	@Test
-	void verificationMailCarriesHeadersAndLinkWithTokenInFragment() throws Exception {
+	void verificationMailCarriesHeadersAndLinkWithTokenInQuery() throws Exception {
 		sender(this.smtp.port()).send(new AuthMail(TO, AuthTokenPurpose.EMAIL_VERIFICATION, TOKEN));
 
 		SmtpStubServer.Received mail = this.smtp.received().getFirst();
@@ -65,7 +65,7 @@ class SmtpAuthMailSenderTest {
 		assertThat(((InternetAddress) message.getFrom()[0]).getAddress()).isEqualTo("no-reply@beone.example.test");
 		assertThat(((InternetAddress) message.getAllRecipients()[0]).getAddress()).isEqualTo(TO);
 		assertThat(message.getSubject()).isEqualTo("[BeONE] 이메일 인증을 완료해 주세요");
-		assertThat(mail.text()).contains(BASE + "/verify-email#token=" + TOKEN).contains("30분");
+		assertThat(mail.text()).contains(BASE + "/email-verification?token=" + TOKEN).contains("30분");
 	}
 
 	@Test
@@ -74,8 +74,8 @@ class SmtpAuthMailSenderTest {
 
 		SmtpStubServer.Received mail = this.smtp.received().getFirst();
 		assertThat(mail.message().getSubject()).isEqualTo("[BeONE] 비밀번호 재설정 안내");
-		assertThat(mail.text()).contains(BASE + "/reset-password#token=" + TOKEN).contains("15분")
-			.doesNotContain("/verify-email");
+		assertThat(mail.text()).contains(BASE + "/password-reset?token=" + TOKEN).contains("15분")
+			.doesNotContain("/email-verification");
 	}
 
 	@Test

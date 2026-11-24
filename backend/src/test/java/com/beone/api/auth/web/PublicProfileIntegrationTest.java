@@ -58,7 +58,7 @@ class PublicProfileIntegrationTest {
 	private static final SmtpStubServer SMTP = new SmtpStubServer();
 
 	private static final Pattern VERIFICATION_TOKEN = Pattern
-		.compile("https://beone\\.example\\.test/verify-email#token=([A-Za-z0-9_-]{43})");
+		.compile("https://beone\\.example\\.test/email-verification\\?token=([A-Za-z0-9_-]{43})");
 
 	private static final Instant START = Instant.parse("2026-11-18T01:00:00Z");
 
