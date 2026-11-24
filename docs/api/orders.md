@@ -184,6 +184,120 @@ X-BeONE-Demo-User: MY_CARDS
 
 - 결정 기록 D-14
 
+## GET /api/v1/me/orders — 내 주문 목록 조회
+
+- [결정 38-5] 현재 사용자가 저장한 주문을 최신순으로 나눠 조회한다. 수정·삭제·상태 필터는 없다.
+- **계약 초안(#178, 구현 전 관리자 확인 대기).** 확인 전까지 이 경로는 위 프로필 설명대로 405다.
+
+현재 사용자 장부(`user_id`)의 주문을 최신순으로 한 페이지씩 돌려주는 API.
+
+### 대상
+
+- 현재 사용자 장부의 주문만 담는다. `local`·`demo`는 `X-BeONE-Demo-User` 헤더로, `member`는 회원 세션으로 사용자를 정한다.
+- 다른 사용자의 주문은 담지 않는다. `member`에서 시연 장부(`MY_CARDS` 등)의 주문은 보이지 않는다. 회원과 시연 사용자는 장부가 다르기 때문이다(결정 37·38-2).
+- 모든 상태(`CREATED`·`PAID`·`CANCELLED`)를 담는다. 상태 필터는 두지 않는다(필요하면 후속).
+
+### Request Header
+
+```text
+X-BeONE-Demo-User: MY_CARDS
+```
+
+### Path / Query Parameter
+
+- `page` · Query · 정수 · 선택 · 0부터 센다. 기본 `0`, 허용 `0`~`1000`
+- `size` · Query · 정수 · 선택 · 한 페이지 건수. 기본 `20`, 허용 `1`~`50`
+
+두 값은 십진 숫자만 받는다(`0`, `7`, `50`). 빈 값, 부호·공백·소수점이 붙은 값, 앞자리 0(`07`), 같은 이름을 두 번 보낸 경우, 허용 범위 밖의 값은 400 `INVALID_REQUEST`다. 그 밖의 쿼리 이름은 무시한다.
+
+### 정렬
+
+`createdAt` 내림차순이고, 같은 시각이면 주문 번호(`orderId`의 숫자) 내림차순이다. 같은 데이터에 같은 요청이면 항상 같은 순서·같은 페이지를 돌려준다.
+
+### Request Body
+
+없음.
+
+### Response Body
+
+성공: **200 OK**
+
+```json
+{
+  "data": {
+    "items": [
+      {
+        "orderId": "ord-5002",
+        "amountWon": 4500,
+        "orderDate": "2026-11-03",
+        "merchantName": null,
+        "merchantClass": "CU_STORE",
+        "status": "CREATED",
+        "createdAt": "2026-11-03T11:02:00+09:00",
+        "simulatedPaymentId": null
+      },
+      {
+        "orderId": "ord-5001",
+        "amountWon": 10000,
+        "orderDate": "2026-11-03",
+        "merchantName": "스타벅스 송도점",
+        "merchantClass": "STARBUCKS_STORE",
+        "status": "PAID",
+        "createdAt": "2026-11-03T10:40:00+09:00",
+        "simulatedPaymentId": "pay-7001"
+      }
+    ],
+    "page": 0,
+    "size": 20,
+    "hasNext": false
+  }
+}
+```
+
+#### 응답 필드
+
+- `items[]` · 목록용 요약. 각 필드의 뜻과 형식은 [주문 상세 조회](#get-apiv1meordersorderid--주문-상세-조회)와 같고, 값이 없는 필드도 `null`로 쓴다
+  - 담는 필드: `orderId`, `amountWon`, `orderDate`, `merchantName`, `merchantClass`, `status`, `createdAt`, `simulatedPaymentId`
+  - 빼는 필드: `orderTime`, `paymentMethod`, `latestRecommendationId`. 상세 화면에서만 필요하고, `latestRecommendationId`는 주문마다 추천을 따로 찾아야 해서 목록에 넣지 않는다. 필요하면 상세 조회를 부른다
+- `page` · Number · 요청에 적용한 페이지 번호(생략하면 `0`)
+- `size` · Number · 요청에 적용한 페이지 크기(생략하면 `20`). 실제 `items` 건수는 이보다 적을 수 있다
+- `hasNext` · Boolean · 다음 페이지에 주문이 더 있으면 `true`
+- 전체 건수(`totalCount`)는 주지 않는다. 화면은 `hasNext`로 "더 보기"를 정한다
+- 주문이 없거나 마지막 페이지를 지나면 200과 `items: []`, `hasNext: false`다(404 아님)
+
+### 페이지 방식을 고른 이유(page·size)
+
+- 커서 방식은 `createdAt`과 주문 번호를 묶은 불투명 커서의 인코딩·검증·변조 처리가 필요하다. page·size는 정수 두 개 검사로 끝나고 Spring Data `Slice`로 바로 구현된다.
+- MVP의 사용자별 주문 수는 작아 오프셋 비용이 문제 되지 않는다.
+- 한계: 페이지를 넘기는 사이 새 주문이 생기면 다음 페이지에 앞 페이지의 마지막 주문이 다시 보일 수 있다(최신순이라 새 주문이 앞에 끼므로). 화면은 `orderId`로 중복을 걸러 낸다. 주문은 삭제하지 않으므로 빠지는 주문은 없다.
+
+### member 프로필 규칙
+
+- 검사 순서는 401 `UNAUTHENTICATED` → 400이다. GET이라 CSRF 토큰을 보지 않는다. 세션이 없으면 파라미터가 틀려도 401이다.
+- 성공·실패 모든 응답에 `Cache-Control: no-store`가 붙는다([회원 세션 규칙](../api.md#회원-세션member-프로필)).
+
+### 다른 메서드
+
+`PUT`·`PATCH`·`DELETE /api/v1/me/orders`는 계속 405 `METHOD_NOT_ALLOWED`다. 주문은 수정·삭제하지 않는다.
+
+### 실패 응답
+
+- **400 `INVALID_REQUEST`**: 요청값이 올바르지 않은 경우
+  - `page`·`size` 형식 오류·범위 밖. `errors`에 `{"field": "page" 또는 "size", "message": "형식이 올바르지 않습니다."}`를 담고 입력 원문은 남기지 않는다
+
+- **401 `UNAUTHENTICATED`**: `member`에서 회원 세션이 없거나 만료된 경우
+
+- **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
+
+### 구현 메모(초안)
+
+- 인덱스: 기존 `idx_orders_user_id`로 사용자 행을 좁힌 뒤 정렬한다. MVP 규모에서는 새 Flyway 인덱스를 추가하지 않는 안을 제안한다.
+
+### 근거
+
+- 결정 38-5
+- 결정 기록 D-09(현재 사용자 범위), 결정 37(회원과 업무 장부 연결)
+
 ## GET /api/v1/me/planned-spends — 예정 소비 조회
 
 - [1차] 예정 소비 목록을 조회한다. 1차에서는 월간 합계 계산에 쓰지 않는다(D-18 K4).
