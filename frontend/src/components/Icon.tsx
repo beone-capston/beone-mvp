@@ -1,7 +1,7 @@
 export function Icon({
   name,
 }: {
-  name: 'plus' | 'more' | 'card' | 'benefit' | 'simulation' | 'chevron' | 'check'
+  name: 'plus' | 'more' | 'card' | 'benefit' | 'simulation' | 'chevron' | 'check' | 'search'
 }) {
   const paths = {
     plus: 'M12 4v16M4 12h16',
@@ -11,6 +11,7 @@ export function Icon({
     simulation:
       'm9 8 7 4-7 4V8ZM5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z',
     chevron: 'm6 9 6 6 6-6',
+    search: 'M21 21l-5-5m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z',
     check: 'm5 12 4 4L19 6',
   }
   return (

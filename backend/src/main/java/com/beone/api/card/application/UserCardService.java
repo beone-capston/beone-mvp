@@ -86,6 +86,8 @@ public class UserCardService {
 	/**
 	 * 현재 사용자 표시 정보, 해제하지 않은 보유 카드 수, CODEF 연결 여부. 연결 여부는 codef의 연결 행 존재다({@link CodefConnectionLookup},
 	 * #136).
+	 * @param user 현재 사용자
+	 * @return 사용자 요약
 	 */
 	@Transactional(readOnly = true)
 	public CurrentUserSummary summarize(CurrentUser user) {
@@ -94,7 +96,11 @@ public class UserCardService {
 				this.connectionLookup.get().isConnected(user));
 	}
 
-	/** 해제하지 않은 보유 카드를 등록 순으로 돌려준다(결정 27 A2-2). */
+	/**
+	 * 해제하지 않은 보유 카드를 등록 순으로 돌려준다(결정 27 A2-2).
+	 * @param user 현재 사용자
+	 * @return 보유 카드 목록
+	 */
 	@Transactional(readOnly = true)
 	public List<UserCardView> list(CurrentUser user) {
 		return this.userCardRepository.findByUserIdAndReleasedAtIsNullOrderByUserCardIdAsc(user.userId())
@@ -105,6 +111,9 @@ public class UserCardService {
 
 	/**
 	 * 보유 카드를 수동 등록한다.
+	 * @param user 현재 사용자
+	 * @param card 등록할 카드 입력
+	 * @return 등록한 카드
 	 * @throws PortfolioReadOnlyException 가상 포트폴리오 사용자
 	 * @throws CardProductNotFoundException 지원하지 않는 상품
 	 * @throws UserCardDuplicatedException 같은 상품의 {@code USER_CONFIRMED} 카드가 이미 있음
@@ -129,6 +138,10 @@ public class UserCardService {
 
 	/**
 	 * 매핑을 확인·변경한다. 같은 카드를 같은 상품으로 다시 확인하면 확인 시각만 바뀐다(결정 27 A2-8).
+	 * @param user 현재 사용자
+	 * @param userCardId 보유 카드 ID 외부 표현
+	 * @param change 매핑 변경 입력
+	 * @return 바뀐 카드와 무효화 목록
 	 * @throws PortfolioReadOnlyException 가상 포트폴리오 사용자
 	 * @throws UserCardNotFoundException 없거나 다른 사용자·해제한 카드
 	 * @throws CandidateMismatchException {@code CODEF_CANDIDATE}인데 현재 후보와 다름
@@ -160,6 +173,10 @@ public class UserCardService {
 
 	/**
 	 * 표시 이름·추천 제외를 바꾼다. 추천 제외 값이 실제로 바뀔 때만 무효화 목록을 담는다(docs/api/cards.md).
+	 * @param user 현재 사용자
+	 * @param userCardId 보유 카드 ID 외부 표현
+	 * @param change 표시 이름·추천 제외 변경 입력
+	 * @return 바뀐 카드와 무효화 목록
 	 * @throws PortfolioReadOnlyException 가상 포트폴리오 사용자
 	 * @throws UserCardNotFoundException 없거나 다른 사용자·해제한 카드
 	 */
@@ -186,6 +203,8 @@ public class UserCardService {
 
 	/**
 	 * 등록을 해제한다. 행을 지우지 않고 해제 시각을 남긴다. 이미 해제한 카드는 없는 카드다(D-23).
+	 * @param user 현재 사용자
+	 * @param userCardId 보유 카드 ID 외부 표현
 	 * @throws PortfolioReadOnlyException 가상 포트폴리오 사용자
 	 * @throws UserCardNotFoundException 없거나 다른 사용자·이미 해제한 카드
 	 */

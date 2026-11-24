@@ -14,6 +14,12 @@ import com.beone.api.benefit.card.CardId;
  * 생성 시 보유 카드 중복, 동일 카드의 월간 상태 중복, 비보유 카드의 월간 상태, 보유하지 않은 대표 카드를 거부한다.
  *
  * @param referenceDate 상태를 판단하는 기준일(시나리오 시계). 주문일은 이보다 늦을 수 있다
+ * @param order 현재 주문
+ * @param cards 보유 카드 목록
+ * @param ledger 원장
+ * @param states 카드별 월간 상태
+ * @param plannedSpendings 예정 소비 목록
+ * @param preference 카드 선택 설정
  */
 public record RecommendationInput(LocalDate referenceDate, Order order, List<HeldCard> cards, Ledger ledger,
 		List<CardMonthlyState> states, PlannedSpendings plannedSpendings, SelectionPreference preference) {

@@ -4,6 +4,8 @@ import java.util.List;
 
 /**
  * 한 번의 최적화에 쓰는 예정 소비 목록. 최대 {@value #MAX_COUNT}건이다(PRD FR-04).
+ *
+ * @param items 예정 소비 목록
  */
 public record PlannedSpendings(List<PlannedSpending> items) {
 

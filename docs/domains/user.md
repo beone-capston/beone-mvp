@@ -20,7 +20,7 @@
 구현하지 않은 범위:
 
 - 회원 가입·로그인·세션 자체는 [auth](auth.md) 패키지가 맡습니다. `FORBIDDEN` 오류 코드는 자리만 예약했습니다.
-- 회원용 가상 포트폴리오(결정 37 D1b), 회원 탈퇴 때 장부 처리(D10), 공개 프로필 구성(O1). `local`·`demo`·`member` 밖에서는 현재 사용자 결정 부품이 등록되지 않습니다.
+- 회원용 가상 포트폴리오(결정 37 D1b, 결정 38-3으로 후순위), 회원 탈퇴 때 장부 처리(D10), 공개 프로필 구성(O1). `local`·`demo`·`member` 밖에서는 현재 사용자 결정 부품이 등록되지 않습니다.
 
 ## 핵심 용어
 
@@ -109,7 +109,7 @@ class UserCardController {
 }
 ```
 
-- `CurrentUserResolver`는 `local`·`demo`, `MemberCurrentUserResolver`는 `member`에서만 등록됩니다. `CurrentUser`를 받는 컨트롤러는 이 중 열 프로필로 제한합니다. `member`에 여는 업무 API는 지금 `/api/v1/me`, 보유 카드(#157), 월간 상태·결제 전 설정(G3a #159), 주문·예정 소비·추천(G3b #160), 모의 결제·원장(G3c #161)입니다(결정 37). CODEF와 시연 사용자 목록은 `member`에 열지 않습니다(D9, 결정 37 D2·D4).
+- `CurrentUserResolver`는 `local`·`demo`, `MemberCurrentUserResolver`는 `member`에서만 등록됩니다. `CurrentUser`를 받는 컨트롤러는 이 중 열 프로필로 제한합니다. `member`에 여는 업무 API는 지금 `/api/v1/me`, 보유 카드(#157), 월간 상태·결제 전 설정(G3a #159), 주문·예정 소비·추천(G3b #160), 원장 조회(#165), 모의 결제(G3c #161, 결정 38)입니다(결정 37).
 - 기능 오류는 이 패키지의 `DemoUserExceptionHandler`처럼 기능 패키지에 예외와 `@Order`를 붙인 처리기를 둡니다([기능별 오류 처리](../api.md#기능별-오류-처리)). 공통 업무 예외는 두지 않습니다.
 
 ## 프로필과 CORS

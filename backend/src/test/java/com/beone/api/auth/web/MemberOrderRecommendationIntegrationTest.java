@@ -10,13 +10,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import com.beone.api.auth.web.MemberApiTestClient.Session;
 import com.beone.api.order.application.NewOrder;
+import com.beone.api.order.application.OrderClock;
 import com.beone.api.order.application.OrderService;
 import com.beone.api.order.application.PaymentMethod;
 import com.beone.api.recommendation.application.RecommendationService;
@@ -52,8 +52,8 @@ import tools.jackson.databind.json.JsonMapper;
  * 컨텍스트를 만들지 않도록 {@link MemberProfileIntegrationTest}와 같은 프로필·가변 시계 조합을 쓴다. 시계는 서울 2026-11-18 10:00에서
  * 시작한다.
  *
- * <p>예정 소비 날짜({@code THIS_MONTH})는 클래스 로드 시점의 서울 날짜로 정하고, 주문 쪽 {@code OrderClock}은 요청 시점의 시스템 시계를
- * 쓴다. 둘 사이에 서울 기준 달이 바뀌면 {@code plannedDate} 400이 나므로 월 경계 자정 근처 실행은 피함(그때 실패하면 다시 실행한다).
+ * <p>예정 소비 날짜는 서버가 허용 범위를 판정하는 {@link OrderClock} 빈으로 요청 직전에 계산한다. 제품 시계를 바꾸지 않으므로 새 테스트
+ * 컨텍스트가 생기지 않는다.
  */
 @IntegrationTest
 @ActiveProfiles("member")
@@ -82,15 +82,9 @@ class MemberOrderRecommendationIntegrationTest {
 			{"amountWon":100000,"orderDate":"2026-11-18","merchantName":"동네 마트",
 			 "merchantClass":"ORDINARY_DOMESTIC","paymentMethod":"DIRECT"}""";
 
-	/**
-	 * 주문·예정 소비의 생성 시각과 "이번 달"은 order 패키지 자체 시계({@code OrderClock}, 시스템 시계)를 따른다. 가변 시계를 쓰지 않으므로
-	 * 예정 소비 날짜는 실행일 기준 서울의 이번 달·다음 달 1일로 만든다.
-	 */
-	private static final LocalDate THIS_MONTH = LocalDate.now(ZoneId.of("Asia/Seoul")).withDayOfMonth(1);
-
 	private static final String PLANNED_ITEMS = """
 			{"items":[{"plannedDate":"%s","amountWon":30000,"merchantClass":"STARBUCKS_STORE",
-			 "paymentMethod":"DIRECT","merchantName":"스타벅스"}]}""".formatted(THIS_MONTH);
+			 "paymentMethod":"DIRECT","merchantName":"스타벅스"}]}""";
 
 	// 전월 실적만 보내면 매핑 확인 없이 저장한다(docs/api/monthly-states.md 409 설명)
 	private static final String PERFORMANCE_STATE = """
@@ -115,6 +109,10 @@ class MemberOrderRecommendationIntegrationTest {
 
 	@Autowired
 	RecommendationService recommendationService;
+
+	/** 주문·예정 소비의 생성 시각과 "이번 달"은 가변 시계가 아니라 order 패키지 자체 시계(시스템 시계)를 따른다. */
+	@Autowired
+	OrderClock orderClock;
 
 	private MemberApiTestClient members;
 
@@ -219,11 +217,12 @@ class MemberOrderRecommendationIntegrationTest {
 		assertBody(empty, 200, EMPTY_PLANNED);
 		assertNoStore(empty);
 
-		ResponseEntity<String> saved = send(HttpMethod.PUT, PLANNED, a, PLANNED_ITEMS);
+		LocalDate thisMonth = thisMonth();
+		ResponseEntity<String> saved = send(HttpMethod.PUT, PLANNED, a, PLANNED_ITEMS.formatted(thisMonth));
 		String expected = """
 				{"data":{"items":[{"plannedSpendId":"%s","plannedDate":"%s","amountWon":30000,
 				 "merchantClass":"STARBUCKS_STORE","paymentMethod":"DIRECT","merchantName":"스타벅스","plannedTime":null}],
-				 "usedInRecommendation":false}}""".formatted(plannedSpendId(saved), THIS_MONTH);
+				 "usedInRecommendation":false}}""".formatted(plannedSpendId(saved), thisMonth);
 		assertBody(saved, 200, expected);
 		assertNoStore(saved);
 		assertBody(send(HttpMethod.GET, PLANNED, a, null), 200, expected);
@@ -271,6 +270,40 @@ class MemberOrderRecommendationIntegrationTest {
 		assertThat(countDemo("recommendations")).isEqualTo(demoRecommendations);
 	}
 
+	/**
+	 * 웹 화면의 '가상 포트폴리오' 탭이 보내는 {@code VIRTUAL_PORTFOLIO} 헤더를 붙인 주문도 회원의 '내 카드'(REAL) 장부에 저장하고, 시연 가상
+	 * 포트폴리오 장부에는 저장하지 않는다(결정 37 D4, G4 조사 M4). 회원 가상 포트폴리오(D1b)는 미결(N-G3-1)이라 회원 장부는 하나다.
+	 */
+	@Test
+	void virtualPortfolioDemoHeaderOrderIsStoredInMemberMyCardsLedger() {
+		Session a = this.members.loginNew(MEMBER_A, "a@example.com");
+		int demoVirtualOrders = countDemoUser("orders", "VIRTUAL_PORTFOLIO");
+		int demoMyCardsOrders = countDemoUser("orders", "MY_CARDS");
+
+		ResponseEntity<String> created = this.members.sendWithDemoHeader(HttpMethod.POST, ORDERS, a, ORDER,
+				"VIRTUAL_PORTFOLIO");
+		assertThat(created.getStatusCode().value()).isEqualTo(201);
+		assertNoStore(created);
+		String orderId = field(created, "orderId");
+
+		// 저장된 행의 장부는 회원 A의 REAL 장부다
+		Map<String, Object> owner = this.jdbcTemplate.queryForMap(
+				"SELECT u.member_id, u.demo_user, u.portfolio_type FROM orders o JOIN users u ON u.user_id = o.user_id"
+						+ " WHERE o.order_id = ?",
+				Long.parseLong(orderId.substring("ord-".length())));
+		assertThat(owner).containsEntry("member_id", MEMBER_A)
+			.containsEntry("demo_user", null)
+			.containsEntry("portfolio_type", "REAL");
+		assertThat(countOf("orders", MEMBER_A)).isOne();
+		assertThat(countDemoUser("orders", "VIRTUAL_PORTFOLIO")).isEqualTo(demoVirtualOrders);
+		assertThat(countDemoUser("orders", "MY_CARDS")).isEqualTo(demoMyCardsOrders);
+
+		// 헤더 없이도, 다른 시연 헤더로도 같은 회원 장부에서 읽힌다
+		assertThat(send(HttpMethod.GET, ORDERS + "/" + orderId, a, null).getStatusCode().value()).isEqualTo(200);
+		assertThat(this.members.getWithDemoHeader(ORDERS + "/" + orderId, a, "MY_CARDS").getStatusCode().value())
+			.isEqualTo(200);
+	}
+
 	/** 쿠키가 없거나 익명 CSRF 세션이면 6개 경로 모두 401이고, 401이 CSRF 403·본문 400보다 먼저다. */
 	@Test
 	void unauthenticatedRequestsAreUnauthorizedBeforeCsrfAndBodyValidation() {
@@ -298,7 +331,8 @@ class MemberOrderRecommendationIntegrationTest {
 	void writesWithoutValidCsrfAreForbiddenAndStoreNothing() {
 		Session a = this.members.loginNew(MEMBER_A, "a@example.com");
 		String orderId = createOrder(a);
-		assertThat(send(HttpMethod.PUT, PLANNED, a, PLANNED_ITEMS).getStatusCode().value()).isEqualTo(200);
+		assertThat(send(HttpMethod.PUT, PLANNED, a, PLANNED_ITEMS.formatted(thisMonth())).getStatusCode().value())
+			.isEqualTo(200);
 		String plannedBefore = send(HttpMethod.GET, PLANNED, a, null).getBody();
 		Session noToken = a.withoutCsrf();
 		Session wrongToken = new Session(a.id(), "x".repeat(43));
@@ -329,7 +363,7 @@ class MemberOrderRecommendationIntegrationTest {
 		for (ResponseEntity<String> response : List.of(send(HttpMethod.POST, ORDERS, a, "{\"amountWon\":0}"),
 				send(HttpMethod.PUT, PLANNED, a, "{}"), send(HttpMethod.PUT, PLANNED, a, """
 						{"items":[{"plannedDate":"%s","amountWon":1,"merchantClass":"STARBUCKS_STORE",
-						 "paymentMethod":"DIRECT"}]}""".formatted(THIS_MONTH.plusMonths(1))))) {
+						 "paymentMethod":"DIRECT"}]}""".formatted(thisMonth().plusMonths(1))))) {
 			assertThat(response.getStatusCode().value()).isEqualTo(400);
 			assertThat(response.getBody()).contains("\"code\":\"INVALID_REQUEST\"");
 			assertNoStore(response);
@@ -408,6 +442,11 @@ class MemberOrderRecommendationIntegrationTest {
 		return card;
 	}
 
+	/** 서버가 예정 소비 허용 범위를 판정하는 시계와 같은 시계로 계산한 서울 기준 이번 달 1일. */
+	private LocalDate thisMonth() {
+		return this.orderClock.currentMonth().atDay(1);
+	}
+
 	private String createOrder(Session session) {
 		ResponseEntity<String> created = send(HttpMethod.POST, ORDERS, session, ORDER);
 		assertThat(created.getStatusCode().value()).isEqualTo(201);
@@ -443,6 +482,12 @@ class MemberOrderRecommendationIntegrationTest {
 		return this.jdbcTemplate.queryForObject(
 				"SELECT COUNT(*) FROM " + table + " t JOIN users u ON u.user_id = t.user_id WHERE u.member_id IS NULL",
 				Integer.class);
+	}
+
+	private int countDemoUser(String table, String demoUser) {
+		return this.jdbcTemplate.queryForObject(
+				"SELECT COUNT(*) FROM " + table + " t JOIN users u ON u.user_id = t.user_id WHERE u.demo_user = ?",
+				Integer.class, demoUser);
 	}
 
 	private ResponseEntity<String> send(HttpMethod method, String path, Session session, String body) {

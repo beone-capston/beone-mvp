@@ -2,6 +2,8 @@
 
 브랜치 `feat/161-member-payment-ledger`, 시작 기준 `origin/feat/160-member-order-recommendation` `a2a326a`(G3b). #158·G3a·G3b가 `develop`에 병합되기 전이라 PR은 열지 않았습니다. 병합 뒤 관리자 지시에 따라 `origin/develop`을 merge하고 `develop` 대상 PR을 엽니다.
 
+2026-11-24 보충: 원장 조회 등록은 #165로 분리돼 #168로 `develop`에 병합됐습니다. 이 PR에는 모의 결제 묶음만 남았습니다(아래 마지막 절).
+
 ## 2026-11-24 · `payment`·`ledger` 컨트롤러 프로필, `simulateFailure` 400, 테스트·문서
 
 - 근거: 결정 36·37, 결정 32 Q4, G3 명세 패키지 1-3절(`simulateFailure`), 3절(멱등성), 4-2절(세션 만료 다단계), 5절, 6절 3번(PR-G3c, endpoint #12~15).
@@ -35,3 +37,16 @@
   - N-G3-2(`member`의 `simulateFailure` 허용 여부) 사용자 확인. 결과가 다르면 정책 객체와 테스트 기대값을 고칩니다.
   - N-G3-3(D8 표기), N-G3-4(Q4 재검토 시점)
   - #158·G3a·G3b 병합 뒤 `origin/develop` merge와 PR
+
+## 2026-11-24 · `origin/develop` merge, 결정 38 반영, draft PR
+
+- 근거: 결정 38(2026-11-24 사용자 직접 답) 1~4번, 결정 36·37, G3 명세 패키지, G3c 분리 명세, R-G3 리뷰.
+- merge: `feat/161`(`a0bd32e`)에 `origin/develop`(`0dab978`)을 merge했습니다(rebase·amend·reset 없음). 충돌 17개 파일은 모두 `develop` 판을 쓴 뒤 결제 묶음만 다시 얹었습니다. 원장 조회 등록(#168)·웹 클라이언트 규칙(#170)·frontend·Android 변경은 `develop` 판 그대로입니다. 자동 병합된 `docs/api/ledger.md`의 G3c 프로필 문단은 #168 문단과 겹쳐 `develop` 판으로 되돌렸습니다.
+- 남은 diff(`origin/develop...HEAD`): `SimulatedPaymentController` `member` 등록, `SimulateFailurePolicy`·`SimulateFailureNotAllowedException`·예외 처리기, `SimulateFailurePolicyTest`, `MemberPaymentIntegrationTest`(이전 이름 `MemberPaymentLedgerIntegrationTest`, 원장 조회 401 확인은 `MemberLedgerIntegrationTest`에 맡기고 결제 3개 경로만 남김), `MemberApiTestClient`(`idempotency_keys` 정리·`sendWithHeaders`), `MemberProfileIntegrationTest`(미등록 목록에서 결제 3개 제거), 결제 미등록을 전제로 한 주석(`LedgerTransactionController`·`MemberLedgerIntegrationTest`), 관련 문서.
+- 결정 38 반영
+  - 1(N-G3-2): `member`의 `simulateFailure: true`만 400이고 주문·승인·원장·멱등 키 행을 저장하지 않습니다. `false`·빈 본문·본문 없음은 201 `APPROVED`입니다. 통합 테스트 `simulateFailureTrueIsRejectedInMemberProfileAndFalseOrOmittedIsApproved`로 고정했습니다. `local`·`demo`의 `true` → 201 `FAILED`는 기존 `SimulatedPaymentIntegrationTest`(local)·`SimulatedPaymentApiWebTest`(local)·`SimulateFailurePolicyTest`(local·demo)가 고정하고 있어 확인만 했습니다.
+  - 2(D8): 장부(`user_id`) 단위 유지. 회원 1명 = '내 카드' 장부 1개라 장부 단위가 곧 회원 단위라는 점을 `docs/api.md` 중복 방지 절과 결제 문서에 적었습니다.
+  - 3(N-G3-1): 회원 가상 장부(D1b)는 구현하지 않았고 문서에 후순위로 표기했습니다.
+  - 4(N-G4-RECO): 승인 후 결과만 보여 주는 흐름을 orders·recommendations·mock-payments 문서와 도메인 문서에 적었습니다. `seenRecommendationId`는 선택이며 보내지 않으면 `changed=null`입니다. 승인 전 추천 화면을 권장하는 문장은 넣지 않았습니다.
+- 문서: `docs/decisions.md`(결정 38 절, D-24 미결·후속 구현에 날짜 보충, 결정 37 G3c 구현 범위), `docs/api.md`(회원 세션 등록 경로·미등록 경로·웹 클라이언트 규칙의 결제 문장·중복 방지·인증 상태), `docs/api/README.md` 상태 행, `docs/api/mock-payments.md`·`orders.md`·`recommendations.md`·`auth.md`, 도메인 `payment.md`·`recommendation.md`·`ledger.md`·`auth.md`·`user.md`, `docs/architecture.md`, 이 기록과 `README.md`.
+- 하지 않은 것: 회원 가상 장부(D1b), 승인 전 추천 UI, frontend·Android 수정, 주문 목록 API(결정 38-5, 별도 PR).

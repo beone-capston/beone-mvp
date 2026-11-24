@@ -19,12 +19,15 @@ import com.beone.api.benefit.state.StateSource;
  * @param periodTo 기준 기간 끝. 값이 있으면 필수
  * @param updatedAt 입력·조회 시각. {@code MANUAL}·{@code CODEF}면 필수
  * @param usable 계산에 쓸 수 있으면 참
- * @param reason {@code usable=false}의 사유
+ * @param reason {@code usable=false}의 사유. {@code UNKNOWN}이면 {@code NOT_ENTERED}(미입력)·{@code SOURCE_CONFLICT}·
+ * {@code POST_SNAPSHOT_ACTIVITY_UNRESOLVED}(입력한 스냅샷 값에 스냅샷 뒤 활동의 영향을 정하지 못함) 중 하나. 세 사유 모두 엔진에서는 같은
+ * {@code UNKNOWN}으로 처리하며 결과에 나가지 않는다
  */
 public record StateInput<T>(T value, String source, LocalDate periodFrom, LocalDate periodTo,
 		OffsetDateTime updatedAt, boolean usable, String reason) {
 
-	private static final Set<String> UNKNOWN_REASONS = Set.of("NOT_ENTERED", "SOURCE_CONFLICT");
+	private static final Set<String> UNKNOWN_REASONS = Set.of("NOT_ENTERED", "SOURCE_CONFLICT",
+			"POST_SNAPSHOT_ACTIVITY_UNRESOLVED");
 
 	private static final Set<String> KNOWN_VALUE_REASONS = Set.of("SOURCE_CONFLICT", "NEGATIVE_UNCONFIRMED_ATTRIBUTION");
 
@@ -83,6 +86,14 @@ public record StateInput<T>(T value, String source, LocalDate periodFrom, LocalD
 	/** 입력하지 않은 값. */
 	public static <T> StateInput<T> notEntered() {
 		return new StateInput<>(null, "UNKNOWN", null, null, null, false, "NOT_ENTERED");
+	}
+
+	/**
+	 * 사용자가 입력한 스냅샷 값에 스냅샷 뒤 승인·취소의 영향을 정하지 못한 값. 승인 차감액을 모르거나 한도 복원 규칙이 없는 취소가 있을 때
+	 * 업무 API가 쓴다(D-17). 계산은 {@link #notEntered()}와 같고 사유만 다르다.
+	 */
+	public static <T> StateInput<T> postSnapshotActivityUnresolved() {
+		return new StateInput<>(null, "UNKNOWN", null, null, null, false, "POST_SNAPSHOT_ACTIVITY_UNRESOLVED");
 	}
 
 	/** 사용자가 입력한 값. */

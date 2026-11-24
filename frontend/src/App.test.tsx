@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { createMockPaymentGateway } from './payment/mockPayment'
 import { mockCardSource } from './data/portfolio'
 import type { CardSource } from './data/portfolio'
 
@@ -48,6 +49,7 @@ function layoutCards() {
 }
 
 beforeEach(() => {
+  vi.stubGlobal('scrollTo', vi.fn())
   vi.stubGlobal('PointerEvent', MouseEvent)
   vi.stubGlobal(
     'matchMedia',
@@ -230,7 +232,7 @@ describe('카드 터치와 부가서비스', () => {
     tapCard()
     expect(screen.getByRole('dialog')).toHaveTextContent('Android 앱에서 사용할 수 있어요')
     expect(screen.getByRole('button', { name: '다시 인증' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: '가상 주문서 결제' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '가상 주문서 결제' })).toBeDisabled()
   })
 })
 
@@ -247,7 +249,7 @@ describe('BeoneBridge v1 기기 인증 경계', () => {
     tapCard()
     nativeState({ reason })
     expect(screen.getByRole('dialog')).toHaveTextContent(message)
-    expect(screen.queryByRole('button', { name: '가상 주문서 결제' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '가상 주문서 결제' })).toBeDisabled()
   })
 
   it('연속 탭으로 중복 인증하지 않고 네이티브 authenticating도 따른다', () => {
@@ -260,28 +262,26 @@ describe('BeoneBridge v1 기기 인증 경계', () => {
     expect(screen.getByRole('button', { name: '다시 인증' })).toBeDisabled()
   })
 
-  it('네이티브의 활성 응답 후 payment.check를 거쳐 진입하며 자동 결제하지 않는다', () => {
+  it('네이티브 활성 응답만으로 승인하지 않고 확인 메시지가 허용한 뒤 승인한다', async () => {
     const bridge = installBridge()
-    render(<App />)
+    const gateway = createMockPaymentGateway(0)
+    const approve = vi.spyOn(gateway, 'approve')
+    render(<App paymentGateway={gateway} />)
+    fireEvent.click(screen.getByRole('button', { name: '모의결제' }))
+    fireEvent.click(screen.getByRole('button', { name: /스타벅스 송도점/ }))
+    fireEvent.click(screen.getByRole('button', { name: '빠른결제로 이동' }))
     tapCard()
     nativeState({ active: true, remainingMs: 60000, reason: 'ACTIVE' })
     expect(screen.getByLabelText('남은 활성 시간')).toHaveTextContent('60초')
+    expect(approve).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '가상 주문서 결제' }))
     expect(sentTypes(bridge)).toContain('payment.check')
-    expect(screen.queryByRole('button', { name: '모의결제 화면 열기' })).not.toBeInTheDocument()
-    act(() =>
-      window.BeoneBridge?.onmessage?.({
-        data: JSON.stringify({
-          v: 1,
-          type: 'payment.check.result',
-          allowed: true,
-          reason: 'ACTIVE',
-        }),
-      }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: '모의결제 화면 열기' }))
-    expect(screen.getByRole('heading', { name: '모의결제' })).toBeInTheDocument()
-    expect(screen.getByText('준비 중이에요')).toBeInTheDocument()
+    expect(approve).not.toHaveBeenCalled()
+    act(() => window.BeoneBridge?.onmessage?.({
+      data: '{"v":1,"type":"payment.check.result","allowed":true,"reason":"ACTIVE"}',
+    }))
+    expect(await screen.findByText('모의 승인 완료')).toBeVisible()
+    expect(approve).toHaveBeenCalledTimes(1)
   })
 
   it('남은 시간이 끝나면 비활성화하고 네이티브 상태를 다시 요청한다', () => {
@@ -291,7 +291,7 @@ describe('BeoneBridge v1 기기 인증 경계', () => {
     tapCard()
     nativeState({ active: true, remainingMs: 1000, reason: 'ACTIVE' })
     act(() => vi.advanceTimersByTime(1200))
-    expect(screen.queryByRole('button', { name: '가상 주문서 결제' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '가상 주문서 결제' })).toBeDisabled()
     expect(sentTypes(bridge).filter((type) => type === 'state.get').length).toBeGreaterThan(1)
     nativeState({ reason: 'EXPIRED' })
     expect(screen.getByRole('dialog')).toHaveTextContent('60초가 만료됐어요')
@@ -312,9 +312,14 @@ describe('BeoneBridge v1 기기 인증 경계', () => {
     expect(screen.queryByLabelText('남은 활성 시간')).not.toBeInTheDocument()
   })
 
-  it('payment.check 거부 후에는 주문 진입을 제공하지 않는다', () => {
+  it('payment.check 거부 후에는 승인 요청을 보내지 않는다', () => {
     installBridge()
-    render(<App />)
+    const gateway = createMockPaymentGateway(0)
+    const approve = vi.spyOn(gateway, 'approve')
+    render(<App paymentGateway={gateway} />)
+    fireEvent.click(screen.getByRole('button', { name: '모의결제' }))
+    fireEvent.click(screen.getByRole('button', { name: /스타벅스 송도점/ }))
+    fireEvent.click(screen.getByRole('button', { name: '빠른결제로 이동' }))
     tapCard()
     nativeState({ active: true, remainingMs: 60000, reason: 'ACTIVE' })
     fireEvent.click(screen.getByRole('button', { name: '가상 주문서 결제' }))
@@ -324,6 +329,6 @@ describe('BeoneBridge v1 기기 인증 경계', () => {
       }),
     )
     expect(screen.getByRole('dialog')).toHaveTextContent('60초가 만료됐어요')
-    expect(screen.queryByRole('button', { name: '모의결제 화면 열기' })).not.toBeInTheDocument()
+    expect(approve).not.toHaveBeenCalled()
   })
 })

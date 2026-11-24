@@ -31,12 +31,18 @@ public class LoginThrottleEntity {
 		return this.emailHash;
 	}
 
-	/** 잠금이 풀리는 시각. 잠근 적이 없으면 {@code null}. */
+	/**
+	 * 잠금이 풀리는 시각. 잠근 적이 없으면 {@code null}.
+	 * @return 잠금이 풀리는 시각, 잠근 적이 없으면 {@code null}
+	 */
 	public LocalDateTime getLockedUntil() {
 		return this.lockedUntil;
 	}
 
-	/** 지정한 시각까지 잠근다. */
+	/**
+	 * 지정한 시각까지 잠근다.
+	 * @param until 잠금이 풀리는 시각
+	 */
 	public void lockUntil(LocalDateTime until) {
 		this.lockedUntil = until;
 	}

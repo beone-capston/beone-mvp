@@ -21,6 +21,16 @@ import com.beone.api.benefit.card.ServiceId;
  * {@code evaluationOnly}는 fixture C02처럼 평가 자료로만 존재하는 규칙 스냅샷을 표시한다.
  * 이런 규칙은 {@code VERIFIED}가 될 수 없으므로 {@link RuleCatalog}가 선택하지 않는다.
  * 평가 전용 규칙의 선택·실행은 후속 평가 하네스에서 다룬다.
+ *
+ * @param cardId 카드 상품 식별자
+ * @param ruleVersion 규칙 버전
+ * @param validity 적용 기간
+ * @param status 검증 상태
+ * @param evaluationOnly 평가 자료로만 쓰는 규칙이면 참
+ * @param sources 근거 공식 문서
+ * @param policy 실적·한도·유예 정책
+ * @param services 혜택 서비스 목록
+ * @param limitBuckets 월 혜택 한도 묶음 목록
  */
 public record CardRuleVersion(CardId cardId, String ruleVersion, ValidityPeriod validity, VerificationStatus status,
 		boolean evaluationOnly, List<OfficialSource> sources, RulePolicy policy, List<BenefitService> services,
@@ -120,6 +130,8 @@ public record CardRuleVersion(CardId cardId, String ruleVersion, ValidityPeriod 
 	 * </ul>
 	 * 입력에 따라서만 필요한 조건(취소 귀속, 할인 매출 실적 제외, 차감 순서, 유예, 중복, 원 미만 처리)은
 	 * {@link #unresolvedConditionalTerms()}로 따로 넘긴다.
+	 * @param service 확인할 서비스
+	 * @return 계산할 수 없는 사유 목록. 계산할 수 있으면 빈 목록
 	 */
 	public List<String> blockingReasons(BenefitService service) {
 		List<String> reasons = new ArrayList<>(service.unresolvedCalculationReasons());
@@ -144,6 +156,7 @@ public record CardRuleVersion(CardId cardId, String ruleVersion, ValidityPeriod 
 	/**
 	 * 입력에 따라서만 필요한 규칙·서비스 단위의 미확정 조건.
 	 * 무시할 수 있는 경우는 {@link ConditionalTerm}을 따른다.
+	 * @return 미확정 조건 목록
 	 */
 	public List<ConditionalTerm> unresolvedConditionalTerms() {
 		List<ConditionalTerm> unresolved = new ArrayList<>();
@@ -162,6 +175,8 @@ public record CardRuleVersion(CardId cardId, String ruleVersion, ValidityPeriod 
 
 	/**
 	 * 서비스가 차감하는 한도 묶음. 상위(통합) 한도까지 모두 포함한다.
+	 * @param service 대상 서비스
+	 * @return 서비스 한도부터 상위 한도까지의 한도 묶음 목록
 	 */
 	public List<LimitBucket> limitChain(BenefitService service) {
 		List<LimitBucket> chain = new ArrayList<>();

@@ -46,16 +46,17 @@ import org.springframework.test.json.JsonCompareMode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * G3c: {@code member} 프로필에 등록한 모의 결제 API 3개(승인·상세·취소)와 원장 조회 API 1개를 실제 HTTP·MySQL로 확인한다. 세션 401·쓰기
- * CSRF 403·{@code Cache-Control: no-store}는 #158의 인터셉터·필터가 경로 기준으로 처리하므로, 그것이 새로 연 경로에도 실제로
- * 적용되는지 단언한다.
+ * G3c: {@code member} 프로필에 등록한 모의 결제 API 3개(승인·상세·취소)를 실제 HTTP·MySQL로 확인한다. 결제가 쓴 원장 행은 #165에서
+ * 등록한 원장 조회 API로 읽어 확인한다. 세션 401·쓰기 CSRF 403·{@code Cache-Control: no-store}는 #158의 인터셉터·필터가 경로 기준으로
+ * 처리하므로, 그것이 새로 연 경로에도 실제로 적용되는지 단언한다.
  *
  * <p>기대값 출처
  * <ul>
  * <li>응답 형식·오류 코드: docs/api/mock-payments.md, docs/api/ledger.md, docs/api/recommendations.md({@code ORDER_PAID})</li>
- * <li>멱등: docs/api.md 중복 방지(사용자별 키, 지문 = 사용자·메서드·경로·본문, 24시간 보존, 같은 키·다른 지문 409)</li>
- * <li>{@code simulateFailure}는 {@code local}·{@code demo}에서만 받고 그 밖에는 400 {@code INVALID_REQUEST}(mock-payments.md 요청
- * 본문·실패 목록, D-23-4). member의 400은 사용자 확인(N-G3-2)을 기다리는 문언 기준 구현이다</li>
+ * <li>멱등: docs/api.md 중복 방지(장부별 키, 지문 = 사용자·메서드·경로·본문, 24시간 보존, 같은 키·다른 지문 409). 회원 1명은 '내
+ * 카드' 장부 1개이므로 장부 단위 = 회원 단위다(결정 38-2)</li>
+ * <li>{@code simulateFailure}: member에서는 {@code true}만 400 {@code INVALID_REQUEST}이고 아무것도 저장하지 않는다. {@code false}와
+ * 생략은 정상이다(결정 38-1, mock-payments.md 요청 본문·실패 목록)</li>
  * <li>무효가 된 추천으로도 승인하고 차이를 담는다(D-23-3). 비교 대상은 모드와 무관한 {@code selected}다(recommendations.md
  * {@code selected}, 결정 32 Q4). 그래서 대표 카드 고정에서 대표 카드만 바꾸면 차이로 잡히지 않는다(공개 한계, N-G3-4)</li>
  * <li>401 → CSRF 403 → 본문 400 → 404, 남의 자원 404(결정 37 D5·D6), 시연 헤더 무시(D4), no-store(결정 37 구현 범위)</li>
@@ -70,7 +71,7 @@ import tools.jackson.databind.json.JsonMapper;
 @IntegrationTest
 @ActiveProfiles("member")
 @Import(AuthSessionIntegrationTest.MutableClockConfiguration.class)
-class MemberPaymentLedgerIntegrationTest {
+class MemberPaymentIntegrationTest {
 
 	private static final Instant START = Instant.parse("2026-11-18T01:00:00Z");
 
@@ -356,29 +357,48 @@ class MemberPaymentLedgerIntegrationTest {
 	}
 
 	/**
-	 * member에서 {@code simulateFailure: true}는 400 {@code INVALID_REQUEST}이고 결제·멱등 키를 저장하지 않는다. 400은 주문 404보다
-	 * 먼저다. {@code false}는 정상 처리하고, 거절된 키는 소모되지 않는다(mock-payments.md, N-G3-2 확인 전 문언 기준).
+	 * 결정 38-1: member에서 {@code simulateFailure: true}는 400 {@code INVALID_REQUEST}이고 주문·승인·원장·멱등 키 행을 하나도 저장하지
+	 * 않는다. 400은 주문 404보다 먼저다. 거절된 키는 소모되지 않는다. {@code false}와 필드 생략(빈 본문·본문 없음)은 정상 201
+	 * {@code APPROVED}다. {@code local}·{@code demo}의 {@code true} → 201 {@code FAILED}는 {@code SimulatedPaymentIntegrationTest}와
+	 * {@code SimulateFailurePolicyTest}가 확인한다.
 	 */
 	@Test
-	void simulateFailureIsRejectedInMemberProfile() {
+	void simulateFailureTrueIsRejectedInMemberProfileAndFalseOrOmittedIsApproved() {
 		Session a = this.members.loginNew(MEMBER_A, EMAIL_A);
 		registerWithC01State(a);
 		String order = createOrder(a);
+		int ordersBefore = countOf("orders", MEMBER_A);
 
 		for (String target : List.of(order, MISSING_ORDER)) {
 			ResponseEntity<String> rejected = approve(a, target, "key-f", "{\"simulateFailure\":true}");
 			assertBody(rejected, 400, INVALID_REQUEST);
 			assertNoStore(rejected);
 		}
+		assertThat(countOf("orders", MEMBER_A)).isEqualTo(ordersBefore);
 		assertThat(countOf("simulated_payments", MEMBER_A)).isZero();
+		assertThat(countOf("ledger_transactions", MEMBER_A)).isZero();
 		assertThat(countOf("idempotency_keys", MEMBER_A)).isZero();
 		assertThat(data(send(HttpMethod.GET, ORDERS + "/" + order, a, null))).containsEntry("status", "CREATED")
 			.containsEntry("simulatedPaymentId", null);
 
+		// 거절된 키를 false로 다시 쓰면 정상 승인된다
 		ResponseEntity<String> approved = approve(a, order, "key-f", "{\"simulateFailure\":false}");
 		assertThat(approved.getStatusCode().value()).isEqualTo(201);
 		assertThat(data(approved)).containsEntry("status", "APPROVED");
-		assertThat(countOf("simulated_payments", MEMBER_A)).isOne();
+
+		// 필드 생략: 빈 본문과 본문 없음도 정상 승인된다
+		String omittedInBody = createOrder(a);
+		ResponseEntity<String> approvedEmpty = approve(a, omittedInBody, "key-e", "{}");
+		assertThat(approvedEmpty.getStatusCode().value()).isEqualTo(201);
+		assertThat(data(approvedEmpty)).containsEntry("status", "APPROVED");
+		String noBody = createOrder(a);
+		ResponseEntity<String> approvedNoBody = approve(a, noBody, "key-n", null);
+		assertThat(approvedNoBody.getStatusCode().value()).isEqualTo(201);
+		assertThat(data(approvedNoBody)).containsEntry("status", "APPROVED");
+
+		assertThat(countOf("simulated_payments", MEMBER_A)).isEqualTo(3);
+		assertThat(countOf("ledger_transactions", MEMBER_A)).isEqualTo(3);
+		assertThat(countOf("idempotency_keys", MEMBER_A)).isEqualTo(3);
 	}
 
 	/**
@@ -471,14 +491,13 @@ class MemberPaymentLedgerIntegrationTest {
 		assertThat(countOf("ledger_transactions", MEMBER_A)).isOne();
 	}
 
-	/** 쿠키가 없거나 익명 CSRF 세션이면 4개 경로 모두 401이고, 401이 CSRF 403·키 400·본문 400보다 먼저다. */
+	/** 쿠키가 없거나 익명 CSRF 세션이면 결제 3개 경로 모두 401이고, 401이 CSRF 403·키 400·본문 400보다 먼저다. */
 	@Test
 	void unauthenticatedRequestsAreUnauthorizedBeforeCsrfAndValidation() {
 		Session anonymous = this.members.anonymous();
 		Object[][] routes = { { HttpMethod.POST, ORDERS + "/ord-1/simulated-payments", "{\"simulateFailure\":true}" },
 				{ HttpMethod.GET, payment("pay-1"), null },
-				{ HttpMethod.POST, payment("pay-1") + "/cancellations", "{}" }, { HttpMethod.GET, LEDGER, null },
-				{ HttpMethod.GET, "/api/v1/me/ledger-transactions", null } };
+				{ HttpMethod.POST, payment("pay-1") + "/cancellations", "{}" } };
 		for (Object[] route : routes) {
 			for (Session session : new Session[] { Session.NONE, anonymous.withoutCsrf(), anonymous }) {
 				ResponseEntity<String> response = send((HttpMethod) route[0], (String) route[1], session,

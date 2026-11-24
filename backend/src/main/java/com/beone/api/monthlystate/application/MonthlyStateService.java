@@ -96,6 +96,10 @@ public class MonthlyStateService {
 
 	/**
 	 * 이 카드·이 달의 상태. 입력한 적이 없으면 모든 값이 미입력인 결과다.
+	 * @param user 현재 사용자
+	 * @param userCardId 보유 카드 ID 외부 표현
+	 * @param month 대상 달
+	 * @return 이 카드·이 달의 상태
 	 * @throws MonthlyStateCardNotFoundException 없거나 해제했거나 다른 사용자의 카드
 	 */
 	@Transactional(readOnly = true)
@@ -111,6 +115,11 @@ public class MonthlyStateService {
 	/**
 	 * 이 카드·이 달의 수동 입력을 교체한다. 저장 시각이 {@code snapshotAt}과 모든 값의 입력 시각이 된다. 가상 포트폴리오도 쓸 수 있다
 	 * (D-19).
+	 * @param user 현재 사용자
+	 * @param userCardId 보유 카드 ID 외부 표현
+	 * @param month 대상 달
+	 * @param input 교체할 수동 입력
+	 * @return 저장한 상태
 	 * @throws MonthlyStateCardNotFoundException 없거나 해제했거나 다른 사용자의 카드
 	 * @throws MappingRequiredException 매핑이 확인되지 않은 카드에 한도 묶음·택1을 보냄
 	 * @throws RuleMismatchException 카드 규칙에 없는 ID, 선택형 서비스가 없는 카드의 선택 없음
@@ -156,6 +165,10 @@ public class MonthlyStateService {
 	 * <p>확장 지점: 월간 상태에 두 번째 출처(CODEF 값 반영 또는 {@code INFERRED} 산출)가 결정으로 열리면, 이 카드·항목·기준 기간의
 	 * 출처별 후보를 모아 값이 다를 때만 충돌로 보고, {@code conflictVersion} 대조(바뀌었으면 409 {@code SOURCE_CONFLICT_CHANGED}),
 	 * 고른 출처 값 없음(400), 선택 저장과 200 응답, 월간 상태 조회 {@code conflicts[]}를 함께 구현한다.
+	 * @param user 현재 사용자
+	 * @param userCardId 보유 카드 ID 외부 표현
+	 * @param month 대상 달
+	 * @param selection 고른 계산 기준
 	 * @throws MonthlyStateCardNotFoundException 없거나 해제했거나 다른 사용자의 카드
 	 * @throws SourceConflictNotFoundException 충돌이 없는 항목(지금은 항상)
 	 */

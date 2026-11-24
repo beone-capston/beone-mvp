@@ -24,7 +24,10 @@ public record UserCardMapping(MappingStatus status, String cardProductId, Confir
 		Objects.requireNonNull(status, "status");
 	}
 
-	/** {@code USER_CONFIRMED}면 고정 표시, 그 밖에는 {@code null}. */
+	/**
+	 * {@code USER_CONFIRMED}면 고정 표시, 그 밖에는 {@code null}.
+	 * @return 고정 표시 문구, {@code USER_CONFIRMED}가 아니면 {@code null}
+	 */
 	public String note() {
 		return (this.status == MappingStatus.USER_CONFIRMED) ? USER_CONFIRMED_NOTE : null;
 	}
