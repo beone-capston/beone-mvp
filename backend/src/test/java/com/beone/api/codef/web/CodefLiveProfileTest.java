@@ -7,6 +7,7 @@ import com.beone.api.codef.application.CodefGateway;
 import com.beone.api.codef.application.CodefSyncGateway;
 import com.beone.api.codef.application.CodefSyncService;
 import com.beone.api.codef.application.FakeCodefGateway;
+import com.beone.api.codef.application.JdbcCodefCallBudget;
 import com.beone.api.codef.application.LiveCodefGateway;
 import com.beone.api.codef.transport.CodefApiKeys;
 import com.beone.api.codef.transport.CodefClient;
@@ -14,6 +15,7 @@ import com.beone.api.codef.transport.CodefTransportSettings;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -32,7 +34,8 @@ class CodefLiveProfileTest {
 				() -> new CodefClient(CodefApiKeys.fromEnvironment(Map.of()), CodefTransportSettings.defaults()))
 		.withBean(CodefConnectionService.class, () -> mock(CodefConnectionService.class))
 		.withBean(CodefSyncService.class, () -> mock(CodefSyncService.class))
-		.withUserConfiguration(LiveCodefGateway.class, FakeCodefGateway.class, CodefConnectionController.class,
+		.withBean(JdbcTemplate.class, () -> mock(JdbcTemplate.class))
+		.withUserConfiguration(LiveCodefGateway.class, FakeCodefGateway.class, JdbcCodefCallBudget.class, CodefConnectionController.class,
 				CodefSyncController.class);
 
 	@ParameterizedTest
@@ -40,6 +43,7 @@ class CodefLiveProfileTest {
 	void memberWithCodefLiveRegistersLiveGatewayAndRoutes(String profiles) {
 		this.runner.withPropertyValues("spring.profiles.active=" + profiles).run(context -> {
 			assertThat(context).hasSingleBean(LiveCodefGateway.class)
+				.hasSingleBean(JdbcCodefCallBudget.class)
 				.doesNotHaveBean(FakeCodefGateway.class)
 				.hasSingleBean(CodefConnectionController.class)
 				.hasSingleBean(CodefSyncController.class);
@@ -53,6 +57,7 @@ class CodefLiveProfileTest {
 	void withoutTheFullConditionNothingCodefIsRegistered(String profiles) {
 		this.runner.withPropertyValues("spring.profiles.active=" + profiles).run(context -> {
 			assertThat(context).doesNotHaveBean(LiveCodefGateway.class)
+				.doesNotHaveBean(JdbcCodefCallBudget.class)
 				.doesNotHaveBean(FakeCodefGateway.class)
 				.doesNotHaveBean(CodefConnectionController.class)
 				.doesNotHaveBean(CodefSyncController.class);
@@ -65,6 +70,7 @@ class CodefLiveProfileTest {
 		this.runner.withPropertyValues("spring.profiles.active=" + profiles).run(context -> {
 			assertThat(context).hasSingleBean(FakeCodefGateway.class)
 				.doesNotHaveBean(LiveCodefGateway.class)
+				.doesNotHaveBean(JdbcCodefCallBudget.class)
 				.hasSingleBean(CodefConnectionController.class)
 				.hasSingleBean(CodefSyncController.class);
 		});

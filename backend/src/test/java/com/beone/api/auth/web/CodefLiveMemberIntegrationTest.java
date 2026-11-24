@@ -18,6 +18,7 @@ import com.beone.api.codef.application.CodefPasswordEncryptor;
 import com.beone.api.codef.application.ConnectedIdKeySource;
 import com.beone.api.codef.transport.CodefApi;
 import com.beone.api.codef.transport.CodefApiKeys;
+import com.beone.api.codef.transport.CodefCallBudget;
 import com.beone.api.codef.transport.CodefClient;
 import com.beone.api.codef.transport.CodefStubServer;
 import com.beone.api.support.IntegrationTest;
@@ -35,6 +36,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 import static com.beone.api.auth.web.MemberApiTestClient.CSRF_INVALID;
 import static com.beone.api.auth.web.MemberApiTestClient.assertBody;
@@ -45,10 +47,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>CODEF는 루프백 스텁 HTTP로만 대신한다. 전송 계층 클라이언트를 스텁 주소와 합성 키로 만든 빈으로 바꾸고(테스트 전용 주입), CODEF 공개키·
  * connectedId 암호화 키·승인번호 HMAC 키도 합성 값이다. 기본 클라이언트는 테스트 작업이 키 환경 변수를 지우므로 어떤 요청도 보내지 않는다.
- * 실제 CODEF 호스트로 나간 요청이 없음은 스텁이 받은 요청 수 전체로 확인한다. 응답 본문은 가짜 게이트웨이의 합성 fixture를 쓴다.
+ * 실제 CODEF 호스트로 나간 요청이 없음은 스텁이 받은 요청 수 전체로 확인한다. 응답 본문은 가짜 게이트웨이의 합성 fixture를 쓴다. 스텁
+ * 클라이언트도 DB 호출 총량 빈({@code JdbcCodefCallBudget}, LP-2)을 거친다.
  */
 @IntegrationTest
 @ActiveProfiles({ "member", "codef-live" })
+// 호출 총량(LP-2)은 설정이 없으면 닫힘이라, 시험 시계(2026-11-18)를 포함하는 창과 검증 환경 권장값(API별 3)을 준다
+@TestPropertySource(properties = { "beone.codef.budget.per-api=3", "beone.codef.budget.window-start=2026-11-01T00:00:00Z",
+		"beone.codef.budget.window-end=2026-12-01T00:00:00Z" })
 @Import({ AuthSessionIntegrationTest.MutableClockConfiguration.class,
 		CodefLiveMemberIntegrationTest.StubCodefConfiguration.class })
 class CodefLiveMemberIntegrationTest {
@@ -113,6 +119,7 @@ class CodefLiveMemberIntegrationTest {
 		}
 		this.jdbcTemplate.update("DELETE FROM user_cards WHERE holding_source = 'CODEF'");
 		this.jdbcTemplate.update("DELETE FROM codef_connections");
+		this.jdbcTemplate.update("DELETE FROM codef_call_budgets");
 		this.members.clearMemberData();
 	}
 
@@ -228,11 +235,11 @@ class CodefLiveMemberIntegrationTest {
 
 		@Bean
 		@Primary
-		CodefClient stubCodefClient() {
+		CodefClient stubCodefClient(CodefCallBudget budget) {
 			return new CodefClient(
 					CodefApiKeys.fromEnvironment(
 							Map.of("CODEF_CLIENT_ID", "synthetic-id", "CODEF_CLIENT_SECRET", "synthetic-value")),
-					STUB.settings(Duration.ofSeconds(5)));
+					STUB.settings(Duration.ofSeconds(5)), budget);
 		}
 
 		@Bean
