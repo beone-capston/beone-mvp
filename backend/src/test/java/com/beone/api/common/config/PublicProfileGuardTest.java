@@ -2,6 +2,7 @@ package com.beone.api.common.config;
 
 import java.util.Map;
 
+import com.beone.api.codef.application.CodefPasswordEncryptor;
 import com.beone.api.codef.application.EnvironmentApprovalFingerprintKeySource;
 import com.beone.api.codef.application.EnvironmentConnectedIdKeySource;
 import com.beone.api.user.web.CurrentUserModeGuard;
@@ -54,6 +55,24 @@ class PublicProfileGuardTest {
 		});
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = { "prod,member,codef-live", "prod,codef-live" })
+	void prodWithCodefLiveFailsStartup(String profiles) {
+		this.runner.withPropertyValues("spring.profiles.active=" + profiles).run(context -> {
+			assertThat(context).hasFailed();
+			assertThat(context.getStartupFailure()).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("prod 프로필은 codef-live 프로필과 함께 켤 수 없습니다");
+		});
+	}
+
+	@Test
+	void prodGroupWithCodefLiveFailsStartup() {
+		// 실제 그룹 펼침(prod → member)을 거쳐도 막힌다
+		assertThatThrownBy(() -> guardedApplication().profiles("prod", "codef-live").run())
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("prod 프로필은 codef-live 프로필과 함께 켤 수 없습니다");
+	}
+
 	@Test
 	void prodWithMemberStarts() {
 		this.runner.withPropertyValues("spring.profiles.active=prod,member")
@@ -71,7 +90,7 @@ class PublicProfileGuardTest {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "member", "local", "demo", "local,demo" })
+	@ValueSource(strings = { "member", "local", "demo", "local,demo", "member,codef-live" })
 	void nonProdProfilesAreNotChecked(String profiles) {
 		this.runner.withPropertyValues("spring.profiles.active=" + profiles)
 			.run(context -> assertThat(context).hasNotFailed());
@@ -131,7 +150,7 @@ class PublicProfileGuardTest {
 
 	@ParameterizedTest
 	@ValueSource(strings = { "CODEF_CLIENT_ID", "CODEF_CLIENT_SECRET", "BEONE_CODEF_APPROVAL_HMAC_KEY",
-			"BEONE_CODEF_CONNECTED_ID_KEY" })
+			"BEONE_CODEF_CONNECTED_ID_KEY", "CODEF_PUBLIC_KEY" })
 	void prodWithACodefSecretVariableFailsStartupNamingOnlyTheVariable(String variable) {
 		this.runner.withPropertyValues("spring.profiles.active=prod,member", variable + "=" + FAKE_VALUE).run(context -> {
 			assertThat(context).hasFailed();
@@ -176,7 +195,7 @@ class PublicProfileGuardTest {
 	@Test
 	void checkedNamesMatchTheNamesCodefReads() {
 		assertThat(PublicProfileGuard.CODEF_SECRET_VARIABLES).contains(EnvironmentApprovalFingerprintKeySource.VARIABLE,
-				EnvironmentConnectedIdKeySource.VARIABLE);
+				EnvironmentConnectedIdKeySource.VARIABLE, CodefPasswordEncryptor.VARIABLE);
 	}
 
 	/** 두 가드만 등록하고 실제 application.yml·application-prod.yml을 읽는 최소 애플리케이션. */

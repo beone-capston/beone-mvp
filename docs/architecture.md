@@ -34,7 +34,8 @@
   - 같은 하위 패키지의 조회·동기화(#129): `POST /api/v1/me/codef/syncs`(local·demo만). `CodefSyncGateway`(가짜 구현만, 합성 fixture)로 조회하고 `codef.sync`의 판정 함수를 호출만 해 새 CODEF 카드를 `user_cards`(`UNMAPPED`, 상품 후보 없음)에, 받아들인 승인 행을 `codef_approval_rows`(승인번호는 HMAC 지문만, 키는 환경 변수, 없으면 승인은 부분 실패)에, 실적 참고값을 `codef_performance_references`에 저장합니다. `ledger_transactions`와 원장 조회는 바꾸지 않습니다. 보유 카드 생성·잠금은 `card`의 `UserCardService` 메서드 2개로만 합니다(codef → card 의존).
   - 하위 패키지 `codef.sync`(#82·#92): 전송 계층의 세 조회 대상 호출 결과를 대상별로 판정(부분 실패)하고 보유카드 후보(`UNMAPPED`)·승인 행 형태 분류·실적 참고값(계산 미사용)으로 옮깁니다. #92에서 카드명 정확 일치 카드 연결, 승인 날짜·시각 해석, 승인번호 지문(주입) 기반 중복 키·재조회 대조, D-17 Type2 짝짓기로 원장 후보 행과 불완전 사유를 판정하는 순수 함수를 더했습니다. 후보 상품 산출·완전 선언·도메인 원장 연결·저장은 하지 않습니다.
   - 해석·전송·sync 계층의 범위 밖: 자동 재시도, 실 계정 연결 요청·RSA 암호화·추가 인증 요청, DB 저장, BeONE 상태값으로의 변환. 이 계층은 `benefit`·`common.web`에 의존하지 않습니다.
-  - 연결·동기화 계층(`codef.application`·`codef.persistence`·`codef.web`)의 범위 밖: 실 CODEF HTTP 게이트웨이, RSA 암호화, 운영 키 공급·회전, 출처 선택 API, 도메인 원장 연결(결정 22 R8), 원장 완전 선언(R7). 동기화는 `codef.sync`를 호출하지만 전송 계층(`codef.transport`)의 실 호출은 쓰지 않습니다.
+  - 실 게이트웨이(#193, LP-1): `LiveCodefGateway`가 전송 계층(`CodefClient`)으로 계정 등록·삭제와 상품 3종을 부릅니다. 프로필 `member & codef-live & !prod`에서만 실 게이트웨이와 CODEF 경로 4개를 회원 세션 기준으로 등록하고(local·demo는 가짜 그대로), `prod`와 `codef-live`를 함께 켜면 `PublicProfileGuard`가 기동을 멈춥니다. 시험은 루프백 스텁 HTTP로만 했고 **실호출은 별도 승인 전 하지 않습니다**. 자세한 내용은 [codef 문서](domains/codef.md#비공개-실연동-프로필-codef-live-lp-1-193).
+  - 연결·동기화 계층(`codef.application`·`codef.persistence`·`codef.web`)의 범위 밖: 운영 키 공급·회전, 출처 선택 API, 도메인 원장 연결(결정 22 R8), 원장 완전 선언(R7). local·demo의 동기화는 가짜 게이트웨이를 쓰고, 전송 계층(`codef.transport`)은 `codef-live`의 실 게이트웨이만 씁니다.
 
 - [user: 현재 사용자 결정 지점과 시연 사용자](domains/user.md)
   - 위치: `backend/src/main/java/com/beone/api/user/` (`web`, `application`, `persistence`)
