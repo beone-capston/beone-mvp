@@ -35,11 +35,12 @@ export class AuthApiError extends Error {
 const baseUrl = (import.meta.env.VITE_AUTH_API_BASE_URL ?? '').replace(/\/+$/, '')
 
 async function request<T>(path: string, options: RequestInit = {}, expectedStatus?: number): Promise<T> {
+  const timeout = AbortSignal.timeout(15000)
   const response = await fetch(`${baseUrl}/api/v1/auth/${path}`, {
     ...options,
     credentials: 'include',
     cache: 'no-store',
-    signal: AbortSignal.timeout(15000),
+    signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout,
   })
 
   if (!response.ok) {
@@ -84,8 +85,8 @@ function checkAcceptance(result: MailAcceptance) {
 }
 
 export const authApi = {
-  async session() {
-    const session = await request<MemberSession>('session')
+  async session(signal?: AbortSignal) {
+    const session = await request<MemberSession>('session', { signal })
     checkMember(session)
     if ([session.authenticatedAt, session.expiresAt, session.absoluteExpiresAt].some(value => typeof value !== 'string')) {
       throw new AuthApiError(200, null, null)
