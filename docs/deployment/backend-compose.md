@@ -35,6 +35,7 @@
 | [`deploy/compose.yaml`](../../deploy/compose.yaml) | MySQL 8.4.11 + backend. 호스트 포트 공개 없음, 필수 값이 없으면 실패 |
 | [`deploy/scripts/build-image.sh`](../../deploy/scripts/build-image.sh) | 이미지 빌드와 식별자 출력 |
 | [`deploy/scripts/verify-local.sh`](../../deploy/scripts/verify-local.sh) | 로컬의 분리된 검증 프로젝트에서 V2~V13 확인 |
+| [`deploy/verify/`](../../deploy/verify/RUNBOOK.md) | 서버 루프백 검증 환경 `beone-verify`(member 프로필, `127.0.0.1:18080`, 결정 39-1)의 compose·nginx·키 이름 템플릿·런북. 운영 `beone-app`과 분리된 프로젝트 |
 
 - 백엔드는 Docker 내부 이름 `mysql:3306`과 앱 전용 계정(`MYSQL_USER`)으로 접속합니다. root 비밀번호는 MySQL 초기화에만 쓰고 백엔드에 넘기지 않습니다.
 - 초기 자원 값은 제안값입니다: MySQL·backend 각각 메모리 1GiB, JVM 힙은 컨테이너 메모리의 70%, InnoDB 버퍼 256MiB, 로그는 10MB×3개 회전. 실제 서버(4GiB)에서의 적합성은 적용 후 확인합니다.
