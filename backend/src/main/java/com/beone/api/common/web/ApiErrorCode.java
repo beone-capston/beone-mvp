@@ -9,13 +9,22 @@ import org.springframework.http.HttpStatus;
  */
 public interface ApiErrorCode {
 
-	/** 응답 {@code code}로 공개하는 값. enum 상수명과 독립적으로 관리한다. */
+	/**
+	 * 응답 {@code code}로 공개하는 값. enum 상수명과 독립적으로 관리한다.
+	 * @return 공개 오류 코드
+	 */
 	String code();
 
-	/** 기본 HTTP 상태. */
+	/**
+	 * 기본 HTTP 상태.
+	 * @return 기본 HTTP 상태
+	 */
 	HttpStatus status();
 
-	/** 응답 {@code message}로 쓰는 고정 문구. 입력값·예외 메시지를 넣지 않는다. */
+	/**
+	 * 응답 {@code message}로 쓰는 고정 문구. 입력값·예외 메시지를 넣지 않는다.
+	 * @return 고정 오류 문구
+	 */
 	String message();
 
 }

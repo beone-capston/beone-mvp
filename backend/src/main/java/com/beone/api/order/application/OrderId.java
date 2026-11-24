@@ -15,7 +15,11 @@ public final class OrderId {
 	private OrderId() {
 	}
 
-	/** 저장소 번호를 외부 표현으로 바꾼다. */
+	/**
+	 * 저장소 번호를 외부 표현으로 바꾼다.
+	 * @param id 양수 저장소 번호
+	 * @return 외부 주문 ID
+	 */
 	public static String format(long id) {
 		if (id < 1) {
 			throw new IllegalArgumentException("order id must be positive");

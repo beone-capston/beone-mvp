@@ -54,6 +54,7 @@ public final class ServiceCandidateEvaluator {
 	 * @param previousMonthPerformance 호출자가 기간을 보증한 전월 실적. 음수는 처리 근거가 없어 거부한다
 	 * @param newCardGrace 이 서비스에 대한 신규 유예 발생 근거
 	 * @param limits 이 서비스의 한도 체인과 입력 사용액
+	 * @return 서비스 후보 판정
 	 * @throws IllegalArgumentException 지원 범위 밖 서비스이거나 입력 계약을 어긴 경우
 	 */
 	public static ServiceCandidate evaluate(BenefitService service, Order order, Won previousMonthPerformance,

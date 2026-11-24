@@ -39,14 +39,20 @@ public final class SessionTokens {
 	private SessionTokens() {
 	}
 
-	/** 새 세션 ID(43자 Base64URL)를 만든다. */
+	/**
+	 * 새 세션 ID(43자 Base64URL)를 만든다.
+	 * @return 새 세션 ID
+	 */
 	public static String newSessionId() {
 		byte[] bytes = new byte[TOKEN_BYTES];
 		RANDOM.nextBytes(bytes);
 		return ENCODER.encodeToString(bytes);
 	}
 
-	/** 메일로 보내는 1회용 토큰(43자 Base64URL)을 만든다. 세션 ID와 같은 생성 방식이다. */
+	/**
+	 * 메일로 보내는 1회용 토큰(43자 Base64URL)을 만든다. 세션 ID와 같은 생성 방식이다.
+	 * @return 새 1회용 메일 토큰
+	 */
 	public static String newMailToken() {
 		return newSessionId();
 	}

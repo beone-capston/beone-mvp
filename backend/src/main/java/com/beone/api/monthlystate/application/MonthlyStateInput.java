@@ -26,7 +26,10 @@ public record MonthlyStateInput(Amount previousMonthPerformanceWon, List<BucketU
 		}
 	}
 
-	/** 규칙(매핑된 상품)이 있어야 해석할 수 있는 항목을 보냈는지. 매핑 확인 필요(409)의 기준이다. */
+	/**
+	 * 규칙(매핑된 상품)이 있어야 해석할 수 있는 항목을 보냈는지. 매핑 확인 필요(409)의 기준이다.
+	 * @return 한도 묶음 사용액·택1 선택·선택 없음 중 하나라도 보냈으면 {@code true}
+	 */
 	public boolean needsRule() {
 		return !this.limitBucketUsages.isEmpty() || !this.selectedServices.isEmpty() || this.noServiceSelection != null;
 	}

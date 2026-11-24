@@ -33,7 +33,11 @@ public class MerchantClassCatalog {
 			.collect(Collectors.toUnmodifiableSet());
 	}
 
-	/** 허용 목록에 정확히 같은 코드가 있으면 {@code true}. 대소문자·공백을 고치지 않는다. */
+	/**
+	 * 허용 목록에 정확히 같은 코드가 있으면 {@code true}. 대소문자·공백을 고치지 않는다.
+	 * @param code 확인할 업종 코드
+	 * @return 허용 목록에 있으면 {@code true}
+	 */
 	public boolean isAllowed(String code) {
 		return code != null && this.codes.contains(code);
 	}

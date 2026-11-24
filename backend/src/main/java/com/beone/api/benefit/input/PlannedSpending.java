@@ -11,6 +11,13 @@ import com.beone.api.benefit.money.Won;
 
 /**
  * 사용자가 확인한 예정 소비(PRD FR-04). 날짜·시각 규칙은 {@link Order}와 같다.
+ *
+ * @param date 예정일(Asia/Seoul)
+ * @param time 예정 시각. 입력된 경우에만 있다
+ * @param amount 예정 금액
+ * @param merchantClass 확인된 업종 분류
+ * @param merchantName 가맹점 이름. 없으면 빈 값
+ * @param paymentMethod 결제 방식
  */
 public record PlannedSpending(LocalDate date, Optional<LocalTime> time, Won amount, MerchantClass merchantClass,
 		Optional<String> merchantName, PaymentMethod paymentMethod) {

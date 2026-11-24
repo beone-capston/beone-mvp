@@ -134,7 +134,7 @@ class CardExceptionHandler {
 
 ### 예약한 오류 코드 자리
 
-인증 필요(401)는 `UNAUTHENTICATED`, 권한 없음(403)은 `FORBIDDEN`으로 자리를 예약합니다(D-09, 값은 2026-11-03 사용자 지시). `local`·`demo`의 고정 사용자 방식에서는 이 응답을 보내지 않습니다. 회원 인증 API에서의 사용은 [D-24](decisions.md#d-24-확정-정책)에 따른 [인증 API 명세](api/auth.md)를 따릅니다. 인증 코드는 업무 오류 코드 표의 「인증」 묶음이며 `auth` 패키지의 기능별 오류 코드로 둡니다. `CommonApiErrorCode`에는 추가하지 않았습니다. 2026-11-18 기준 인증 코드 6개(`UNAUTHENTICATED`·`INVALID_CREDENTIALS`·`EMAIL_NOT_VERIFIED`·`CSRF_INVALID`·`AUTH_TOKEN_INVALID`·`RATE_LIMITED`)가 `auth` 패키지에 구현돼 있습니다(#125·#130·#133·#140). `FORBIDDEN`은 아직 쓰는 곳이 없습니다.
+인증 필요(401)는 `UNAUTHENTICATED`, 권한 없음(403)은 `FORBIDDEN`으로 자리를 예약합니다(D-09, 값은 2026-11-03 사용자 지시). `local`·`demo`의 고정 사용자 방식에서는 이 응답을 보내지 않습니다. 회원 인증 API에서의 사용은 [D-24](decisions.md#d-24-확정-정책)에 따른 [인증 API 명세](api/auth.md)를 따릅니다. 인증 코드는 업무 오류 코드 표의 「인증」 묶음이며 `auth` 패키지의 기능별 오류 코드로 둡니다. `CommonApiErrorCode`에는 추가하지 않았습니다. 2026-11-18 기준 인증 코드 6개(`UNAUTHENTICATED`·`INVALID_CREDENTIALS`·`EMAIL_NOT_VERIFIED`·`CSRF_INVALID`·`AUTH_TOKEN_INVALID`·`RATE_LIMITED`)가 `auth` 패키지에 구현돼 있습니다(#125·#130·#133·#140). `FORBIDDEN`은 아직 쓰는 곳이 없습니다. 로컬 회원 프로필 `member`의 업무 API(`/api/v1/me`, `/api/v1/me/**`)는 회원 세션이 없으면 401 `UNAUTHENTICATED`, 쓰기 요청의 CSRF가 틀리면 403 `CSRF_INVALID`입니다(결정 37 D5·D6, 아래 「회원 세션(member 프로필)」).
 
 ## 업무 API 공통 규약
 
@@ -146,6 +146,18 @@ D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 업�
 - 헤더는 `local`·`demo` 프로필에서만 동작합니다. 없거나 값이 잘못되면 400 `INVALID_REQUEST`입니다.
 - 현재 사용자는 서버의 `CurrentUserResolver` 한 곳에서 이 헤더로 정합니다(D-09). 상품 조회(`/api/v1/card-products`)와 `/api/v1/demo-users`는 사용자 자원이 아니므로 헤더가 필요 없습니다.
 - 세션 로그인을 붙이면 `CurrentUserResolver` 구현만 바꾸고 경로·본문은 그대로 둡니다.
+
+### 회원 세션(member 프로필)
+
+로컬 개발·테스트용 회원 프로필 `member`의 규칙입니다(결정 37, #157). 공개 배포 프로필 구성은 미결입니다(O1).
+
+- 현재 사용자는 `__Host-BEONE_SESSION` 회원 세션 → 회원 → 회원의 '내 카드' 장부 순서로 정합니다(`MemberCurrentUserResolver`). `X-BeONE-Demo-User` 헤더는 읽지 않으므로 보내도 무시합니다.
+- `member`와 `local`·`demo`를 함께 켜면 기동에 실패합니다(현재 사용자 결정 방식은 하나만, D4).
+- 검사 순서: 401 `UNAUTHENTICATED`(쿠키 없음·익명 세션·만료·로그아웃) → 쓰기(POST·PUT·PATCH·DELETE)의 403 `CSRF_INVALID` → 본문 400 → 404입니다. 남의 자원은 404이고 `FORBIDDEN`은 쓰지 않습니다(D5·D6). CSRF 토큰은 `GET /api/v1/auth/csrf`로 받아 `X-CSRF-TOKEN` 헤더로 보냅니다. 실패하면 저장하지 않습니다.
+- 통과한 요청은 미사용 만료를 7일 늘리고 세션 쿠키를 새 `Max-Age`로 다시 심습니다. 로그인 뒤 최대 30일은 넘지 않습니다(D3).
+- 응답 헤더: `/api/v1/me`·`/api/v1/me/**`의 모든 응답(성공, 401·403, 등록하지 않은 경로의 404 포함)에 `Cache-Control: no-store`를 붙입니다. 인증 API와 같은 규칙이며(G1 D5 권장 4항), 업무 응답이 회원 개인 데이터와 세션 쿠키 재발급을 담기 때문입니다. `local`·`demo`의 업무 응답에는 붙이지 않습니다(기존 동작 유지).
+- 등록 경로: 인증 API 9개, `GET /api/v1/me`, 보유 카드 API(`/api/v1/me/cards/**`), 카드 상품 조회, `/actuator/health`. 주문·예정 소비·추천·모의 승인·월간 상태·결제 설정·원장·CODEF·시연 사용자 목록은 등록하지 않아 로그인 여부와 관계없이 404입니다. 이 업무 API들의 `member` 등록은 G3 범위입니다. 공개 회원의 CODEF 연결 범위는 별도 미결입니다(D9).
+- `local`·`demo`의 업무 API에는 세션·CSRF 검사를 걸지 않습니다(기존 동작 유지).
 
 ### 값 형식
 
@@ -244,6 +256,6 @@ D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 업�
 
 미구현·범위 밖:
 
-- 업무 API(`/api/v1/me/**`)의 회원 세션 연동(D-24 미결). 지금 업무 API는 시연 사용자 헤더로만 현재 사용자를 정합니다. `UNAUTHENTICATED`는 인증 API(`auth` 패키지)에만 구현돼 있고, `FORBIDDEN`은 자리만 예약돼 있으며 쓰는 곳이 없습니다(D-09)
+- 업무 API의 회원 세션 연동은 로컬 회원 프로필 `member`의 `/api/v1/me`와 보유 카드 API까지만 구현했습니다(결정 37, #157). 나머지 업무 API의 회원 연결은 G3 범위이고, 공개 회원의 CODEF 연결 범위(D9)와 공개 프로필(O1~O3)은 미결입니다. `local`·`demo`는 시연 사용자 헤더로 현재 사용자를 정합니다. `FORBIDDEN`은 자리만 예약돼 있으며 쓰는 곳이 없습니다(D-09)
 - DB·CODEF·AI 등 외부 연동 예외의 세부 분류(현재는 예상하지 못한 예외로 500 처리)
 - 서블릿 필터 단계 예외의 공통 응답

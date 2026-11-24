@@ -10,10 +10,10 @@ import org.springframework.stereotype.Component;
 /**
  * 메일을 실제로 보내지 않는 가짜 발송기. 보낸 메일을 메모리에만 담고 로그를 남기지 않는다. 테스트가 내용을 확인한다.
  *
- * <p>오래 켜 둔 시연 서버에서 메모리가 늘지 않도록 최근 {@value #CAPACITY}통만 둔다. {@code local}·{@code demo} 프로필 전용이다.
+ * <p>오래 켜 둔 시연 서버에서 메모리가 늘지 않도록 최근 {@value #CAPACITY}통만 둔다. {@code local}·{@code demo}·{@code member} 프로필 전용이다.
  */
 @Component
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 public class FakeAuthMailSender implements AuthMailSender {
 
 	static final int CAPACITY = 100;

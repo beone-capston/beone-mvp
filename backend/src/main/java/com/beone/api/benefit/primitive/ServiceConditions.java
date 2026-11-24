@@ -23,6 +23,9 @@ public final class ServiceConditions {
 	/**
 	 * 거래 금액이 건당 최소 금액 이상이면 참. 최소 금액과 같아도 충족한다(D-10 "건당 5만원 이상", 사례집 C13 "정확히 5만원도 해당").
 	 * 취소(음수 금액)의 혜택 처리는 정해지지 않았으므로 음수 금액은 거부한다.
+	 * @param service 대상 서비스
+	 * @param transactionAmount 거래 금액. 음수는 거부한다
+	 * @return 최소 금액 이상이면 {@code true}
 	 */
 	public static boolean meetsMinimumAmount(BenefitService service, Won transactionAmount) {
 		Objects.requireNonNull(service, "service");
@@ -35,6 +38,9 @@ public final class ServiceConditions {
 
 	/**
 	 * 결제 방식이 서비스가 나열한 대상 결제 방식에 포함되면 참.
+	 * @param service 대상 서비스
+	 * @param paymentMethod 결제 방식
+	 * @return 대상 결제 방식이면 {@code true}
 	 */
 	public static boolean acceptsPaymentMethod(BenefitService service, PaymentMethod paymentMethod) {
 		Objects.requireNonNull(service, "service");
@@ -44,6 +50,9 @@ public final class ServiceConditions {
 
 	/**
 	 * 업종이 제외 조건을 적용하기 전의 대상 가맹점에 들면 참. 제외 업종 여부는 {@link #isExcludedClass}로 따로 판정한다.
+	 * @param service 대상 서비스
+	 * @param merchantClass 업종 분류
+	 * @return 대상 가맹점에 들면 {@code true}
 	 */
 	public static boolean isTargetClass(BenefitService service, MerchantClass merchantClass) {
 		Objects.requireNonNull(service, "service");
@@ -56,6 +65,9 @@ public final class ServiceConditions {
 
 	/**
 	 * 업종이 서비스의 제외 업종이면 참.
+	 * @param service 대상 서비스
+	 * @param merchantClass 업종 분류
+	 * @return 제외 업종이면 {@code true}
 	 */
 	public static boolean isExcludedClass(BenefitService service, MerchantClass merchantClass) {
 		Objects.requireNonNull(service, "service");
