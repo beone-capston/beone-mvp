@@ -3,29 +3,39 @@
 공개 서비스와 분리된 루프백 검증 환경에서 실제 CODEF에 **연결 1회와 동기화 1회**를 하고, 정제된 결과만 검증 DB에 남는지 확인한 뒤 폐기하는 절차입니다.
 
 - **근거:** 결정 38-8(CODEF는 공개 환경에 등록하지 않음), 결정 39-4(비공개 실연동 승인. 로컬 검증 때와 같은 키·KB 계정으로 연결 1회·동기화 1회), ROADMAP-next-20261125 6절(K0~K7)·7절 승인 ⑨~⑪
-- **N14(호출 상한):** API별 최대 **3회**(결정 39-4)
+- **N14(호출 상한):** API별 최대 **3회**(결정 39-4). 서버 재기동과 관계없이 DB 카운터(LP-2, #205)로 셉니다.
 - **N15(보존 기간):** 정제 데이터(비밀번호·카드번호·승인번호 원문 제외)는 검증 DB에 **MVP 시연이 끝날 때까지** 보관하고, **MVP 수락 뒤 폐기**합니다(결정 39-4)
 - **실행 주체:** 서버 명령은 운영 담당(SSM), 키 입력은 사용자입니다. 에이전트는 키 값을 보지 않습니다.
 - **상태:** 문서만 있습니다. 서버 배치와 실호출은 하지 않았습니다. 서버 배치는 `beone-verify`를 정리한 뒤에만 합니다.
+
+## 0. 서버 명령 블록의 공통 규칙
+
+- SSM 기본 셸은 `sh`입니다. 세션을 열면 먼저 `exec bash`를 한 번 실행합니다.
+- 아래 서버 블록은 모두 `( set -euo pipefail` … `)`로 감싼 **독립 블록**입니다. 블록 안에서 명령 하나가 실패하면 그 블록의 나머지는 실행되지 않고 블록이 종료 코드 1로 끝납니다. SSM 셸 자체는 닫히지 않습니다.
+- 블록끼리 변수를 공유하지 않습니다. 각 블록이 `C`(compose 명령)·`Q`(검증 DB 조회)·`fail`을 스스로 정의합니다. compose 명령은 2-1절과 같이 **두 `-f`, `-p beone-codef`, `--env-file`을 항상 명시**합니다(현재 폴더나 다른 구성에 의존하지 않음).
+- 조회 명령(`docker compose ps`·`logs`, `docker volume ls`, DB 조회)이 실패하면 "0건"으로 읽지 않고 즉시 중단합니다. 결과를 세는 `grep -c`는 조회가 성공한 출력에만 씁니다.
+- 각 블록은 끝에 `…_OK`를 출력합니다. 이 줄이 없으면 성공이 아닙니다.
+- 이 규칙의 실패 경로(설정 실패 뒤 `up` 미실행, `down -v` 실패 뒤 삭제 미진행, 대상 오식별, 조회 실패)는 가짜 `docker`·`sudo`로 오프라인 점검했습니다([`deploy/scripts/codef-runbook-selftest.sh`](../../deploy/scripts/codef-runbook-selftest.sh)). 서버에서 실행해 본 것은 아닙니다.
 
 ## 1. 코드와 프로필 (K0)
 
 | 항목 | 내용 | 상태 |
 |---|---|---|
 | 실 게이트웨이 | `LiveCodefGateway`, 프로필 조건 `member & codef-live & !prod`([codef 문서](../domains/codef.md#비공개-실연동-프로필-codef-live-lp-1-193)). `prod`와 함께 켜면 `PublicProfileGuard`가 기동을 멈춤 | develop 병합(#195) |
-| 호출 상한 카운터 | 프로세스를 넘는 호출 총량(LP-2) | PR #205 진행 중. **설정 키 이름은 #205 병합 뒤 확정** |
+| 호출 상한 카운터 | 프로세스를 넘는 호출 총량(LP-2, [codef 문서](../domains/codef.md#프로세스를-넘는-호출-총량-lp-2-196)). 표 `codef_call_budgets`(V15)에 API·창 시작 시각별 누적 시도 수. **설정이 하나라도 없거나 창 밖이면 닫힘(호출 0)** | develop 병합(#205, `97fe4c3`) |
+| 호출 상한 설정 | `BEONE_CODEF_BUDGET_PER_API`(=`3`), `BEONE_CODEF_BUDGET_WINDOW_START`, `BEONE_CODEF_BUDGET_WINDOW_END`(ISO-8601 오프셋 시각, 시작 포함·끝 제외). Spring 키 `beone.codef.budget.per-api`·`window-start`·`window-end` | 코드 기준(#205) |
 | 프로필 | `SPRING_PROFILES_ACTIVE=member,codef-live`(`prod` 없음) | 코드 기준(#195, `LiveCodefGateway.PROFILE`) |
 | 키 환경 변수 | `CODEF_CLIENT_ID`, `CODEF_CLIENT_SECRET`, `CODEF_PUBLIC_KEY`, `BEONE_CODEF_CONNECTED_ID_KEY`, `BEONE_CODEF_APPROVAL_HMAC_KEY`(이름만) | 코드 기준(#195) |
 | `beone.codef.*` 설정(비밀 아님) | `beone.codef.product-host`(기본 `https://sandbox.codef.io`, 허용 `sandbox`·`development`·`api.codef.io`), `beone.codef.connect-timeout`(기본 5초), `beone.codef.token-response-timeout`(기본 110초), `beone.codef.product-response-timeout`(기본 310초). 환경 변수로는 `BEONE_CODEF_PRODUCT_HOST` 등(Spring 완화 바인딩) | 코드 기준([`CodefTransportConfiguration`](../../backend/src/main/java/com/beone/api/codef/transport/CodefTransportConfiguration.java)) |
-| 실 계정용 상품 호스트 | 기본값은 샌드박스라 실 KB 계정에는 맞지 않을 수 있다. `development.codef.io`·`api.codef.io` 중 무엇을 쓸지는 **결정 필요**(키 발급 종류와 함께 사용자 확인) | 결정 필요 |
+| 실 계정용 상품 호스트(N19) | 기본값은 샌드박스라 실 KB 계정에는 맞지 않을 수 있다. `development.codef.io`·`api.codef.io` 중 무엇을 쓸지는 **미결(N19)**. 키 발급 종류와 함께 사용자가 정한다 | 미결 |
 
 ## 2. beone-codef 실행안
 
 ### 2-1. 환경 (K1, 승인 ⑨)
 
 - `beone-verify`를 [검증 런북](../../deploy/verify/RUNBOOK.md) 9절대로 **먼저 정리**합니다. 서버 메모리 때문에 두 검증 환경을 동시에 띄우지 않습니다.
-- 같은 compose를 별도 프로젝트 이름 `beone-codef`로 띄웁니다. 빈 DB, 별도 볼륨, `127.0.0.1:18080`, 메모리 상한과 중단 조건은 검증 런북과 같습니다.
-- 백엔드에만 CODEF 프로필과 키 이름을 넘기는 덮어쓰기 파일(`/opt/beone/codef/compose.codef.yaml`) 초안은 아래와 같습니다. 값은 쓰지 않고 `.env`에서 읽습니다.
+- 같은 compose(`/opt/beone/verify/compose.yaml`)를 별도 프로젝트 이름 `beone-codef`로 띄웁니다. 빈 DB, 별도 볼륨(`beone-codef_verify-mysql-data`), `127.0.0.1:18080`, 메모리 상한과 중단 조건은 검증 런북과 같습니다.
+- 백엔드에만 CODEF 프로필·키·호출 상한 설정을 넘기는 덮어쓰기 파일(`/opt/beone/codef/compose.codef.yaml`) 초안은 아래와 같습니다. 값은 쓰지 않고 `.env`에서 읽으며, 하나라도 없으면 `config`가 실패합니다(`:?`).
 
 ```yaml
 # /opt/beone/codef/compose.codef.yaml (초안)
@@ -38,60 +48,149 @@ services:
       CODEF_PUBLIC_KEY: ${CODEF_PUBLIC_KEY:?}
       BEONE_CODEF_CONNECTED_ID_KEY: ${BEONE_CODEF_CONNECTED_ID_KEY:?}
       BEONE_CODEF_APPROVAL_HMAC_KEY: ${BEONE_CODEF_APPROVAL_HMAC_KEY:?}
-      BEONE_CODEF_PRODUCT_HOST: ${BEONE_CODEF_PRODUCT_HOST:?}   # 결정 필요(1절). 비밀 아님
-      # LP-2 상한 설정 키: #205 병합 뒤 확정(API별 3회, N14)
+      BEONE_CODEF_PRODUCT_HOST: ${BEONE_CODEF_PRODUCT_HOST:?}                 # N19 미결(1절). 비밀 아님
+      # 호출 상한(LP-2, N14). 비밀 아님. 빠지면 백엔드는 닫힘(호출 0)
+      BEONE_CODEF_BUDGET_PER_API: ${BEONE_CODEF_BUDGET_PER_API:?}             # 3
+      BEONE_CODEF_BUDGET_WINDOW_START: ${BEONE_CODEF_BUDGET_WINDOW_START:?}   # 2-2에서 한 번 정하고 바꾸지 않음
+      BEONE_CODEF_BUDGET_WINDOW_END: ${BEONE_CODEF_BUDGET_WINDOW_END:?}
 ```
+
+`config`가 실패하면 `up`을 실행하지 않습니다.
 
 ```bash
-exec bash   # SSM 기본 셸은 sh다
-C='sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env'
-$C config --quiet && echo CONFIG_OK
-$C up -d
-$C ps --format '{{.Name}} {{.Status}}'
+# block: up
+( set -euo pipefail
+C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
+fail() { echo "중단: $*" >&2; exit 1; }
+"${C[@]}" config --quiet || fail "config 실패(값 누락 등). up을 실행하지 않는다"
+echo CONFIG_OK
+"${C[@]}" up -d || fail "up 실패"
+"${C[@]}" ps --format '{{.Name}} {{.Status}}' || fail "ps 조회 실패"
+echo UP_OK
+)
 ```
 
-### 2-2. 키 입력 (K2, 승인 ⑨)
+### 2-2. 키와 호출 상한 입력 (K2, 승인 ⑨)
 
 1. 운영 담당이 빈 파일을 만듭니다: `sudo install -d -m 750 /opt/beone/codef && sudo install -m 600 /dev/null /opt/beone/codef/.env`
-2. **사용자가 직접** `sudoedit /opt/beone/codef/.env`로 검증 DB 값(`MYSQL_*`), 이미지 태그(`BEONE_VERIFY_*`), 1절의 키 5개, 상품 호스트(`BEONE_CODEF_PRODUCT_HOST`)를 입력합니다. 로컬 검증 때와 같은 키를 씁니다.
-3. 에이전트와 운영 담당은 값을 보지 않습니다. 이름이 있는지만 확인합니다.
+2. **사용자가 직접** `sudoedit /opt/beone/codef/.env`로 다음을 입력합니다. 로컬 검증 때와 같은 키를 씁니다.
+   - 검증 DB 값(`MYSQL_DATABASE`·`MYSQL_USER`·`MYSQL_PASSWORD`·`MYSQL_ROOT_PASSWORD`), 이미지 태그(`BEONE_VERIFY_API_IMAGE`·`BEONE_VERIFY_NGINX_IMAGE`)
+   - 1절의 키 5개, 상품 호스트(`BEONE_CODEF_PRODUCT_HOST`, N19)
+   - 호출 상한: `BEONE_CODEF_BUDGET_PER_API=3`, `BEONE_CODEF_BUDGET_WINDOW_START`, `BEONE_CODEF_BUDGET_WINDOW_END`. 창은 연결·동기화를 할 검증 기간 전체를 덮도록 **처음 한 번만** 정합니다(예: `2026-12-01T00:00:00+09:00` ~ `2026-12-08T00:00:00+09:00`).
+3. **창은 한 번 정하면 바꾸지 않습니다.** 카운터는 창 시작 시각별로 따로 세므로, 재기동할 때 시작 시각을 바꾸면 새 행에서 0부터 다시 세어 상한이 무력해집니다. 재기동·키 재입력(4-1) 때도 같은 값을 그대로 둡니다. 창이 끝나면 호출은 닫히며, 창을 늘리거나 새로 정하는 것은 사용자 승인 사항입니다.
+4. 에이전트와 운영 담당은 키 값을 보지 않습니다. 이름이 있는지와 빈 값이 없는지만 확인합니다. 호출 상한 세 값은 비밀이 아니므로 기록표에 남깁니다(창 고정 확인용).
 
 ```bash
-exec bash
-sudo sh -c 'cut -d= -f1 /opt/beone/codef/.env | grep -v "^#" | sort'   # 이름만
-sudo sh -c 'awk -F= "length(\$2)==0{print \$1\" 비어 있음\"}" /opt/beone/codef/.env'   # 빈 값만 이름으로
+# block: names
+( set -euo pipefail
+fail() { echo "중단: $*" >&2; exit 1; }
+names=$(sudo awk -F= '!/^#/ && NF { print $1 }' /opt/beone/codef/.env) || fail ".env를 읽지 못함"
+empty=$(sudo awk -F= '!/^#/ && NF && length($2) == 0 { print $1 }' /opt/beone/codef/.env) || fail ".env를 읽지 못함"
+missing=""
+for k in MYSQL_DATABASE MYSQL_USER MYSQL_PASSWORD MYSQL_ROOT_PASSWORD BEONE_VERIFY_API_IMAGE BEONE_VERIFY_NGINX_IMAGE \
+	CODEF_CLIENT_ID CODEF_CLIENT_SECRET CODEF_PUBLIC_KEY BEONE_CODEF_CONNECTED_ID_KEY BEONE_CODEF_APPROVAL_HMAC_KEY \
+	BEONE_CODEF_PRODUCT_HOST BEONE_CODEF_BUDGET_PER_API BEONE_CODEF_BUDGET_WINDOW_START BEONE_CODEF_BUDGET_WINDOW_END; do
+	printf '%s\n' "$names" | grep -qx "$k" || missing="$missing $k"
+done
+[ -z "$missing" ] || fail "이름 없음:$missing"
+[ -z "$empty" ] || fail "빈 값: $(echo $empty)"
+sudo grep -E '^BEONE_CODEF_BUDGET_' /opt/beone/codef/.env || fail "호출 상한 값을 읽지 못함"   # 비밀 아님. 기록표에 남긴다
+echo NAMES_OK
+)
 ```
 
 - 공개 `beone-app` 환경 파일에는 넣지 않습니다. 저장소·이슈·PR·로그에도 남기지 않습니다.
 
 ### 2-3. 호출 (K3, 승인 ⑩)
 
+- 호출 전에 3-1의 `ledger-before`와 3-0의 `budget`(행 0)을 실행해 기준을 남깁니다.
 - 사용자 Mac에서 SSH 터널(검증 런북 8절)로 `http://localhost:18080`에 접속합니다. 합성 회원 1명을 T-a로 인증합니다(검증 런북 7절).
 - `POST /api/v1/me/codef/connection`: 기관 `0301`(KB국민카드), 동의한 계정 1개. 비밀번호는 사용자가 화면이나 요청에 직접 입력하고 기록하지 않습니다. **1회.**
 - `POST /api/v1/me/codef/syncs`: **1회.**
 - 기록은 HTTP 상태와 `CF-` 결과 코드만 남깁니다. 응답 전문은 저장하지 않습니다.
-- **상한(N14):** API별 최대 3회입니다. 실패해도 자동 재시도는 없습니다(게이트웨이는 재호출하지 않음). 다시 시도하면 횟수에 셉니다.
+- **상한(N14):** API별 최대 3회이며 DB 카운터가 막습니다. 실패해도 자동 재시도는 없습니다(게이트웨이는 재호출하지 않음). 다시 시도하면 횟수에 셉니다. 연결이 `502 CODEF_UNAVAILABLE`이고 `codef_call_budgets`에 행이 없으면 상한 설정 누락·창 밖(닫힘)을 먼저 의심합니다(2-2 `names`).
 - **중단:** 계정 잠김 경고나 인증 실패 계열 `CF-`, 상한 도달, 로그·DB에서 금지 값 발견, 원장 변경, 운영 영향 중 하나라도 해당하면 즉시 멈추고 4절로 갑니다.
 
 ## 3. 확인 (K4~K6)
 
-### 3-1. 정제 저장 (K4)
+### 3-0. 호출 상한 누적 (LP-2)
+
+호출 전, 연결 뒤, 동기화 뒤, 재기동 뒤마다 실행합니다. 창 시작 시각이 하나뿐이고 어느 API도 3을 넘지 않아야 합니다.
 
 ```bash
-exec bash
-Q() { sudo docker compose -p beone-codef exec -T verify-mysql sh -c "mysql -u\"\$MYSQL_USER\" -p\"\$MYSQL_PASSWORD\" -N -e \"$1\" \"\$MYSQL_DATABASE\"" 2>/dev/null; }
-Q 'SELECT COUNT(*) FROM ledger_transactions'                          # 호출 전과 같아야 함(R8)
-Q 'SELECT COUNT(*) FROM codef_approval_rows'
-Q 'SELECT COUNT(*) FROM codef_held_cards'
-Q 'SELECT COUNT(*) FROM codef_performance_references'
-Q "SELECT SUM(connected_id_ciphertext NOT LIKE 'v1:%') FROM codef_connections"   # 0
+# block: budget
+( set -euo pipefail
+C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
+fail() { echo "중단: $*" >&2; exit 1; }
+Q() { "${C[@]}" exec -T verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u"$MYSQL_USER" -N -B -e "$1" "$MYSQL_DATABASE"' sh "$1"; }
+rows=$(Q 'SELECT api, window_start, used FROM codef_call_budgets ORDER BY window_start, api') || fail "조회 실패"
+stat=$(Q 'SELECT COUNT(DISTINCT window_start), COALESCE(MAX(used), 0) FROM codef_call_budgets') || fail "조회 실패"
+[ -n "$stat" ] || fail "조회 결과가 비어 있음(0건과 다름)"
+read -r windows maxused <<< "$stat"
+printf '%s\n' "$rows"
+[ "$windows" -le 1 ] || fail "창 시작 시각이 ${windows}개(재기동 때 창을 바꿈). 호출을 멈춘다"
+[ "$maxused" -le 3 ] || fail "API별 3회 초과(${maxused})"
+echo "windows=$windows maxUsed=$maxused"
+echo BUDGET_OK
+)
 ```
 
-| 확인 | 기대 |
+| 시점 | 기대 |
 |---|---|
-| `ledger_transactions` 행 수 | 호출 전과 같음(CODEF는 원장에 쓰지 않음) |
-| `codef_connections` | 암호문(`v1:`)만, 평문 0 |
-| `codef_approval_rows` | 승인번호는 64자 소문자 16진 지문만(DB CHECK) |
+| 호출 전 | 행 0(`windows=0 maxUsed=0`) |
+| 연결 뒤 | `ACCOUNT_CREATE` 1, `TOKEN` 1 이상 3 이하, 창 시작 시각 1개이며 2-2에서 기록한 시작 시각(UTC로 저장)과 같음 |
+| 동기화 뒤 | 위에 더해 `HELD_CARDS`·`APPROVALS`·`CARD_PERFORMANCES` 각 1 |
+| 재기동 뒤 | 이전과 같은 행·값(창이 새로 생기지 않음) |
+
+### 3-1. 정제 저장과 원장 불변 (K4)
+
+원장(`ledger_transactions`)은 행 수만이 아니라 **모든 열의 내용 해시**로 호출 전후를 비교합니다. 같은 행이 수정돼도 해시가 바뀝니다. 기준값(행 수·해시, 비밀 아님)은 서버 홈 폴더 파일에 남깁니다.
+
+```bash
+# block: ledger-before   (2-3 호출 전에 한 번)
+( set -euo pipefail
+C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
+fail() { echo "중단: $*" >&2; exit 1; }
+Q() { "${C[@]}" exec -T verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u"$MYSQL_USER" -N -B -e "$1" "$MYSQL_DATABASE"' sh "$1"; }
+SNAP="SET SESSION group_concat_max_len = 67108864; SELECT COUNT(*), COALESCE(SHA2(GROUP_CONCAT(CONCAT_WS('|', ledger_id, user_id, user_card_id, source, entry_type, amount_won, transaction_date, COALESCE(transaction_time, '-'), merchant_class, payment_method, COALESCE(transaction_nature, '-'), COALESCE(merchant_name, '-'), COALESCE(original_ledger_id, '-'), COALESCE(simulated_payment_id, '-'), attribution_month, attribution_status, recorded_at) ORDER BY ledger_id SEPARATOR '\n'), 256), 'EMPTY') FROM ledger_transactions"
+snap=$(Q "$SNAP") || fail "원장 조회 실패"
+[ -n "$snap" ] || fail "원장 조회 결과가 비어 있음"
+printf '%s\n' "$snap" > ~/beone-codef-ledger-before.txt
+echo "ledger before: $snap"
+echo LEDGER_BEFORE_OK
+)
+```
+
+```bash
+# block: ledger-after   (동기화 뒤)
+( set -euo pipefail
+C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
+fail() { echo "중단: $*" >&2; exit 1; }
+Q() { "${C[@]}" exec -T verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u"$MYSQL_USER" -N -B -e "$1" "$MYSQL_DATABASE"' sh "$1"; }
+SNAP="SET SESSION group_concat_max_len = 67108864; SELECT COUNT(*), COALESCE(SHA2(GROUP_CONCAT(CONCAT_WS('|', ledger_id, user_id, user_card_id, source, entry_type, amount_won, transaction_date, COALESCE(transaction_time, '-'), merchant_class, payment_method, COALESCE(transaction_nature, '-'), COALESCE(merchant_name, '-'), COALESCE(original_ledger_id, '-'), COALESCE(simulated_payment_id, '-'), attribution_month, attribution_status, recorded_at) ORDER BY ledger_id SEPARATOR '\n'), 256), 'EMPTY') FROM ledger_transactions"
+before=$(cat ~/beone-codef-ledger-before.txt) || fail "호출 전 기준 파일 없음(ledger-before를 먼저 실행)"
+after=$(Q "$SNAP") || fail "원장 조회 실패"
+[ -n "$after" ] || fail "원장 조회 결과가 비어 있음"
+echo "ledger before: $before"
+echo "ledger after:  $after"
+[ "$before" = "$after" ] || fail "원장 행 수 또는 내용이 바뀜(R8 위반). 4절로 간다"
+conn=$(Q "SELECT COUNT(*), COALESCE(SUM(connected_id_ciphertext NOT LIKE 'v1:%'), 0) FROM codef_connections") || fail "조회 실패"
+fp=$(Q "SELECT COUNT(*), COALESCE(SUM(NOT REGEXP_LIKE(approval_fingerprint, '^[0-9a-f]{64}\$', 'c')), 0) FROM codef_approval_rows") || fail "조회 실패"
+held=$(Q 'SELECT COUNT(*) FROM codef_held_cards') || fail "조회 실패"
+perf=$(Q 'SELECT COUNT(*) FROM codef_performance_references') || fail "조회 실패"
+echo "connections(행 비v1)=$conn approvals(행 형식밖)=$fp held=$held performance=$perf"
+read -r _ notv1 <<< "$conn"; read -r _ badfp <<< "$fp"
+[ "$notv1" = 0 ] && [ "$badfp" = 0 ] || fail "형식 밖 행 발견"
+echo LEDGER_AFTER_OK
+)
+```
+
+| 확인 | 기대 | 이 확인이 보장하지 않는 것 |
+|---|---|---|
+| 원장 행 수·내용 해시 | 호출 전과 같음(CODEF는 원장에 쓰지 않음, R8) | `ledger_transactions` 밖(예: `simulated_payments`)의 변화. 비교 범위는 원장 표 하나 |
+| `codef_connections` | 1행, `v1:` 접두어가 아닌 행 0(`SUM`은 행이 0개면 NULL이라 `COALESCE`로 0 처리) | 암호문 안의 내용이 올바른 암호화인지. DB CHECK도 같은 접두어만 보므로 형식 확인일 뿐 평문 부재의 증명이 아님 |
+| `codef_approval_rows` | 형식(64자 소문자 16진) 밖 행 0 | 다른 열(가맹점명 등)에 원문이 섞였는지. DB CHECK가 이미 막는 형식이라 행 존재·형식 확인에 그침 |
+| `codef_held_cards`·`codef_performance_references` | 동기화 결과 행이 있음(행 수 기록) | 값의 정확성 |
 
 ### 3-2. API (K5)
 
@@ -100,41 +199,80 @@ Q "SELECT SUM(connected_id_ciphertext NOT LIKE 'v1:%') FROM codef_connections"  
 
 ### 3-3. 로그 점검 (K6)
 
+`logs` 조회가 실패하거나 출력이 비어 있으면 "금지 패턴 0건"으로 읽지 않고 중단합니다.
+
 ```bash
-exec bash
-L='sudo docker compose -p beone-codef logs verify-backend'
-$L | grep -ciE 'password|passwd|connectedId=|cardNo|card_no|approvalNo'   # 0
-$L | grep -oE 'CF-[0-9]{5}' | sort | uniq -c                               # 결과 코드만
-$L | grep -cE 'CODEF_(CLIENT_ID|CLIENT_SECRET|PUBLIC_KEY)=|CODEF_[A-Z_]*KEY='                 # 0(키 이름=값 형태 없음)
+# block: logs
+( set -euo pipefail
+C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
+fail() { echo "중단: $*" >&2; exit 1; }
+logs=$("${C[@]}" logs --no-color verify-backend) || fail "logs 조회 실패(0건과 다름)"
+[ -n "$logs" ] || fail "로그가 비어 있음(백엔드 미기동 의심, 0건과 다름)"
+sens=$(printf '%s\n' "$logs" | grep -ciE 'password|passwd|connectedId=|cardNo|card_no|approvalNo' || true)
+keys=$(printf '%s\n' "$logs" | grep -cE 'CODEF_(CLIENT_ID|CLIENT_SECRET|PUBLIC_KEY)=|CODEF_[A-Z_]*KEY=' || true)
+printf '%s\n' "$logs" | grep -oE 'CF-[0-9]{5}' | sort | uniq -c || true   # 결과 코드만
+echo "sensitive=$sens keyform=$keys"
+[ "$sens" = 0 ] && [ "$keys" = 0 ] || fail "금지 패턴 발견. 로그를 공유하지 말고 4절로 간다"
+echo LOGS_OK
+)
 ```
 
-- 첫 번째 결과가 0이 아니면 중단하고 로그를 공유하지 말고 4절로 갑니다.
+- 이 점검은 **알려진 이름 패턴**(비밀번호·connectedId·카드번호·승인번호 필드명, 키 이름=값 형태)만 셉니다. 0건이어도 이름 없이 찍힌 값, 다른 형식, nginx·MySQL 등 다른 컨테이너 로그의 민감값이 없다는 보장은 아닙니다. 결과를 공유할 때는 이 숫자와 결과 코드만 씁니다.
 
 ## 4. 해제·폐기 (K7, 승인 ⑪)
 
 ### 4-1. 보관 중 (N15)
 
-- MVP 시연이 끝날 때까지는 검증 DB 볼륨(`beone-codef_verify-mysql-data`)에 정제 데이터만 보관합니다. 컨테이너는 멈춰 둘 수 있습니다(`$C stop`, 볼륨 보존).
-- 보관하는 동안 CODEF 키는 `.env`에서 지울 수 있습니다. 다시 띄울 때 사용자가 다시 입력합니다.
+- MVP 시연이 끝날 때까지는 검증 DB 볼륨(`beone-codef_verify-mysql-data`)에 정제 데이터만 보관합니다. 컨테이너는 멈춰 둘 수 있습니다(아래 `stop`, 볼륨 보존).
+- 보관하는 동안 CODEF 키는 `.env`에서 지울 수 있습니다. 다시 띄울 때 사용자가 다시 입력하며, **호출 상한 세 값(특히 창)은 그대로 둡니다**(2-2의 3번). 다시 띄운 뒤 3-0 `budget`으로 창이 하나인지 확인합니다.
+
+```bash
+# block: stop
+( set -euo pipefail
+C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
+fail() { echo "중단: $*" >&2; exit 1; }
+names=$("${C[@]}" ps -a --format '{{.Name}}') || fail "대상 조회 실패"
+[ -n "$names" ] || fail "beone-codef 컨테이너가 없음"
+while IFS= read -r n; do case "$n" in beone-codef-*) ;; *) fail "beone-codef가 아닌 컨테이너: $n" ;; esac; done <<< "$names"
+"${C[@]}" stop || fail "stop 실패"
+echo STOP_OK
+)
+```
 
 ### 4-2. MVP 수락 뒤 폐기
 
-기본 방법은 **검증 DB를 통째로 지우는 것**입니다.
+기본 방법은 **검증 DB를 통째로 지우는 것**입니다. 대상 식별이 어긋나거나 조회·삭제가 실패하면 그 자리에서 멈추고 다음 단계로 가지 않습니다.
+
+1. 연결 해제: CODEF 쪽 connectedId 정리를 요청합니다(키가 있어야 정리됨). 사용자 Mac 터널에서 `DELETE /api/v1/me/codef/connection`(CSRF) → 204.
+2. 아래 블록으로 검증 환경·DB·키 파일을 지우고 확인합니다.
 
 ```bash
-exec bash
-# 1) 연결 해제: CODEF 쪽 connectedId 정리를 요청한다(키가 있어야 정리됨)
-#    사용자 Mac 터널에서: DELETE /api/v1/me/codef/connection (CSRF) → 204
-# 2) 검증 환경과 DB 통째 삭제
-$C down -v
+# block: destroy
+( set -euo pipefail
+C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
+fail() { echo "중단: $*" >&2; exit 1; }
+# 1) 대상 식별: 이 프로젝트의 컨테이너가 모두 beone-codef- 이름인지(운영 beone-app·검증 beone-verify가 섞이면 중단)
+names=$("${C[@]}" ps -a --format '{{.Name}}') || fail "대상 조회 실패"
+[ -n "$names" ] || fail "beone-codef 컨테이너가 없음(이미 정리했거나 대상 오식별). 수동 확인"
+while IFS= read -r n; do case "$n" in beone-codef-*) ;; *) fail "beone-codef가 아닌 컨테이너: $n" ;; esac; done <<< "$names"
+# 2) 검증 환경과 DB 통째 삭제. 실패하면 키 파일 삭제·확인으로 넘어가지 않는다
+"${C[@]}" down -v || fail "down -v 실패. 키 파일과 볼륨을 그대로 두고 보고한다"
 # 3) 키 파일 삭제
-sudo rm /opt/beone/codef/.env /opt/beone/codef/compose.codef.yaml && sudo rmdir /opt/beone/codef
-# 4) 확인
-sudo docker volume ls --format '{{.Name}}' | grep -c '^beone-codef_'   # 0
-sudo ls /opt/beone/codef 2>&1 | head -1                                 # 없음
+sudo rm /opt/beone/codef/.env /opt/beone/codef/compose.codef.yaml || fail "키 파일 삭제 실패"
+sudo rmdir /opt/beone/codef || fail "폴더 삭제 실패"
+# 4) 확인. 조회 실패는 0개로 읽지 않는다
+vols=$(sudo docker volume ls --format '{{.Name}}') || fail "볼륨 조회 실패(0개와 다름)"
+left=$(printf '%s\n' "$vols" | grep -c '^beone-codef_' || true)
+[ "$left" = 0 ] || fail "beone-codef 볼륨이 ${left}개 남음"
+if sudo test -e /opt/beone/codef; then fail "/opt/beone/codef가 남음"; fi
+rm -f ~/beone-codef-ledger-before.txt
+echo DESTROY_OK
+)
 ```
 
-### 4-3. DB를 남기고 CODEF 데이터만 지울 때 (선택)
+- 끝나면 검증 런북 9절의 "영향 없음 확인"(운영 `beone-app` healthy·이미지 동일, 복원 회차 그대로)을 실행합니다.
+
+### 4-3. DB를 남기고 CODEF 데이터만 지울 때 (선택, N20 미결)
 
 검증 DB를 남겨야 할 때만 씁니다. **대상은 `codef_*` 테이블뿐**이고, `beone-codef` 검증 DB에서만 실행합니다. **운영 DB(`beone-app`)와 원장(`ledger_transactions`)은 대상이 아닙니다.** 외래 키 순서는 자식 → 부모입니다.
 
@@ -149,14 +287,16 @@ DELETE FROM codef_connections;
 COMMIT;
 ```
 
-- 동기화로 만든 `user_cards` 행(`holding_source='CODEF'`)은 `codef_*`가 아니라 위 SQL 범위 밖입니다. 이 행까지 지울지는 **결정 필요**입니다. 4-2의 통째 삭제는 이 행도 함께 지웁니다.
-- 실행 전후로 각 테이블의 `COUNT(*)`를 기록합니다. 원장 행 수는 바뀌지 않아야 합니다.
+- 동기화로 만든 `user_cards` 행(`holding_source='CODEF'`)은 `codef_*`가 아니라 위 SQL 범위 밖입니다. 이 행까지 지울지는 **미결(N20)**입니다. 4-2의 통째 삭제는 이 행도 함께 지웁니다.
+- 실행 전후로 각 테이블의 `COUNT(*)`를 기록하고, 3-1의 `ledger-after`로 원장 행 수·내용 해시가 그대로인지 확인합니다.
+- `codef_call_budgets`(호출 상한 누적)는 이 SQL 범위 밖입니다. 지우면 상한이 다시 0부터 세어지므로 검증 기간 중에는 지우지 않습니다.
 
 ## 5. 남은 것
 
 | 항목 | 상태 |
 |---|---|
-| LP-2 상한 설정 이름 | #205 병합 뒤 1절·2-1절에 채움 |
+| 실 계정용 상품 호스트 | 미결(N19, 1절) |
+| CODEF 카드 `user_cards` 행 폐기 범위 | 미결(N20, 4-3) |
 | 계정 API 실호출 전 확인 항목 | [codef 문서](../domains/codef.md#비공개-실연동-프로필-codef-live-lp-1-193)의 '실호출 전 확인 필요' 목록 |
-| CODEF 카드 `user_cards` 행 폐기 범위 | 결정 필요(4-3) |
 | 정식 과금 여부와 비용 상한 | N14의 비용 부분. 정식 과금이면 별도 승인 |
+| 서버 블록의 실제 실행 확인 | 오프라인 스텁 점검만 함(0절). 서버 실행은 운영 담당 |
