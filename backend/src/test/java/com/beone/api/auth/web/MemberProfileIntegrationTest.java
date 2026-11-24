@@ -267,8 +267,8 @@ class MemberProfileIntegrationTest {
 
 	/**
 	 * member 프로필은 인증 9개·/me·보유 카드·월간 상태·결제 설정·주문·예정 소비·추천·원장 조회·모의 결제·상품 조회·health만 연다.
-	 * 나머지 업무 API는 로그인해도 404다. CODEF 4개(D9 미결)와 시연 사용자 목록(결정 37 D2·D4)은 404로 남는다. 주문 경로는 POST만 있으므로 {@code GET /api/v1/me/orders}는 인증 전에 405 {@code METHOD_NOT_ALLOWED}다(docs/api.md
-	 * 공통 실패 응답).
+	 * 나머지 업무 API는 로그인해도 404다. CODEF 4개(D9 미결)와 시연 사용자 목록(결정 37 D2·D4)은 404로 남는다. 주문 모음 경로는 GET(목록, 결정 38-5)·POST만 있으므로 {@code PUT}·{@code PATCH}·{@code DELETE /api/v1/me/orders}는
+	 * 인증 전에 405 {@code METHOD_NOT_ALLOWED}다(docs/api.md 공통 실패 응답). GET 목록은 로그인하면 200, 아니면 401이다.
 	 */
 	@Test
 	void onlyAllowedRoutesAreRegistered() throws Exception {
@@ -295,12 +295,22 @@ class MemberProfileIntegrationTest {
 				.value()).as("anonymous " + route[0] + " " + route[1]).isEqualTo(404);
 		}
 
-		// 목록 API가 없는 주문 경로의 GET은 핸들러가 없어 인터셉터 전에 405다. 로그인 여부와 관계없다
-		for (Session session : new Session[] { a, Session.NONE }) {
-			ResponseEntity<String> listOrders = send(HttpMethod.GET, "/api/v1/me/orders", session, null);
-			assertBody(listOrders, 405, METHOD_NOT_ALLOWED);
-			assertThat(listOrders.getHeaders().getAllow()).containsExactly(HttpMethod.POST);
-			assertNoStore(listOrders);
+		// 주문 목록 GET은 등록된 경로라 로그인하면 200, 아니면 401이다(결정 38-5)
+		ResponseEntity<String> listOrders = send(HttpMethod.GET, "/api/v1/me/orders", a, null);
+		assertThat(listOrders.getStatusCode().value()).isEqualTo(200);
+		assertNoStore(listOrders);
+		assertBody(send(HttpMethod.GET, "/api/v1/me/orders", Session.NONE, null), 401, UNAUTHENTICATED);
+
+		// 주문은 수정·삭제하지 않으므로 모음 경로의 PUT·PATCH·DELETE는 핸들러가 없어 인터셉터 전에 405다. 로그인 여부와 관계없다
+		for (HttpMethod method : new HttpMethod[] { HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE }) {
+			for (Session session : new Session[] { a, Session.NONE }) {
+				ResponseEntity<String> notAllowed = send(method, "/api/v1/me/orders", session, "{}");
+				assertBody(notAllowed, 405, METHOD_NOT_ALLOWED);
+				assertThat(notAllowed.getHeaders().getAllow()).as(method.name())
+					.contains(HttpMethod.GET, HttpMethod.POST)
+					.doesNotContain(HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE);
+				assertNoStore(notAllowed);
+			}
 		}
 	}
 
