@@ -1,6 +1,6 @@
 # #196 CODEF 프로세스를 넘는 호출 상한 카운터 (LP-2, N14)
 
-브랜치 `feat/196-codef-call-budget`, LP-1 브랜치(`feat/193-codef-live-gateway`, PR #195, `92ed605`) 위에 쌓았습니다. codef 패키지가 겹치기 때문입니다. #195가 병합되면 이 PR의 diff는 LP-2 변경만 남습니다.
+브랜치 `feat/196-codef-call-budget`, codef 패키지가 겹쳐 LP-1 브랜치(`feat/193-codef-live-gateway`, PR #195, `92ed605`)에서 시작했습니다. #195가 `develop` `455b0e8`로 병합된 뒤 `origin/develop`을 merge해(rebase 없음) diff는 LP-2 변경만 남았습니다. develop 트리가 #195 head와 같아 충돌 6파일(코드 1·시험 2·문서 3)은 LP-2 쪽을 택했습니다.
 
 ## 2026-11-25 · 호출 총량 카운터
 
@@ -14,5 +14,5 @@
 - 기존 테스트 수정: `CodefLiveMemberIntegrationTest`에 창·API별 3 설정과 `codef_call_budgets` 정리를 더했습니다. `PublicProfileIntegrationTest`(#190)의 마이그레이션 목록 기대값에 15를 더했습니다.
 - 하지 않은 것: CODEF 실호출, 실키·환경 비밀 파일, 서버 접속, 비용 상한, 연결·동기화 API의 새 공개 오류 코드(기존 `CODEF_UNAVAILABLE` 유지), frontend·Android.
 - 검증
-  - `./gradlew test webTest --rerun-tasks` 통과(단위 1472 = #195 1462 + 10, 웹 436, 실패·skip 0).
+  - `./gradlew test webTest --rerun-tasks` 통과(단위 1472 = develop 1462 + 10, 웹 436, 실패·skip 0). develop 동기화 뒤 다시 실행해 같은 결과였고, `./gradlew integrationTest --rerun-tasks` 단독 전체 재실행도 통과했습니다(204 = develop 198 + 6, peak 3,798MiB).
   - `./gradlew integrationTest --rerun-tasks` 단독 실행: 204건 중 1건 실패(`PublicProfileIntegrationTest`가 마이그레이션 목록을 1~14로 고정). 기대값을 고친 뒤 그 클래스만 다시 실행해 4/4 통과. 나머지 203건은 전체 실행에서 통과(peak 3,798MiB). 실행 전 다른 작업선의 Docker 스모크가 없음을 확인했습니다.
