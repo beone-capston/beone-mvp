@@ -21,6 +21,9 @@ public final class BenefitArithmetic {
 	/**
 	 * 건당 할인 대상 금액 상한을 적용한다. 상한을 넘는 부분은 할인 대상이 아니다({@code BenefitService.maximumTargetAmount}).
 	 * 상한이 없으면 거래 금액 전체가 대상이다. 상한은 규칙 모델과 같이 0원보다 커야 한다.
+	 * @param transactionAmount 거래 금액
+	 * @param maximumTargetAmount 건당 할인 대상 금액 상한. 없으면 빈 값
+	 * @return 할인 대상 금액
 	 */
 	public static Won capTargetAmount(Won transactionAmount, Optional<Won> maximumTargetAmount) {
 		requireNotNegative(transactionAmount, "transaction amount");
@@ -35,6 +38,9 @@ public final class BenefitArithmetic {
 
 	/**
 	 * 계산 방식에 따라 대상 금액의 혜택을 원 미만까지 정확히 계산한다.
+	 * @param calculation 계산 방식
+	 * @param targetAmount 할인 대상 금액
+	 * @return 원 미만을 포함한 혜택 금액
 	 */
 	public static UnroundedWon apply(BenefitCalculation calculation, Won targetAmount) {
 		Objects.requireNonNull(calculation, "calculation");
@@ -49,6 +55,9 @@ public final class BenefitArithmetic {
 	 *
 	 * <p>
 	 * 곱셈 넘침을 피하려고 대상 금액을 10,000 단위 몫과 나머지로 나눠 계산한다. 요율이 100% 이하이므로 결과는 대상 금액을 넘지 않는다.
+	 * @param rate 정률 계산 방식
+	 * @param targetAmount 할인 대상 금액
+	 * @return 원 미만을 포함한 혜택 금액
 	 */
 	public static UnroundedWon rate(BenefitCalculation.Rate rate, Won targetAmount) {
 		Objects.requireNonNull(rate, "rate");
@@ -68,6 +77,9 @@ public final class BenefitArithmetic {
 	 * <p>
 	 * {@code targetAmount}는 음수인지 확인하는 데만 쓴다. 결과가 대상 금액보다 클 수 있으며, 정액을 결제 금액으로 줄일지는
 	 * 정해지지 않았으므로 여기서 줄이지 않는다.
+	 * @param fixed 정액 계산 방식
+	 * @param targetAmount 할인 대상 금액. 음수 확인에만 쓴다
+	 * @return 정액 혜택 금액
 	 */
 	public static UnroundedWon fixed(BenefitCalculation.FixedAmount fixed, Won targetAmount) {
 		Objects.requireNonNull(fixed, "fixed");

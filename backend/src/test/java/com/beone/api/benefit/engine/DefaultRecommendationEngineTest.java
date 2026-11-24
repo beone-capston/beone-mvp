@@ -171,6 +171,24 @@ class DefaultRecommendationEngineTest {
 		}
 
 		@Test
+		void postSnapshotUnresolvedUsageIsCalculatedTheSameAsNotEntered() {
+			// 결정 32 Q6: 사유만 다르고 계산·판정은 미입력과 같다
+			EngineResult notEntered = recommend(order("STARBUCKS_STORE", 20_000, "DIRECT"),
+					card("09174", stateWithGreat(StateInput.notEntered())));
+			EngineResult unresolved = recommend(order("STARBUCKS_STORE", 20_000, "DIRECT"),
+					card("09174", stateWithGreat(StateInput.postSnapshotActivityUnresolved())));
+
+			assertThat(unresolved).isEqualTo(notEntered);
+			assertThat(unresolved.excludedCards()).extracting(ExcludedCard::reason).containsExactly("NEEDS_CONFIRMATION");
+		}
+
+		private MonthlyStateInput stateWithGreat(StateInput<Long> great) {
+			List<BucketUsageInput> usages = new ArrayList<>(usages(DATE, allBuckets("09174", 0L)));
+			usages.replaceAll(usage -> usage.limitBucketId().equals("GREAT") ? new BucketUsageInput("GREAT", great) : usage);
+			return new MonthlyStateInput(prior(DATE, 300_000L), usages, other(DATE), "NONE", List.of(noSelection()));
+		}
+
+		@Test
 		void negativePriorPerformanceNeedsConfirmationInsteadOfFailing() {
 			EngineResult result = recommend(order("STARBUCKS_STORE", 20_000, "DIRECT"),
 					card("09174", state(DATE, -1_000L, allBuckets("09174", 0L))));

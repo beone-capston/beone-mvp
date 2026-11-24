@@ -18,6 +18,19 @@ class StateInputTest {
 	}
 
 	@Test
+	void postSnapshotActivityUnresolvedIsAnUnknownWithItsOwnReason() {
+		StateInput<Long> value = StateInput.postSnapshotActivityUnresolved();
+		assertThat(value.value()).isNull();
+		assertThat(value.source()).isEqualTo("UNKNOWN");
+		assertThat(value.usable()).isFalse();
+		assertThat(value.reason()).isEqualTo("POST_SNAPSHOT_ACTIVITY_UNRESOLVED");
+		assertThat(StateInput.notEntered().reason()).isEqualTo("NOT_ENTERED");
+		assertThatThrownBy(() -> new StateInput<>(1L, "MANUAL", ORDER_DATE, ORDER_DATE, NOW, false,
+				"POST_SNAPSHOT_ACTIVITY_UNRESOLVED"))
+			.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
 	void periodMismatchIsNotAcceptedBecauseTheEngineJudgesThePeriod() {
 		assertThatThrownBy(() -> new StateInput<>(1L, "MANUAL", ORDER_DATE, ORDER_DATE, NOW, false, "PERIOD_MISMATCH"))
 			.hasMessageContaining("PERIOD_MISMATCH");

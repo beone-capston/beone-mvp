@@ -120,6 +120,8 @@ seenRecommendationId
 - `status` · `APPROVED` / `FAILED`. `FAILED`는 서비스 내부 테스트 조건의 실패이고 카드사 거절이 아니다(PRD §4, FR-07)
 - `FAILED`일 때(D-23): 응답은 **201**이고 실패 기록(`simulatedPaymentId`, 시각)을 저장한다. 원장에 승인 행을 남기지 않아 `ledgerTransactionId=null`이고, 주문은 `PAID`가 아니며 한도를 줄이지 않는다. `currentOrderBenefit.amountWon=null`, `cancellableAmountWon=0`이다. 같은 키·같은 지문은 같은 실패를 돌려주고, 다른 키로 다시 승인할 수 있다
 - `recalculation.changed`는 `seenRecommendationId`가 무효가 된 추천이어도 같은 규칙으로 계산한다. `differences[].reason`에 `MAPPING_CHANGED` 등 사유를 담는다(D-23)
+- 비교 기준은 결제 설정과 관계없이 `selected`다. `selected.userCardId`와 `selected.currentOrderBenefit.amountWon` 두 값만 비교한다(사용자 확인, 결정 32 Q4, 2026-11-18)
+  - 한계: 대표 카드 고정 모드에서 승인 카드는 대표 카드인데, 대표 카드가 `selected`와 다르면 대표 카드의 혜택만 바뀐 경우를 감지하지 못하고 `changed=false`일 수 있다. 화면 연결(3단계)에서 다시 검토한다
 - `currentOrderBenefit` · 승인 시점 계산값. 미확정이면 `amountWon=null`. 카드사가 지급한 금액이 아니다
 - 승인된 혜택은 다음 계산의 사용액으로 서비스 체인 안 모든 한도 버킷에 반영한다(D-18 K1). 모의 원장 기준이며 실제 카드사 차감 시점이 아니다
 - `ledgerTransactionId` · 원장에 남긴 승인 행

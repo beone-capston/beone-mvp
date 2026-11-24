@@ -11,10 +11,19 @@ import org.springframework.data.repository.query.Param;
  */
 public interface RecommendationCardBasisRepository extends JpaRepository<RecommendationCardBasisEntity, Long> {
 
-	/** 추천 하나의 카드 근거를 넣은 순서로 찾는다. */
+	/**
+	 * 추천 하나의 카드 근거를 넣은 순서로 찾는다.
+	 * @param recommendationId 추천 번호
+	 * @return 카드 근거 행 목록
+	 */
 	List<RecommendationCardBasisEntity> findByRecommendationIdOrderByCardBasisIdAsc(Long recommendationId);
 
-	/** 이 사용자의 추천 중 이 보유 카드를 근거로 쓴 추천 번호를 오름차순으로 찾는다. */
+	/**
+	 * 이 사용자의 추천 중 이 보유 카드를 근거로 쓴 추천 번호를 오름차순으로 찾는다.
+	 * @param userId 사용자 ID
+	 * @param userCardId 보유 카드 ID
+	 * @return 추천 번호 목록
+	 */
 	@Query("select distinct b.recommendationId from RecommendationCardBasisEntity b, RecommendationEntity r"
 			+ " where r.recommendationId = b.recommendationId and r.userId = :userId and b.userCardId = :userCardId"
 			+ " order by b.recommendationId")

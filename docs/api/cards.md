@@ -136,7 +136,7 @@ X-BeONE-Demo-User: MY_CARDS
 
 - `demoUser` · String · 시연 사용자 구분. `member` 프로필의 회원이면 `null`
 - `cardCount` · Integer · 등록 해제되지 않은 보유 카드 수
-- `codefConnected` · Boolean · CODEF 연결 여부. CODEF 연결 행이 있으면 `true`다. 상태가 `RECONNECT_REQUIRED`여도 연결은 있으므로 `true`이고, 재연결 필요 여부는 [CODEF 연결 상태 조회](codef.md)의 `status`·`reconnectRequired`로 본다. 연결이 없거나 가상 포트폴리오면 `false`. `member` 프로필에서도 같은 규칙(연결 행 존재)이며, CODEF API 자체는 이 프로필에 등록하지 않는다
+- `codefConnected` · Boolean · CODEF 연결 여부. CODEF 연결 행이 있으면 `true`다. 상태가 `RECONNECT_REQUIRED`여도 연결은 있으므로 `true`이고, 재연결 필요 여부는 [CODEF 연결 상태 조회](codef.md)의 `status`·`reconnectRequired`로 본다. 연결이 없거나 가상 포트폴리오면 `false`(F1 #137, 사용자 확인 결정 32 Q8, 2026-11-18). `member` 프로필에서도 같은 규칙(연결 행 존재)이며, CODEF API 자체는 이 프로필에 등록하지 않는다
 
 ### 실패 응답
 

@@ -20,7 +20,10 @@ public class RuleMismatchException extends RuntimeException {
 		this.violations = List.copyOf(violations);
 	}
 
-	/** 위반 목록. 비어 있지 않다. */
+	/**
+	 * 위반 목록. 비어 있지 않다.
+	 * @return 위반 목록
+	 */
 	public List<Violation> violations() {
 		return this.violations;
 	}

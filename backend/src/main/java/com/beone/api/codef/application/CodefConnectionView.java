@@ -26,7 +26,10 @@ public record CodefConnectionView(String organization, CodefConnectionStatus sta
 		Objects.requireNonNull(status, "status");
 	}
 
-	/** 다시 연결해야 하면 참이다. */
+	/**
+	 * 다시 연결해야 하면 참이다.
+	 * @return 다시 연결해야 하면 {@code true}
+	 */
 	public boolean reconnectRequired() {
 		return this.status == CodefConnectionStatus.RECONNECT_REQUIRED;
 	}

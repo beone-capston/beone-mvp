@@ -32,12 +32,18 @@ public class OrderClock {
 		this.clock = Objects.requireNonNull(clock, "clock").withZone(ZONE);
 	}
 
-	/** 서울 기준 이번 달. 예정 소비의 조회 범위이자 허용 범위다. */
+	/**
+	 * 서울 기준 이번 달. 예정 소비의 조회 범위이자 허용 범위다.
+	 * @return 서울 기준 이번 달
+	 */
 	public YearMonth currentMonth() {
 		return YearMonth.now(this.clock);
 	}
 
-	/** 서울 기준 현재 시각(초 단위). 주문 생성 시각으로 저장한다. */
+	/**
+	 * 서울 기준 현재 시각(초 단위). 주문 생성 시각으로 저장한다.
+	 * @return 서울 기준 현재 시각(초 단위)
+	 */
 	public LocalDateTime now() {
 		return LocalDateTime.now(this.clock).truncatedTo(ChronoUnit.SECONDS);
 	}

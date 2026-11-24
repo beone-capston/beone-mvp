@@ -27,6 +27,9 @@ public final class PerformanceTiers {
 
 	/**
 	 * 서비스의 계산 방식 구간. 고른 구간의 계산식이 미확정({@code RuleTerm.Unresolved})일 수 있으므로 호출자가 확인한다.
+	 * @param service 대상 서비스
+	 * @param performance 전월 실적. 음수는 거부한다
+	 * @return 실적이 도달한 가장 높은 구간. 도달한 구간이 없으면 빈 값
 	 */
 	public static Optional<ServiceTier> serviceTier(BenefitService service, Won performance) {
 		Objects.requireNonNull(service, "service");
@@ -35,6 +38,9 @@ public final class PerformanceTiers {
 
 	/**
 	 * 한도 버킷의 월 한도 구간.
+	 * @param bucket 대상 한도 묶음
+	 * @param performance 전월 실적. 음수는 거부한다
+	 * @return 실적이 도달한 가장 높은 구간. 도달한 구간이 없으면 빈 값
 	 */
 	public static Optional<LimitTier> limitTier(LimitBucket bucket, Won performance) {
 		Objects.requireNonNull(bucket, "bucket");

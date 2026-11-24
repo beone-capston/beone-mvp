@@ -63,8 +63,8 @@ class SnapshotUsageTest {
 				manual(2000), List.of(approval(effect("STORE", 1000L)), approval(effect("STORE", null)),
 						approval(effect("FUEL", null))));
 
-		assertThat(adjusted.buckets()).containsExactly(new BucketUsageInput("STORE", StateInput.notEntered()));
-		assertThat(adjusted.otherBuckets()).isEqualTo(StateInput.notEntered());
+		assertThat(adjusted.buckets()).containsExactly(new BucketUsageInput("STORE", unresolved()));
+		assertThat(adjusted.otherBuckets()).isEqualTo(unresolved());
 	}
 
 	@Test
@@ -74,7 +74,7 @@ class SnapshotUsageTest {
 				List.of(new BucketUsageInput("STORE", manual(5000)), new BucketUsageInput("FUEL", manual(300))),
 				manual(2000), List.of(cancellation(effect("STORE", 1000L))));
 
-		assertThat(adjusted.buckets()).containsExactly(new BucketUsageInput("STORE", StateInput.notEntered()),
+		assertThat(adjusted.buckets()).containsExactly(new BucketUsageInput("STORE", unresolved()),
 				new BucketUsageInput("FUEL", manual(300)));
 		assertThat(adjusted.otherBuckets()).isEqualTo(manual(2000));
 	}
@@ -95,7 +95,38 @@ class SnapshotUsageTest {
 		SnapshotUsage.Adjusted adjusted = SnapshotUsage.adjust(List.of(), manual(2000),
 				List.of(cancellation(effect("FUEL", null))));
 
+		assertThat(adjusted.otherBuckets()).isEqualTo(unresolved());
+	}
+
+	@Test
+	void valuesThatWereNeverEnteredKeepNotEnteredEvenWhenActivityIsUnresolved() {
+		// 결정 32 Q6: 진짜 미입력은 NOT_ENTERED 그대로다. 새 사유는 입력한 값에만 쓴다
+		SnapshotUsage.Adjusted adjusted = SnapshotUsage.adjust(
+				List.of(new BucketUsageInput("STORE", StateInput.notEntered())), StateInput.notEntered(),
+				List.of(approval(effect("STORE", null)), cancellation(effect("FUEL", 500L))));
+
+		assertThat(adjusted.buckets()).containsExactly(new BucketUsageInput("STORE", StateInput.notEntered()));
 		assertThat(adjusted.otherBuckets()).isEqualTo(StateInput.notEntered());
+		assertThat(adjusted.otherBuckets().reason()).isEqualTo("NOT_ENTERED");
+	}
+
+	@Test
+	void unresolvedActivityChangesOnlyTheReasonOfTheEnteredValue() {
+		StateInput<Long> value = SnapshotUsage
+			.adjust(List.of(new BucketUsageInput("STORE", manual(5000))), manual(2000),
+					List.of(approval(effect("STORE", null))))
+			.buckets()
+			.get(0)
+			.usedWon();
+
+		assertThat(value.value()).isNull();
+		assertThat(value.source()).isEqualTo("UNKNOWN");
+		assertThat(value.usable()).isFalse();
+		assertThat(value.reason()).isEqualTo("POST_SNAPSHOT_ACTIVITY_UNRESOLVED");
+	}
+
+	private static StateInput<Long> unresolved() {
+		return StateInput.postSnapshotActivityUnresolved();
 	}
 
 	private static StateInput<Long> manual(long value) {

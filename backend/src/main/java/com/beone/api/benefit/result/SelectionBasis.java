@@ -25,6 +25,7 @@ public enum SelectionBasis {
 
 	/**
 	 * 선택된 카드가 더 낫다는 뜻이 아닌 단계면 참(D-12).
+	 * @return 임의 판정 단계면 {@code true}
 	 */
 	public boolean isArbitrary() {
 		return arbitrary;

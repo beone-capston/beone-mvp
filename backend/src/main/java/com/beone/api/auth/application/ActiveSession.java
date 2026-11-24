@@ -16,7 +16,10 @@ public record ActiveSession(String sessionId, Duration cookieMaxAge) {
 		Objects.requireNonNull(cookieMaxAge, "cookieMaxAge");
 	}
 
-	/** 이 세션의 CSRF 토큰. */
+	/**
+	 * 이 세션의 CSRF 토큰.
+	 * @return CSRF 토큰 원문
+	 */
 	public String csrfToken() {
 		return SessionTokens.csrfTokenOf(this.sessionId);
 	}
