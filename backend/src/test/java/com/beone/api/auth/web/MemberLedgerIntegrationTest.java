@@ -40,9 +40,9 @@ import org.springframework.test.context.ActiveProfiles;
  * #165: {@code member} 프로필에 등록한 원장 조회 API({@code GET /api/v1/me/ledger-transactions})를 실제 HTTP·MySQL로 확인한다. 세션
  * 401·{@code Cache-Control: no-store}는 #158의 인터셉터·필터가 경로 기준으로 처리하므로, 그것이 새로 연 경로에도 적용되는지 단언한다.
  *
- * <p>모의 결제 API는 member에 등록하지 않았다(N-G3-2·D8 결정 대기). 그래서 회원 원장 행은 결제 API가 아니라 원장 저장소에 직접 넣는
- * 테스트 픽스처로 만든다. 출처는 모의 거래({@code SIMULATION})이고 모의 결제 번호는 비워 둔다. 결제 경로가 member에서 계속 404인지는
- * {@link MemberProfileIntegrationTest#onlyAllowedRoutesAreRegistered()}가 확인한다.
+ * <p>원장 조회만 따로 확인하려고 회원 원장 행은 결제 API가 아니라 원장 저장소에 직접 넣는 테스트 픽스처로 만든다. 출처는 모의
+ * 거래({@code SIMULATION})이고 모의 결제 번호는 비워 둔다. 모의 결제 API가 쓴 회원 원장은
+ * {@link MemberPaymentIntegrationTest}가 확인한다(G3c #161).
  *
  * <p>기대값 출처
  * <ul>
@@ -236,7 +236,7 @@ class MemberLedgerIntegrationTest {
 	}
 
 	/**
-	 * 결제 API 없이 원장 저장소에 모의 거래 행을 직접 넣는다. 모의 결제 번호는 비워 둔다(member에 결제 API 미등록). 취소 행은 실제
+	 * 결제 API 없이 원장 저장소에 모의 거래 행을 직접 넣는다. 모의 결제 번호는 비워 둔다(원장 조회만 따로 확인). 취소 행은 실제
 	 * 쓰기 경로처럼 거래 시각을 비운다(docs/api/ledger.md).
 	 */
 	private long insert(long userId, long userCardId, LedgerEntryType entryType, long amountWon, LocalDate date,

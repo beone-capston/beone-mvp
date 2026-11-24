@@ -55,6 +55,7 @@
 - #160 → 커밋·push(#158은 develop 병합됨, PR은 G3a PR #162 병합 뒤): G3b(결정 36·37). 로컬 회원 프로필 `member`에 주문 2개·예정 소비 2개·추천 2개를 등록(컨트롤러 `@Profile`만 변경, 서비스·DB 불변, 결정 32 Q2·Q3를 `member` API로 확인, `GET /me/orders` 405). #159 브랜치 위에 쌓은 작업. [기록](160-member-order-recommendation.md)
 - #165 → `develop` 동기화 뒤 PR: G3c 분리(결정 37). 로컬 회원 프로필 `member`에 원장 조회 1개만 등록(컨트롤러 `@Profile`만 변경, 서비스·DB 불변). 모의 결제 3개는 N-G3-2·D8 결정 대기로 미등록이며 `feat/161`에 보존. #160 브랜치 위에 쌓은 작업. [기록](165-member-ledger.md)
 - #169 → 커밋·push(PR은 #168 병합 뒤): G4 B1·B2(결정 36·37). `docs/api.md` 회원 세션 절에 웹 클라이언트 호출 규칙(쿠키 포함·쓰기 CSRF 토큰·시연 헤더 무시·401 재로그인/403 토큰 재발급·no-store·결제 미등록)을 현재 구현 그대로 정리하고, 같은 origin 구성은 N-G4-ORIGIN·N-FE-PROXY 결정 대기로 표시. `VIRTUAL_PORTFOLIO` 헤더 주문이 회원 '내 카드' 장부에 저장되는 회귀 테스트 1건(코드·DB 불변). #165 브랜치 위에 쌓은 작업. [기록](169-member-web-client-rules.md)
+- #161 → `origin/develop` merge 뒤 draft PR: G3c 결제 묶음(결정 36·37·38). 로컬 회원 프로필 `member`에 모의 결제 3개를 등록하고(컨트롤러 `@Profile`, 서비스·DB 불변), `SimulateFailurePolicy`로 `member`의 `simulateFailure: true`만 400·미저장(결정 38-1). 멱등 키는 장부 단위 유지(결정 38-2), 회원 가상 장부(D1b) 미구현(결정 38-3), 승인 후 결과만 보여 주는 흐름 문서화(결정 38-4). 원장 조회 변경은 #168로 이미 병합돼 develop 판을 썼습니다. [기록](161-member-payment-ledger.md)
 
 ## 사용자 확인 사항
 1. 음수 전월 실적의 구간 판정은 D-17로 정했습니다(2026-11-01, 약관 근거 없음). 판정기는 구현 전까지 계속 거부합니다.

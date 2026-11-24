@@ -7,7 +7,7 @@
 구현된 범위:
 
 - 쓰기(#116): 모의 승인 행(양수)과 모의 취소 행(음수, 원 승인 행 연결) 기록, 승인 행마다 엔진이 계산한 한도 버킷 차감액 저장(`ledger_usage_effects`, 모르는 차감액은 0이 아닌 `NULL`, D-18 K1).
-- 조회(#118): `GET /api/v1/me/ledger-transactions?month=YYYY-MM[&userCardId][&source]`. `local`·`demo`와 로컬 회원 프로필 `member`(#165)에서 등록합니다. `member`에서는 회원 세션의 장부가 현재 사용자이고, 세션 401·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 처리합니다(결정 37). `member`에는 모의 결제 API가 아직 없어(N-G3-2·D8 결정 대기) API로 원장 행이 생기지 않고, CODEF 원장도 연결하지 않았습니다(R8). 페이지 나눔은 계약의 "명세 단계 미정"대로 없습니다.
+- 조회(#118): `GET /api/v1/me/ledger-transactions?month=YYYY-MM[&userCardId][&source]`. `local`·`demo`와 로컬 회원 프로필 `member`(#165)에서 등록합니다. `member`에서는 회원 세션의 장부가 현재 사용자이고, 세션 401·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 처리합니다(결정 37). `member`의 원장 행은 G3c(#161, 결정 38)에서 등록한 모의 결제 API가 만들고, CODEF 원장은 연결하지 않았습니다(R8). 페이지 나눔은 계약의 "명세 단계 미정"대로 없습니다.
 - 스냅샷 뒤 활동 읽기(#120): `LedgerQueryService.activityAfter(user, userCardId, month, snapshotAt)`는 같은 카드에서 기록 시각(`recorded_at`)이 `snapshotAt`보다 뒤인 행 중 승인은 자기 거래일이, 취소는 원 승인 행의 거래일이 그 달인 행을 행 ID 오름차순으로 돌려줍니다. 취소는 원 승인 행의 거래일 월에 귀속합니다. 11월 승인을 12월에 취소하면 11월 활동이고(그 달 버킷은 확인 필요), 10월 승인을 11월에 취소한 행은 11월 활동이 아닙니다([monthly-states.md](../api/monthly-states.md) 218행, [D-17](../decisions.md#d-15d-16d-17-확정-정책), 관리자 승인 규칙). 조회 API(`GET /ledger-transactions`)의 달 조건은 그대로 거래일입니다. 승인 행에는 그 행의 버킷 차감액, 취소 행에는 원 승인 행의 버킷 차감액을 붙입니다(모르는 차감액은 `null` 그대로). monthlystate의 `afterSnapshot`과 recommendation의 사용액 반영이 씁니다. 카드 소유 확인은 호출자가 합니다.
 - Flyway `V8__simulated_payments_ledger.sql`의 `ledger_transactions`·`ledger_usage_effects` 테이블. 조회는 새 마이그레이션이 없습니다.
 
