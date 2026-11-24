@@ -25,6 +25,7 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
   const [problem, setProblem] = useState<FormProblem>()
   const [accepted, setAccepted] = useState('')
   const [resetComplete, setResetComplete] = useState(false)
+  const [verificationSent, setVerificationSent] = useState('')
   const [loading, setLoading] = useState(false)
   const submitting = useRef(false)
   const heading = useRef<HTMLHeadingElement>(null)
@@ -52,6 +53,7 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
     setProblem(undefined)
     setAccepted('')
     setResetComplete(false)
+    setVerificationSent('')
   }
 
   function clearError(field: Field) {
@@ -62,6 +64,7 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
     }))
     setProblem(undefined)
     setAccepted('')
+    setVerificationSent('')
     setResetComplete(false)
   }
 
@@ -102,6 +105,23 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
     setProblem({ text, code })
   }
 
+  // 미인증 로그인(403 EMAIL_NOT_VERIFIED) 뒤에만 쓰는 인증메일 재요청. 계정 존재 여부와 관계없이 202다
+  async function resendVerification() {
+    if (submitting.current) return
+    submitting.current = true
+    setLoading(true)
+    try {
+      const result = await authApi.requestEmailVerification(email.trim().toLowerCase())
+      setProblem(undefined)
+      setVerificationSent(result.message)
+    } catch (error) {
+      handleFailure(error)
+    } finally {
+      submitting.current = false
+      setLoading(false)
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (sessionChecking || submitting.current || (completing && !validToken)) return
@@ -127,6 +147,7 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
     setFieldErrors(errors)
     setProblem(undefined)
     setAccepted('')
+    setVerificationSent('')
     const firstError = Object.keys(errors)[0]
     if (firstError) {
       event.currentTarget.querySelector<HTMLInputElement>(`#auth-${firstError}`)?.focus()
@@ -258,6 +279,12 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
               </p>
             )}
             {resetComplete && <p role="status">비밀번호를 변경했어요. 새 비밀번호로 로그인해 주세요.</p>}
+            {verificationSent && <p role="status">{verificationSent} 메일의 링크에서 인증을 완료해 주세요.</p>}
+            {login && problem?.code === 'EMAIL_NOT_VERIFIED' && (
+              <button type="button" className="auth-reset" disabled={loading} onClick={resendVerification}>
+                인증 메일 다시 받기
+              </button>
+            )}
             {completing && !validToken && <p role="alert" className="auth-problem">재설정 링크를 확인하거나 다시 요청해 주세요.</p>}
           </div>
           {completing && (!validToken || problem?.code === 'AUTH_TOKEN_INVALID') ? (

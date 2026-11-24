@@ -290,3 +290,71 @@ describe('비밀번호 재설정과 빈 로그인 입력', () => {
     expect(screen.getByLabelText('이메일')).toBeInTheDocument()
   })
 })
+
+describe('이메일 인증', () => {
+  const token = 'b'.repeat(43)
+
+  it('메일 링크를 연 것만으로는 인증하지 않고 버튼을 누른 뒤 204면 로그인 화면으로 안내한다', async () => {
+    history.replaceState(null, '', `/email-verification?token=${token}`)
+    fetchMock.mockReset().mockResolvedValueOnce(csrf()).mockResolvedValueOnce(new Response(null, { status: 204 }))
+    mount()
+    expect(location.pathname).toBe('/')
+    expect(location.search).toBe('')
+    expect(screen.getByRole('heading', { name: '이메일 인증' })).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    submit('이메일 인증 완료하기')
+    expect(await screen.findByText('이메일 인증을 완료했어요. 로그인해 주세요.')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/auth/email-verifications', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ token }),
+      headers: expect.objectContaining({ 'X-CSRF-TOKEN': 'csrf-token' }),
+    }))
+    fetchMock.mockResolvedValueOnce(failure(401, 'UNAUTHENTICATED'))
+    submit('로그인하기')
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+  })
+
+  it('만료·사용된 토큰은 다시 요청하라고 안내하고 재시도 버튼을 두지 않는다', async () => {
+    history.replaceState(null, '', `/email-verification?token=${token}`)
+    fetchMock.mockReset().mockResolvedValueOnce(csrf()).mockResolvedValueOnce(failure(400, 'AUTH_TOKEN_INVALID'))
+    mount()
+    submit('이메일 인증 완료하기')
+    expect(await screen.findByRole('alert')).toHaveTextContent('링크가 유효하지 않거나 만료되었습니다.')
+    expect(screen.queryByRole('button', { name: '이메일 인증 완료하기' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '로그인하기' })).toBeInTheDocument()
+  })
+
+  it('형식이 맞지 않는 토큰은 요청하지 않는다', () => {
+    history.replaceState(null, '', '/email-verification?token=short')
+    fetchMock.mockReset()
+    mount()
+    expect(screen.getByRole('alert')).toHaveTextContent('인증 링크를 확인하거나')
+    expect(screen.queryByRole('button', { name: '이메일 인증 완료하기' })).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('미인증 로그인 뒤 인증 메일을 다시 요청한다', async () => {
+    fetchMock.mockResolvedValueOnce(csrf()).mockResolvedValueOnce(failure(403, 'EMAIL_NOT_VERIFIED'))
+      .mockResolvedValueOnce(csrf()).mockResolvedValueOnce(success({ message: accepted }, 202))
+    await enterLogin()
+    expect(screen.queryByRole('button', { name: '인증 메일 다시 받기' })).not.toBeInTheDocument()
+    submit()
+    expect(await screen.findByRole('alert')).toHaveTextContent('이메일 인증을 완료해 주세요.')
+    submit('인증 메일 다시 받기')
+    expect(await screen.findByText(`${accepted} 메일의 링크에서 인증을 완료해 주세요.`)).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenNthCalledWith(5, '/api/v1/auth/email-verification-requests', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ email: 'test+tag@example.com' }),
+    }))
+    expect(screen.queryByRole('button', { name: '인증 메일 다시 받기' })).not.toBeInTheDocument()
+  })
+
+  it('인증 메일 재요청이 429면 기다릴 시간을 안내한다', async () => {
+    fetchMock.mockResolvedValueOnce(csrf()).mockResolvedValueOnce(failure(403, 'EMAIL_NOT_VERIFIED'))
+      .mockResolvedValueOnce(csrf()).mockResolvedValueOnce(failure(429, 'RATE_LIMITED', [], { 'Retry-After': '42' }))
+    await enterLogin()
+    submit()
+    await screen.findByRole('alert')
+    submit('인증 메일 다시 받기')
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('42초 후 재시도'))
+  })
+})

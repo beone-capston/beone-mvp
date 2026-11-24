@@ -60,7 +60,7 @@ async function request<T>(path: string, options: RequestInit = {}, expectedStatu
   return body.data
 }
 
-async function post<T>(path: string, body: Credentials | { email: string } | { token: string; newPassword: string }, expectedStatus?: number): Promise<T> {
+async function post<T>(path: string, body: Credentials | { email: string } | { token: string } | { token: string; newPassword: string }, expectedStatus?: number): Promise<T> {
   // Get a token for the current cookie before each explicit attempt. Never replay a POST.
   const csrf = await request<Csrf>('csrf')
   if (typeof csrf.headerName !== 'string' || !csrf.headerName || typeof csrf.token !== 'string' || !csrf.token) {
@@ -106,5 +106,12 @@ export const authApi = {
   },
   async resetPassword(token: string, newPassword: string) {
     await post<void>('password-resets', { token, newPassword }, 204)
+  },
+  // 메일 링크를 연 것만으로는 인증하지 않는다. 화면에서 확인한 뒤 호출한다(docs/api/auth.md)
+  async verifyEmail(token: string) {
+    await post<void>('email-verifications', { token }, 204)
+  },
+  async requestEmailVerification(email: string) {
+    return checkAcceptance(await post<MailAcceptance>('email-verification-requests', { email }, 202))
   },
 }
