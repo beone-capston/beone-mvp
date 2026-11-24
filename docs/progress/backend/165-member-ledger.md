@@ -1,6 +1,6 @@
 # #165 member 프로필에 원장 조회 등록 (G3c 분리)
 
-브랜치 `feat/165-member-ledger`, 시작 기준 `origin/feat/160-member-order-recommendation` `722dd08`(G3b). G3a PR #162와 G3b가 `develop`에 병합되기 전이라 PR은 열지 않았습니다. 병합 뒤 관리자 지시에 따라 PR을 엽니다.
+브랜치 `feat/165-member-ledger`, 시작 기준 `origin/feat/160-member-order-recommendation` `722dd08`(G3b). G3a(#162, `fb262a4`)와 G3b(#166, `a73288a`)가 `develop`에 병합된 뒤 최신 `origin/develop`을 merge하고(rebase 없음) PR을 엽니다.
 
 ## 2026-11-24 · `ledger` 조회 컨트롤러 프로필, 테스트·문서
 
@@ -23,4 +23,10 @@
 - 문서: `docs/api/ledger.md` 프로필 문단, 도메인 `ledger.md`, `docs/api.md` 회원 세션 절, `docs/api/README.md`, `docs/decisions.md` 결정 37 구현 범위, `docs/api/auth.md`·도메인 `auth.md`·`user.md`의 낡은 범위 문장. 결제 묶음은 N-G3-2·D8 결정 대기로 미등록이라고 적었습니다.
 - 남은 것
   - 모의 결제 묶음(N-G3-2·D8 결정 뒤 `feat/161` 재개)
-  - #162·G3b 병합 뒤 관리자 지시로 PR
+
+## 2026-11-24 · `develop` 동기화와 R165 검토 반영
+
+- `origin/develop`(`a73288a`: G3b squash, 팀원 프런트 #167 포함)을 merge했습니다. 충돌 11파일은 `develop` 판을 기준으로 두고 원장 변경만 다시 얹었습니다. 내용 충돌은 `docs/api/README.md` 상태 문단 하나였고, #166 문장(카드 상품은 세션 검사 대상 아님)을 지키고 원장 조회 1개와 결제 묶음 보류 문장만 더했습니다(E1). 팀원 #167의 `README.md`·`docs/architecture.md`·`frontend-payment.md` 변경은 그대로입니다.
+- 문서: 도메인 `ledger.md` 실패 응답 표의 시연 헤더 400을 `local`·`demo` 한정으로 고치고 `member` 세션 401 행을 더했습니다(M1). curl 예시가 `local`·`demo` 방식임을 밝혔습니다(m4). `recommendation` 문서 2곳의 낡은 "G3c" 표기를 "N-G3-2·D8 결정 대기로 미등록"으로 고쳤습니다(M2). `docs/architecture.md`의 백엔드 `member` 범위 문장 2곳을 G3a·G3b·#165까지로 맞췄습니다(M3).
+- 테스트: `MemberLedgerIntegrationTest` 픽스처의 취소 행 거래 시각을 실제 쓰기 경로처럼 비웠습니다(m2). 모의 결제 번호 `null`(m1)은 클래스 주석에 이유가 있고 결제 묶음 등록 때 실제 결제 API로 행을 만드는 시험으로 바꿀 대상이라 그대로 둡니다.
+- 검증(동기화·반영 뒤): `./gradlew test webTest` 통과(단위 1395, 웹 393, 실패·skip 0). `./gradlew integrationTest` 단독 실행 177 통과(`MemberLedgerIntegrationTest` 5 포함, 실패·skip 0), 컨테이너 메모리 합 최고 3,982MiB(상한 4,760MiB 미도달). 배포 컨테이너 4개는 그대로 유지했습니다.

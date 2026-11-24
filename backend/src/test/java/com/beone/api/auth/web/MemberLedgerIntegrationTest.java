@@ -235,12 +235,15 @@ class MemberLedgerIntegrationTest {
 				amountWon, date, originalLedgerId);
 	}
 
-	/** 결제 API 없이 원장 저장소에 모의 거래 행을 직접 넣는다. 모의 결제 번호는 비워 둔다(member에 결제 API 미등록). */
+	/**
+	 * 결제 API 없이 원장 저장소에 모의 거래 행을 직접 넣는다. 모의 결제 번호는 비워 둔다(member에 결제 API 미등록). 취소 행은 실제
+	 * 쓰기 경로처럼 거래 시각을 비운다(docs/api/ledger.md).
+	 */
 	private long insert(long userId, long userCardId, LedgerEntryType entryType, long amountWon, LocalDate date,
 			Long originalLedgerId) {
 		return this.ledgerTransactionRepository
 			.save(new LedgerTransactionEntity(userId, userCardId, LedgerSource.SIMULATION, entryType, amountWon, date,
-					LocalTime.of(10, 0), "ORDINARY_DOMESTIC", "DIRECT", "동네 마트", originalLedgerId, null,
+					(entryType == LedgerEntryType.CANCELLATION) ? null : LocalTime.of(10, 0), "ORDINARY_DOMESTIC", "DIRECT", "동네 마트", originalLedgerId, null,
 					date.toString().substring(0, 7), AttributionStatus.CONFIRMED, LocalDateTime.of(2026, 11, 18, 10, 0)))
 			.getLedgerId();
 	}
@@ -249,10 +252,11 @@ class MemberLedgerIntegrationTest {
 			Long originalLedgerId) {
 		return """
 				{"ledgerTransactionId":"lt-%d","userCardId":"%s","source":"SIMULATION","entryType":"%s","amountWon":%d,
-				 "transactionDate":"%s","transactionTime":"10:00:00","merchantClass":"ORDINARY_DOMESTIC",
+				 "transactionDate":"%s","transactionTime":%s,"merchantClass":"ORDINARY_DOMESTIC",
 				 "paymentMethod":"DIRECT","transactionNature":null,"merchantName":"동네 마트","originalTransactionId":%s,
 				 "simulatedPaymentId":null,"attributionMonth":{"value":"2026-11","status":"CONFIRMED"}}"""
 			.formatted(ledgerId, userCardId, entryType, amountWon, date,
+					"CANCELLATION".equals(entryType) ? "null" : "\"10:00:00\"",
 					(originalLedgerId == null) ? "null" : "\"lt-" + originalLedgerId + "\"");
 	}
 

@@ -24,7 +24,8 @@
 | `month` 형식 오류(`2026-1`, `2026-13` 등) | 400 | `INVALID_REQUEST`(`month` 형식 오류) |
 | `source`가 `SIMULATION`·`CODEF`가 아님(빈 값·소문자 포함) | 400 | `INVALID_REQUEST`(`source` 형식 오류) |
 | 지정한 `userCardId`의 카드가 없거나, 형식이 틀렸거나, 해제했거나, 다른 사용자의 카드(생략하면 전체 카드를 조회하며 404가 아님) | 404 | `USER_CARD_NOT_FOUND` |
-| 시연 사용자 헤더 없음·틀림 | 400 | `INVALID_REQUEST`(공통) |
+| `local`·`demo`: 시연 사용자 헤더 없음·틀림 | 400 | `INVALID_REQUEST`(공통) |
+| `member`: 회원 세션 없음·만료(헤더는 보지 않고 세션으로 식별, `month` 검사보다 먼저) | 401 | `UNAUTHENTICATED`(공통) |
 
 ## 핵심 용어
 
@@ -86,6 +87,7 @@ LedgerMonthView view = ledgerQueryService.find(user, YearMonth.of(2026, 11), "uc
 ```
 
 ```bash
+# local·demo 예시. member에서는 시연 헤더 대신 회원 세션 쿠키(__Host-BEONE_SESSION)로 현재 사용자를 정합니다.
 curl "http://localhost:8080/api/v1/me/ledger-transactions?month=2026-11&source=SIMULATION" \
   -H "X-BeONE-Demo-User: MY_CARDS"
 ```
