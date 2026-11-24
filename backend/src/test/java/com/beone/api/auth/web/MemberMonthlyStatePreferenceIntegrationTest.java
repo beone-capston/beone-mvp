@@ -156,12 +156,8 @@ class MemberMonthlyStatePreferenceIntegrationTest {
 				{"data":{%s,"afterSnapshot":{"approvalCount":0,"approvedAmountWon":0,"cancellationCount":0}}}
 				""".formatted(manual));
 
-		assertThat(this.jdbcTemplate.queryForObject(
-				"SELECT COUNT(*) FROM monthly_states s JOIN users u ON u.user_id = s.user_id WHERE u.member_id = ?",
-				Integer.class, MEMBER_A))
-			.isOne();
-		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM monthly_states s JOIN users u"
-				+ " ON u.user_id = s.user_id WHERE u.member_id IS NULL", Integer.class)).isZero();
+		assertThat(countOf("monthly_states", MEMBER_A)).isOne();
+		assertThat(countDemo("monthly_states")).isZero();
 	}
 
 	/** 회원 B는 A의 카드 월간 상태를 읽지도 바꾸지도 못한다. 남의 카드와 없는 카드의 404 본문은 같다. */
@@ -187,10 +183,7 @@ class MemberMonthlyStatePreferenceIntegrationTest {
 		assertThat(foreignPut.getBody()).isEqualTo(missingPut.getBody());
 
 		assertThat(send(HttpMethod.GET, monthlyPath(cardOfA), a, null).getBody()).isEqualTo(before);
-		assertThat(this.jdbcTemplate.queryForObject(
-				"SELECT COUNT(*) FROM monthly_states s JOIN users u ON u.user_id = s.user_id WHERE u.member_id = ?",
-				Integer.class, MEMBER_B))
-			.isZero();
+		assertThat(countOf("monthly_states", MEMBER_B)).isZero();
 	}
 
 	/** 시연 장부의 카드 ID를 넣어도 404이고, 시연 헤더를 보내도 회원 장부로 처리한다(결정 37 D2·D4). */
@@ -208,9 +201,10 @@ class MemberMonthlyStatePreferenceIntegrationTest {
 
 		ResponseEntity<String> preference = this.members.getWithDemoHeader(PREFERENCE, a, "VIRTUAL_PORTFOLIO");
 		assertBody(preference, 200, NOT_SET);
-		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM monthly_states", Integer.class)).isZero();
-		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM payment_preferences", Integer.class))
-			.isZero();
+		assertThat(countOf("monthly_states", MEMBER_A)).isZero();
+		assertThat(countOf("payment_preferences", MEMBER_A)).isZero();
+		assertThat(countDemo("monthly_states")).isZero();
+		assertThat(countDemo("payment_preferences")).isZero();
 	}
 
 	/** 쿠키가 없거나 익명 CSRF 세션이면 5개 경로 모두 401이고, 401이 CSRF 403·본문 400보다 먼저다. */
@@ -250,9 +244,8 @@ class MemberMonthlyStatePreferenceIntegrationTest {
 			assertForbidden(send(HttpMethod.PUT, PREFERENCE, session, "{}"));
 		}
 
-		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM monthly_states", Integer.class)).isZero();
-		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM payment_preferences", Integer.class))
-			.isZero();
+		assertThat(countOf("monthly_states", MEMBER_A)).isZero();
+		assertThat(countOf("payment_preferences", MEMBER_A)).isZero();
 		// 조회는 CSRF 없이 된다
 		assertThat(send(HttpMethod.GET, monthlyPath(card), noToken, null).getBody()).contains("\"snapshotAt\":null");
 		assertBody(send(HttpMethod.GET, PREFERENCE, noToken, null), 200, NOT_SET);
@@ -291,7 +284,7 @@ class MemberMonthlyStatePreferenceIntegrationTest {
 		ResponseEntity<String> withoutState = send(HttpMethod.PUT, selections, a, SOURCE_SELECTION);
 		assertBody(withoutState, 409, NO_CONFLICT);
 		assertNoStore(withoutState);
-		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM monthly_states", Integer.class)).isZero();
+		assertThat(countOf("monthly_states", MEMBER_A)).isZero();
 
 		assertThat(send(HttpMethod.PUT, monthlyPath(card), a, PERFORMANCE_STATE).getStatusCode().value())
 			.isEqualTo(200);
@@ -299,7 +292,7 @@ class MemberMonthlyStatePreferenceIntegrationTest {
 		this.clock.advance(Duration.ofMinutes(1));
 		assertBody(send(HttpMethod.PUT, selections, a, SOURCE_SELECTION), 409, NO_CONFLICT);
 		assertThat(send(HttpMethod.GET, monthlyPath(card), a, null).getBody()).isEqualTo(before);
-		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM monthly_states", Integer.class)).isOne();
+		assertThat(countOf("monthly_states", MEMBER_A)).isOne();
 
 		// 남의 카드는 409가 아니라 404이고 없는 카드와 본문이 같다
 		ResponseEntity<String> foreign = send(HttpMethod.PUT, selections, b, SOURCE_SELECTION);
@@ -318,8 +311,7 @@ class MemberMonthlyStatePreferenceIntegrationTest {
 		ResponseEntity<String> initial = send(HttpMethod.GET, PREFERENCE, a, null);
 		assertBody(initial, 200, NOT_SET);
 		assertNoStore(initial);
-		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM payment_preferences", Integer.class))
-			.isZero();
+		assertThat(countOf("payment_preferences", MEMBER_A)).isZero();
 
 		String cardOfA = register(a, "09174");
 		String fixed = "{\"data\":{\"selectionMode\":\"FIXED_REPRESENTATIVE\",\"representativeUserCardId\":\"%s\",\"updatedAt\":\"%s\"}}"
@@ -341,8 +333,8 @@ class MemberMonthlyStatePreferenceIntegrationTest {
 
 		assertBody(send(HttpMethod.GET, PREFERENCE, a, null), 200, fixed);
 		assertBody(send(HttpMethod.GET, PREFERENCE, b, null), 200, NOT_SET);
-		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM payment_preferences", Integer.class))
-			.isOne();
+		assertThat(countOf("payment_preferences", MEMBER_A)).isOne();
+		assertThat(countOf("payment_preferences", MEMBER_B)).isZero();
 	}
 
 	/**
@@ -409,6 +401,19 @@ class MemberMonthlyStatePreferenceIntegrationTest {
 		Long id = this.jdbcTemplate.queryForObject("SELECT MIN(c.user_card_id) FROM user_cards c "
 				+ "JOIN users u ON u.user_id = c.user_id WHERE u.demo_user = 'VIRTUAL_PORTFOLIO'", Long.class);
 		return "uc-" + id;
+	}
+
+	/** 회원 장부 범위로 행 수를 센다. 다른 테스트가 남긴 행에 영향을 받지 않는다. */
+	private int countOf(String table, String memberId) {
+		return this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + table
+				+ " t JOIN users u ON u.user_id = t.user_id WHERE u.member_id = ?", Integer.class, memberId);
+	}
+
+	/** 시연 장부(member_id 없음)의 행 수를 센다. */
+	private int countDemo(String table) {
+		return this.jdbcTemplate.queryForObject(
+				"SELECT COUNT(*) FROM " + table + " t JOIN users u ON u.user_id = t.user_id WHERE u.member_id IS NULL",
+				Integer.class);
 	}
 
 	private ResponseEntity<String> send(HttpMethod method, String path, Session session, String body) {
