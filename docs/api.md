@@ -160,6 +160,21 @@ D-14가 명세 단계로 넘긴 값입니다(2026-11-03 사용자 지시). 업�
 - 아직 등록하지 않은 경로: 모의 결제 3개(승인·조회·취소)·CODEF·시연 사용자 목록은 로그인 여부와 관계없이 404입니다. 모의 결제 묶음은 `simulateFailure` 처리(N-G3-2)와 `Idempotency-Key` 저장 단위 표기(D8) 결정 대기로 `member`에 등록하지 않았습니다. 그래서 `member` 원장에는 아직 행을 만드는 API가 없습니다. 공개 회원의 CODEF 연결 범위는 별도 미결입니다(D9). 시연 사용자 목록은 `member`에 열지 않습니다(결정 37 D2·D4).
 - `local`·`demo`의 업무 API에는 세션·CSRF 검사를 걸지 않습니다(기존 동작 유지).
 
+#### 웹 클라이언트 호출 규칙(member)
+
+웹 화면이 `member` 프로필의 업무 API를 부를 때 따라야 하는 규칙입니다. 위 회원 세션 규칙을 호출하는 쪽에서 본 것으로, 현재 백엔드 구현 그대로이며 새 정책이 아닙니다(결정 37 D3·D4·D5·D6, #169). 프런트 코드는 아직 이 규칙을 따르지 않으며 고치는 일은 팀원 조율 대상입니다.
+
+- **쿠키 포함:** 모든 호출에 세션 쿠키 `__Host-BEONE_SESSION`을 함께 보냅니다(`fetch`의 `credentials`를 `'omit'`으로 두지 않습니다). 쿠키는 `HttpOnly`라서 화면 코드가 읽거나 저장하지 않습니다. 위 등록 경로의 업무 API는 쿠키가 없으면 401입니다. 등록하지 않은 경로는 쿠키와 관계없이 404, 등록 경로에 허용하지 않는 메서드(예: `GET /api/v1/me/orders`)는 쿠키와 관계없이 405입니다.
+- **같은 origin 전제:** 이 쿠키는 `__Host-`·`Secure`·`SameSite=Lax`이고, `member`에는 CORS 허용이 없습니다(`local`·`demo` CORS는 자격 증명을 허용하지 않고 `X-CSRF-TOKEN`도 허용 헤더가 아닙니다). 그래서 화면과 API가 같은 origin일 때만 동작합니다. 같은 origin을 어떻게 구성할지는 결정 대기입니다. 로컬은 결정 37 O2-L에서 Vite 프록시를 쓰기로 했지만 프런트 설정(`vite.config`)은 팀원 조율 대기이고(N-FE-PROXY), 회원 웹 화면의 호출 origin(배포 때 같은 호스트로 둘지, 교차 origin과 CORS 자격 증명으로 갈지)은 N-G4-ORIGIN 결정 대기입니다. 둘 다 확정된 구성이 아닙니다.
+- **쓰기 요청의 CSRF 토큰:** POST·PUT·PATCH·DELETE 전에 `GET /api/v1/auth/csrf`로 토큰을 받아 `X-CSRF-TOKEN` 헤더에 담습니다. 토큰은 세션에 묶이므로 로그인·로그아웃 뒤에는 다시 받습니다([`docs/api/auth.md`](api/auth.md)). 토큰을 URL·localStorage·로그에 남기지 않습니다. 추천 계산(`POST /api/v1/me/orders/{orderId}/recommendations`)도 쓰기라서 토큰이 필요합니다. GET에는 필요 없습니다.
+- **시연 헤더 무시:** `member`는 `X-BeONE-Demo-User`를 읽지 않습니다. `MY_CARDS`·`VIRTUAL_PORTFOLIO` 어느 값을 보내도 장부 선택에 쓰이지 않고, 모든 요청은 로그인한 회원의 '내 카드' 장부 하나로 처리합니다(D4). 예를 들어 `VIRTUAL_PORTFOLIO` 헤더를 붙인 `POST /api/v1/me/orders`도 회원의 '내 카드' 장부에 저장되고 시연 가상 포트폴리오 장부에는 저장되지 않습니다(`MemberOrderRecommendationIntegrationTest`). 회원 가상 포트폴리오(D1b)는 미결입니다(N-G3-1).
+- **오류 분기:** 등록 경로·허용 메서드의 검사 순서는 401 → 403 → 400 → 404입니다. 경로·메서드 판정은 세션 검사보다 먼저라서, 등록하지 않은 경로는 로그인 여부와 관계없이 404, 허용하지 않는 메서드는 로그인 여부와 관계없이 405 `METHOD_NOT_ALLOWED`입니다(`MemberProfileIntegrationTest`).
+  - 401 `UNAUTHENTICATED`: 회원 세션이 없거나 끝났습니다(쿠키 없음·익명 CSRF 세션·만료·로그아웃·다른 로그인으로 종료). 다시 로그인하게 합니다. 토큰을 다시 받아도 해결되지 않습니다.
+  - 403 `CSRF_INVALID`: 회원 세션은 유효하지만 쓰기 요청의 토큰이 없거나 다릅니다. `GET /api/v1/auth/csrf`로 토큰을 다시 받은 뒤 다시 시도합니다. 403이면 저장하지 않았으므로 다시 보내도 중복 저장되지 않습니다.
+  - 400은 본문·파라미터 오류, 404는 없는 자원이나 남의 자원입니다(남의 자원도 `FORBIDDEN`이 아니라 404).
+- **캐시:** `/api/v1/me`·`/api/v1/me/**`의 모든 응답은 `Cache-Control: no-store`입니다. 화면도 이 응답을 별도 캐시에 남기지 않습니다.
+- **결제 API 미등록:** 모의 결제 3개(승인·조회·취소)는 N-G3-2·D8 결정 대기로 `member`에 등록하지 않았습니다. `member`에서 부르면 로그인 여부와 관계없이 404이며, 결제 호출 규칙(`Idempotency-Key`·자동 재전송 여부 포함)은 등록할 때 정합니다.
+
 ### 값 형식
 
 - 날짜 `YYYY-MM-DD`, 월 `YYYY-MM`, 시각 없는 시간 값 `HH:mm:ss`, 시점은 `+09:00`이 붙은 ISO-8601(Asia/Seoul)입니다.
