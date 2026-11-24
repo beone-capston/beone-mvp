@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { CardCarousel } from './components/CardCarousel'
 import { Icon } from './components/Icon'
 import { PaymentPreferenceMenu } from './components/PaymentPreferenceMenu'
 import { PortfolioModeTabs } from './components/PortfolioModeTabs'
 import { Sheet } from './components/Sheet'
+import { CardRegisterSheet } from './cards/CardRegisterSheet'
 import { defaultPreference, mockCardSource } from './data/portfolio'
 import type { CardSource, PaymentPreference, PortfolioMode, WalletCard } from './data/portfolio'
 import { OrderWorkspace } from './orders/OrderWorkspace'
@@ -49,7 +50,30 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
   const [notice, setNotice] = useState('')
   const [services, setServices] = useState<WalletCard | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
-  const cards = useMemo(() => cardSource.getCards(mode), [cardSource, mode])
+  const [loadedCards, setLoadedCards] = useState<Partial<Record<PortfolioMode, readonly WalletCard[]>>>({})
+  const [cardReload, setCardReload] = useState(0)
+  const [registering, setRegistering] = useState(false)
+  const cards = loadedCards[mode] ?? cardSource.getCards(mode)
+
+  // 서버 카드 소스면 모드마다 목록을 불러온다. 등록 뒤에는 cardReload로 다시 불러온다
+  useEffect(() => {
+    if (!cardSource.load) return
+    let active = true
+    cardSource.load(mode).then(
+      list => { if (active) setLoadedCards(current => ({ ...current, [mode]: list })) },
+      () => { if (active) setNotice('카드 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.') },
+    )
+    return () => { active = false }
+  }, [cardSource, mode, cardReload])
+
+  function addCard() {
+    if (cardSource.register) {
+      setNotice('')
+      setRegistering(true)
+    } else {
+      setNotice('카드 추가 기능은 준비 중이에요. 현재 카드는 디자인 확인용 샘플이며 서버에 등록되지 않습니다.')
+    }
+  }
   const activeIndex = Math.max(0, Math.min(modes[mode].activeIndex, cards.length - 1))
   const myMode = mode === 'MY_CARDS'
 
@@ -117,14 +141,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
         </a>
         {!authOpen && myMode && menu !== '모의결제' && (
           <div className="header-actions">
-            <button
-              aria-label="카드 추가"
-              onClick={() =>
-                setNotice(
-                  '카드 추가 기능은 준비 중이에요. 현재 카드는 디자인 확인용 샘플이며 서버에 등록되지 않습니다.',
-                )
-              }
-            >
+            <button aria-label="카드 추가" onClick={addCard}>
               <Icon name="plus" />
             </button>
             <button
@@ -144,9 +161,8 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
             <section className="quick-payment" key={mode}>
               <h1 className="sr-only">B:ONE 빠른결제</h1>
               <p className="sr-only">
-                {myMode
-                  ? '디자인 확인용 샘플 카드입니다. 실제 등록 카드가 아닙니다.'
-                  : '가상 포트폴리오 시연용 카드입니다.'}
+                {!myMode ? '가상 포트폴리오 시연용 카드입니다.'
+                  : cardSource.load ? '등록한 내 카드입니다.' : '디자인 확인용 샘플 카드입니다. 실제 등록 카드가 아닙니다.'}
               </p>
               {selectedOrder && (
                 <div className="quick-selected-order" aria-label="선택한 가상 주문">
@@ -184,10 +200,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
                   <h3>등록된 카드가 없어요</h3>
                   <p>카드를 추가하거나 가상 포트폴리오를 체험해보세요.</p>
                   {myMode && (
-                    <button
-                      className="primary-button"
-                      onClick={() => setNotice('카드 추가 기능은 준비 중이에요.')}
-                    >
+                    <button className="primary-button" onClick={addCard}>
                       카드 추가
                     </button>
                   )}
@@ -243,12 +256,20 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
           </button>
         </div>
       )}
+      {registering && cardSource.register && (
+        <CardRegisterSheet registrar={cardSource.register} onClose={() => setRegistering(false)}
+          onRegistered={() => {
+            setRegistering(false)
+            setCardReload(value => value + 1)
+            setNotice('카드를 등록했어요.')
+          }} />
+      )}
       {services && (
         <Sheet title={services.name + ' 부가서비스'} onClose={() => setServices(null)}>
           <p className="sheet-description">
             {services.source === 'DESIGN_SAMPLE'
               ? '디자인 확인용 샘플 카드입니다. 실제 등록 데이터가 아닙니다.'
-              : '가상 포트폴리오의 시연용 카드입니다.'}
+              : services.source === 'MEMBER' ? '직접 등록한 카드입니다.' : '가상 포트폴리오의 시연용 카드입니다.'}
           </p>
           <p className="sheet-description">
             이 카드의 혜택 조건·부가서비스 상세 연결은 준비 중이에요. 확인된 설명 데이터를 연결하기
