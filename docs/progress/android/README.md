@@ -26,6 +26,7 @@
 - [#86](https://github.com/beone-capston/beone-mvp/issues/86) 브리지 v1 계약 확정(문서) — 2026-11-16 사용자 결정 반영, [PR #87](https://github.com/beone-capston/beone-mvp/pull/87)로 `develop`에 병합(`73d7f045b5166594d7851944353e5ecde0eab37e`). 공개 계약 v1은 문서로 확정됐고, 구현 상태는 아래 #88을 따릅니다 ([단계 기록](86-bridge-contract-v1.md))
 - [#88](https://github.com/beone-capston/beone-mvp/issues/88) 브리지 v1 로컬 구현 — [PR #89](https://github.com/beone-capston/beone-mvp/pull/89)로 `develop`에 squash 병합(`77fe2e3d17fc9a97ff1cc84e13f86b371e2975bb`). release 시작 주소 `https://beonepay.site/`, 신뢰 origin 1개에만 `window.BeoneBridge` 노출, 기기 인증 상태와 연결(대기 시간 120초·10초는 근거 없는 잠정값). 로컬 단위 테스트 166건만 실행했고 실기기·설치·실제 프런트엔드 통합은 미확인입니다 ([단계 기록](88-android-bridge-local.md))
 - [#101](https://github.com/beone-capston/beone-mvp/issues/101) 브리지 실기기 시험 페이지(T)와 서버 적용 절차 — frontend 밖 정적 페이지 [`tools/bridge-test/`](../../../tools/bridge-test/README.md)(시험 전용·제거 가능)와 release용 [서버 적용 절차](../../deployment/bridge-test-page.md)(사용자 실행, 미검증). 페이지 동작은 코드 리뷰로만 확인했고 설치·adb·서버 적용은 하지 않았습니다 ([단계 기록](101-bridge-test-page.md))
+- [#171](https://github.com/beone-capston/beone-mvp/issues/171) release 보호 조건과 60초 만료 경계 단위 테스트 보강(U1·U2·U3·U5·U6, 테스트만 추가) — PR 대기. 로컬 단위 테스트 debug 174건·release 178건, 실기기 미확인 ([단계 기록](171-android-release-guards.md))
 - [#27](https://github.com/yim0327/beone-mvp/issues/27) 브리지 계약 초안(후보) — [PR #72](https://github.com/beone-capston/beone-mvp/pull/72)로 병합(PR #28을 대체). 당시 공개 계약은 후보였습니다. 현재 공개 계약 v1은 #86에, Android 로컬 구현 상태는 #88에 기록합니다
 
 ## 사용자 확인 사항
