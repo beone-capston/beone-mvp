@@ -71,6 +71,11 @@ public final class CodefStubServer implements AutoCloseable {
 		responders.put(path, HttpExchange::close);
 	}
 
+	/** 받은 요청 기록을 비운다. 여러 시험이 서버 하나를 같이 쓸 때 시험마다 부른다. */
+	public void clearRequests() {
+		received.clear();
+	}
+
 	public List<Received> requests() {
 		return List.copyOf(received);
 	}

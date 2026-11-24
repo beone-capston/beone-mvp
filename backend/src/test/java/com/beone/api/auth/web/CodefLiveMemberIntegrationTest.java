@@ -94,6 +94,8 @@ class CodefLiveMemberIntegrationTest {
 		this.members = new MemberApiTestClient(this.port, this.jdbcTemplate);
 		clearTables();
 		this.clock.set(START);
+		// 스텁 서버는 클래스가 같이 쓰므로 시험마다 요청 기록을 비운다
+		STUB.clearRequests();
 		STUB.respond(CodefStubServer.TOKEN_PATH, 200, "{\"access_token\":\"synthetic-token\"}");
 		STUB.respond(CREATE, 200, "{\"result\":{\"code\":\"CF-00000\"},\"data\":{\"connectedId\":\"" + CONNECTED_ID + "\"}}");
 		STUB.respond(DELETE, 200, "{\"result\":{\"code\":\"CF-00000\"},\"data\":{}}");
@@ -121,7 +123,6 @@ class CodefLiveMemberIntegrationTest {
 
 	@Test
 	void memberConnectsSyncsAndDisconnectsThroughTheStubOnly() {
-		int before = STUB.requests().size();
 		Session a = this.members.loginNew(MEMBER_A, "a@example.com");
 		Session b = this.members.loginNew(MEMBER_B, "b@example.com");
 		int ledgerRows = count("SELECT COUNT(*) FROM ledger_transactions");
@@ -162,8 +163,12 @@ class CodefLiveMemberIntegrationTest {
 		assertThat(STUB.requestsTo(DELETE)).singleElement()
 			.satisfies(r -> assertThat(r.body()).contains(CONNECTED_ID).doesNotContain(PASSWORD));
 
-		// 토큰 1, 등록 1, 상품 3, 삭제 1 외에는 아무 요청도 없다
-		assertThat(STUB.requests().size() - before).isEqualTo(6);
+		// 등록 1, 상품 3, 삭제 1 외에는 아무 요청도 없다. 토큰은 클라이언트 빈이 캐시하므로 앞선 시험이 발급했으면 0건이다
+		assertThat(STUB.requests()).extracting(CodefStubServer.Received::path)
+			.filteredOn(path -> !path.equals(CodefStubServer.TOKEN_PATH))
+			.containsExactly(CREATE, CodefApi.HELD_CARDS.path(), CodefApi.APPROVALS.path(),
+					CodefApi.CARD_PERFORMANCES.path(), DELETE);
+		assertThat(STUB.requestsTo(CodefStubServer.TOKEN_PATH)).hasSizeLessThanOrEqualTo(1);
 	}
 
 	@Test
@@ -174,17 +179,14 @@ class CodefLiveMemberIntegrationTest {
 		for (CodefApi api : CodefApi.values()) {
 			STUB.respond(api.path(), 500, "");
 		}
-		int cards = STUB.requestsTo(CodefApi.HELD_CARDS.path()).size();
-		int approvals = STUB.requestsTo(CodefApi.APPROVALS.path()).size();
-		int performances = STUB.requestsTo(CodefApi.CARD_PERFORMANCES.path()).size();
 
 		ResponseEntity<String> synced = this.members.send(HttpMethod.POST, SYNCS, a, null);
 
 		assertThat(synced.getStatusCode().value()).isEqualTo(502);
 		assertThat(synced.getBody()).contains("\"code\":\"CODEF_UNAVAILABLE\"");
-		assertThat(STUB.requestsTo(CodefApi.HELD_CARDS.path())).hasSize(cards + 1);
-		assertThat(STUB.requestsTo(CodefApi.APPROVALS.path())).hasSize(approvals + 1);
-		assertThat(STUB.requestsTo(CodefApi.CARD_PERFORMANCES.path())).hasSize(performances + 1);
+		assertThat(STUB.requestsTo(CodefApi.HELD_CARDS.path())).hasSize(1);
+		assertThat(STUB.requestsTo(CodefApi.APPROVALS.path())).hasSize(1);
+		assertThat(STUB.requestsTo(CodefApi.CARD_PERFORMANCES.path())).hasSize(1);
 	}
 
 	private int count(String sql, Object... args) {
