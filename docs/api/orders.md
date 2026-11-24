@@ -4,7 +4,7 @@
 
 공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 구현 상태는 [README](README.md#업무-api-1차-명세)의 상태 항목을 봅니다.
 
-프로필: 네 API는 `local`·`demo`와 로컬 회원 프로필 `member`에 등록돼 있습니다(G3b #160). 아래 `X-BeONE-Demo-User` 헤더는 `local`·`demo`의 방식입니다. `member`에서는 헤더 대신 회원 세션 쿠키(`__Host-BEONE_SESSION`)로 현재 사용자를 정하고 `POST /api/v1/me/orders`와 `PUT /api/v1/me/planned-spends`에 `X-CSRF-TOKEN`이 필요합니다. 검사 순서는 401 `UNAUTHENTICATED` → 403 `CSRF_INVALID` → 400 → 404이고 모든 응답에 `Cache-Control: no-store`가 붙습니다([회원 세션 규칙](../api.md#회원-세션member-프로필)). 다른 회원의 주문은 없는 주문과 같은 404 `ORDER_NOT_FOUND`이고, 예정 소비는 회원 장부마다 나뉩니다. 주문 목록 API는 없으므로 `GET /api/v1/me/orders`는 405 `METHOD_NOT_ALLOWED`입니다.
+프로필: 다섯 API는 `local`·`demo`와 로컬 회원 프로필 `member`에 등록돼 있습니다(G3b #160, 주문 목록 조회는 결정 38-5 #178). 아래 `X-BeONE-Demo-User` 헤더는 `local`·`demo`의 방식입니다. `member`에서는 헤더 대신 회원 세션 쿠키(`__Host-BEONE_SESSION`)로 현재 사용자를 정하고 `POST /api/v1/me/orders`와 `PUT /api/v1/me/planned-spends`에 `X-CSRF-TOKEN`이 필요합니다. 검사 순서는 401 `UNAUTHENTICATED` → 403 `CSRF_INVALID` → 400 → 404이고 모든 응답에 `Cache-Control: no-store`가 붙습니다([회원 세션 규칙](../api.md#회원-세션member-프로필)). 다른 회원의 주문은 없는 주문과 같은 404 `ORDER_NOT_FOUND`이고, 예정 소비는 회원 장부마다 나뉩니다. 주문 목록 조회(`GET /api/v1/me/orders`)는 현재 사용자 장부의 주문만 돌려줍니다. 주문은 수정·삭제하지 않으므로 `PUT`·`PATCH`·`DELETE /api/v1/me/orders`는 405 `METHOD_NOT_ALLOWED`입니다.
 
 ## POST /api/v1/me/orders — 주문 생성
 
@@ -187,7 +187,7 @@ X-BeONE-Demo-User: MY_CARDS
 ## GET /api/v1/me/orders — 내 주문 목록 조회
 
 - [결정 38-5] 현재 사용자가 저장한 주문을 최신순으로 나눠 조회한다. 수정·삭제·상태 필터는 없다.
-- **계약 초안(#178, 구현 전 관리자 확인 대기).** 확인 전까지 이 경로는 위 프로필 설명대로 405다.
+- 2026-11-24 계약 확정(관리자 확인, #178)과 구현.
 
 현재 사용자 장부(`user_id`)의 주문을 최신순으로 한 페이지씩 돌려주는 API.
 
@@ -256,6 +256,7 @@ X-BeONE-Demo-User: MY_CARDS
 
 #### 응답 필드
 
+- `orderDate`와 `createdAt`은 다르다. `orderDate`는 사용자가 입력한 주문 날짜이고, `createdAt`은 서버가 주문을 저장한 시각이며 목록 정렬 기준이다.
 - `items[]` · 목록용 요약. 각 필드의 뜻과 형식은 [주문 상세 조회](#get-apiv1meordersorderid--주문-상세-조회)와 같고, 값이 없는 필드도 `null`로 쓴다
   - 담는 필드: `orderId`, `amountWon`, `orderDate`, `merchantName`, `merchantClass`, `status`, `createdAt`, `simulatedPaymentId`
   - 빼는 필드: `orderTime`, `paymentMethod`, `latestRecommendationId`. 상세 화면에서만 필요하고, `latestRecommendationId`는 주문마다 추천을 따로 찾아야 해서 목록에 넣지 않는다. 필요하면 상세 조회를 부른다
@@ -289,9 +290,10 @@ X-BeONE-Demo-User: MY_CARDS
 
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
-### 구현 메모(초안)
+### 구현 메모
 
-- 인덱스: 기존 `idx_orders_user_id`로 사용자 행을 좁힌 뒤 정렬한다. MVP 규모에서는 새 Flyway 인덱스를 추가하지 않는 안을 제안한다.
+- 조회는 항상 `user_id` 조건을 넣고(`OrderRepository.findByUserId`), 기존 `idx_orders_user_id`로 사용자 행을 좁힌 뒤 정렬한다. 새 Flyway 인덱스는 추가하지 않았다(관리자 확인).
+- 다음 페이지 여부는 Spring Data `Slice`가 페이지 크기보다 한 건 더 읽어 정한다. 전체 건수 조회는 하지 않는다.
 
 ### 근거
 

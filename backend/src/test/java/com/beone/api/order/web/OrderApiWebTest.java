@@ -6,7 +6,10 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
@@ -25,6 +28,7 @@ import com.beone.api.order.application.NewPlannedSpend;
 import com.beone.api.order.application.OrderClock;
 import com.beone.api.order.application.OrderDetail;
 import com.beone.api.order.application.OrderNotFoundException;
+import com.beone.api.order.application.OrderPage;
 import com.beone.api.order.application.OrderService;
 import com.beone.api.order.application.OrderStatus;
 import com.beone.api.order.application.PaymentMethod;
@@ -54,7 +58,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * 주문·예정 소비 API 4개의 요청 검증·응답 형식·실패 응답을 MockMvc로 확인한다.
+ * 주문·예정 소비 API 5개(주문 목록 조회는 결정 38-5)의 요청 검증·응답 형식·실패 응답을 MockMvc로 확인한다.
  *
  * <p>기대 JSON은 docs/api/orders.md 응답 예시, 실패 응답은 같은 문서의 실패 목록과 docs/api.md 공통 실패 응답에서 옮겼다.
  * "이번 달"은 고정 시계 2026-11-17(Asia/Seoul)이다.
@@ -268,6 +272,134 @@ class OrderApiWebTest {
 
 		assertThat(result.getResponse().getStatus()).isEqualTo(400);
 		assertJson(result, INVALID_REQUEST_EMPTY);
+	}
+
+	// GET /api/v1/me/orders (결정 38-5)
+
+	@Test
+	void listOrdersReturnsContractBodyWithDefaults() throws Exception {
+		// docs/api/orders.md 내 주문 목록 조회 응답 예시: 최신순 2건, page 0, size 20, hasNext false
+		given(this.orderService.list(MY_CARDS, 0, 20)).willReturn(new OrderPage(List.of(
+				new OrderDetail("ord-5002", 4500, LocalDate.of(2026, 11, 3), null, null, "CU_STORE",
+						PaymentMethod.ELIGIBLE_SIMPLE_PAY, OrderStatus.CREATED, LocalDateTime.of(2026, 11, 3, 11, 2, 0)),
+				new OrderDetail("ord-5001", 10000, LocalDate.of(2026, 11, 3), LocalTime.of(10, 39, 0), "스타벅스 송도점",
+						"STARBUCKS_STORE", PaymentMethod.DIRECT, OrderStatus.PAID, LocalDateTime.of(2026, 11, 3, 10, 40, 0),
+						"pay-7001")),
+				0, 20, false));
+
+		MvcResult result = perform(get(ORDERS).header(HEADER, "MY_CARDS"));
+
+		assertThat(result.getResponse().getStatus()).isEqualTo(200);
+		// orderTime·paymentMethod·latestRecommendationId는 목록에 담지 않는다
+		assertJson(result, """
+				{
+				  "data": {
+				    "items": [
+				      {
+				        "orderId": "ord-5002",
+				        "amountWon": 4500,
+				        "orderDate": "2026-11-03",
+				        "merchantName": null,
+				        "merchantClass": "CU_STORE",
+				        "status": "CREATED",
+				        "createdAt": "2026-11-03T11:02:00+09:00",
+				        "simulatedPaymentId": null
+				      },
+				      {
+				        "orderId": "ord-5001",
+				        "amountWon": 10000,
+				        "orderDate": "2026-11-03",
+				        "merchantName": "스타벅스 송도점",
+				        "merchantClass": "STARBUCKS_STORE",
+				        "status": "PAID",
+				        "createdAt": "2026-11-03T10:40:00+09:00",
+				        "simulatedPaymentId": "pay-7001"
+				      }
+				    ],
+				    "page": 0,
+				    "size": 20,
+				    "hasNext": false
+				  }
+				}
+				""");
+		verify(this.orderService, never()).latestRecommendationId(any(), anyString());
+	}
+
+	@Test
+	void listOrdersEmptyIsOkWithEmptyItems() throws Exception {
+		given(this.orderService.list(PORTFOLIO, 0, 20)).willReturn(new OrderPage(List.of(), 0, 20, false));
+
+		MvcResult result = perform(get(ORDERS).header(HEADER, "VIRTUAL_PORTFOLIO"));
+
+		assertThat(result.getResponse().getStatus()).isEqualTo(200);
+		assertJson(result, "{\"data\":{\"items\":[],\"page\":0,\"size\":20,\"hasNext\":false}}");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "0,1", "3,50", "1000,1", "7,20" })
+	void listOrdersPassesBoundaryPageAndSize(String pageAndSize) throws Exception {
+		int page = Integer.parseInt(pageAndSize.split(",")[0]);
+		int size = Integer.parseInt(pageAndSize.split(",")[1]);
+		given(this.orderService.list(MY_CARDS, page, size)).willReturn(new OrderPage(List.of(), page, size, true));
+
+		MvcResult result = perform(get(ORDERS).param("page", String.valueOf(page))
+			.param("size", String.valueOf(size))
+			.header(HEADER, "MY_CARDS"));
+
+		assertThat(result.getResponse().getStatus()).isEqualTo(200);
+		assertJson(result, "{\"data\":{\"items\":[],\"page\":" + page + ",\"size\":" + size
+				+ ",\"hasNext\":true}}");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "", "-1", "+1", " 1", "1 ", "1.0", "01", "00", "1001", "abc", "1e1", "99999999999" })
+	void listOrdersInvalidPageIsInvalidRequest(String value) throws Exception {
+		MvcResult result = perform(get(ORDERS).param("page", value).header(HEADER, "MY_CARDS"));
+
+		assertFieldError(result, "page", "형식이 올바르지 않습니다.");
+		verify(this.orderService, never()).list(any(), anyInt(), anyInt());
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "", "0", "51", "-1", "+5", "020", "5.0", "abc", "99999999999" })
+	void listOrdersInvalidSizeIsInvalidRequest(String value) throws Exception {
+		MvcResult result = perform(get(ORDERS).param("size", value).header(HEADER, "MY_CARDS"));
+
+		assertFieldError(result, "size", "형식이 올바르지 않습니다.");
+		verify(this.orderService, never()).list(any(), anyInt(), anyInt());
+	}
+
+	@Test
+	void listOrdersRepeatedParameterIsInvalidRequest() throws Exception {
+		assertFieldError(perform(get(ORDERS).param("page", "1", "2").header(HEADER, "MY_CARDS")), "page",
+				"형식이 올바르지 않습니다.");
+		assertFieldError(perform(get(ORDERS).param("size", "10", "10").header(HEADER, "MY_CARDS")), "size",
+				"형식이 올바르지 않습니다.");
+		verify(this.orderService, never()).list(any(), anyInt(), anyInt());
+	}
+
+	@Test
+	void listOrdersIgnoresUnknownQueryParameters() throws Exception {
+		given(this.orderService.list(MY_CARDS, 0, 20)).willReturn(new OrderPage(List.of(), 0, 20, false));
+
+		MvcResult result = perform(get(ORDERS).param("status", "PAID").param("sort", "amountWon").header(HEADER,
+				"MY_CARDS"));
+
+		assertThat(result.getResponse().getStatus()).isEqualTo(200);
+		verify(this.orderService).list(MY_CARDS, 0, 20);
+	}
+
+	@Test
+	void updateAndDeleteOnOrderCollectionRemainMethodNotAllowed() throws Exception {
+		List<MockHttpServletRequestBuilder> requests = List.of(putJson(ORDERS, "{}"),
+				patch(ORDERS).contentType(MediaType.APPLICATION_JSON).content("{}"), delete(ORDERS));
+
+		for (MockHttpServletRequestBuilder request : requests) {
+			MvcResult result = perform(request.header(HEADER, "MY_CARDS"));
+			assertThat(result.getResponse().getStatus()).isEqualTo(405);
+			assertJson(result, "{\"code\":\"METHOD_NOT_ALLOWED\",\"message\":\"지원하지 않는 요청 방식입니다.\",\"errors\":[]}");
+			assertThat(result.getResponse().getHeader("Allow")).contains("GET").contains("POST");
+		}
 	}
 
 	// GET /api/v1/me/orders/{orderId}
@@ -557,7 +689,7 @@ class OrderApiWebTest {
 	@Test
 	void missingDemoUserHeaderIsInvalidRequestOnAllApis() throws Exception {
 		List<MockHttpServletRequestBuilder> requests = List.of(postJson(ORDERS, CONTRACT_ORDER_REQUEST),
-				get(ORDERS + "/ord-5001"), get(PLANNED), putJson(PLANNED, "{\"items\":[]}"));
+				get(ORDERS), get(ORDERS + "/ord-5001"), get(PLANNED), putJson(PLANNED, "{\"items\":[]}"));
 
 		for (MockHttpServletRequestBuilder request : requests) {
 			MvcResult result = perform(request);
@@ -566,6 +698,7 @@ class OrderApiWebTest {
 		}
 		verify(this.orderService, never()).create(any(), any());
 		verify(this.orderService, never()).get(any(), any());
+		verify(this.orderService, never()).list(any(), anyInt(), anyInt());
 		verify(this.plannedSpendService, never()).list(any());
 		verify(this.plannedSpendService, never()).replace(any(), any());
 	}
@@ -574,7 +707,7 @@ class OrderApiWebTest {
 	@ValueSource(strings = { "", "my_cards", "ADMIN" })
 	void invalidDemoUserHeaderIsInvalidRequestOnAllApis(String value) throws Exception {
 		List<MockHttpServletRequestBuilder> requests = List.of(postJson(ORDERS, CONTRACT_ORDER_REQUEST),
-				get(ORDERS + "/ord-5001"), get(PLANNED), putJson(PLANNED, "{\"items\":[]}"));
+				get(ORDERS), get(ORDERS + "/ord-5001"), get(PLANNED), putJson(PLANNED, "{\"items\":[]}"));
 
 		for (MockHttpServletRequestBuilder request : requests) {
 			MvcResult result = perform(request.header(HEADER, value));
