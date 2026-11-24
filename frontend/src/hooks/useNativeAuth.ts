@@ -25,7 +25,7 @@ const reasons = [
 type NativeReason = (typeof reasons)[number]
 type AuthReason = NativeReason | 'BROWSER' | 'SYNCING' | 'BRIDGE_ERROR'
 
-export function useNativeAuth() {
+export function useNativeAuth(enabled = true) {
   const [reason, setReason] = useState<AuthReason>('NOT_AUTHENTICATED')
   const [active, setActive] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -59,6 +59,7 @@ export function useNativeAuth() {
   }, [])
 
   useEffect(() => {
+    if (!enabled) return
     const bridge = window.BeoneBridge
     if (!bridge) return
     const previous = bridge.onmessage
@@ -142,7 +143,7 @@ export function useNativeAuth() {
       window.removeEventListener('focus', synchronize)
       if (bridge.onmessage === receive) bridge.onmessage = previous
     }
-  }, [send, invalidate])
+  }, [enabled, send, invalidate])
 
   const request = useCallback(() => {
     if (pending.current) return
@@ -169,7 +170,21 @@ export function useNativeAuth() {
     if (!send('payment.check')) invalidate('BRIDGE_ERROR')
   }, [invalidate, send])
 
-  return { reason, active, busy, remainingMs, checking, paymentReady, request, checkPayment }
+  useEffect(() => {
+    if (!busy) return
+    const timeout = setTimeout(() => {
+      pending.current = false
+      setBusy(false)
+      invalidate('NO_RESPONSE')
+    }, 125000)
+    return () => clearTimeout(timeout)
+  }, [busy, invalidate])
+
+  const reset = useCallback((reason: 'LEFT_APP' | 'NO_RESPONSE' = 'LEFT_APP') => invalidate(reason), [invalidate])
+
+  const clearCheck = useCallback(() => setPaymentReady(false), [])
+
+  return { reason, active, busy, remainingMs, checking, paymentReady, request, checkPayment, reset, clearCheck }
 }
 
 export const authMessages: Record<AuthReason, string> = {

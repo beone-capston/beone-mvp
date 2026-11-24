@@ -64,8 +64,11 @@ com.beone.api.order
 ## 처리 흐름
 
 ```text
-POST /api/v1/me/orders (X-BeONE-Demo-User 헤더)
-→ CurrentUserResolver(user 패키지)가 CurrentUser 주입. 헤더 오류는 400 INVALID_REQUEST
+POST /api/v1/me/orders
+→ CurrentUserResolver(user 패키지)가 CurrentUser 주입
+   - local·demo: X-BeONE-Demo-User 헤더로 시연 사용자를 정함. 헤더 오류는 400 INVALID_REQUEST
+   - member: 헤더는 무시. 컨트롤러 전에 /api/v1/me/** 인터셉터가 세션 쿠키(없거나 만료면 401 UNAUTHENTICATED)와
+     쓰기 요청의 X-CSRF-TOKEN(틀리면 403 CSRF_INVALID)을 검사하고, 세션의 회원 장부를 현재 사용자로 씀
 → JSON 역직렬화: 금액은 JSON 정수만, 날짜 YYYY-MM-DD·시각 HH:mm:ss 문자열만 (아니면 400, errors [])
 → Bean Validation: 필수 필드, 금액 1 이상, merchantName 50자, merchantClass 허용 목록 (아니면 400, 필드 오류)
 → OrderService.create: user_id와 함께 저장, status=CREATED, createdAt=OrderClock.now()
