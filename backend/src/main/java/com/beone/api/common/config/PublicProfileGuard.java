@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
  * <p>{@code prod}에 CODEF 키·토큰 환경 변수가 있어도 기동을 멈춘다(결정 38-8, LP-4). CODEF는 공개 {@code prod}에서 등록하지 않으며
  * 키는 비공개 검증 서버에만 둔다. 값은 읽지 않고 이름만 확인하며, 메시지에도 이름만 넣는다. 공개 전환이 승인되면 이 규칙을 걷어낸다.
  *
- * <p>이 가드는 공개 배포 가능 여부를 보증하지 않는다. 실메일 발송기(N1 결정 대기)가 없으면 공개 배포할 수 없다.
+ * <p>이 가드는 공개 배포 가능 여부를 보증하지 않는다. 메일 설정 검사는 {@code SmtpMailConfiguration}(결정 39-6)이 따로 한다.
  */
 @Component
 public class PublicProfileGuard implements BeanFactoryPostProcessor, EnvironmentAware, Ordered {

@@ -104,6 +104,12 @@ class PublicProfileGuardTest {
 			assertThat(environment.getProperty("spring.flyway.clean-disabled")).isEqualTo("true");
 			assertThat(environment.getProperty("management.endpoints.web.exposure.include")).isEqualTo("health");
 			assertThat(environment.getProperty("management.endpoint.health.show-details")).isEqualTo("never");
+			// 메일(결정 39-6): 인증·STARTTLS 필수, 상태 확인의 SMTP 로그인 끔
+			assertThat(environment.getProperty("spring.mail.properties[mail.smtp.auth]")).isEqualTo("true");
+			assertThat(environment.getProperty("spring.mail.properties[mail.smtp.starttls.enable]")).isEqualTo("true");
+			assertThat(environment.getProperty("spring.mail.properties[mail.smtp.starttls.required]")).isEqualTo("true");
+			assertThat(environment.getProperty("management.health.mail.enabled")).isEqualTo("false");
+			assertThat(environment.getProperty("spring.mail.host")).isNull();
 		}
 	}
 
