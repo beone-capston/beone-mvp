@@ -14,14 +14,31 @@ public final class CodefClient {
 
 	private final CodefHttp http;
 
+	private final CodefCallBudget budget;
+
 	public CodefClient(CodefApiKeys keys, CodefTransportSettings settings) {
-		this(keys, settings, Clock.systemUTC());
+		this(keys, settings, CodefCallBudget.UNLIMITED);
+	}
+
+	/**
+	 * 호출 총량을 함께 쓰는 클라이언트를 만든다(LP-2).
+	 * @param keys 클라이언트 키
+	 * @param settings 전송 설정
+	 * @param budget 프로세스를 넘는 호출 총량
+	 */
+	public CodefClient(CodefApiKeys keys, CodefTransportSettings settings, CodefCallBudget budget) {
+		this(keys, settings, Clock.systemUTC(), budget);
 	}
 
 	CodefClient(CodefApiKeys keys, CodefTransportSettings settings, Clock clock) {
+		this(keys, settings, clock, CodefCallBudget.UNLIMITED);
+	}
+
+	CodefClient(CodefApiKeys keys, CodefTransportSettings settings, Clock clock, CodefCallBudget budget) {
 		Objects.requireNonNull(keys, "keys");
 		Objects.requireNonNull(settings, "settings");
 		Objects.requireNonNull(clock, "clock");
+		this.budget = Objects.requireNonNull(budget, "budget");
 		this.http = new CodefHttp(settings);
 		this.tokens = keys.isConfigured() ? Optional.of(new CodefTokenCache(http, keys, clock)) : Optional.empty();
 	}
@@ -31,7 +48,7 @@ public final class CodefClient {
 	 * @return 새 관측
 	 */
 	public CodefObservation startObservation() {
-		return new CodefObservation(tokens, http);
+		return new CodefObservation(tokens, http, budget);
 	}
 
 	CodefHttp http() {
