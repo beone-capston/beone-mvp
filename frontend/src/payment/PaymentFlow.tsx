@@ -115,7 +115,8 @@ export function PaymentFlow({ mode, preference, selection, cards, gateway, mockA
   }, [stage])
 
   const order = stage.kind === 'ready' ? selection?.order : stage.attempt.selection.order
-  const canSubmit = stage.kind === 'ready' && !stage.blocked && auth.active && !checking && !auth.checking &&
+  // 재인증 중(busy)에는 활성 시간이 남아 있어도 제출하지 않는다(A1)
+  const canSubmit = stage.kind === 'ready' && !stage.blocked && auth.active && !auth.busy && !checking && !auth.checking &&
     selection?.order.status === 'CREATED' && Boolean(selection.order.orderId) &&
     Number.isSafeInteger(selection.order.amountWon) && selection.order.amountWon > 0 &&
     (gateway.kind === 'mock' || selection.source === 'server')

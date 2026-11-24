@@ -3,7 +3,7 @@
 빠른결제에서 카드 이미지를 탭하면 사용 준비 화면을 엽니다. 선택 주문의 ID와 모드를 고정하고 기기 활성 상태를 확인한 뒤, 사용자가 결제 버튼을 누른 경우에 승인 요청을 보냅니다. 승인 결과의 카드 선택은 서버가 결정하며 화면에서 탭한 카드와 독립적입니다.
 
 - [PaymentFlow](../../frontend/src/payment/PaymentFlow.tsx)는 사용 준비, 처리 중, 결과, 결과 미확인을 관리합니다. 동일 시도의 재확인은 최대 24시간 동안 같은 주문·요청 본문·멱등 키를 사용합니다.
-- [인증 선택](../../frontend/src/payment/deviceAuth.ts)은 개발용 타이머 또는 [BeoneBridge v1](../android/bridge-contract-candidate.md)을 사용합니다. 기기 결과는 결제 서버 요청에 포함되지 않습니다.
+- [인증 선택](../../frontend/src/payment/deviceAuth.ts)은 개발용 타이머 또는 [BeoneBridge v1](../android/bridge-contract-candidate.md)을 사용합니다. 기기 결과는 결제 서버 요청에 포함되지 않습니다. 60초 활성 중 다시 인증하는 상태(`active`·`authenticating` 동시, reason `ACTIVE`, 남은 시간 > 0)도 받아 재인증 중으로 표시하고, 그동안 결제 버튼을 막습니다(결정 38 A1).
 - [결제 계약](../../frontend/src/payment/contract.ts)과 [서버 어댑터](../../frontend/src/payment/paymentApi.ts)는 승인, 단건 조회와 추천 조회를 구분합니다. 승인 결과를 받은 뒤 추천 조회에 실패해도 승인 결과는 유지됩니다. 대표 카드 고정의 선택 근거는 서버에서 `null`일 수 있습니다.
 - [목 어댑터](../../frontend/src/payment/mockPayment.ts)는 피처 테스트를 위한 독립적인 메모리 저장소입니다. 목 주문과 서버 주문은 화면 상태에서 출처를 구분하고 목 주문은 서버 승인에 보낼 수 없습니다. 목 승인은 화면에서만 주문 상태를 갱신합니다.
 - [PaymentResult](../../frontend/src/payment/PaymentResult.tsx)는 승인 ID와 카드 ID로 결과와 추천 상세를 표시합니다. 비교가 로딩되지 않았거나 카드명이 없는 경우 ID를 표시합니다. 결과에서 주문 목록으로 돌아갈 때 같은 주문의 상태만 갱신합니다.

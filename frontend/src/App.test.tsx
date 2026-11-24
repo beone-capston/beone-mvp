@@ -262,6 +262,35 @@ describe('BeoneBridge v1 기기 인증 경계', () => {
     expect(screen.getByRole('button', { name: '다시 인증' })).toBeDisabled()
   })
 
+  it('활성 중 재인증 상태를 받아 결제를 막고 재인증이 끝나면 다시 허용한다', () => {
+    installBridge()
+    const gateway = createMockPaymentGateway(0)
+    const approve = vi.spyOn(gateway, 'approve')
+    render(<App paymentGateway={gateway} />)
+    fireEvent.click(screen.getByRole('button', { name: '모의결제' }))
+    fireEvent.click(screen.getByRole('button', { name: /스타벅스 송도점/ }))
+    fireEvent.click(screen.getByRole('button', { name: '빠른결제로 이동' }))
+    tapCard()
+    nativeState({ active: true, remainingMs: 60000, reason: 'ACTIVE' })
+    expect(screen.getByRole('button', { name: '가상 주문서 결제' })).toBeEnabled()
+    nativeState({ active: true, remainingMs: 50000, reason: 'ACTIVE', authenticating: true })
+    expect(screen.getByLabelText('남은 활성 시간')).toHaveTextContent('50초')
+    expect(screen.getByRole('button', { name: '가상 주문서 결제' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '가상 주문서 결제' }))
+    expect(approve).not.toHaveBeenCalled()
+    nativeState({ active: true, remainingMs: 45000, reason: 'ACTIVE', authenticating: false })
+    expect(screen.getByRole('button', { name: '가상 주문서 결제' })).toBeEnabled()
+  })
+
+  it('활성인데 남은 시간이 0이거나 reason이 ACTIVE가 아닌 재인증 상태는 계속 무시한다', () => {
+    installBridge()
+    render(<App />)
+    tapCard()
+    nativeState({ active: true, remainingMs: 0, reason: 'ACTIVE', authenticating: true })
+    nativeState({ active: true, remainingMs: 30000, reason: 'SYNCING', authenticating: true })
+    expect(screen.queryByLabelText('남은 활성 시간')).not.toBeInTheDocument()
+  })
+
   it('네이티브 활성 응답만으로 승인하지 않고 확인 메시지가 허용한 뒤 승인한다', async () => {
     const bridge = installBridge()
     const gateway = createMockPaymentGateway(0)

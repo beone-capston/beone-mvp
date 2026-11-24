@@ -82,11 +82,8 @@ export function useNativeAuth(enabled = true) {
           !reasons.includes(message.reason as NativeReason)
         )
           return
-        if (
-          message.active &&
-          (message.reason !== 'ACTIVE' || message.remainingMs === 0 || message.authenticating)
-        )
-          return
+        // 활성 중 재인증(active·authenticating 동시)은 브리지 v1이 허용하는 조합이므로 받아서 busy로 반영한다(A1)
+        if (message.active && (message.reason !== 'ACTIVE' || message.remainingMs === 0)) return
         if (!message.active && (message.reason === 'ACTIVE' || message.remainingMs !== 0)) return
         pending.current = message.authenticating
         setBusy(message.authenticating)
