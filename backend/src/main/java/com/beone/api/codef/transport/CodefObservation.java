@@ -24,7 +24,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 관측 1회. 이 객체 하나가 호출 상한의 집계 범위이고, 토큰과 상품 API마다 {@value #CALL_LIMIT}회까지 보낸다. 넘으면 보내기 전에 거부한다.
- * 어떤 조회를 관측 1회로 볼지는 객체를 여는 호출자가 정한다. 프로세스를 넘어선 누적은 세지 않는다.
+ * 어떤 조회를 관측 1회로 볼지는 객체를 여는 호출자가 정한다. 프로세스를 넘는 누적은 {@link CodefCallBudget}이 보내기 직전에 따로 센다(LP-2).
  *
  * <p>
  * 자동 재시도는 없다. 401이나 {@code CF-00401}이면 토큰을 버리고 결과를 그대로 돌려주며, 같은 요청을 다시 보내지 않는다.
@@ -50,14 +50,17 @@ public final class CodefObservation {
 
 	private final CodefHttp http;
 
+	private final CodefCallBudget budget;
+
 	/** 상품 API({@link CodefApi})와 계정 API({@link CodefAccountApi})마다 따로 센다. */
 	private final Map<Enum<?>, Integer> productCalls = new HashMap<>();
 
 	private int tokenCalls;
 
-	CodefObservation(Optional<CodefTokenCache> tokens, CodefHttp http) {
+	CodefObservation(Optional<CodefTokenCache> tokens, CodefHttp http, CodefCallBudget budget) {
 		this.tokens = tokens;
 		this.http = http;
+		this.budget = budget;
 	}
 
 	public CodefCallResult<CodefHeldCard> heldCards(Map<String, String> parameters) {
@@ -124,9 +127,21 @@ public final class CodefObservation {
 		if (!productCallRemains(api)) {
 			return failed(api, Stage.PRODUCT, Reason.CALL_LIMIT_REACHED, OptionalInt.empty());
 		}
-		CodefTokenCache.Outcome outcome = tokens.get().current(this::acquireTokenCall);
+		// 캐시된 토큰을 쓰면 발급 요청이 없으므로 총량도 쓰지 않는다. 발급할 때만 묻는다
+		boolean[] budgetDenied = { false };
+		CodefTokenCache.Outcome outcome = tokens.get().current(() -> {
+			if (!acquireTokenCall()) {
+				return false;
+			}
+			if (!budget.tryAcquire(CodefCallBudget.TOKEN)) {
+				budgetDenied[0] = true;
+				return false;
+			}
+			return true;
+		});
 		if (outcome instanceof CodefTokenCache.Outcome.Failure failure) {
-			return failed(api, Stage.TOKEN, failure.reason(), failure.httpStatus());
+			return failed(api, Stage.TOKEN, budgetDenied[0] ? Reason.BUDGET_EXHAUSTED : failure.reason(),
+					failure.httpStatus());
 		}
 		// 토큰을 기다리는 동안 취소된 호출은 보내지 않는다. isInterrupted는 인터럽트 상태를 지우지 않는다.
 		if (Thread.currentThread().isInterrupted()) {
@@ -135,6 +150,9 @@ public final class CodefObservation {
 		String token = ((CodefTokenCache.Outcome.Token) outcome).value();
 		if (!acquireProductCall(api)) {
 			return failed(api, Stage.PRODUCT, Reason.CALL_LIMIT_REACHED, OptionalInt.empty());
+		}
+		if (!budget.tryAcquire(api.name())) {
+			return failed(api, Stage.PRODUCT, Reason.BUDGET_EXHAUSTED, OptionalInt.empty());
 		}
 		return send(api, token, body, reader);
 	}
