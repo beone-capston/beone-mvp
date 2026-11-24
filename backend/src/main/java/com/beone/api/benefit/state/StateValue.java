@@ -16,6 +16,8 @@ import com.beone.api.benefit.rule.RuleVersionRef;
  * {@code SYNTHETIC}은 시나리오 데이터에 없는 시각을 만들지 않도록 생략할 수 있다.</li>
  * <li>{@code INFERRED}는 산출에 쓴 규칙 버전이 필수다.</li>
  * </ul>
+ *
+ * @param <T> 값 형식
  */
 public final class StateValue<T> {
 
@@ -88,6 +90,7 @@ public final class StateValue<T> {
 
 	/**
 	 * 값을 반환한다.
+	 * @return 알려진 값
 	 * @throws IllegalStateException 상태가 {@code UNKNOWN}인 경우
 	 */
 	public T knownValue() {

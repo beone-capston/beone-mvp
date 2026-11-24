@@ -71,7 +71,11 @@ public class PaymentPreferenceEntity {
 		return this.updatedAt;
 	}
 
-	/** 이 카드가 대표 카드인지. */
+	/**
+	 * 이 카드가 대표 카드인지.
+	 * @param userCardId 보유 카드 ID
+	 * @return 대표 카드이면 {@code true}
+	 */
 	public boolean represents(long userCardId) {
 		return this.representativeUserCardId != null && this.representativeUserCardId == userCardId;
 	}

@@ -75,7 +75,11 @@ public class CodefConnectionService {
 		this.clock = Objects.requireNonNull(clock, "clock").withZone(SEOUL);
 	}
 
-	/** 연결 상태. 연결이 없으면 {@link CodefConnectionView#NOT_CONNECTED}다. */
+	/**
+	 * 연결 상태. 연결이 없으면 {@link CodefConnectionView#NOT_CONNECTED}다.
+	 * @param user 현재 사용자
+	 * @return 연결 상태
+	 */
 	public CodefConnectionView get(CurrentUser user) {
 		return this.transactions.execute(status -> this.codefConnectionRepository.findById(user.userId())
 			.map(CodefConnectionService::toView)

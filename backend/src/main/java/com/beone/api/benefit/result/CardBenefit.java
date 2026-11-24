@@ -16,6 +16,7 @@ import com.beone.api.benefit.rule.RuleVersionRef;
 /**
  * 후보 카드 한 장의 결과.
  *
+ * @param cardId 카드 상품 식별자
  * @param appliedRule 사용한 규칙 버전. 쓸 수 있는 규칙이 없을 때만 비어 있다
  * @param status 카드 단위 적용 상태
  * @param currentOrderBenefit 현재 주문의 혜택

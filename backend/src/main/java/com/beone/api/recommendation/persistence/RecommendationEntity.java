@@ -47,7 +47,10 @@ public class RecommendationEntity {
 		this.calculatedAt = calculatedAt;
 	}
 
-	/** 번호를 받은 뒤 응답 본문을 채운다. */
+	/**
+	 * 번호를 받은 뒤 응답 본문을 채운다.
+	 * @param documentJson 응답 본문 JSON
+	 */
 	public void attachDocument(String documentJson) {
 		this.documentJson = documentJson;
 	}

@@ -22,6 +22,7 @@ public sealed interface BenefitAmount {
 
 	/**
 	 * 확정 금액을 반환한다.
+	 * @return 확정 금액
 	 * @throws IllegalStateException 아직 확인이 필요한 금액인 경우
 	 */
 	Won confirmedWon();

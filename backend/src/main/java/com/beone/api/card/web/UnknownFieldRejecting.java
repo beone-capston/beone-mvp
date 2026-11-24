@@ -11,7 +11,11 @@ import com.fasterxml.jackson.annotation.JsonAnySetter;
  */
 interface UnknownFieldRejecting {
 
-	/** Jackson이 선언되지 않은 필드마다 호출한다. 항상 역직렬화 오류로 만든다. */
+	/**
+	 * Jackson이 선언되지 않은 필드마다 호출한다. 항상 역직렬화 오류로 만든다.
+	 * @param name 선언되지 않은 필드 이름
+	 * @param value 그 필드의 값. 쓰지 않는다
+	 */
 	@JsonAnySetter
 	default void rejectUnknownField(String name, Object value) {
 		throw new IllegalArgumentException("unknown request field");

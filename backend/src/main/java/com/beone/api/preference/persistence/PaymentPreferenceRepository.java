@@ -40,6 +40,8 @@ public interface PaymentPreferenceRepository extends JpaRepository<PaymentPrefer
 
 	/**
 	 * 이 사용자의 설정 행을 쓰기 잠금으로 찾는다. {@link #lockUser} 뒤에 불러, 앞 요청이 커밋한 최신 값을 읽는다.
+	 * @param userId 사용자 ID
+	 * @return 잠근 설정 행, 없으면 빈 값
 	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<PaymentPreferenceEntity> findForUpdateByUserId(Long userId);

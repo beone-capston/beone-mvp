@@ -95,12 +95,18 @@ public class AuthSessionEntity {
 		return this.sessionHash;
 	}
 
-	/** 회원 ID. 익명 세션은 {@code null}이다. */
+	/**
+	 * 회원 ID. 익명 세션은 {@code null}이다.
+	 * @return 회원 ID, 익명 세션이면 {@code null}
+	 */
 	public String getMemberId() {
 		return this.memberId;
 	}
 
-	/** 회원 로그인 세션이면 {@code true}. */
+	/**
+	 * 회원 로그인 세션이면 {@code true}.
+	 * @return 회원 로그인 세션이면 {@code true}
+	 */
 	public boolean isMemberSession() {
 		return this.memberId != null;
 	}
@@ -117,7 +123,10 @@ public class AuthSessionEntity {
 		return this.idleExpiresAt;
 	}
 
-	/** 절대 만료 시각. 익명 세션은 {@code null}이다. */
+	/**
+	 * 절대 만료 시각. 익명 세션은 {@code null}이다.
+	 * @return 절대 만료 시각, 익명 세션이면 {@code null}
+	 */
 	public LocalDateTime getAbsoluteExpiresAt() {
 		return this.absoluteExpiresAt;
 	}

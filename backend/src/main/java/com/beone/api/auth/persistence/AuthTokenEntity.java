@@ -61,7 +61,11 @@ public class AuthTokenEntity {
 		this.expiresAt = Objects.requireNonNull(expiresAt, "expiresAt");
 	}
 
-	/** 만료 시각에 도달했거나 지났으면(같은 시각 포함) 만료다. */
+	/**
+	 * 만료 시각에 도달했거나 지났으면(같은 시각 포함) 만료다.
+	 * @param now 비교할 현재 시각
+	 * @return 만료 시각이 {@code now}와 같거나 이전이면 {@code true}
+	 */
 	public boolean isExpiredAt(LocalDateTime now) {
 		return !now.isBefore(this.expiresAt);
 	}

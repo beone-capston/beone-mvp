@@ -73,12 +73,18 @@ public record MonthlyStateView(String userCardId, YearMonth month, LocalDateTime
 			Objects.requireNonNull(updatedAt, "updatedAt");
 		}
 
-		/** 적용일이 있으면 계산에 쓸 수 있다. */
+		/**
+		 * 적용일이 있으면 계산에 쓸 수 있다.
+		 * @return 적용일이 있으면 {@code true}
+		 */
 		public boolean usable() {
 			return this.effectiveFrom != null;
 		}
 
-		/** 쓸 수 없는 이유. */
+		/**
+		 * 쓸 수 없는 이유.
+		 * @return 쓸 수 없으면 {@code NOT_ENTERED}, 쓸 수 있으면 {@code null}
+		 */
 		public StateReason reason() {
 			return usable() ? null : StateReason.NOT_ENTERED;
 		}
@@ -97,12 +103,18 @@ public record MonthlyStateView(String userCardId, YearMonth month, LocalDateTime
 			Objects.requireNonNull(updatedAt, "updatedAt");
 		}
 
-		/** 적용일이 있으면 계산에 쓸 수 있다. */
+		/**
+		 * 적용일이 있으면 계산에 쓸 수 있다.
+		 * @return 적용일이 있으면 {@code true}
+		 */
 		public boolean usable() {
 			return this.effectiveFrom != null;
 		}
 
-		/** 쓸 수 없는 이유. */
+		/**
+		 * 쓸 수 없는 이유.
+		 * @return 쓸 수 없으면 {@code NOT_ENTERED}, 쓸 수 있으면 {@code null}
+		 */
 		public StateReason reason() {
 			return usable() ? null : StateReason.NOT_ENTERED;
 		}
