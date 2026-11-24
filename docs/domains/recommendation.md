@@ -10,7 +10,7 @@
 
 - `POST /api/v1/me/orders/{orderId}/recommendations`: 추천 계산. **201**과 계산 결과를 돌려줍니다. 같은 주문이라도 부를 때마다 새 추천 ID가 생깁니다.
 - `GET /api/v1/me/recommendations/{recommendationId}`: 저장한 결과 조회. 다시 계산하지 않고, 계산 응답에 `invalidated`·`invalidatedReason`만 더합니다.
-- 실패 응답: 404 `ORDER_NOT_FOUND`(없거나 다른 사용자의 주문), 409 `ORDER_ALREADY_PAID`(모의 승인된 주문), 404 `RECOMMENDATION_NOT_FOUND`(없거나 형식이 틀렸거나 다른 사용자의 추천). 시연 사용자 헤더가 없거나 틀리면 공통 처리기의 400 `INVALID_REQUEST`입니다.
+- 실패 응답: 404 `ORDER_NOT_FOUND`(없거나 다른 사용자의 주문), 409 `ORDER_ALREADY_PAID`(모의 승인된 주문), 404 `RECOMMENDATION_NOT_FOUND`(없거나 형식이 틀렸거나 다른 사용자의 추천). `local`·`demo`에서는 시연 사용자 헤더가 없거나 틀리면 공통 처리기의 400 `INVALID_REQUEST`입니다. `member`는 헤더를 보지 않고 회원 세션으로 사용자를 정합니다(아래 항목).
 - `local`·`demo`·`member` 프로필에서 등록합니다. `member`(G3b #160)에서는 회원 세션의 '내 카드' 장부가 현재 사용자이고, 세션 401·CSRF 403·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 처리합니다(결정 37). 계산은 추천 행을 저장하는 POST라서 CSRF 토큰이 필요합니다. 남의 주문·추천과 시연 장부의 주문·추천은 없는 것과 같은 404입니다. 무효화 규칙(추천 제외 변경은 `MAPPING_CHANGED`, 결제 설정 변경은 무효화 없음, 결정 32 Q2·Q3)은 프로필과 관계없이 같습니다. 서비스 코드는 바꾸지 않았습니다.
 - Flyway `V7__recommendations.sql`: `recommendations`, `recommendation_card_bases`. 시드는 없습니다. 번호는 다른 작업선과 나눈 **임시 번호**이며, 병합 직전 관리자가 정한 순서에 따라 바뀔 수 있습니다(D-23 12항).
 
