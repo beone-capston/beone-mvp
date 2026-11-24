@@ -12,7 +12,11 @@ import { orderApi } from './orders/orderApi'
 import type { OrderApi } from './orders/orderApi'
 import { formatWon, orderName } from './orders/order'
 import type { CreatedOrder } from './orders/order'
-import { authMessages, useNativeAuth } from './hooks/useNativeAuth'
+import { PaymentFlow } from './payment/PaymentFlow'
+import { apiPaymentGateway } from './payment/paymentApi'
+import { createMockPaymentGateway } from './payment/mockPayment'
+import { sampleOrder } from './payment/fixtures'
+import type { Approval, Attempt, OrderSelection, PaymentGateway } from './payment/contract'
 
 const menus = ['혜택', '빠른결제', '모의결제'] as const
 type Menu = (typeof menus)[number]
@@ -21,19 +25,30 @@ interface ModeState {
   preference: PaymentPreference
 }
 
-function App({ cardSource = mockCardSource, orders = orderApi }: { cardSource?: CardSource; orders?: OrderApi }) {
+const mockDevice = import.meta.env.DEV && import.meta.env.VITE_DEVICE_AUTH_MODE === 'mock'
+const mockPayments = import.meta.env.DEV && import.meta.env.VITE_PAYMENT_API_MODE === 'mock'
+
+function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, mockAuth = mockDevice }: {
+  cardSource?: CardSource; orders?: OrderApi; paymentGateway?: PaymentGateway; mockAuth?: boolean
+}) {
   const [menu, setMenu] = useState<Menu>('빠른결제')
   const [mode, setMode] = useState<PortfolioMode>('MY_CARDS')
   const [modes, setModes] = useState<Record<PortfolioMode, ModeState>>({
     MY_CARDS: { activeIndex: 0, preference: defaultPreference() },
     VIRTUAL_PORTFOLIO: { activeIndex: 0, preference: defaultPreference() },
   })
-  const [selectedOrders, setSelectedOrders] = useState<Partial<Record<PortfolioMode, CreatedOrder>>>({})
-  const selectedOrder = selectedOrders[mode]
+  const [gateway] = useState(() => paymentGateway ?? (mockPayments
+    ? createMockPaymentGateway(Number(import.meta.env.VITE_PAYMENT_MOCK_DELAY_MS || 800) || 0)
+    : apiPaymentGateway))
+  const [selectedOrders, setSelectedOrders] = useState<Partial<Record<PortfolioMode, OrderSelection>>>({})
+  const [sampleOrders, setSampleOrders] = useState<Partial<Record<PortfolioMode, CreatedOrder>>>(
+    () => gateway.kind === 'mock' ? { MY_CARDS: sampleOrder } : {},
+  )
+  const [paidIds, setPaidIds] = useState<Partial<Record<PortfolioMode, string[]>>>({})
+  const selectedOrder = selectedOrders[mode]?.order
   const [notice, setNotice] = useState('')
   const [services, setServices] = useState<WalletCard | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
-  const auth = useNativeAuth()
   const cards = useMemo(() => cardSource.getCards(mode), [cardSource, mode])
   const activeIndex = Math.max(0, Math.min(modes[mode].activeIndex, cards.length - 1))
   const myMode = mode === 'MY_CARDS'
@@ -50,9 +65,28 @@ function App({ cardSource = mockCardSource, orders = orderApi }: { cardSource?: 
     setNotice('')
   }
 
-  function openSelectedOrder(orderMode: PortfolioMode, order: CreatedOrder) {
-    setSelectedOrders(current => ({ ...current, [orderMode]: order }))
+  function openSelectedOrder(orderMode: PortfolioMode, order: CreatedOrder, source: OrderSelection['source'] = 'server') {
+    setSelectedOrders(current => ({ ...current, [orderMode]: { order, source } }))
     selectMenu('빠른결제')
+    window.scrollTo(0, 0)
+  }
+
+  function openPayment() {
+    setAuthOpen(true)
+    setNotice('')
+    window.scrollTo(0, 0)
+  }
+
+  function returnToOrders(attempt?: Attempt, approval?: Approval) {
+    if (attempt && approval?.status === 'APPROVED') {
+      const { selection, mode: orderMode } = attempt
+      const order = { ...selection.order, status: 'PAID' as const }
+      setSelectedOrders(current => ({ ...current, [orderMode]: { ...selection, order } }))
+      if (selection.source === 'mock') setSampleOrders(current => ({ ...current, [orderMode]: order }))
+      else setPaidIds(current => ({ ...current, [orderMode]: [...(current[orderMode] ?? []), order.orderId] }))
+    }
+    setAuthOpen(false)
+    selectMenu('모의결제')
     window.scrollTo(0, 0)
   }
 
@@ -61,13 +95,18 @@ function App({ cardSource = mockCardSource, orders = orderApi }: { cardSource?: 
   }
 
   return (
-    <div className="wallet-app">
+    <div className={authOpen ? "wallet-app wallet-payment" : "wallet-app"}>
       <header className="wallet-header">
         <a
           className="brand"
           href="#main"
           aria-label="B:ONE 빠른결제 홈"
-          onClick={() => selectMenu('빠른결제')}
+          onClick={event => {
+            if (authOpen) event.preventDefault()
+            else selectMenu('빠른결제')
+          }}
+          aria-disabled={authOpen || undefined}
+          tabIndex={authOpen ? -1 : undefined}
         >
           <span className="brand-symbol">
             <img src="/beone-logo-blue.png" alt="" />
@@ -76,7 +115,7 @@ function App({ cardSource = mockCardSource, orders = orderApi }: { cardSource?: 
             B<span className="brand-colon">:</span>ONE
           </span>
         </a>
-        {myMode && menu !== '모의결제' && (
+        {!authOpen && myMode && menu !== '모의결제' && (
           <div className="header-actions">
             <button
               aria-label="카드 추가"
@@ -98,9 +137,9 @@ function App({ cardSource = mockCardSource, orders = orderApi }: { cardSource?: 
         )}
       </header>
 
-      {menu !== '모의결제' && <PortfolioModeTabs mode={mode} onChange={selectMode} />}
+      {!authOpen && menu !== '모의결제' && <PortfolioModeTabs mode={mode} onChange={selectMode} />}
       <main id="main">
-        <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode} hidden={menu === '모의결제'}>
+        <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode} hidden={authOpen || menu === '모의결제'}>
           {menu === '빠른결제' ? (
             <section className="quick-payment" key={mode}>
               <h1 className="sr-only">B:ONE 빠른결제</h1>
@@ -136,10 +175,7 @@ function App({ cardSource = mockCardSource, orders = orderApi }: { cardSource?: 
                       [mode]: { ...current[mode], activeIndex: index },
                     }))
                   }
-                  onCardTap={() => {
-                    setAuthOpen(true)
-                    auth.request()
-                  }}
+                  onCardTap={openPayment}
                   onServices={setServices}
                 />
               ) : (
@@ -173,11 +209,15 @@ function App({ cardSource = mockCardSource, orders = orderApi }: { cardSource?: 
         </div>
         {(['MY_CARDS', 'VIRTUAL_PORTFOLIO'] as const).map(orderMode => (
           <OrderWorkspace key={orderMode} mode={orderMode} api={orders}
-            active={menu === '모의결제' && mode === orderMode} onSelect={openSelectedOrder} />
+            active={!authOpen && menu === '모의결제' && mode === orderMode} onSelect={openSelectedOrder}
+            paidIds={paidIds[orderMode]} sampleOrder={sampleOrders[orderMode]} mockApproval={gateway.kind === 'mock'} />
         ))}
+        {authOpen && <PaymentFlow mode={mode} preference={modes[mode].preference} selection={selectedOrders[mode]}
+          cards={cards} gateway={gateway} mockAuth={mockAuth}
+          onBack={() => { setAuthOpen(false); window.scrollTo(0, 0) }} onReturn={returnToOrders} />}
       </main>
 
-      <nav
+      {!authOpen && <nav
         className="bottom-nav"
         aria-label="주요 메뉴"
         style={{ '--active-index': menus.indexOf(menu) } as CSSProperties}
@@ -193,7 +233,7 @@ function App({ cardSource = mockCardSource, orders = orderApi }: { cardSource?: 
             <span>{item}</span>
           </button>
         ))}
-      </nav>
+      </nav>}
 
       {notice && (
         <div className="toast" role="status">
@@ -214,54 +254,6 @@ function App({ cardSource = mockCardSource, orders = orderApi }: { cardSource?: 
             이 카드의 혜택 조건·부가서비스 상세 연결은 준비 중이에요. 확인된 설명 데이터를 연결하기
             전에는 혜택이나 금액을 표시하지 않습니다.
           </p>
-        </Sheet>
-      )}
-      {authOpen && (
-        <Sheet title="가상카드 기기 인증" onClose={() => setAuthOpen(false)}>
-          <p className="auth-message" role="status">
-            {authMessages[auth.reason]}
-          </p>
-          {auth.active && (
-            <p className="auth-countdown" aria-label="남은 활성 시간">
-              {Math.ceil(auth.remainingMs / 1000)}초
-            </p>
-          )}
-          <p className="sheet-description">
-            실제 결제 및 금융거래는 발생하지 않습니다. 카드 터치는 대표 카드 고정 설정을 변경하지
-            않습니다.
-          </p>
-          {auth.active ? (
-            <button
-              className="primary-button"
-              disabled={auth.checking || auth.paymentReady}
-              onClick={auth.checkPayment}
-            >
-              {auth.checking ? '활성 상태 확인 중' : '가상 주문서 결제'}
-            </button>
-          ) : (
-            <button
-              className="primary-button"
-              disabled={auth.busy || auth.reason === 'BROWSER' || auth.reason === 'NO_RESPONSE'}
-              onClick={auth.request}
-            >
-              다시 인증
-            </button>
-          )}
-          {auth.paymentReady && (
-            <div className="payment-entry" role="status">
-              <p>네이티브 활성 상태를 확인했어요. 모의결제 화면으로 이동할 수 있어요.</p>
-              <button
-                className="primary-button"
-                onClick={() => {
-                  setAuthOpen(false)
-                  selectMenu('모의결제')
-                }}
-              >
-                모의결제 화면 열기
-              </button>
-              <small>모의 승인 요청은 아직 연결되지 않았습니다.</small>
-            </div>
-          )}
         </Sheet>
       )}
     </div>

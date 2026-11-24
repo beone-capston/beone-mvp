@@ -50,7 +50,7 @@ cp .env.example .env
 - `.env`는 git에서 제외됩니다. 실제 값은 절대 커밋하지 않습니다.
 - CODEF 키(`CODEF_*`)는 **서버(backend)에서만** 사용합니다. `android/`와 `frontend/`에 넣지 않습니다. 키가 없어도 서버는 뜨고 CODEF 호출만 실패합니다. 변수 목록은 [CODEF 설정과 샌드박스 확인 절차](docs/development/codef-sandbox-check.md)를 봅니다.
 - CODEF 연결·동기화 키 `BEONE_CODEF_CONNECTED_ID_KEY`(connectedId 암호화)·`BEONE_CODEF_APPROVAL_HMAC_KEY`(승인번호 HMAC)는 각각 Base64로 적은 32바이트이고 고정 기본값이 없습니다. 값은 저장소에 두지 않고 서버 프로세스 환경에만 줍니다. 없으면 CODEF 연결은 502, 동기화의 승인내역은 부분 실패입니다([codef 안내](docs/domains/codef.md)). `.env.example`에는 아직 이름이 없습니다.
-- `frontend/.env.example`은 프론트엔드 전용 공개 설정(`VITE_API_BASE_URL`)입니다. `VITE_` 변수는 번들에 포함되므로 비밀값을 넣지 않습니다.
+- `frontend/.env.example`은 프론트엔드 전용 공개 설정입니다. `VITE_` 변수는 번들에 포함되므로 비밀값을 넣지 않습니다.
 
 ## 실행
 
@@ -96,6 +96,18 @@ debug 앱은 개발 서버 `http://localhost:5173/`을 엽니다. 실기기에�
 - 카드 등록·월간 상태 확인·가상 주문 버튼은 준비 중 안내를 제공합니다. 실제 API 연결, 혜택 계산, Android 인증은 아직 연결하지 않았습니다.
 - 네이비·민트 브랜드 색상과 제공된 로고 이미지(`frontend/public/beone-brand.png`)를 사용하며, 모든 화면에서 최대 480px 너비의 세로 앱 레이아웃과 하단 메뉴를 제공합니다. Android WebView의 안전 영역 여백을 반영합니다.
 - 실행은 `frontend/`에서 `npm run dev` 후 터미널에 표시된 주소로 접속합니다.
+
+## 개발용 가상카드 및 모의 승인
+
+백엔드와 Android 없이 세 화면을 확인하려면 기존 개발 서버를 종료한 뒤 `frontend/`에서 실행합니다.
+
+```bash
+VITE_DEVICE_AUTH_MODE=mock VITE_PAYMENT_API_MODE=mock npm run dev
+```
+
+`http://localhost:5173`에서 개발용 로그인 후 카드 이미지를 탭하면 바로 60초 사용 준비 화면이 열립니다. **모의결제** 탭의 내 카드 목록에 있는 목 주문을 열고 **빠른결제로 이동**을 누르면 해당 주문을 선택할 수 있습니다. **가상 주문서 결제**를 눌러 결과를 확인합니다. 응답 지연은 `VITE_PAYMENT_MOCK_DELAY_MS`로 조정합니다(기본 800ms).
+
+인증과 결제 전송 모드는 각각 `native`·`mock`, `api`·`mock`으로 선택합니다. 개발 플래그가 없거나 배포 빌드일 때는 네이티브 인증과 기존 백엔드 계약을 사용합니다. 서버 승인에는 시연 프로필과 실제로 생성한 주문이 필요하며, 서버의 결제 전 설정을 사용합니다. 구조는 [가상카드 및 모의 승인 안내](docs/domains/frontend-payment.md)를 참고합니다.
 
 ## 빌드·테스트
 
