@@ -109,7 +109,7 @@ class UserCardController {
 }
 ```
 
-- `CurrentUserResolver`는 `local`·`demo`, `MemberCurrentUserResolver`는 `member`에서만 등록됩니다. `CurrentUser`를 받는 컨트롤러는 이 중 열 프로필로 제한합니다. `member`에 여는 업무 API는 지금 `/api/v1/me`, 보유 카드(#157), 월간 상태·결제 전 설정(G3a #159)입니다(결정 37). 나머지 업무 API의 `member` 등록은 G3 후속 범위입니다.
+- `CurrentUserResolver`는 `local`·`demo`, `MemberCurrentUserResolver`는 `member`에서만 등록됩니다. `CurrentUser`를 받는 컨트롤러는 이 중 열 프로필로 제한합니다. `member`에 여는 업무 API는 지금 `/api/v1/me`, 보유 카드(#157), 월간 상태·결제 전 설정(G3a #159), 주문·예정 소비·추천(G3b #160)입니다(결정 37). 모의 승인·원장의 `member` 등록은 G3 후속 범위(G3c)입니다.
 - 기능 오류는 이 패키지의 `DemoUserExceptionHandler`처럼 기능 패키지에 예외와 `@Order`를 붙인 처리기를 둡니다([기능별 오류 처리](../api.md#기능별-오류-처리)). 공통 업무 예외는 두지 않습니다.
 
 ## 프로필과 CORS

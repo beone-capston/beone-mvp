@@ -11,7 +11,7 @@
 - `POST /api/v1/me/orders/{orderId}/recommendations`: 추천 계산. **201**과 계산 결과를 돌려줍니다. 같은 주문이라도 부를 때마다 새 추천 ID가 생깁니다.
 - `GET /api/v1/me/recommendations/{recommendationId}`: 저장한 결과 조회. 다시 계산하지 않고, 계산 응답에 `invalidated`·`invalidatedReason`만 더합니다.
 - 실패 응답: 404 `ORDER_NOT_FOUND`(없거나 다른 사용자의 주문), 409 `ORDER_ALREADY_PAID`(모의 승인된 주문), 404 `RECOMMENDATION_NOT_FOUND`(없거나 형식이 틀렸거나 다른 사용자의 추천). 시연 사용자 헤더가 없거나 틀리면 공통 처리기의 400 `INVALID_REQUEST`입니다.
-- `local`·`demo` 프로필에서만 등록합니다(다른 사용자 자원 API와 같음).
+- `local`·`demo`·`member` 프로필에서 등록합니다. `member`(G3b #160)에서는 회원 세션의 '내 카드' 장부가 현재 사용자이고, 세션 401·CSRF 403·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 처리합니다(결정 37). 계산은 추천 행을 저장하는 POST라서 CSRF 토큰이 필요합니다. 남의 주문·추천과 시연 장부의 주문·추천은 없는 것과 같은 404입니다. 무효화 규칙(추천 제외 변경은 `MAPPING_CHANGED`, 결제 설정 변경은 무효화 없음, 결정 32 Q2·Q3)은 프로필과 관계없이 같습니다. 서비스 코드는 바꾸지 않았습니다.
 - Flyway `V7__recommendations.sql`: `recommendations`, `recommendation_card_bases`. 시드는 없습니다. 번호는 다른 작업선과 나눈 **임시 번호**이며, 병합 직전 관리자가 정한 순서에 따라 바뀔 수 있습니다(D-23 12항).
 
 구현하지 않은 범위는 [제약과 한계](#제약과-한계)에 모았습니다.
@@ -150,4 +150,4 @@ EngineResult result = engine.recommend(new EngineRequest(order.orderDate(),
 - 단위(#120 추가): `SnapshotUsageTest`(같은 버킷 가산, 미입력 버킷은 그 밖의 사용액, 모르는 차감액·취소는 확인 필요, 0 대체 없음), `RecommendationLinksTest`(최대 ID, 변경 전 유효 후보, `MAPPING_CHANGED`만 오름차순), `RecommendationServiceTest`의 스냅샷 뒤 차감액 엔진 입력 반영.
 - 단위: `RecommendationIdTest`(형식), `RecommendationNotesTest`(문구·모르는 코드 실패), `EngineInputAssemblerTest`(입력 변환, 0 대체 없음), `RecommendationServiceTest`(실제 규칙 파일로 평가 자료 C01 계산, `NOT_DETERMINED` 스냅샷 `null`, 무효화 우선순위, 다른 사용자·형식 오류 404, 모의 승인 판정, `calculateForApproval`이 같은 본문과 엔진 차감액을 `null` 그대로 돌려줌).
 - 웹(`controllers=` 한정): `RecommendationApiWebTest`(계약 예시 JSON, 404·409, 헤더 400), `RecommendationProfileOffWebTest`(프로필 밖 미등록).
-- 통합: `RecommendationIntegrationTest`(V7 적용, 계산·저장·조회, 사용자별 분리, 월간 상태 재입력·추천 제외·해제 무효화, 가상 포트폴리오의 `확인 필요`). 추천 행이 주문·보유 카드를 참조하므로 테스트 앞뒤로 지웁니다. `RecommendationLinksIntegrationTest`(#120: 주문 `latestRecommendationId`, 표시 이름·추천 제외·매핑 변경의 `invalidatedRecommendationIds`, 승인·취소 뒤 `afterSnapshot`, 실제 빈 연결).
+- 통합: `RecommendationIntegrationTest`(V7 적용, 계산·저장·조회, 사용자별 분리, 월간 상태 재입력·추천 제외·해제 무효화, 가상 포트폴리오의 `확인 필요`). 추천 행이 주문·보유 카드를 참조하므로 테스트 앞뒤로 지웁니다. `RecommendationLinksIntegrationTest`(#120: 주문 `latestRecommendationId`, 표시 이름·추천 제외·매핑 변경의 `invalidatedRecommendationIds`, 승인·취소 뒤 `afterSnapshot`, 실제 빈 연결). [`MemberOrderRecommendationIntegrationTest`](../../backend/src/test/java/com/beone/api/auth/web/MemberOrderRecommendationIntegrationTest.java)(`member`: 회원 A·B 분리, 남의 추천·없는 추천 404 본문 동일, 시연 장부 주문·추천 404, 401, 계산 CSRF 403·미저장, 추천 제외 변경·되돌림·매핑 해제의 `MAPPING_CHANGED`와 결제 설정 변경 뒤 유효(결정 32 Q2·Q3)를 API로 확인, 다른 회원 추천 불변). 모의 승인이 `member`에 없어 `ORDER_ALREADY_PAID`·`ORDER_PAID`는 G3c에서 확인합니다.

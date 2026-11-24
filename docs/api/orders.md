@@ -4,6 +4,8 @@
 
 공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 구현 상태는 [README](README.md#업무-api-1차-명세)의 상태 항목을 봅니다.
 
+프로필: 네 API는 `local`·`demo`와 로컬 회원 프로필 `member`에 등록돼 있습니다(G3b #160). 아래 `X-BeONE-Demo-User` 헤더는 `local`·`demo`의 방식입니다. `member`에서는 헤더 대신 회원 세션 쿠키(`__Host-BEONE_SESSION`)로 현재 사용자를 정하고 `POST /api/v1/me/orders`와 `PUT /api/v1/me/planned-spends`에 `X-CSRF-TOKEN`이 필요합니다. 검사 순서는 401 `UNAUTHENTICATED` → 403 `CSRF_INVALID` → 400 → 404이고 모든 응답에 `Cache-Control: no-store`가 붙습니다([회원 세션 규칙](../api.md#회원-세션member-프로필)). 다른 회원의 주문은 없는 주문과 같은 404 `ORDER_NOT_FOUND`이고, 예정 소비는 회원 장부마다 나뉩니다. 주문 목록 API는 없으므로 `GET /api/v1/me/orders`는 405 `METHOD_NOT_ALLOWED`입니다.
+
 ## POST /api/v1/me/orders — 주문 생성
 
 - [1차] 결제할 가상 주문을 만든다. 추천·모의 승인은 이 주문 ID로 요청한다.
