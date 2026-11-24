@@ -280,8 +280,8 @@ describe('BeoneBridge v1 기기 인증 경계', () => {
       }),
     )
     fireEvent.click(screen.getByRole('button', { name: '모의결제 화면 열기' }))
-    expect(screen.getByRole('heading', { name: '모의결제' })).toBeInTheDocument()
-    expect(screen.getByText('준비 중이에요')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '주문 목록' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '주문 생성' })).toBeInTheDocument()
   })
 
   it('남은 시간이 끝나면 비활성화하고 네이티브 상태를 다시 요청한다', () => {
