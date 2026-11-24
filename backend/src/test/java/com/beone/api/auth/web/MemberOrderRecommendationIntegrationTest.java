@@ -51,6 +51,9 @@ import tools.jackson.databind.json.JsonMapper;
  * 모의 승인은 아직 member에 등록하지 않았으므로(G3c) {@code ORDER_ALREADY_PAID}·{@code ORDER_PAID}는 여기서 확인하지 않는다. 새 테스트
  * 컨텍스트를 만들지 않도록 {@link MemberProfileIntegrationTest}와 같은 프로필·가변 시계 조합을 쓴다. 시계는 서울 2026-11-18 10:00에서
  * 시작한다.
+ *
+ * <p>예정 소비 날짜({@code THIS_MONTH})는 클래스 로드 시점의 서울 날짜로 정하고, 주문 쪽 {@code OrderClock}은 요청 시점의 시스템 시계를
+ * 쓴다. 둘 사이에 서울 기준 달이 바뀌면 {@code plannedDate} 400이 나므로 월 경계 자정 근처 실행은 피함(그때 실패하면 다시 실행한다).
  */
 @IntegrationTest
 @ActiveProfiles("member")

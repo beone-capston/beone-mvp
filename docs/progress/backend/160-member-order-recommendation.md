@@ -25,7 +25,7 @@
   - 기대값은 `docs/api/orders.md`·`recommendations.md`·`cards.md`·`docs/api.md`, 결정 32·37에서 가져왔습니다.
   - 첫 실행 실패 2건과 수정(계약 기대값은 바꾸지 않음, 테스트의 잘못된 가정만 고침)
     - 주문 `createdAt`을 가변 시계 값으로 가정했습니다. order 패키지는 자체 시계 `OrderClock`(시스템 시계)을 쓰고, 계약(`orders.md`)은 생성 시각의 형식만 정합니다. 응답 값의 형식(`+09:00`)을 확인하고 상세 조회와 같은지 비교하도록 바꿨습니다. 같은 이유로 예정 소비 날짜를 실행일 기준 이번 달로 만듭니다(계약: "이번 달이어야 한다").
-    - 매핑 해제의 `invalidatedRecommendationIds`를 이번 추천 하나로 가정했습니다. 무효화는 계산 때 카드 근거와 현재 상태의 비교라서(도메인 `recommendation.md` 처리 흐름), 추천 제외를 되돌린 순간 첫 추천이 다시 유효해졌고 해제로 함께 무효가 됐습니다. 계약(`cards.md`)은 "이번 변경으로 승인 근거로 쓸 수 없게 된 추천"이므로 이번 추천을 포함하고 다른 회원 추천을 포함하지 않는지로 바꿨습니다.
+    - 매핑 해제의 `invalidatedRecommendationIds`를 이번 추천 하나로 가정했습니다. 무효화는 계산 때 카드 근거와 현재 상태의 비교라서(도메인 `recommendation.md` 처리 흐름), 추천 제외를 되돌린 순간 첫 추천이 다시 유효해졌고 해제로 함께 무효가 됐습니다. 계약(`cards.md`)은 "매핑 변경으로 더 이상 승인 근거로 쓸 수 없게 된 추천 ID"이므로 이번 추천을 포함하고 다른 회원 추천을 포함하지 않는지로 바꿨습니다.
     - 관찰(정책 아님): 추천 제외를 켰다 끄면 그 사이 무효였던 추천이 다시 유효해집니다. 계약 문서는 무효화가 되돌아갈 수 있는지 말하지 않습니다. 기존 local·demo 동작과 같고 이번 범위에서 바꾸지 않았습니다.
 - 검증: `./gradlew test webTest` 통과(단위 1391, 웹 393). `./gradlew integrationTest` 단독 실행: 첫 실행 170/172(위 2건 실패, 컨테이너 메모리 합 최고 3,961MiB), 수정 뒤 172 통과(최고 3,973MiB, 시작 전 배포 컨테이너 4개 약 2,120MiB). 배포 컨테이너 4개는 그대로 유지했습니다.
 - 문서: `docs/api.md` 회원 세션 절, `docs/api/README.md`, `docs/api/auth.md`, `orders.md`·`recommendations.md` 프로필 문장, 도메인 `order.md`·`recommendation.md`(+ `auth.md`·`user.md`·`monthlystate.md`의 낡은 범위 문장), `docs/decisions.md` 결정 36·37 구현 범위.
