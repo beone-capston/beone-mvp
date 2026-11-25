@@ -18,7 +18,7 @@ PRD FR-08(AI 약관 초안 추출·사람 검증·수동 작성 비교)을 위�
 | 장치 | 내용 |
 |---|---|
 | 별도 Gradle 프로젝트 | backend `settings.gradle`에 포함하지 않습니다. 이 도구의 클래스와 의존성(PDFBox, Jackson)은 backend 클래스패스에 없습니다. |
-| 규칙 경로 쓰기 금지 | [`OutputGuard`](src/main/java/com/beone/ruledraft/check/OutputGuard.java)가 다음 경로에 쓰려고 하면 실패합니다(종료 1). 링크로 돌아 들어가는 경로도 막습니다. 규칙 JSON은 읽기만 합니다.<br>- 기준 표본 디렉터리 아래<br>- 이름이 `backend/src/main/resources/rules`인 경로 아래 |
+| 규칙 경로 쓰기 금지 | [`OutputGuard`](src/main/java/com/beone/ruledraft/check/OutputGuard.java)가 다음 경로에 쓰려고 하면 실패합니다(종료 1). 경로의 존재하는 앞부분은 운영체제 방식으로 풀어 링크와 그 뒤의 `..`까지 반영하고, 아직 없는 부분의 `.`·`..`는 거부합니다. 도구는 검사가 돌려준 경로에만 씁니다. 규칙 JSON은 읽기만 합니다.<br>- 기준 표본 디렉터리 아래<br>- 이름이 `backend/src/main/resources/rules`인 경로 아래 |
 | 상태 고정 | 초안의 `status`는 모델이 무엇을 내든 `AI_DRAFT`로 바꿉니다. backend [`VerificationStatus`](../../backend/src/main/java/com/beone/api/benefit/rule/VerificationStatus.java)의 값이며, 계산에는 `VERIFIED`만 씁니다. 모델이 다른 값을 냈으면 근거 파일의 `modelStatus`에 남깁니다. |
 | 사람 반영 | `VERIFIED` 반영은 사람이 원문과 대조해 rules JSON을 고친 뒤 별도 커밋으로만 합니다. |
 
@@ -38,7 +38,7 @@ cd tools/rule-draft
 ./gradlew run --args="text --source /경로/상품설명서.pdf --out build/rule-draft/01664.txt"
 ```
 
-PDF를 쪽마다 따로 추출해 각 쪽 앞에 `[[page N]]` 줄을 붙입니다. 사람이 추출 결과를 확인하거나, 스캔본처럼 추출이 안 되는 PDF를 손으로 옮겨 적을 때 이 형식을 씁니다.
+PDF를 쪽마다 따로 추출해 각 쪽 앞에 `[[page N]]` 줄을 붙입니다. 본문에 `[[page N]]`처럼 보이는 줄이 있으면 앞에 역슬래시를 붙여(`\[[page N]]`) 쪽 표시와 구분하고, 읽을 때 하나를 뗍니다. 손으로 쓰는 텍스트도 같은 규칙을 따릅니다. 사람이 추출 결과를 확인하거나, 스캔본처럼 추출이 안 되는 PDF를 손으로 옮겨 적을 때 이 형식을 씁니다.
 
 ### 2. 초안 생성 (`draft`)
 
@@ -63,7 +63,7 @@ PDF를 쪽마다 따로 추출해 각 쪽 앞에 `[[page N]]` 줄을 붙입니�
 2. 기준 표본 규칙 JSON 4개에서 키 구조를 뽑습니다.
 3. 지시문을 모델에 넘기고, 받은 응답에서 `{"draft": …, "evidence": …}`를 읽습니다. 지시문은 [고정 안내](src/main/resources/draft-instructions.txt), 허용 구조 경로, 형식 예시 1개로 이루어집니다.
 4. 스키마를 검사합니다. 맞지 않으면 아무것도 쓰지 않고 종료 1로 끝납니다.
-5. 근거를 검사한 뒤 두 파일을 씁니다. 근거가 빠지거나 확인되지 않은 값이 있으면 종료 3입니다.
+5. 근거를 검사한 뒤 두 파일을 짝으로 씁니다. 같은 폴더의 임시 파일에 먼저 다 쓰고 원자적 이름 변경으로 옮기며, 두 번째 이동이 실패하면 새 초안을 지우고 종료 1입니다. 근거 파일의 `draftSha256`은 같은 실행의 초안 내용 sha256입니다. 근거가 빠지거나 확인되지 않은 값이 있으면 종료 3입니다.
 
 형식 예시는 **대상이 아닌 다른 카드**의 규칙을 씁니다. 대상 카드의 수동 규칙을 모델에 보여 주면 수동 작성과 AI 초안의 비교가 무의미해지기 때문입니다.
 
@@ -109,10 +109,10 @@ PDF를 쪽마다 따로 추출해 각 쪽 앞에 `[[page N]]` 줄을 붙입니�
 [`EvidenceChecker`](src/main/java/com/beone/ruledraft/check/EvidenceChecker.java)가 맡습니다. 근거 파일의 키는 JSON Pointer(RFC 6901)입니다. JSON 안의 위치를 `/limitBuckets/0/tiers/1/monthlyCap`처럼 `/`로 이어 적는 표준 표기입니다.
 
 - **덮는 범위:** 근거는 값 경로 자신이나 조상 경로에 답니다. 예를 들어 `/limitBuckets`의 근거는 그 아래 값 전체를 덮습니다.
-- **확인 방식:** 인용문이 지정한 쪽 텍스트에 공백을 무시하고 그대로 있어야 확인된 근거로 칩니다. 다음 경우는 `unverified`에 사유와 함께 남기고, 그 근거는 아무 값도 덮지 않습니다.
+- **확인 방식:** 인용문이 지정한 쪽 텍스트에 공백을 무시하고 그대로 있어야 확인된 근거로 칩니다. 공백은 `Character.isWhitespace`·`isSpaceChar`(NBSP·U+2003 등)와 서식 문자(U+200B 등)를 모두 뜻하며, 인용문과 원문에 같은 정규화를 씁니다. 쪽 번호는 정수 JSON 숫자만 받고, 소수·문자열은 잘라 쓰지 않고 없는 쪽(0)으로 처리합니다. 다음 경우는 `unverified`에 사유와 함께 남기고, 그 근거는 아무 값도 덮지 않습니다.
   - 초안에 없는 경로
   - 원문에 없는 쪽
-  - 빈 인용문. 공백(NBSP·전각 공백 포함)을 지운 결과가 비는 인용도 여기에 들고, 포함 검사와 같은 정규화로 판단합니다
+  - 빈 인용문. 공백을 지운 결과가 비는 인용도 여기에 듭니다
   - 인용문을 원문에서 찾지 못함
 - **누락:** 확인된 근거가 자기·조상 경로 어디에도 없는 값은 `missing`에 남습니다.
 - **근거를 요구하지 않는 필드:** 원문이 아닌 프로젝트가 정하는 값들입니다.
@@ -127,6 +127,7 @@ PDF를 쪽마다 따로 추출해 각 쪽 앞에 `[[page N]]` 줄을 붙입니�
 {
   "cardId": "99999",
   "source": { "fileName": "synthetic-99999.txt", "sha256": "…", "pageCount": 2 },
+  "draftSha256": "…",
   "model": "recorded:recorded-99999.json",
   "status": "AI_DRAFT",
   "modelStatus": "VERIFIED",

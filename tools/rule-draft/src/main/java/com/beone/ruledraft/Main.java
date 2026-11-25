@@ -68,9 +68,9 @@ public final class Main {
 
 	private static int text(CliArgs a, PrintStream out) throws UsageException, IOException {
 		Path source = Path.of(a.require("source"));
-		Path target = Path.of(a.require("out"));
-		OutputGuard.ensureWritable(target, List.of(a.pathOr("rules-dir", DEFAULT_RULES_DIR)));
-		Path parent = target.toAbsolutePath().getParent();
+		// 검사한 경로(링크·.. 해석 결과)에만 쓴다
+		Path target = OutputGuard.ensureWritable(Path.of(a.require("out")), List.of(a.pathOr("rules-dir", DEFAULT_RULES_DIR)));
+		Path parent = target.getParent();
 		if (parent != null) {
 			Files.createDirectories(parent);
 		}

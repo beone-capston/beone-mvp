@@ -17,8 +17,8 @@ import com.fasterxml.jackson.databind.JsonNode;
  *
  * <ul>
  *   <li>근거는 값 경로 자신 또는 조상 경로에 달 수 있다(예: {@code /limitBuckets/0} 근거가 그 아래 값 전체를 덮는다).</li>
- *   <li>인용문은 해당 쪽 텍스트에 공백을 무시하고 그대로 있어야 확인된 근거로 친다. 공백(NBSP·전각 공백 포함)을
- *       지운 결과가 빈 인용은 거부한다.</li>
+ *   <li>인용문은 해당 쪽 텍스트에 공백을 무시하고 그대로 있어야 확인된 근거로 친다. 공백(유니코드 공백·서식 문자 포함,
+ *       {@link #normalize})을 지운 결과가 빈 인용은 거부한다.</li>
  *   <li>프로젝트 관리 필드는 원문 근거를 요구하지 않는다: {@code /status}(도구가 AI_DRAFT로 고정),
  *       {@code /evaluationOnly}, {@code /sources} 아래, 이름이 {@code evidence}이거나 {@code Evidence}로 끝나는 키
  *       (docs/rules 근거 표 번호).</li>
@@ -99,8 +99,17 @@ public final class EvidenceChecker {
 		return false;
 	}
 
+	/**
+	 * 비교용 정규화: 공백으로 보는 모든 문자를 지운다. {@link Character#isWhitespace}·{@link Character#isSpaceChar}
+	 * (NBSP·U+2003 등 유니코드 공백 포함)와 서식 문자(U+200B 너비 없는 공백 등, 유형 FORMAT)가 대상이다.
+	 * 인용문과 원문 쪽 텍스트에 같은 함수를 쓴다.
+	 */
 	static String normalize(String text) {
-		return text.replaceAll("[\\s\\u00A0\\u3000]+", "");
+		StringBuilder sb = new StringBuilder(text.length());
+		text.codePoints()
+			.filter(cp -> !Character.isWhitespace(cp) && !Character.isSpaceChar(cp) && Character.getType(cp) != Character.FORMAT)
+			.forEach(sb::appendCodePoint);
+		return sb.toString();
 	}
 
 }

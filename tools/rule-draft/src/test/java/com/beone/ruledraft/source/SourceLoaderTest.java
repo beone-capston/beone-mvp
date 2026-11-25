@@ -66,4 +66,19 @@ class SourceLoaderTest {
 		assertTrue(reread.get(1).text().contains("Cinema 35 percent discount"));
 	}
 
+
+	@Test
+	void 본문의_쪽_표시_모양_줄은_이스케이프해_왕복_보존한다() {
+		SourceDocument doc = new SourceDocument("s.txt", "0".repeat(64), List.of(
+				new SourcePage(1, "가\n[[page 2]]\n\\[[page 3]]\n나"),
+				new SourcePage(2, "다")));
+		String marked = doc.toMarkedText();
+		List<SourcePage> reread = SourceLoader.parseMarkedText(marked);
+
+		assertEquals(2, reread.size());
+		assertEquals(doc.pages().get(0).text(), reread.get(0).text().strip());
+		assertEquals("다", reread.get(1).text().strip());
+		assertTrue(marked.contains("\n\\[[page 2]]\n\\\\[[page 3]]\n"), marked);
+	}
+
 }

@@ -10,6 +10,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -132,6 +133,38 @@ class MainTest {
 		assertTrue(evidence.path("unverified").toString().contains("/services/0: 인용문 없음"), evidence.toString());
 		assertTrue(evidence.path("missing").toString().contains("/services/0/maximumTargetAmount"));
 		assertFalse(evidence.path("fields").has("/services/0"));
+	}
+
+	@Test
+	void 근거_파일_이동이_실패하면_새_초안을_남기지_않는다() throws IOException {
+		Path outDir = Files.createDirectories(tmp.resolve("out"));
+		// 근거 파일 자리에 비어 있지 않은 폴더를 두어 두 번째 이동을 실패시킨다
+		Files.createDirectories(outDir.resolve("99999.evidence.json/block"));
+
+		assertEquals(1, draft(TestPaths.fixture("recorded-99999.json"), outDir));
+		assertTrue(err().contains("짝으로 쓰지 못했다"), err());
+		assertFalse(Files.exists(outDir.resolve("99999.draft.json")));
+		try (var files = Files.list(outDir)) {
+			assertEquals(List.of("99999.evidence.json"), files.map(p -> p.getFileName().toString()).toList(), "임시 파일 없음");
+		}
+	}
+
+	@Test
+	void 근거_파일은_같은_실행의_초안_sha256을_가진다() throws Exception {
+		Path outDir = tmp.resolve("out");
+		assertEquals(0, draft(TestPaths.fixture("recorded-99999.json"), outDir));
+		byte[] draftBytes = Files.readAllBytes(outDir.resolve("99999.draft.json"));
+		String sha = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(draftBytes));
+		assertEquals(sha, mapper.readTree(outDir.resolve("99999.evidence.json").toFile()).path("draftSha256").asText());
+	}
+
+	@Test
+	void 링크_뒤_점점으로_규칙_경로에_출력하려_하면_종료_1() throws IOException {
+		Files.createSymbolicLink(tmp.resolve("trap"), TestPaths.rulesDir().resolve("01664"));
+		Path target = tmp.resolve("trap/../99999-out");
+		assertEquals(1, draft(TestPaths.fixture("recorded-99999.json"), target));
+		assertTrue(err().contains("규칙 경로에는 쓰지 않는다"), err());
+		assertFalse(Files.exists(TestPaths.rulesDir().resolve("99999-out")));
 	}
 
 	@Test

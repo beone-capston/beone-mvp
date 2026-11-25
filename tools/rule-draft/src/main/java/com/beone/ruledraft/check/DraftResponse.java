@@ -35,7 +35,9 @@ public record DraftResponse(ObjectNode draft, Map<String, Evidence> evidence) {
 		}
 		for (Map.Entry<String, JsonNode> e : ev.properties()) {
 			JsonNode v = e.getValue();
-			int page = v.path("page").canConvertToInt() ? v.path("page").asInt() : 0;
+			// 정수 JSON 숫자만 쪽 번호로 받는다. 2.7 같은 소수·문자열은 잘라 쓰지 않고 0(없는 쪽)으로 두어 확인 실패가 되게 한다
+			JsonNode pageNode = v.path("page");
+			int page = pageNode.isIntegralNumber() && pageNode.canConvertToInt() ? pageNode.intValue() : 0;
 			evidence.put(e.getKey(), new Evidence(page, v.path("quote").asText("")));
 		}
 		return new DraftResponse((ObjectNode) draft, evidence);

@@ -67,4 +67,38 @@ class EvidenceCheckerTest {
 		assertFalse(r.complete());
 	}
 
+
+	@Test
+	void 유니코드_공백과_서식_문자만_있는_인용도_거부한다() throws Exception {
+		EvidenceReport r = EvidenceChecker.check(draft(), Map.of(
+				"/limitBuckets", new Evidence(1, "\u2003\u2009\u200A"),
+				"/services", new Evidence(2, "\u200B\u2028\u205F\uFEFF")), source);
+		assertEquals(List.of("/limitBuckets: 인용문 없음", "/services: 인용문 없음"), r.unverified());
+		assertTrue(r.verified().isEmpty());
+		assertEquals(List.of("/limitBuckets/0/monthlyCap", "/services/0/rate"), r.missing());
+	}
+
+	@Test
+	void 유니코드_공백이_섞인_정상_인용은_확인된다() throws Exception {
+		EvidenceReport r = EvidenceChecker.check(draft(), Map.of(
+				"/limitBuckets", new Evidence(1, "월\u2003할인한도\u00A0 1만원"),
+				"/services/0/rate", new Evidence(2, "영화관\u200B 35%")), source);
+		assertTrue(r.complete(), r.toString());
+	}
+
+
+	@Test
+	void 소수나_문자열_쪽_번호는_잘라_쓰지_않고_확인_실패로_둔다() throws Exception {
+		DraftResponse response = DraftResponse.parse("""
+				{"draft":{"status":"AI_DRAFT","limitBuckets":[{"monthlyCap":10000,"evidence":"E1"}],"services":[{"rate":3500}],"sources":[]},
+				 "evidence":{"/limitBuckets":{"page":1.9,"quote":"월 할인한도"},"/services":{"page":"2","quote":"영화관"},
+				             "/services/0/rate":{"page":2,"quote":"영화관"}}}
+				""", mapper);
+		assertEquals(0, response.evidence().get("/limitBuckets").page());
+		assertEquals(0, response.evidence().get("/services").page());
+		EvidenceReport r = EvidenceChecker.check(response.draft(), response.evidence(), source);
+		assertEquals(List.of("/limitBuckets: 원문에 없는 쪽 0", "/services: 원문에 없는 쪽 0"), r.unverified());
+		assertEquals(List.of("/limitBuckets/0/monthlyCap"), r.missing());
+	}
+
 }

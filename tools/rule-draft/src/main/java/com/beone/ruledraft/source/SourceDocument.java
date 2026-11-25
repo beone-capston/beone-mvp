@@ -28,7 +28,10 @@ public record SourceDocument(String fileName, String sha256, List<SourcePage> pa
 		StringBuilder sb = new StringBuilder();
 		for (SourcePage page : pages) {
 			sb.append(SourceLoader.PAGE_MARKER_PREFIX).append(page.number()).append(SourceLoader.PAGE_MARKER_SUFFIX).append('\n');
-			sb.append(page.text().strip()).append("\n\n");
+			for (String line : page.text().strip().split("\\R", -1)) {
+				sb.append(SourceLoader.escapeLine(line)).append('\n');
+			}
+			sb.append('\n');
 		}
 		return sb.toString();
 	}

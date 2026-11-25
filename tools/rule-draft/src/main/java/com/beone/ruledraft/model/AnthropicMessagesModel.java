@@ -5,6 +5,7 @@ import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.beone.ruledraft.source.SourceLoader;
 import com.beone.ruledraft.source.SourcePage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -74,7 +75,11 @@ public final class AnthropicMessagesModel implements RuleDraftModel {
 		StringBuilder text = new StringBuilder();
 		text.append("카드 ID: ").append(request.cardId()).append("\n원문 파일: ").append(request.source().fileName()).append("\n\n");
 		for (SourcePage page : request.source().pages()) {
-			text.append("[[page ").append(page.number()).append("]]\n").append(page.text().strip()).append("\n\n");
+			text.append("[[page ").append(page.number()).append("]]\n");
+			for (String line : page.text().strip().split("\\R", -1)) {
+				text.append(SourceLoader.escapeLine(line)).append('\n');
+			}
+			text.append('\n');
 		}
 		user.put("content", text.toString());
 		try {

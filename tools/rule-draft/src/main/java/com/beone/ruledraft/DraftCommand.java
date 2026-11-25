@@ -6,7 +6,11 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 
@@ -49,7 +53,8 @@ final class DraftCommand {
 		if (!cardId.matches("\\d{5}")) {
 			throw new IOException("--card는 숫자 5자리다");
 		}
-		OutputGuard.ensureWritable(outDir, List.of(rulesDir));
+		// 검사한 경로(링크·.. 해석 결과)에만 쓴다
+		Path safeOut = OutputGuard.ensureWritable(outDir, List.of(rulesDir));
 		RuleKeySchema schema = RuleKeySchema.fromSamples(rulesDir);
 		SourceDocument source = SourceLoader.load(sourcePath);
 
@@ -71,15 +76,12 @@ final class DraftCommand {
 		}
 
 		EvidenceReport report = EvidenceChecker.check(draft, response.evidence(), source);
-		Path draftFile = outDir.resolve(cardId + ".draft.json");
-		Path evidenceFile = outDir.resolve(cardId + ".evidence.json");
-		OutputGuard.ensureWritable(draftFile, List.of(rulesDir));
-		OutputGuard.ensureWritable(evidenceFile, List.of(rulesDir));
-		Files.createDirectories(outDir);
-		Files.writeString(draftFile, mapper.writeValueAsString(draft) + "\n", StandardCharsets.UTF_8);
-		Files.writeString(evidenceFile,
-				mapper.writeValueAsString(evidenceJson(cardId, source, model, modelStatus, report)) + "\n",
-				StandardCharsets.UTF_8);
+		Path draftFile = OutputGuard.ensureWritable(safeOut.resolve(cardId + ".draft.json"), List.of(rulesDir));
+		Path evidenceFile = OutputGuard.ensureWritable(safeOut.resolve(cardId + ".evidence.json"), List.of(rulesDir));
+		String draftText = mapper.writeValueAsString(draft) + "\n";
+		String evidenceText = mapper.writeValueAsString(
+				evidenceJson(cardId, source, model, modelStatus, report, sha256(draftText))) + "\n";
+		writePair(safeOut, draftFile, draftText, evidenceFile, evidenceText);
 
 		out.println("초안: " + draftFile);
 		out.println("근거: " + evidenceFile);
@@ -93,9 +95,11 @@ final class DraftCommand {
 	}
 
 	private ObjectNode evidenceJson(String cardId, SourceDocument source, RuleDraftModel model, String modelStatus,
-			EvidenceReport report) {
+			EvidenceReport report, String draftSha256) {
 		ObjectNode root = mapper.createObjectNode();
 		root.put("cardId", cardId);
+		// 짝 확인용: 같은 실행에서 쓴 초안 파일 내용의 sha256
+		root.put("draftSha256", draftSha256);
 		ObjectNode src = root.putObject("source");
 		src.put("fileName", source.fileName());
 		src.put("sha256", source.sha256());
@@ -116,6 +120,45 @@ final class DraftCommand {
 		ArrayNode unverified = root.putArray("unverified");
 		report.unverified().forEach(unverified::add);
 		return root;
+	}
+
+	/**
+	 * 초안·근거 두 파일을 짝으로 쓴다. 두 내용을 같은 폴더의 임시 파일에 먼저 다 쓰고, 그다음 원자적 이름 변경으로 옮긴다.
+	 * 임시 파일 쓰기가 실패하면 기존 파일은 그대로다. 두 번째 이동이 실패하면 먼저 옮긴 새 초안을 지워
+	 * 새 초안과 옛 근거가 짝처럼 남지 않게 한다. 근거 파일의 {@code draftSha256}으로도 짝을 확인할 수 있다.
+	 */
+	static void writePair(Path dir, Path first, String firstText, Path second, String secondText) throws IOException {
+		Files.createDirectories(dir);
+		Path tmpFirst = Files.createTempFile(dir, ".rule-draft-", ".tmp");
+		Path tmpSecond = null;
+		boolean firstMoved = false;
+		try {
+			Files.writeString(tmpFirst, firstText, StandardCharsets.UTF_8);
+			tmpSecond = Files.createTempFile(dir, ".rule-draft-", ".tmp");
+			Files.writeString(tmpSecond, secondText, StandardCharsets.UTF_8);
+			Files.move(tmpFirst, first, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+			firstMoved = true;
+			Files.move(tmpSecond, second, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		}
+		catch (IOException e) {
+			Files.deleteIfExists(tmpFirst);
+			if (tmpSecond != null) {
+				Files.deleteIfExists(tmpSecond);
+			}
+			if (firstMoved) {
+				Files.deleteIfExists(first);
+			}
+			throw new IOException("초안·근거 파일을 짝으로 쓰지 못했다(새 초안은 남기지 않음): " + e.getClass().getSimpleName(), e);
+		}
+	}
+
+	static String sha256(String text) {
+		try {
+			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)));
+		}
+		catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException(e);
+		}
 	}
 
 	/**

@@ -21,12 +21,15 @@ import org.apache.pdfbox.text.PDFTextStripper;
  * PDF 또는 쪽 표시 텍스트를 읽어 {@link SourceDocument}로 만든다.
  *
  * <p>텍스트 형식: 각 쪽 앞에 {@code [[page N]]} 줄을 둔다. 첫 표시 앞의 내용은 허용하지 않는다.
+ * 본문에 {@code [[page N]]}처럼 보이는 줄이 있으면 앞에 역슬래시를 붙여 {@code \\[[page N]]}로 쓴다(읽을 때 하나를 뗀다).
  */
 public final class SourceLoader {
 
 	static final String PAGE_MARKER_PREFIX = "[[page ";
 	static final String PAGE_MARKER_SUFFIX = "]]";
 	private static final Pattern MARKER = Pattern.compile("^\\[\\[page (\\d+)]]\\s*$");
+	/** 본문 줄이 쪽 표시처럼 보이면 앞에 역슬래시를 하나 더 붙여 쓴다. 읽을 때 하나를 뗀다. */
+	private static final Pattern ESCAPED = Pattern.compile("^\\\\+\\[\\[page \\d+]]\\s*$");
 
 	private SourceLoader() {
 	}
@@ -42,6 +45,11 @@ public final class SourceLoader {
 	}
 
 	/** PDF를 쪽마다 따로 추출한다. 쪽 번호가 근거 인용의 기준이 된다. */
+	/** 본문 한 줄을 쪽 표시 텍스트에 쓸 형태로 바꾼다. 쪽 표시나 이미 이스케이프된 줄이면 역슬래시를 하나 붙인다. */
+	public static String escapeLine(String line) {
+		return MARKER.matcher(line).matches() || ESCAPED.matcher(line).matches() ? "\\" + line : line;
+	}
+
 	static List<SourcePage> readPdf(byte[] bytes) throws IOException {
 		List<SourcePage> pages = new ArrayList<>();
 		try (PDDocument doc = Loader.loadPDF(bytes)) {
@@ -81,7 +89,7 @@ public final class SourceLoader {
 				}
 			}
 			else {
-				body.append(line).append('\n');
+				body.append(ESCAPED.matcher(line).matches() ? line.substring(1) : line).append('\n');
 			}
 		}
 		if (current != null) {
