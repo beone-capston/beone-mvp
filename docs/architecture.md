@@ -13,7 +13,7 @@
 - [backend/](../backend/): Java 21·Spring Boot API. 카드 규칙과 계산 입출력 모델, 공통 API 응답·예외 처리를 보유합니다. DB 마이그레이션은 Flyway로 관리합니다.
 - [docs/](./): 요구사항, 결정, 조사·평가 자료와 개발 안내.
 - [fixtures/](../fixtures/): 비식별 평가·시연 데이터. 테스트용 합성 값은 실제 관측값과 구분합니다.
-- [deploy/](../deploy/): 배포용 Compose(백엔드·MySQL, 호스트 포트 비공개)와 이미지 빌드·로컬 검증 스크립트. 공개 서버 적용과 외부 API 공개는 아직 하지 않았습니다([백엔드 배포 기반](deployment/backend-compose.md)). 배포 워크플로(`.github/workflows/deploy.yml`)와 웹 이미지 정의(`deploy/web/Dockerfile`)는 [배포 자동화](deployment/cd.md)에 설명하며, 저장소 변수가 켜지기 전에는 동작하지 않습니다.
+- [deploy/](../deploy/): 배포용 Compose(백엔드·MySQL, 호스트 포트 비공개)와 이미지 빌드·로컬 검증 스크립트. 공개 서버 적용과 외부 API 공개는 아직 하지 않았습니다([백엔드 배포 기반](deployment/backend-compose.md)). 배포 워크플로(`.github/workflows/deploy.yml`)와 웹 이미지 정의(`deploy/web/Dockerfile`)는 [배포 자동화](deployment/cd.md)에 설명하며, 저장소 변수가 켜지기 전에는 동작하지 않습니다. 켜는 순서는 [배포 자동화 활성화 런북](deployment/cd-activation.md)에 있습니다.
 
 세 애플리케이션은 독립적으로 빌드·테스트합니다. 실행 방법을 이 문서에 중복해서 관리하지 않습니다.
 
