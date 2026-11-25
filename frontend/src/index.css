@@ -192,7 +192,8 @@ p {
   width: 126px;
 }
 
-.wallet-app > main {
+.wallet-app > main,
+.wallet-main-content > main {
   flex: 1;
   min-width: 0;
 }

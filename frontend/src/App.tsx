@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { CardServicesPage } from './card-services/CardServicesPage'
 import { CardCarousel } from './components/CardCarousel'
 import { Icon } from './components/Icon'
 import { PaymentPreferenceMenu } from './components/PaymentPreferenceMenu'
@@ -30,6 +31,27 @@ function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
   const cards = useMemo(() => cardSource.getCards(mode), [cardSource, mode])
   const activeIndex = Math.max(0, Math.min(modes[mode].activeIndex, cards.length - 1))
   const myMode = mode === 'MY_CARDS'
+  const servicePage = services?.source === 'VIRTUAL' ? services : null
+  const serviceTrigger = useRef<HTMLElement | null>(null)
+
+  function openServices(card: WalletCard) {
+    setServices(card)
+    if (card.source === 'VIRTUAL') {
+      serviceTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>('.services-page h1 button')?.focus()
+        window.scrollTo(0, 0)
+      })
+    }
+  }
+
+  function closeServices() {
+    setServices(null)
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0)
+      serviceTrigger.current?.focus({ preventScroll: true })
+    })
+  }
 
   function selectMode(value: PortfolioMode) {
     setMode(value)
@@ -48,13 +70,13 @@ function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
   }
 
   return (
-    <div className="wallet-app">
+    <div className={'wallet-app' + (servicePage ? ' wallet-services-open' : '')}>
       <header className="wallet-header">
         <a
           className="brand"
           href="#main"
           aria-label="B:ONE 빠른결제 홈"
-          onClick={() => selectMenu('빠른결제')}
+          onClick={() => { setServices(null); selectMenu('빠른결제') }}
         >
           <span className="brand-symbol">
             <img src="/beone-logo-blue.png" alt="" />
@@ -85,96 +107,99 @@ function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
         )}
       </header>
 
-      <PortfolioModeTabs mode={mode} onChange={selectMode} />
-      <main id="main">
-        <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode}>
-          {menu === '빠른결제' ? (
-            <section className="quick-payment" key={mode}>
-              <h1 className="sr-only">B:ONE 빠른결제</h1>
-              <p className="sr-only">
-                {myMode
-                  ? '디자인 확인용 샘플 카드입니다. 실제 등록 카드가 아닙니다.'
-                  : '가상 포트폴리오 시연용 카드입니다.'}
-              </p>
-              <div className="card-section-heading">
-                <h2>
-                  나의 카드 <span>{cards.length}</span>
-                </h2>
-                <PaymentPreferenceMenu
-                  key={mode}
-                  cards={cards}
-                  preference={modes[mode].preference}
-                  onChange={updatePreference}
-                />
-              </div>
-              {cards.length > 0 ? (
-                <CardCarousel
-                  cards={cards}
-                  activeIndex={activeIndex}
-                  onIndexChange={(index) =>
-                    setModes((current) => ({
-                      ...current,
-                      [mode]: { ...current[mode], activeIndex: index },
-                    }))
-                  }
-                  onCardTap={() => {
-                    setAuthOpen(true)
-                    auth.request()
-                  }}
-                  onServices={setServices}
-                />
-              ) : (
-                <div className="empty-state">
-                  <Icon name="card" />
-                  <h3>등록된 카드가 없어요</h3>
-                  <p>카드를 추가하거나 가상 포트폴리오를 체험해보세요.</p>
-                  {myMode && (
-                    <button
-                      className="primary-button"
-                      onClick={() => setNotice('카드 추가 기능은 준비 중이에요.')}
-                    >
-                      카드 추가
-                    </button>
-                  )}
+      {servicePage && <CardServicesPage key={servicePage.id} card={servicePage} onClose={closeServices} />}
+      <div className="wallet-main-content" hidden={Boolean(servicePage)}>
+        <PortfolioModeTabs mode={mode} onChange={selectMode} />
+        <main id={servicePage ? undefined : "main"}>
+          <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode}>
+            {menu === '빠른결제' ? (
+              <section className="quick-payment" key={mode}>
+                <h1 className="sr-only">B:ONE 빠른결제</h1>
+                <p className="sr-only">
+                  {myMode
+                    ? '디자인 확인용 샘플 카드입니다. 실제 등록 카드가 아닙니다.'
+                    : '가상 포트폴리오 시연용 카드입니다.'}
+                </p>
+                <div className="card-section-heading">
+                  <h2>
+                    나의 카드 <span>{cards.length}</span>
+                  </h2>
+                  <PaymentPreferenceMenu
+                    key={mode}
+                    cards={cards}
+                    preference={modes[mode].preference}
+                    onChange={updatePreference}
+                  />
                 </div>
-              )}
-              <p className="simulation-disclaimer">실제 결제 및 금융거래는 발생하지 않습니다.</p>
-            </section>
-          ) : (
-            <section className="placeholder-page">
-              <Icon name={menu === '혜택' ? 'benefit' : 'simulation'} />
-              <h1>{menu}</h1>
-              <p>
-                {menu === '혜택'
-                  ? '달별로 받은 혜택과 결제 정보를 확인할 수 있는 공간이에요.'
-                  : '가상의 주문으로 결제를 시뮬레이션하는 공간이에요.'}
-              </p>
-              <span>준비 중이에요</span>
-              <button className="primary-button" onClick={() => selectMenu('빠른결제')}>
-                빠른결제로 돌아가기
-              </button>
-            </section>
-          )}
-        </div>
-      </main>
+                {cards.length > 0 ? (
+                  <CardCarousel
+                    cards={cards}
+                    activeIndex={activeIndex}
+                    onIndexChange={(index) =>
+                      setModes((current) => ({
+                        ...current,
+                        [mode]: { ...current[mode], activeIndex: index },
+                      }))
+                    }
+                    onCardTap={() => {
+                      setAuthOpen(true)
+                      auth.request()
+                    }}
+                    onServices={openServices}
+                  />
+                ) : (
+                  <div className="empty-state">
+                    <Icon name="card" />
+                    <h3>등록된 카드가 없어요</h3>
+                    <p>카드를 추가하거나 가상 포트폴리오를 체험해보세요.</p>
+                    {myMode && (
+                      <button
+                        className="primary-button"
+                        onClick={() => setNotice('카드 추가 기능은 준비 중이에요.')}
+                      >
+                        카드 추가
+                      </button>
+                    )}
+                  </div>
+                )}
+                <p className="simulation-disclaimer">실제 결제 및 금융거래는 발생하지 않습니다.</p>
+              </section>
+            ) : (
+              <section className="placeholder-page">
+                <Icon name={menu === '혜택' ? 'benefit' : 'simulation'} />
+                <h1>{menu}</h1>
+                <p>
+                  {menu === '혜택'
+                    ? '달별로 받은 혜택과 결제 정보를 확인할 수 있는 공간이에요.'
+                    : '가상의 주문으로 결제를 시뮬레이션하는 공간이에요.'}
+                </p>
+                <span>준비 중이에요</span>
+                <button className="primary-button" onClick={() => selectMenu('빠른결제')}>
+                  빠른결제로 돌아가기
+                </button>
+              </section>
+            )}
+          </div>
+        </main>
 
-      <nav
-        className="bottom-nav"
-        aria-label="주요 메뉴"
-        style={{ '--active-index': menus.indexOf(menu) } as CSSProperties}
-      >
-        <span className="nav-indicator" aria-hidden="true" />
-        {menus.map((item, index) => (
-          <button
-            key={item}
-            aria-current={menu === item ? 'page' : undefined}
-            onClick={() => selectMenu(item)}
-          >
-            <Icon name={(['benefit', 'card', 'simulation'] as const)[index]} />
-            <span>{item}</span>
-          </button>
-        ))}
-      </nav>
+        <nav
+          className="bottom-nav"
+          aria-label="주요 메뉴"
+          style={{ '--active-index': menus.indexOf(menu) } as CSSProperties}
+        >
+          <span className="nav-indicator" aria-hidden="true" />
+          {menus.map((item, index) => (
+            <button
+              key={item}
+              aria-current={menu === item ? 'page' : undefined}
+              onClick={() => selectMenu(item)}
+            >
+              <Icon name={(['benefit', 'card', 'simulation'] as const)[index]} />
+              <span>{item}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
 
       {notice && (
         <div className="toast" role="status">
@@ -184,7 +209,7 @@ function App({ cardSource = mockCardSource }: { cardSource?: CardSource }) {
           </button>
         </div>
       )}
-      {services && (
+      {services && !servicePage && (
         <Sheet title={services.name + ' 부가서비스'} onClose={() => setServices(null)}>
           <p className="sheet-description">
             {services.source === 'DESIGN_SAMPLE'
