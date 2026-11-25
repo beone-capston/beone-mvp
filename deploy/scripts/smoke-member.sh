@@ -57,6 +57,8 @@ field() { jq -r "$1 | if . == null then empty else . end" "$WORK/body" 2> /dev/n
 header() { grep -i "^$1:" "$WORK/head" | tr -d '\r'; }
 # 쿠키 값은 지우고 속성만 남긴다. 줄마다 첫 '=' 뒤부터 ';' 또는 줄 끝까지를 가린다(세미콜론 없는 값도 가림)
 cookie_attrs() { header set-cookie | sed -E 's/^[^:]*: *//; s/^([^=;]*)=[^;]*/\1=<값>/'; }
+# 판정용 원문 Set-Cookie 줄(헤더 이름만 뗀다). 값이 들어 있으므로 판정에만 쓰고 출력·기록하지 않는다
+cookie_raw() { header set-cookie | sed -E 's/^[^:]*: *//'; }
 csrf() {
 	req "$1" GET /api/v1/auth/csrf > /dev/null
 	field '.data.token'
@@ -111,17 +113,23 @@ step_login() {
 	local jar="$1" p="$2" login="$3" s t
 	t=$(csrf "$jar")
 	s=$(req "$jar" POST /api/v1/auth/login "$login" "X-CSRF-TOKEN: $t")
-	record "${p}4" "로그인" "200, __Host-BEONE_SESSION(Path=/, Secure, HttpOnly, SameSite=Lax, Domain 없음)" "$s; $(cookie_attrs)" \
-		"$(check_session_cookie "$s" "$(cookie_attrs)")"
+	record "${p}4" "로그인" "200, __Host-BEONE_SESSION(값 있음, Path=/, Secure, HttpOnly, SameSite=Lax, Domain 없음)" "$s; $(cookie_attrs)" \
+		"$(check_session_cookie "$s" "$(cookie_raw)")"
 }
 
-# check_session_cookie <상태> <속성 줄들> → 1|0. 세션 쿠키(__Host-BEONE_SESSION) 줄 하나에서 정확한 경계로
-# Path=/, Secure, HttpOnly, SameSite=Lax가 모두 있고 Domain이 없어야 한다. 다른 쿠키 줄의 속성은 합치지 않는다
+# check_session_cookie <상태> <원문 Set-Cookie 줄들(cookie_raw)> → 1|0. 마스킹 전 원문으로 판정한다.
+# cookie-pair(첫 ';' 앞)의 이름이 정확히 __Host-BEONE_SESSION이고 값이 비어 있지 않은 줄 하나에서, 정확한 경계로
+# Path=/, Secure, HttpOnly, SameSite=Lax가 모두 있고 Domain이 없어야 한다. 다른 쿠키 줄의 속성은 합치지 않는다.
+# 값은 출력하지 않는다(결과 표에는 cookie_attrs의 마스킹 결과만 쓴다)
 check_session_cookie() {
 	[ "$1" = 200 ] || { echo 0; return; }
-	local line
+	local line pair value
 	while IFS= read -r line; do
-		case "$line" in __Host-BEONE_SESSION=*) ;; *) continue ;; esac
+		pair="${line%%;*}"
+		case "$pair" in __Host-BEONE_SESSION=*) ;; *) continue ;; esac
+		value="${pair#__Host-BEONE_SESSION=}"
+		value="${value//[[:space:]]/}"
+		[ -n "$value" ] || continue
 		if echo "$line" | grep -qE '; *Path=/ *(;|$)' && echo "$line" | grep -qiE '; *Secure *(;|$)' \
 			&& echo "$line" | grep -qiE '; *HttpOnly *(;|$)' && echo "$line" | grep -qiE '; *SameSite=Lax *(;|$)' \
 			&& ! echo "$line" | grep -qiE '; *Domain='; then
@@ -213,8 +221,8 @@ step_s5() {
 	local s attrs
 	s=$(req anon GET /api/v1/auth/csrf)
 	attrs=$(cookie_attrs)
-	record S5 "익명 세션 쿠키 속성" "200, __Host-BEONE_SESSION 한 줄에 Path=/, Secure, HttpOnly, SameSite=Lax, Domain 없음" \
-		"$s; $attrs" "$(check_session_cookie "$s" "$attrs")"
+	record S5 "익명 세션 쿠키 속성" "200, __Host-BEONE_SESSION 한 줄에 값 있음, Path=/, Secure, HttpOnly, SameSite=Lax, Domain 없음" \
+		"$s; $attrs" "$(check_session_cookie "$s" "$(cookie_raw)")"
 }
 
 # S17 전달 헤더 위조. 양쪽 모두 200과 유효한 세션 쿠키를 먼저 요구한 뒤 속성(값은 가림) 동일·Location 없음을 본다
@@ -222,11 +230,11 @@ step_s17() {
 	local s1 s2 plain forged ok1 ok2 loc1 loc2 ok=0
 	s1=$(req f1 GET /api/v1/auth/csrf)
 	plain=$(cookie_attrs)
-	ok1=$(check_session_cookie "$s1" "$plain")
+	ok1=$(check_session_cookie "$s1" "$(cookie_raw)")
 	loc1=$(header location | wc -l | tr -d ' ')
 	s2=$(req f2 GET /api/v1/auth/csrf '' 'X-Forwarded-Host: evil.invalid' 'X-Forwarded-Proto: http' 'X-Forwarded-For: 192.0.2.1')
 	forged=$(cookie_attrs)
-	ok2=$(check_session_cookie "$s2" "$forged")
+	ok2=$(check_session_cookie "$s2" "$(cookie_raw)")
 	loc2=$(header location | wc -l | tr -d ' ')
 	[ "$ok1 $ok2" = '1 1' ] && [ "$plain" = "$forged" ] && [ "$loc1 $loc2" = '0 0' ] && ok=1
 	record S17 "X-Forwarded-* 위조" "양쪽 200·유효 세션 쿠키, Set-Cookie 속성 동일, Location 없음" \
@@ -301,6 +309,8 @@ self_test() {
 	}
 	csrf() { echo synthetic-csrf; }
 	local good_cookie='set-cookie: __Host-BEONE_SESSION=synthetic; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax\r\n'
+	local empty_cookie='set-cookie: __Host-BEONE_SESSION=; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax\r\n'
+	local blank_cookie='set-cookie: __Host-BEONE_SESSION= ; Path=/; Secure; HttpOnly; SameSite=Lax\r\n'
 	local good_cookie2='set-cookie: __Host-BEONE_SESSION=other-synthetic; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax\r\n'
 	local me_a='{"data":{"demoUser":null,"displayName":"내 카드","portfolioType":"REAL","readOnly":false,"cardCount":1,"codefConnected":false}}'
 	local me_v='{"data":{"demoUser":"VIRTUAL_PORTFOLIO","displayName":"가상 포트폴리오","portfolioType":"VIRTUAL","readOnly":true,"cardCount":3,"codefConnected":false}}'
@@ -311,6 +321,12 @@ self_test() {
 	# 사례: 이름 | 기대 종료 코드 | 상태 | 헤더 | 본문 | 시연 헤더 본문 | 단계 | 위조 요청 상태 | 위조 요청 헤더
 	local cases=(
 		"S5 정상|0|200|$good_cookie|||step_s5"
+		"S5 빈 세션 값(속성 정상)|1|200|$empty_cookie|||step_s5"
+		"S5 공백뿐인 세션 값|1|200|$blank_cookie|||step_s5"
+		"S5 값 없는 쿠키 줄 + 다른 쿠키에 값|1|200|${empty_cookie}set-cookie: other=__Host-BEONE_SESSION=x; Path=/; Secure; HttpOnly; SameSite=Lax\r\n|||step_s5"
+		"S17 기준 쪽 빈 세션 값|1|200|$empty_cookie|||step_s17|200|$good_cookie2"
+		"S17 위조 쪽 빈 세션 값|1|200|$good_cookie|||step_s17|200|$empty_cookie"
+		"S17 양쪽 빈 세션 값(속성 같음)|1|200|$empty_cookie|||step_s17|200|$empty_cookie"
 		"S5 Path=/api|1|200|set-cookie: __Host-BEONE_SESSION=synthetic; Path=/api; Secure; HttpOnly; SameSite=Lax\r\n|||step_s5"
 		"S5 여러 줄에 속성 분산|1|200|set-cookie: __Host-BEONE_SESSION=synthetic; Path=/api; Secure\r\nset-cookie: other=x; Path=/; HttpOnly; SameSite=Lax\r\n|||step_s5"
 		"S5 SameSite 누락|1|200|set-cookie: __Host-BEONE_SESSION=synthetic; Path=/; Secure; HttpOnly\r\n|||step_s5"
@@ -327,6 +343,7 @@ self_test() {
 		"S1 정상|0|200|content-type: text/html;charset=UTF-8\r\n|||step_s1"
 		"S1 Content-Type 잘못됨|1|200|content-type: application/json\r\n|||step_s1"
 		"로그인 쿠키 정상|0|200|$good_cookie|||login"
+		"로그인 쿠키 빈 세션 값(속성 정상)|1|200|$empty_cookie|||login"
 		"로그인 쿠키 Secure 누락|1|200|set-cookie: __Host-BEONE_SESSION=synthetic; Path=/; HttpOnly; SameSite=Lax\r\n|||login"
 		"로그인 쿠키 HttpOnly 누락|1|200|set-cookie: __Host-BEONE_SESSION=synthetic; Path=/; Secure; SameSite=Lax\r\n|||login"
 		"로그인 쿠키 Path 다름|1|200|set-cookie: __Host-BEONE_SESSION=synthetic; Path=/api; Secure; HttpOnly\r\n|||login"
