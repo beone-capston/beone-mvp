@@ -9,12 +9,13 @@
 
 ## 선행 PR
 
-이 런북은 아래 PR의 파일을 근거로 한다. 아직 develop에 없으면 1단계에서 멈춘다. 이 PR은 그 파일들을 수정하지 않는다.
+이 런북은 아래 PR의 파일을 근거로 한다. 필요한 파일·절이 develop에 없으면 1단계에서 멈춘다. 이 PR은 그 파일들을 수정하지 않는다.
 
-| PR | 내용 | 이 런북에서 쓰는 곳 |
-|---|---|---|
-| #226 | `deploy/scripts/deploy.sh`, `smoke-public.sh`, `deploy-selftest.sh`, [서버 배포 스크립트](server-deploy.md) | 2·4·8·9단계 |
-| #229 | [공개 nginx 초안](public-proxy.md) 2-1절(스테이징 server 블록)·3절(네트워크 연결) | 7·8단계 |
+| PR | 내용 | 이 런북에서 쓰는 곳 | 상태 |
+|---|---|---|---|
+| #226 | `deploy/scripts/deploy.sh`, `smoke-public.sh`, `deploy-selftest.sh`, [서버 배포 스크립트](server-deploy.md) | 2·4·8·9단계 | develop 병합(준비 스크립트일 뿐, 서버 실행·운영 첫 배포 승인은 아님) |
+| #229 | [공개 nginx 초안](public-proxy.md) 2-1절(스테이징 server 블록)·3절(네트워크 연결)·운영 첫 배치(bootstrap) 순서 | 7·8단계 | **미병합(선행).** 운영 첫 배치 순서는 #229에서 보완 중이다 |
+| 번호 미정 | `deploy.sh` 운영 전용 하위 명령(`bootstrap-prepare`·`bootstrap-confirm`·`bootstrap-abort`) | 8-1 | **선행(코드 PR 예정).** 명령 이름·종료 코드는 그 PR이 확정한 값을 따른다 |
 
 develop에 이미 있는 근거: [배포 자동화](cd.md)(#225), [스테이징](staging.md)·`deploy/staging/`(#230), [백엔드 배포 기반](backend-compose.md).
 
@@ -35,7 +36,8 @@ develop에 이미 있는 근거: [배포 자동화](cd.md)(#225), [스테이징]
 5 AWS(OIDC·스테이징 역할·BeoneDeployStaging) ─▶ 6 GitHub 변수 → 첫 자동 배포(스테이징)
    │
    ▼
-7 스테이징 공개 접근(DNS·인증서·공개 nginx, 승인) ─▶ 8 운영(역할·문서·Environment·변수·승격·승인 1회)
+7 스테이징 공개 접근(DNS·인증서·공개 nginx, 승인) ─▶ 8-1 운영 첫 배치(#229 bootstrap, 선행)
+                                                     ─▶ 8-2 운영 자동 배포 켜기(역할·문서·Environment·변수·승격·승인 1회)
 
 9 끄기와 되돌리기: 어느 단계에서든 쓴다
 ```
@@ -47,6 +49,7 @@ develop에 이미 있는 근거: [배포 자동화](cd.md)(#225), [스테이징]
 - 서버 명령은 `sudo`로 실행하고, 값이 출력되는 명령(`cat .env`, `docker compose config` 전체 출력 등)은 쓰지 않는다.
 - 명령 출력에 비밀값이 보이면 그 출력은 기록·공유하지 않는다.
 - 실행 기록에는 날짜(KST), 실행자, 단계 번호, 확인값(digest·종료 코드·HTTP 상태)만 남긴다.
+- **실패 닫힘 블록:** `bash -euo pipefail <<'EOF' … EOF`로 시작하는 블록은 한 덩어리로 붙여 넣는다. 안의 명령이 하나라도 실패하면(파이프 중간 포함) 그 자리에서 멈추고 0이 아닌 종료 코드를 낸다. 성공하면 마지막 줄에 `… OK`가 나온다. 블록 뒤 `echo "exit=$?"`가 `exit=0`이고 `OK` 줄이 있을 때만 다음으로 넘어간다. 어느 셸(zsh 포함)에서 붙여 넣어도 bash로 실행된다. `<…>` 자리표시를 바꾸지 않고 실행하면 형식 검사에서 실패한다.
 
 ---
 
@@ -57,10 +60,30 @@ develop에 이미 있는 근거: [배포 자동화](cd.md)(#225), [스테이징]
 | 실행 | 운영 담당(서버), 사용자 또는 운영 담당(GitHub) |
 | 전제 | 승인 묶음(결정 40 활성화)이 내려옴 |
 
+**기준 커밋과 필수 파일(PC, 저장소 루트, 실패 닫힘):** fetch가 성공한 직후의 `origin/develop` 커밋을 기준으로 고정하고, 필수 파일이 그 커밋에 파일(blob)로 있는지 하나씩 확인한다. 여기서 나온 기준 커밋을 2·3단계의 `<GitSha>`로 쓴다.
+
+```bash
+bash -euo pipefail <<'EOF'
+git fetch origin develop || { echo "FAIL: fetch 실패"; exit 1; }
+BASE=$(git rev-parse --verify 'origin/develop^{commit}') || { echo "FAIL: 기준 커밋 조회 실패"; exit 1; }
+missing=0
+for f in deploy/scripts/deploy.sh deploy/scripts/smoke-public.sh \
+         deploy/staging/compose.yaml deploy/staging/env.template deploy/staging/nginx.conf \
+         docs/deployment/public-proxy.md docs/deployment/server-deploy.md; do
+  if [ "$(git cat-file -t "$BASE:$f" 2>/dev/null)" = blob ]; then echo "OK   $f"; else echo "FAIL $f 없음"; missing=1; fi
+done
+# #229의 스테이징 server 블록 절(7단계)
+if git show "$BASE:docs/deployment/public-proxy.md" | grep -q '^## 2-1\. 스테이징 server 블록'; then echo "OK   public-proxy 2-1절"; else echo "FAIL public-proxy 2-1절 없음(#229 미병합)"; missing=1; fi
+[ "$missing" = 0 ] || { echo "FAIL: 필수 파일·절 누락. 1단계에서 멈춘다"; exit 1; }
+echo "PRECHECK OK $BASE"
+EOF
+echo "exit=$?"
+```
+
 | 확인 | 명령 | 기대 |
 |---|---|---|
-| 선행 PR 병합 | `gh pr view 226 --json state -q .state`, `gh pr view 229 --json state -q .state` | 둘 다 `MERGED` |
-| develop에 파일 있음 | `git ls-tree --name-only origin/develop deploy/scripts/ deploy/staging/` | `deploy.sh`, `smoke-public.sh`, `compose.yaml`, `env.template`, `nginx.conf` 포함 |
+| 기준 커밋·필수 파일 | 위 블록 | `exit=0`, 마지막 줄 `PRECHECK OK <40자리 커밋>`. `FAIL` 줄이 하나라도 있으면 멈춤 |
+| 선행 PR(참고) | `gh pr view 229 --json state -q .state` | `MERGED`. 판정은 위 블록의 파일·절 확인으로 한다 |
 | 디스크 여유 | `df -h / /var/lib/docker` | 사용률 80% 미만, 이미지 2개(api·web)와 스테이징 DB를 둘 여유(대략 5GB 이상) |
 | 메모리 | `free -m` | 스테이징 상한 합계 1344MiB를 더해도 `available`이 남음([스테이징 구성](staging.md#구성)) |
 | 기존 운영 앱 | `sudo docker compose -f /opt/beone/app/compose.yaml -p beone-app ps` | `backend`·`mysql`이 `running`(healthy) |
@@ -76,33 +99,55 @@ develop에 이미 있는 근거: [배포 자동화](cd.md)(#225), [스테이징]
 | 실행 | 운영 담당(승인 뒤) |
 | 전제 | 1단계 통과. 설치할 develop 커밋 `<GitSha>`를 정함 |
 
-설치는 develop의 특정 커밋 파일을 그대로 옮기는 것이다. 먼저 PC에서 체크섬을 기록한다.
+설치는 1단계 기준 커밋의 파일을 그대로 옮기는 것이다. 먼저 PC에서 두 파일을 꺼내고 체크섬을 기록한다(실패 닫힘). 꺼낸 파일이 곧 서버로 옮길 파일이라, 해시한 내용과 옮기는 내용이 같다.
 
 ```bash
-# PC, 저장소 루트
-git fetch origin
+bash -euo pipefail <<'EOF'
+SHA='<GitSha>'                       # 1단계 PRECHECK OK의 40자리 커밋
+[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "FAIL: GitSha 형식이 아님"; exit 1; }
+git cat-file -e "$SHA^{commit}" 2>/dev/null || { echo "FAIL: 커밋 없음"; exit 1; }
+OUT=$(mktemp -d)
 for f in deploy.sh smoke-public.sh; do
-  git show <GitSha>:deploy/scripts/$f | shasum -a 256    # Linux는 sha256sum
+  [ "$(git cat-file -t "$SHA:deploy/scripts/$f" 2>/dev/null)" = blob ] || { echo "FAIL: $f 없음"; exit 1; }
+  git show "$SHA:deploy/scripts/$f" > "$OUT/$f"
+  [ -s "$OUT/$f" ] || { echo "FAIL: $f 비어 있음"; exit 1; }
+  if command -v sha256sum > /dev/null; then h=$(sha256sum "$OUT/$f"); else h=$(shasum -a 256 "$OUT/$f"); fi
+  h=${h%% *}
+  [[ "$h" =~ ^[0-9a-f]{64}$ ]] || { echo "FAIL: $f 해시 실패"; exit 1; }
+  echo "$h  $f"
 done
+echo "옮길 폴더: $OUT"
+echo "CHECKSUM OK $SHA"
+EOF
+echo "exit=$?"
 ```
 
-서버에 파일을 옮긴 뒤(전송 방법은 운영 담당이 정함) 설치한다.
+| 확인 | 기대 |
+|---|---|
+| PC 블록 | `exit=0`, 해시 두 줄(64자리 + 파일 이름), 마지막 줄 `CHECKSUM OK <GitSha>`. 아니면 설치로 넘어가지 않음 |
+
+서버로 `옮길 폴더`의 두 파일을 옮긴 뒤(전송 방법은 운영 담당이 정함) 설치하고, PC에서 기록한 해시와 대조한다(실패 닫힘). `<…해시>`에는 PC 블록의 64자리 값을 넣는다.
 
 ```bash
-sudo install -d -m 755 -o root -g root /opt/beone/deploy
-sudo install -m 755 -o root -g root deploy.sh smoke-public.sh /opt/beone/deploy/
-sudo sha256sum /opt/beone/deploy/deploy.sh /opt/beone/deploy/smoke-public.sh
-ls -l /opt/beone/deploy/
+sudo bash -euo pipefail <<'EOF'
+install -d -m 755 -o root -g root /opt/beone/deploy
+install -m 755 -o root -g root deploy.sh smoke-public.sh /opt/beone/deploy/
+cd /opt/beone/deploy
+printf '%s  %s\n' '<deploy.sh 해시>' deploy.sh '<smoke-public.sh 해시>' smoke-public.sh | sha256sum -c -
+ls -l deploy.sh smoke-public.sh
+echo "INSTALL OK"
+EOF
+echo "exit=$?"
 sudo /opt/beone/deploy/deploy.sh; echo "exit=$?"
 ```
 
 | 확인 | 기대 |
 |---|---|
-| 체크섬 | PC에서 기록한 값과 두 파일 모두 같음 |
+| 설치 블록 | `exit=0`, `deploy.sh: OK`·`smoke-public.sh: OK`, 마지막 줄 `INSTALL OK` |
 | 권한·소유자 | `-rwxr-xr-x root root` |
 | 인자 없이 실행 | `사용: deploy.sh …` 한 줄, 아무것도 바꾸지 않음(종료 코드 2, [종료 코드](server-deploy.md#종료-코드)) |
 
-**실패하면:** 체크섬이 다르면 설치한 두 파일을 지우고(`sudo rm /opt/beone/deploy/deploy.sh /opt/beone/deploy/smoke-public.sh`) 다시 옮긴다. 이 단계는 실행 중인 서비스를 바꾸지 않는다.
+**실패하면:** PC 블록이 실패하면 아무것도 옮기지 않는다(커밋·경로부터 다시 확인). 설치 블록의 대조가 실패하면 설치한 두 파일을 지우고(`sudo rm /opt/beone/deploy/deploy.sh /opt/beone/deploy/smoke-public.sh`) PC 블록부터 다시 한다. 이 단계는 실행 중인 서비스를 바꾸지 않는다.
 
 ## 3. 스테이징 폴더
 
@@ -268,7 +313,7 @@ sudo /opt/beone/deploy/smoke-public.sh http://127.0.0.1:18081; echo "exit=$?"
 
 첫 활성화에서 볼 세 가지는 [cd.md 위험과 분리 이유](cd.md#위험과-분리-이유)의 「첫 활성화」와 같다: GHCR 첫 푸시 권한, digest 기록, OIDC 역할 맡기.
 
-**실패하면:** `BEONE_CD_ENABLED`를 지운다(9단계). 다음 push부터 `gate`만 돈다. 서버가 실패했다면 `deploy.sh`가 이미 복귀를 시도했으므로 종료 코드를 4단계 기준으로 본다. GHCR 첫 푸시가 권한으로 실패하면 패키지 권한·가시성 결정으로 돌아간다.
+**실패하면:** `BEONE_CD_ENABLED`를 지운다. 이것은 **다음 실행부터** `gate`만 돌게 할 뿐이다. 진행 중인 실행이 있으면 9단계 「진행 중인 실행 확인」을 따른다. 서버가 실패했다면 `deploy.sh`가 이미 복귀를 시도했으므로 종료 코드를 4단계 기준으로 본다. GHCR 첫 푸시가 권한으로 실패하면 패키지 권한·가시성 결정으로 돌아간다.
 
 ## 7. 스테이징 공개 접근 (승인 항목)
 
@@ -296,12 +341,45 @@ sudo /opt/beone/deploy/smoke-public.sh http://127.0.0.1:18081; echo "exit=$?"
 
 **실패하면:** 공개 nginx 설정을 P3 백업본으로 되돌리고 `nginx -t` 뒤 reload한다([4절 원복](public-proxy.md#4-반영원복-절차-승인-⑧)). DNS·인증서는 그대로 두어도 서비스에 영향이 없다.
 
-## 8. 운영 첫 승인 배포
+## 8. 운영 첫 배치와 자동 배포 켜기
+
+운영은 두 부분으로 나눈다. 8-1(첫 배치)이 끝나기 전에는 8-2를 시작하지 않는다.
+
+### 8-1. 운영 첫 배치(bootstrap): #229 절차를 따른다(선행)
+
+| 항목 | 내용 |
+|---|---|
+| 실행 | 운영 담당이 **서버에서 승인 창 안에 직접** 실행(SSM으로 부르지 않음), 사용자 승인 |
+| 전제 | 6단계(필요하면 7단계)까지 통과. 운영 첫 배포 승인(main 승격, Flyway V2~V15, 공개 nginx 변경, [cd.md 실행 승인 항목](cd.md#실행-승인-항목)). #229의 bootstrap 절차와 `deploy.sh` 운영 전용 하위 명령 PR(선행, 번호 미정)이 develop에 병합됨 |
+
+운영 첫 배치는 정상 `deploy.sh production`(SSM)으로 하지 않는다. 지금 공개 주소는 기존 안내 화면만 주고 `/api`와 웹 릴리스 폴더가 공개 nginx에 연결되어 있지 않다. 그래서 정상 배포의 필수 공개 스모크(`https://<운영 도메인>`의 P1~P4)가 이 시점에 성공한다고 전제할 수 없다. 첫 배포는 상태 파일이 없어 실패하면 종료 1이고 새 backend·웹 링크가 남을 수 있다([첫 배포](server-deploy.md#첫-배포)). 그래서 **준비 → nginx 연결 → 공개 확인 뒤 확정**으로 나눈다. 종료 1을 무시하거나, 스모크를 건너뛰거나, 상태 파일을 손으로 만들어 성공으로 기록하지 않는다.
+
+아래 하위 명령 이름·종료 코드·파일 이름은 관리자가 전달한 설계 요지를 따른 것이다. **확정값은 선행 코드 PR과 #229가 정하며, 다르면 그쪽을 따른다.**
+
+| # | 단계 | 하는 일(설계 요지) | 확인 | 실패하면 |
+|---|---|---|---|---|
+| B1 | `sudo /opt/beone/deploy/deploy.sh bootstrap-prepare <ApiDigest> <WebDigest> <GitSha>` | `production.state`가 있으면 거부. 복귀 기준(지금 실행 중인 backend 이미지)과 배포 직전 백업·짝 기록을 남김. 새 backend를 올려 health 확인, 웹 `current` 전환. 비공개 검증만 하고 공개 스모크는 하지 않음. 대기 파일 `production.bootstrap`만 씀 | 종료 0(= **준비 완료, 미확정**). `production.bootstrap` 있음, `production.state` 없음 | B4(abort) |
+| B2 | 사람 단계: 공개 nginx의 네트워크·마운트·설정 반영 → `nginx -t` → reload([공개 nginx 3·4절](public-proxy.md#3-두-compose-프로젝트-연결), P3 백업 선행) | 공개 nginx가 `/api`와 `/opt/beone/web/current`를 보게 함 | `syntax is ok`, `test is successful`, reload 성공 | `nginx -t` 실패면 P3 tar로 nginx 설정을 복원(reload)한 뒤 B4 |
+| B3 | `sudo /opt/beone/deploy/deploy.sh bootstrap-confirm` | 공개 스모크(`https://<운영 도메인>`)를 통과했을 때만 `production.state`를 기록 | 종료 0, `production.state` 생김 | 종료 1이면 상태 파일 없음. 대기 파일이 남아 원인을 고친 뒤 B3을 다시 할 수 있음. 포기하면 nginx를 P3로 복원한 뒤 B4 |
+| B4 | `sudo /opt/beone/deploy/deploy.sh bootstrap-abort` | 복귀 기준 이미지로 backend를 되돌리고 웹 링크 원복. 상태 파일은 쓰지 않음 | 기존 backend 이미지로 healthy, 공개 주소가 기존 안내 화면(`200`) | 사람이 바로 확인([백엔드 배포 기반 롤백](backend-compose.md#롤백)) |
+
+8-1이 끝났다고 보는 조건(8-2의 전제). B3이 성공한 뒤에만 확인한다.
+
+| 확인 | 명령 | 기대 |
+|---|---|---|
+| 운영 상태 파일 | `sudo grep -cE '^(api_digest\|web_digest)=sha256:[0-9a-f]{64}$' /opt/beone/deploy/state/production.state` | `2`(B3이 기록한 값) |
+| 대기 파일 정리 | 선행 코드 PR이 정한 방식으로 `production.bootstrap` 상태 확인 | 확정 뒤 상태(그 PR 기준) |
+| 공개 스모크 | `sudo /opt/beone/deploy/smoke-public.sh https://<운영 도메인>; echo "exit=$?"` | `exit=0` |
+| 웹 | `sudo test -f /opt/beone/web/current/index.html && echo ok` | `ok` |
+
+정상 자동 배포(SSM `BeoneDeployProduction`)는 B3으로 `production.state`가 생긴 뒤부터 쓴다.
+
+### 8-2. 운영 자동 배포 켜기
 
 | 항목 | 내용 |
 |---|---|
 | 실행 | 운영 담당(AWS·GitHub 설정), 사용자(Environment 승인자, 운영 배포 승인), 관리자(승격 PR) |
-| 전제 | 6단계(필요하면 7단계)까지 통과. 운영 첫 배포 승인(main 승격, Flyway V2~V15, 공개 nginx 변경, [cd.md 실행 승인 항목](cd.md#실행-승인-항목)). 공개 nginx 정적 루트가 `/opt/beone/web/current`를 보도록 하는 일([공개 nginx 3절](public-proxy.md#3-두-compose-프로젝트-연결))의 승인·순서가 정해짐 |
+| 전제 | 8-1 완료 조건을 모두 만족 |
 
 순서가 중요하다. **Environment 보호 규칙을 먼저 만들고, 운영 스위치는 마지막에 켠다.** 보호 규칙 없이 운영 job이 돌면 GitHub이 Environment를 보호 규칙 없이 자동으로 만들어 승인 없이 배포된다([cd.md 게이트](cd.md#게이트꺼진-상태로-병합)).
 
@@ -319,18 +397,18 @@ sudo /opt/beone/deploy/smoke-public.sh http://127.0.0.1:18081; echo "exit=$?"
 | 운영 역할 신뢰 | `aws iam get-role --role-name <운영 역할 이름> --query 'Role.AssumeRolePolicyDocument'` | `sub`가 `repo:beone-capston/beone-mvp:environment:production` 하나 |
 | 배포 | job 로그 | SSM 명령 상태 `Success`, job 성공 |
 | 배포 직전 백업 | `sudo grep -E '^backup_id=' /opt/beone/deploy/state/production.state`, `sudo ls /opt/beone/app/backups/<backup_id>/` | `app.sql`, `app.sql.flyway`, `app.sql.record` 세 파일 |
-| 짝 기록 | `sudo grep -E '^deploy_(prev_api\|new_api\|new_web)_digest=\|^deploy_git_sha=' /opt/beone/app/backups/<backup_id>/app.sql.record` | 새 digest가 job 요약과 같음. 첫 자동 배포면 `deploy_prev_api_digest=none` |
+| 짝 기록 | `sudo grep -E '^deploy_(prev_api\|new_api\|new_web)_digest=\|^deploy_git_sha=' /opt/beone/app/backups/<backup_id>/app.sql.record` | 새 digest가 job 요약과 같고, `deploy_prev_api_digest`가 8-1에서 남은 digest |
 | 스모크 | `sudo /opt/beone/deploy/smoke-public.sh https://<운영 도메인>` | 종료 0 |
 | 웹 | `sudo test -f /opt/beone/web/current/index.html && echo ok` | `ok` |
 
-운영의 첫 자동 배포는 상태 파일이 없어 복귀 대상이 없다([첫 배포](server-deploy.md#첫-배포)). 지금 운영 backend는 `docker load`한 태그 이미지이므로, 승인 시각에 운영 담당과 사용자가 함께 지켜본다.
+8-1에서 상태 파일이 생겼으므로, 이 배포가 실패하면 `deploy.sh`는 8-1의 digest와 웹 링크로 복귀한다(종료 4).
 
 **실패하면:**
 
 - 승인 전이면 승인 화면에서 **거절**한다. 아무것도 배포되지 않는다.
 - `deploy.sh`가 종료 4면 이전 backend와 웹 링크로 복귀했다. DB는 새 마이그레이션이 적용된 상태일 수 있다(아래 9단계 DB 항목).
-- 종료 1이면 사람이 바로 확인한다. backend 이미지는 [백엔드 배포 기반 롤백](backend-compose.md#롤백)처럼 `docker load`했던 직전 태그로 되돌린다.
-- 운영 자동 배포를 멈추려면 `BEONE_CD_PRODUCTION_ENABLED`를 지운다.
+- 종료 1이면 사람이 바로 확인한다. 상태 파일의 이전 digest로 [이전 버전 재배포](#9-끄기와-되돌리기)를 검토한다.
+- 다음 main push부터 운영 자동 배포를 막으려면 `BEONE_CD_PRODUCTION_ENABLED`를 지운다. 진행 중인 실행은 9단계 「진행 중인 실행 확인」을 따른다.
 
 ## 9. 끄기와 되돌리기
 
@@ -339,12 +417,36 @@ sudo /opt/beone/deploy/smoke-public.sh http://127.0.0.1:18081; echo "exit=$?"
 | 실행 | 운영 담당(변수·SSM), 사용자(운영 결정) |
 | 전제 | 없음. 어느 단계에서든 쓴다 |
 
+변수와 워크플로 설정은 **새로 시작하는 실행**에만 적용된다. 이미 `gate`를 지난 build·staging·production job과 서버에서 실행 중인 SSM 명령(`deploy.sh`)은 멈추지 않는다. 그래서 "앞으로 막기"와 "진행 중인 실행 다루기"를 나눈다. 변수를 지운 것만으로 정지 완료라고 기록하지 않는다.
+
+**앞으로 막기(다음 실행부터)**
+
 | 하려는 것 | 방법 | 확인 |
 |---|---|---|
-| 자동 배포 전체 즉시 정지 | 저장소 변수 `BEONE_CD_ENABLED`를 지우거나 `false`로 바꿈 | 다음 push의 `Deploy` 실행이 `gate`만 성공, 요약에 비활성 표시 |
-| 운영만 정지 | `BEONE_CD_PRODUCTION_ENABLED` 삭제 | main push가 `gate`에서 멈춤 |
-| 더 강하게 막기 | Actions에서 `Deploy` 워크플로 비활성화, 또는 IAM 역할 신뢰 정책 삭제 | 실행 없음 / 역할 맡기 실패 |
-| 진행 중 운영 배포 막기 | Environment 승인 화면에서 거절 | job `Rejected` |
+| 자동 배포 전체를 다음 실행부터 막기 | 저장소 변수 `BEONE_CD_ENABLED`를 지우거나 `false`로 바꿈 | 다음 push의 `Deploy` 실행이 `gate`만 성공, 요약에 비활성 표시 |
+| 운영만 다음 실행부터 막기 | `BEONE_CD_PRODUCTION_ENABLED` 삭제 | 다음 main push가 `gate`에서 멈춤 |
+| 더 강하게 막기 | Actions에서 `Deploy` 워크플로 비활성화, 또는 IAM 역할 신뢰 정책 삭제 | 새 실행 없음 / 역할 맡기 실패 |
+
+**진행 중인 실행 확인(정지를 기록하기 전에 반드시)**
+
+```bash
+gh run list --workflow deploy.yml --limit 10 --json databaseId,status,headBranch,headSha,createdAt
+gh run view <run ID> --json status,jobs -q '.status, (.jobs[] | "\(.name) \(.status) \(.conclusion)")'
+aws ssm list-commands --filters key=Status,value=InProgress --query 'Commands[].[CommandId,DocumentName,Status,RequestedDateTime]'
+aws ssm get-command-invocation --command-id <SSM 명령 ID> --instance-id <인스턴스 ID> --query '[Status,ResponseCode]'
+```
+
+| 진행 중인 것 | 할 일 | 확인 |
+|---|---|---|
+| 없음(`queued`·`in_progress`·`waiting` 실행 없음, SSM `InProgress` 없음) | 정지 완료로 기록한다. 기록에는 확인한 시각과 마지막 run ID를 남긴다 | 위 명령 결과 |
+| 운영 job이 승인 대기(`waiting`) | Environment 승인 화면에서 **거절** | job `Rejected`, SSM 호출 없음 |
+| build 또는 staging·production job이 SSM 요청 전 | run 취소(`gh run cancel <run ID>`)는 **별도 승인**을 받은 뒤 한다 | run `cancelled`, `aws ssm list-commands`에 새 명령 없음 |
+| SSM 명령이 서버에서 실행 중 | **중간에 끊지 않고** 끝날 때까지 기다린다(문서 `executionTimeout` 1500초). 끝나면 `ResponseCode`(= `deploy.sh` 종료 코드)를 보고 [종료 코드](server-deploy.md#종료-코드) 기준으로 판단한다. `aws ssm cancel-command`는 `deploy.sh`를 단계 중간에서 끊을 수 있으므로 **별도 승인** 항목이며, 취소했다면 상태 파일·컨테이너 이미지·웹 링크를 직접 확인하고 아래 「이전 버전 재배포」로 복귀한다 | `Success`/`Failed`와 `ResponseCode`, 상태 파일 digest, 스모크 종료 0 |
+
+**되돌리기**
+
+| 하려는 것 | 방법 | 확인 |
+|---|---|---|
 | 이전 버전 재배포 | 되돌릴 커밋 실행의 job 요약에서 api·web digest와 GitSha를 확인하고, 해당 환경 문서(`BeoneDeployStaging`/`BeoneDeployProduction`)를 그 값으로 실행(콘솔 또는 `aws ssm send-command`). "Re-run jobs"는 이미지를 다시 빌드해 digest가 달라질 수 있으므로 쓰지 않음 | 명령 상태 `Success`, 상태 파일 digest가 되돌린 값, 스모크 종료 0 |
 | DB 되돌리기 | **자동 복원 없음.** 운영 배포 직전 백업(`/opt/beone/app/backups/<backup_id>/`)과 짝 기록으로 [복원 확인](backend-compose.md#복원-확인-회차별-분리-프로젝트) 절차를 따름. 운영 DB 교체는 별도 결정 | 복원 회차 프로젝트에서 이력·앱 기동 확인 |
 
@@ -360,4 +462,6 @@ sudo /opt/beone/deploy/smoke-public.sh http://127.0.0.1:18081; echo "exit=$?"
 | 5 | OIDC·IAM(스테이징), SSM 문서 `BeoneDeployStaging` |
 | 6 | 저장소 변수(스테이징 3개) |
 | 7 | DNS, 인증서, 공개 nginx 변경 |
-| 8 | OIDC·IAM(운영), `BeoneDeployProduction`, Environment 보호 규칙, 저장소 변수(운영 2개), 운영 첫 배포(main 승격, Flyway, 공개 nginx), 실메일 |
+| 8-1 | 운영 첫 배치(main 승격, Flyway, 공개 nginx, 서버 직접 실행 bootstrap 3단계). 절차는 #229 bootstrap(선행) |
+| 8-2 | OIDC·IAM(운영), `BeoneDeployProduction`, Environment 보호 규칙, 저장소 변수(운영 2개), 실메일 |
+| 9 | 진행 중인 run 취소, SSM 명령 취소 |
