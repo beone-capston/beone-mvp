@@ -2,7 +2,7 @@
 
 GitHub Actions가 SSM 문서 `BeoneDeployStaging`(스테이징) 또는 `BeoneDeployProduction`(운영)으로 서버의 `/opt/beone/deploy/deploy.sh`를 부르면, 이 스크립트가 digest로 고정한 이미지를 받아 backend와 웹을 바꾸고 공개 점검을 한 뒤, 실패하면 이전 상태로 되돌립니다. 결정 40(배포 자동화)의 (3)(7)과 인터페이스 계약을 따릅니다.
 
-- **상태:** 스크립트와 오프라인 자기검사만 있습니다. 서버 설치, SSM 문서, IAM, 워크플로 연결은 하지 않았습니다. 서버 설치·갱신은 승인 절차(Aside)입니다.
+- **상태:** 운영 서버(`/opt/beone/deploy/`)에 설치돼 있고, 운영 최초 배포(bootstrap)를 2026-11-25에 확정했습니다(`production.state` 있음). 이후 운영 배포는 정상 경로(`deploy.sh production …`)입니다. SSM 문서·IAM·워크플로 연결은 아직 없으므로, 자동 배포를 켜기 전에는 승인 창에서 사람이 서버에서 같은 명령을 실행합니다. 스테이징은 구성하지 않았습니다. 서버 스크립트 갱신은 계속 승인 절차(Aside)입니다. 단계별 상태: [활성화 런북 현재 상태](cd-activation.md#현재-상태-2026-11-26-기준)
 - **파일:** [`deploy/scripts/deploy.sh`](../../deploy/scripts/deploy.sh), [`deploy/scripts/smoke-public.sh`](../../deploy/scripts/smoke-public.sh), [`deploy/scripts/deploy-selftest.sh`](../../deploy/scripts/deploy-selftest.sh)
 - **서버 설치(승인 절차, Aside):** `deploy.sh`와 `smoke-public.sh`를 **같은 폴더 `/opt/beone/deploy/`에 실행 권한과 함께** 설치합니다(예: `install -m 755 deploy.sh smoke-public.sh /opt/beone/deploy/`). `deploy.sh`는 자기 폴더의 `smoke-public.sh`를 부릅니다. SSM 문서 `BeoneDeployStaging`·`BeoneDeployProduction`이 이 경로를 실행합니다. SSM은 root로 실행하므로 스크립트 안에서 `sudo`를 쓰지 않습니다. 스크립트 갱신도 같은 승인 절차입니다.
 
@@ -27,7 +27,7 @@ deploy.sh <staging|production> <ApiDigest> <WebDigest> <GitSha>
 
 - 이미지: `ghcr.io/beone-capston/beone-api@<ApiDigest>`, `ghcr.io/beone-capston/beone-web@<WebDigest>`. backend는 compose의 `BEONE_API_IMAGE`를 셸 환경으로 덮어써 digest 이미지로 띄웁니다(셸 환경이 `--env-file`보다 우선). 서버 `.env`는 바꾸지 않습니다.
 - web 이미지 안 dist 위치는 `/dist`입니다(`WEB_DIST_PATH`). 워크플로의 `deploy/web/Dockerfile`(`COPY . /dist/`, #225)과 같습니다.
-- 운영 웹 폴더는 `/opt/beone/web`(`releases/`와 `current` 링크)으로 확정입니다. 공개 nginx 정적 루트를 이 링크에 맞추는 일은 공개 nginx 정합 작업(B-CD3, [공개 nginx 초안](public-proxy.md))이 합니다. 그 반영 전에는 운영 웹 링크를 바꿔도 공개 화면이 바뀌지 않습니다.
+- 운영 웹 폴더는 `/opt/beone/web`(`releases/`와 `current` 링크)으로 확정입니다. 공개 nginx 정적 루트는 운영 최초 배포 때 이 링크에 맞췄습니다([공개 nginx 초안](public-proxy.md) 4절). 그래서 지금은 웹 링크를 바꾸면 공개 화면이 바로 바뀝니다.
 
 ## 순서
 
@@ -82,9 +82,11 @@ deploy_git_sha=<GitSha>
 
 ### 첫 배포
 
-상태 파일이 없으면 첫 배포로 처리합니다(스테이징. 운영은 아래와 같이 거부). 이때 backend 복귀 대상이 없으므로 4~7단계가 실패하면 새 backend를 그대로 둔 채 종료 1입니다. 웹은 이전 `current` 링크가 있으면 되돌리고, 없으면 그대로 둡니다. 스테이징은 루프백 점검 포트로 스모크를 하므로 첫 배포도 이 경로를 씁니다. **운영의 첫 배포는 이 경로를 쓰지 않고 [운영 최초 배포(bootstrap)](#운영-최초-배포-bootstrap)를 씁니다.**
+상태 파일이 없으면 첫 배포로 처리합니다(스테이징. 운영은 아래와 같이 거부). 이때 backend 복귀 대상이 없으므로 4~7단계가 실패하면 새 backend를 그대로 둔 채 종료 1입니다. 웹은 이전 `current` 링크가 있으면 되돌리고, 없으면 그대로 둡니다. 스테이징은 루프백 점검 포트로 스모크를 하므로 첫 배포도 이 경로를 씁니다. **운영의 첫 배포는 이 경로를 쓰지 않고 [운영 최초 배포(bootstrap)](#운영-최초-배포-bootstrap)를 씁니다.** 운영은 bootstrap으로 확정돼 상태 파일이 있으므로 이 경로에 들어가지 않습니다.
 
 ## 운영 최초 배포 (bootstrap)
+
+> **완료(2026-11-25).** `bootstrap-confirm production`이 종료 0으로 끝나 `production.state`가 생겼습니다. 상태 파일이 있으면 `bootstrap-prepare`가 거부하므로 이 절차는 다시 쓰지 않습니다. 아래는 원리와 기록으로 남깁니다.
 
 운영 첫 배포는 정상 경로로 할 수 없습니다. `deploy.sh production`은 `https://beonepay.site` 공개 스모크(P2 `/api/v1/me` 401, P4 CSRF 쿠키)를 통과해야 성공하는데, 공개 nginx의 `/api` 프록시와 웹 링크 마운트는 그 뒤 nginx 변경([공개 nginx 초안](public-proxy.md) 4절)에서 처음 연결됩니다. 그대로 실행하면 첫 배포가 반드시 실패하고, 복귀 대상이 없어 새 backend와 웹 링크가 남은 채 종료 1이 됩니다(순환 의존). 그래서 운영 최초 1회는 세 단계로 나눕니다.
 

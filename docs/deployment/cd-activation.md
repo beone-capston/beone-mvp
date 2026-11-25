@@ -2,10 +2,32 @@
 
 [배포 자동화(CD)](cd.md)는 저장소 변수가 꺼진 상태로 병합되어 있다. 이 문서는 승인 묶음이 내려온 뒤, 스테이징 자동 배포부터 운영 첫 승인 배포까지 **어떤 순서로 켜는지**를 적은 실행 순서표(런북)다.
 
-- **상태:** 문서만 있다. 아래 단계는 **하나도 실행하지 않았다.** 서버·AWS·GitHub 설정은 바뀌지 않았다.
+- **상태:** 운영 첫 배치(8-1)는 2026-11-25에 끝났다. 나머지 단계(스테이징 3~7, 운영 자동 배포 8-2)는 실행하지 않았다. 아래 [현재 상태](#현재-상태-2026-11-26-기준)를 본다.
 - **실행 주체:** 서버·AWS·GitHub 설정은 운영 담당(Aside)이 승인 뒤 실행한다. 비밀값 입력과 운영 승인은 사용자가 한다. 단계마다 담당을 적었다.
 - **자리표시:** `<…>`는 실제 값으로 바꿀 자리다. 계정 ID·도메인·비밀번호 같은 실값은 이 문서와 저장소에 적지 않는다.
 - **제외 범위:** CODEF는 자동 배포 대상이 아니다(결정 40-7). 서버 `deploy.sh`는 env에 `CODEF_`·`BEONE_CODEF_` 키가 있으면 배포를 거부한다([서버 배포 스크립트](server-deploy.md#codef-가드)). 회원 전체 스모크도 이 런북에 넣지 않는다([공개 nginx 4절 P5-4](public-proxy.md#4-반영원복-절차-승인-⑧)).
+
+## 현재 상태 (2026-11-26 기준)
+
+실행 결과는 운영 담당(Aside)의 보고를 관리자가 정리한 것이다. 실제 서버의 백업 이름·디렉터리 값·비밀값은 저장소에 적지 않는다.
+
+**실제 순서는 런북과 다르다.** 첫 운영 배포를 먼저 하기로 해서 스테이징 단계(3~7)를 건너뛰고 2단계(운영 서버 스크립트 설치) 뒤 바로 8-1을 했다. 그래서 4단계의 수동 배포·롤백 시험과 6단계의 첫 자동 배포 확인은 아직 한 번도 하지 않았다.
+
+| 항목 | 상태 | 근거·남은 일 |
+|---|---|---|
+| 서버 스크립트 설치(2단계) | 완료(운영) | `deploy.sh`·`smoke-public.sh`를 `/opt/beone/deploy/`에 설치하고 체크섬을 대조했다 |
+| 운영 첫 배치(8-1 bootstrap) | 완료 | 2026-11-25 `bootstrap-confirm production` 종료 0, `production.state` 기록, 공개 스모크 P1~P4 통과. 배포 커밋 `6974880`(#253 병합 커밋)이다. 운영 `compose.yaml`은 #245의 prod·메일 키 필수 버전이다 |
+| 공개 nginx 연결 | 완료(운영) | `/api` 프록시와 웹 링크(`/opt/beone/web/current`) 마운트를 반영했다([공개 nginx 초안](public-proxy.md) 4절 순서) |
+| GHCR 가시성 | 완료: public | `beone-api`·`beone-web`를 public으로 바꿨다(사용자 결정). 서버에 GHCR 토큰이 필요 없다 |
+| 이미지 발행 경로 | 있음 | `GITHUB_TOKEN` 수동 실행([cd.md 첫 배포 이미지 발행](cd.md#첫-배포-이미지-발행), #253). 첫 운영 배포 이미지를 이 경로로 만들었다 |
+| 운영 메일 키 | 서버 `.env` 입력 완료 | 앱 비밀번호는 사용자가 직접 입력했다. **실발송 확인(운영 회원 스모크)은 아직 하지 않았다** |
+| 스테이징(3·4·7단계) | 미완료 | `/opt/beone/staging/` 구성, 기본 인증, 수동 배포·롤백 시험, DNS·인증서. 사용자 승인 묶음 |
+| AWS OIDC 공급자·역할 2개·SSM 문서 2개(5단계·8-2) | 미완료 | 하나도 만들지 않았다. 사용자 승인 묶음 |
+| Environment `production` 보호 규칙(8-2) | 미완료 | 만들지 않았다. 운영 스위치보다 먼저 만들어야 한다. 사용자 승인 묶음 |
+| 저장소 변수 5개(6단계·8-2) | 미완료 | 하나도 설정하지 않았다. 그래서 develop·main push는 `gate`에서 멈춘다. 사용자 승인 묶음 |
+
+- **이후 운영 배포:** `production.state`가 있으므로 운영은 정상 경로(`deploy.sh production <ApiDigest> <WebDigest> <GitSha>`)만 쓴다. bootstrap 하위 명령은 상태 파일이 있으면 거부하므로 다시 쓰지 않는다. 자동 배포(8-2)를 켜기 전에는 승인 창에서 운영 담당이 서버에서 같은 명령을 직접 실행한다.
+- **남은 단계를 진행할 때:** 1단계 사전 점검과 각 단계의 전제는 그대로 따른다. 2단계는 운영 서버에 이미 설치돼 있으므로, 기준 커밋의 스크립트와 체크섬이 같은지만 다시 대조한다.
 
 ## 선행 PR
 
@@ -14,8 +36,10 @@
 | PR | 내용 | 이 런북에서 쓰는 곳 | 상태 |
 |---|---|---|---|
 | #226 | `deploy/scripts/deploy.sh`, `smoke-public.sh`, `deploy-selftest.sh`, [서버 배포 스크립트](server-deploy.md) | 2·4·8·9단계 | develop 병합(준비 스크립트일 뿐, 서버 실행·운영 첫 배포 승인은 아님) |
-| #229 | [공개 nginx 초안](public-proxy.md) 2-1절(스테이징 server 블록)·3절(네트워크 연결)·운영 첫 배치(bootstrap) 순서 | 7·8단계 | **미병합(선행).** 운영 첫 배치 순서는 #229에서 보완 중이다 |
-| #242 | `deploy.sh` 운영 전용 하위 명령(`bootstrap-prepare`·`bootstrap-confirm`·`bootstrap-abort` `production`), [운영 최초 배포(bootstrap)](server-deploy.md#운영-최초-배포-bootstrap) | 2·8-1단계 | **미병합(선행).** 이슈 #241, 관리자 검증 통과(head `47ea243`) |
+| #229 | [공개 nginx 초안](public-proxy.md) 2-1절(스테이징 server 블록)·3절(네트워크 연결)·운영 첫 배치(bootstrap) 순서 | 7·8단계 | develop 병합 |
+| #242 | `deploy.sh` 운영 전용 하위 명령(`bootstrap-prepare`·`bootstrap-confirm`·`bootstrap-abort` `production`), [운영 최초 배포(bootstrap)](server-deploy.md#운영-최초-배포-bootstrap) | 2·8-1단계 | develop 병합(이슈 #241) |
+| #245 | 운영 compose가 prod 프로필·메일 키를 backend에 넘김 | 8-1단계 | develop 병합 |
+| #253 | `deploy.yml` 수동 이미지 발행(`workflow_dispatch`) | 4·8-1단계 이미지 준비 | develop 병합 |
 
 develop에 이미 있는 근거: [배포 자동화](cd.md)(#225), [스테이징](staging.md)·`deploy/staging/`(#230), [백엔드 배포 기반](backend-compose.md).
 
@@ -36,7 +60,7 @@ develop에 이미 있는 근거: [배포 자동화](cd.md)(#225), [스테이징]
 5 AWS(OIDC·스테이징 역할·BeoneDeployStaging) ─▶ 6 GitHub 변수 → 첫 자동 배포(스테이징)
    │
    ▼
-7 스테이징 공개 접근(DNS·인증서·공개 nginx, 승인) ─▶ 8-1 운영 첫 배치(#242 bootstrap, 선행)
+7 스테이징 공개 접근(DNS·인증서·공개 nginx, 승인) ─▶ 8-1 운영 첫 배치(#242 bootstrap, 2026-11-25 완료)
                                                      ─▶ 8-2 운영 자동 배포 켜기(역할·문서·Environment·변수·승격·승인 1회)
 
 9 끄기와 되돌리기: 어느 단계에서든 쓴다
@@ -349,6 +373,8 @@ sudo /opt/beone/deploy/smoke-public.sh http://127.0.0.1:18081; echo "exit=$?"
 
 ### 8-1. 운영 첫 배치(bootstrap)
 
+> **완료(2026-11-25).** `production.state`가 있으므로 이 절차는 다시 쓰지 않는다. 아래는 기록과 원리 설명으로 남긴다. 실제로는 3~7단계를 건너뛰고 실행했다([현재 상태](#현재-상태-2026-11-26-기준)).
+
 | 항목 | 내용 |
 |---|---|
 | 실행 | 운영 담당이 **서버에서 root로 직접** 실행(SSM으로는 부를 수 없음), 승인 창 안에서. 사용자 승인 |
@@ -488,14 +514,14 @@ aws ssm get-command-invocation --command-id <SSM 명령 ID> --instance-id <인�
 
 ## 승인 항목 대조
 
-| 단계 | 승인 항목([cd.md](cd.md#실행-승인-항목)) |
-|---|---|
-| 2 | 서버 스크립트 설치 |
-| 3 | 스테이징 `/opt/beone/staging/` 구성, 기본 인증 값, GHCR 가시성(사용자 결정) |
-| 4 | GHCR 수동 푸시(가시성 결정 뒤) |
-| 5 | OIDC·IAM(스테이징), SSM 문서 `BeoneDeployStaging` |
-| 6 | 저장소 변수(스테이징 3개) |
-| 7 | DNS, 인증서, 공개 nginx 변경 |
-| 8-1 | 운영 첫 배치(main 승격, Flyway, 공개 nginx, 서버 root 직접 실행 bootstrap prepare·confirm·abort). 선행 #242·#229 |
-| 8-2 | OIDC·IAM(운영), `BeoneDeployProduction`, Environment 보호 규칙, 저장소 변수(운영 2개), 실메일 |
-| 9 | 진행 중인 run 취소, SSM 명령 취소 |
+| 단계 | 승인 항목([cd.md](cd.md#실행-승인-항목)) | 상태(2026-11-26) |
+|---|---|---|
+| 2 | 서버 스크립트 설치 | 운영 서버 설치 완료 |
+| 3 | 스테이징 `/opt/beone/staging/` 구성, 기본 인증 값, GHCR 가시성(사용자 결정) | 스테이징 미완료. GHCR은 public으로 결정·적용 |
+| 4 | GHCR 수동 푸시(가시성 결정 뒤) | 스테이징 시험 미완료. 운영 이미지는 #253 수동 실행으로 발행 |
+| 5 | OIDC·IAM(스테이징), SSM 문서 `BeoneDeployStaging` | 미완료 |
+| 6 | 저장소 변수(스테이징 3개) | 미완료 |
+| 7 | DNS, 인증서, 공개 nginx 변경 | 스테이징 미완료. 운영 공개 nginx는 8-1에서 반영 |
+| 8-1 | 운영 첫 배치(main 승격, Flyway, 공개 nginx, 서버 root 직접 실행 bootstrap prepare·confirm·abort). 선행 #242·#229 | 완료(2026-11-25) |
+| 8-2 | OIDC·IAM(운영), `BeoneDeployProduction`, Environment 보호 규칙, 저장소 변수(운영 2개), 실메일 | 미완료. 메일 앱 비밀번호는 서버 `.env`에 입력했으나 실발송 확인 전 |
+| 9 | 진행 중인 run 취소, SSM 명령 취소 | 해당 없음 |

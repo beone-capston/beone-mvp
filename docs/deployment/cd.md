@@ -1,6 +1,9 @@
 # 배포 자동화(CD): 스테이징 자동 반영과 운영 승인 배포
 
-[결정 40](../decisions.md#결정-40-배포-자동화스테이징-자동-반영-운영은-승인-1회)을 구현한 워크플로와 그것을 켜기 위해 필요한 AWS·GitHub 설정을 설명한다. 이 문서의 AWS·GitHub 설정은 **아직 하나도 만들지 않았다.** 아래 「실행 승인 항목」이 모두 승인되고 운영 담당이 설정하기 전까지 워크플로는 꺼진 상태로 동작한다.
+[결정 40](../decisions.md#결정-40-배포-자동화스테이징-자동-반영-운영은-승인-1회)을 구현한 워크플로와 그것을 켜기 위해 필요한 AWS·GitHub 설정을 설명한다. 이 문서의 AWS·GitHub 설정(OIDC 공급자·역할·SSM 문서·Environment 보호 규칙·저장소 변수)은 **아직 하나도 만들지 않았다.** 아래 「실행 승인 항목」이 승인되고 운영 담당이 설정하기 전까지 push 경로는 꺼진 상태로 동작한다.
+
+- **운영 첫 배포는 끝났다(2026-11-25).** 자동 배포가 아니라 서버에서 직접 실행한 bootstrap으로 확정했다([서버 배포 스크립트](server-deploy.md#운영-최초-배포-bootstrap)). 이미지는 아래 수동 발행으로 만들었고 GHCR 패키지는 public이다. 단계별 현재 상태는 [활성화 런북 현재 상태](cd-activation.md#현재-상태-2026-11-26-기준)에 있다.
+- 이후 운영 배포는 정상 경로(`deploy.sh production …`)다. 자동 배포를 켜기 전에는 승인 창에서 운영 담당이 서버에서 직접 실행하고, 켠 뒤에는 main push → 승인 1회 → SSM이 같은 명령을 부른다.
 
 - 워크플로: [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml)
 - SSM 요청·대기 스크립트: [`.github/scripts/ssm-deploy.sh`](../../.github/scripts/ssm-deploy.sh)
@@ -89,9 +92,9 @@ main push ────▶ deploy.yml
 
 ## 첫 배포 이미지 발행
 
-첫 운영 배포에 쓸 api·web 이미지를 사용자 개인 토큰 없이 `GITHUB_TOKEN`으로 GHCR에 올리는 수동 실행이다. 배포 자동화 변수를 켜기 전에도 쓸 수 있다.
+api·web 이미지를 사용자 개인 토큰 없이 `GITHUB_TOKEN`으로 GHCR에 올리는 수동 실행이다. 배포 자동화 변수를 켜기 전에도 쓸 수 있다. 첫 운영 배포(2026-11-25) 이미지를 이 경로로 만들었다. 자동 배포를 켜기 전의 운영 수동 배포에도 같은 방법으로 이미지를 만든다.
 
-- **누가·언제:** 사용자(또는 사용자가 승인한 운영 담당)가 첫 운영 배포 직전에 한다. 승격할 커밋이 develop 끝에 있을 때 실행한다. 실행 기준은 실행 시점의 develop 끝 커밋이다.
+- **누가·언제:** 사용자(또는 사용자가 승인한 운영 담당)가 운영 수동 배포 직전에 한다. 승격할 커밋이 develop 끝에 있을 때 실행한다. 실행 기준은 실행 시점의 develop 끝 커밋이다.
 - **방법:** GitHub Actions → `Deploy` → `Run workflow` → 브랜치 `develop` → 실행. 입력은 없다. 다른 브랜치를 고르면 `gate`가 안내만 남기고 끝난다.
 - **하는 일:** push 경로와 같은 `build` job이다. `linux/amd64`, 증명 메타데이터 없음, 태그와 revision 라벨은 커밋 전체 SHA이다. 푸시 뒤 [`image-inventory.sh`](../../.github/scripts/image-inventory.sh)가 job 요약에 다음을 남긴다.
   - api·web digest, 태그, revision 라벨(커밋 SHA와 다르면 job 실패), 플랫폼, 라벨
@@ -305,24 +308,24 @@ IAM에 `token.actions.githubusercontent.com` OIDC 공급자를 추가한다. 대
 
 1. Environment `production`을 만든다. 필수 승인자는 사용자로 정하고, **배포 브랜치는 `main`으로만 제한한다.** 브랜치 제한이 없으면 develop 등 다른 브랜치의 워크플로가 `environment: production` job을 선언해 승인 요청을 띄울 수 있다. 그 요청이 실수로 승인되면 운영 역할을 맡게 된다.
 2. 스테이징을 켠다: `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN_STAGING`, `BEONE_CD_ENABLED=true`.
-3. 운영 첫 배포를 승인한 뒤 운영을 켠다: `AWS_DEPLOY_ROLE_ARN_PRODUCTION`, `BEONE_CD_PRODUCTION_ENABLED=true`.
+3. 운영을 켠다: `AWS_DEPLOY_ROLE_ARN_PRODUCTION`, `BEONE_CD_PRODUCTION_ENABLED=true`. 운영 첫 배포(bootstrap)는 끝났으므로 남은 전제는 1번 보호 규칙과 운영 역할·문서다.
 
 GitHub에는 비밀값을 두지 않는다. DB 비밀번호, 메일 앱 비밀번호, CODEF 키는 서버 `.env`에만 둔다. 역할 ARN과 리전은 비밀이 아니라서 변수로 둔다.
 
 ## 실행 승인 항목
 
-| 항목 | 내용 | 담당 |
-|---|---|---|
-| OIDC·IAM | OIDC 공급자, 스테이징·운영 역할 2개(위 신뢰·권한 정책), SSM 문서 `BeoneDeployStaging`·`BeoneDeployProduction` 등록 | 운영 담당(승인 뒤) |
-| Environment 보호 규칙 | `production` 필수 승인자(사용자), 배포 브랜치 `main`만 | 운영 담당(승인 뒤) |
-| 저장소 변수 | 위 5개. 운영 ARN·운영 스위치는 운영 첫 배포 승인 뒤에 설정 | 운영 담당(승인 뒤) |
-| 스테이징 | DNS, 인증서, 기본 인증 값, `/opt/beone/staging/` 구성 | 운영 담당(승인 뒤) |
-| GHCR 가시성 | public 또는 private과 서버 읽기 전용 토큰(**결정 필요**, 관리 권장 public) | 사용자 결정 |
-| 서버 스크립트 설치 | `/opt/beone/deploy/deploy.sh` 설치·갱신 | 운영 담당(승인 뒤) |
-| 운영 첫 배포 | `main` 승격, Flyway V2~V15, 공개 Nginx 변경 | 사용자 승인, 운영 담당 실행 |
-| 실메일 | Gmail 앱 비밀번호를 서버 `.env`에 입력(결정 39-6) | 사용자 |
+| 항목 | 내용 | 담당 | 상태(2026-11-26) |
+|---|---|---|---|
+| OIDC·IAM | OIDC 공급자, 스테이징·운영 역할 2개(위 신뢰·권한 정책), SSM 문서 `BeoneDeployStaging`·`BeoneDeployProduction` 등록 | 운영 담당(승인 뒤) | 미완료 |
+| Environment 보호 규칙 | `production` 필수 승인자(사용자), 배포 브랜치 `main`만 | 운영 담당(승인 뒤) | 미완료 |
+| 저장소 변수 | 위 5개. 운영 ARN·운영 스위치는 보호 규칙 뒤에 설정 | 운영 담당(승인 뒤) | 미완료 |
+| 스테이징 | DNS, 인증서, 기본 인증 값, `/opt/beone/staging/` 구성 | 운영 담당(승인 뒤) | 미완료 |
+| GHCR 가시성 | public 또는 private과 서버 읽기 전용 토큰 | 사용자 결정 | public으로 결정·적용 |
+| 서버 스크립트 설치 | `/opt/beone/deploy/deploy.sh` 설치·갱신 | 운영 담당(승인 뒤) | 운영 서버 설치 완료. 갱신은 계속 승인 항목 |
+| 운영 첫 배포 | `main` 승격, Flyway V2~V15, 공개 Nginx 변경 | 사용자 승인, 운영 담당 실행 | 완료(2026-11-25, bootstrap) |
+| 실메일 | Gmail 앱 비밀번호를 서버 `.env`에 입력(결정 39-6) | 사용자 | 입력 완료. 실발송 확인(운영 회원 스모크)은 미실행 |
 
-GHCR 가시성 참고: 처음 푸시한 패키지는 기본이 private이다. private으로 두면 서버에 `read:packages` 토큰이 필요하고, 그 토큰은 서버에만 둔다. public으로 바꾸는 것은 패키지 설정에서 하는 승인 항목이다.
+GHCR 가시성 참고: 처음 푸시한 패키지는 기본이 private이다. 지금은 두 패키지 모두 public이라 서버에 토큰이 필요 없다. private으로 되돌리면 서버에 `read:packages` 토큰이 필요하고, 그 토큰은 서버에만 둔다. 가시성 변경은 패키지 설정에서 하는 승인 항목이다.
 
 ## 롤백과 비활성화
 
