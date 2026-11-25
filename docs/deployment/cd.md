@@ -4,6 +4,7 @@
 
 - 워크플로: [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml)
 - SSM 요청·대기 스크립트: [`.github/scripts/ssm-deploy.sh`](../../.github/scripts/ssm-deploy.sh)
+- 수동 발행 이미지 내용 목록: [`.github/scripts/image-inventory.sh`](../../.github/scripts/image-inventory.sh), gate 판정 표 시험: [`.github/scripts/deploy-gate-selftest.sh`](../../.github/scripts/deploy-gate-selftest.sh)
 - 웹 이미지 정의: [`deploy/web/Dockerfile`](../../deploy/web/Dockerfile)
 - 서버 배포 스크립트: `deploy/scripts/deploy.sh`(별도 PR, 서버에는 `/opt/beone/deploy/deploy.sh`로 설치)
 - PR CI는 별도 워크플로 `ci.yml`이다. 비밀값 없이 PR마다 돈다.
@@ -35,6 +36,9 @@ develop push ──▶ deploy.yml
 main push ────▶ deploy.yml
                   gate → build → production: Environment production 승인(사용자 1회)
                            → OIDC로 운영 역할 획득 → SSM BeoneDeployProduction(…) → 대기
+
+수동 실행(develop) ─▶ deploy.yml                                         배포 없음
+                  gate(변수 무관) → build: 이미지 빌드 → GHCR 푸시 → digest·내용 목록 기록(여기서 끝)
 ```
 
 서버 쪽 `deploy.sh`가 하는 일(인터페이스 계약, 자세한 동작은 그 PR 기준): digest로 이미지를 받는다. 운영이면 배포 직전에 DB를 백업한다([backend-compose](backend-compose.md) 방식). 그다음 기동, health 확인, 공개 점검 스모크를 한다. 실패하면 이전 digest와 이전 웹 릴리스 링크로 되돌린다. DB는 자동으로 되돌리지 않는다.
@@ -53,6 +57,8 @@ main push ────▶ deploy.yml
 
 - develop push: `BEONE_CD_ENABLED`·`AWS_REGION`·스테이징 ARN이 모두 맞을 때만 빌드와 스테이징 배포를 한다.
 - main push: `BEONE_CD_ENABLED`·`AWS_REGION`·운영 ARN·`BEONE_CD_PRODUCTION_ENABLED`가 모두 맞을 때만 빌드와 운영 배포를 한다.
+- 수동 실행(`workflow_dispatch`)은 위 변수와 무관하게 판정한다. develop ref면 빌드만 하고, 다른 ref면 안내만 남기고 성공한다. 배포는 어느 경우에도 하지 않는다([첫 배포 이미지 발행](#첫-배포-이미지-발행)). push 경로의 판정 스크립트는 그대로다.
+- 판정 표 시험: [`.github/scripts/deploy-gate-selftest.sh`](../../.github/scripts/deploy-gate-selftest.sh)(bash·ruby, 네트워크 없음). 워크플로의 gate 단계 스크립트를 그대로 꺼내 수동·push 사례를 돌리고, staging·production job 조건에 push 조건이 있는지 확인한다.
 - 변수가 없거나 형식이 틀리면 `gate`만 돌고 성공한다. job 요약에 빠진 변수 이름이 남는다. 이때 GHCR 푸시, AWS 호출, 서버 배포는 일어나지 않는다. 그래서 워크플로를 병합하는 것만으로는 아무것도 배포되지 않는다.
 - `AWS_REGION`과 `BEONE_CD_PRODUCTION_ENABLED`는 결정 40 처음 계약에 더한 것이다(관리 검토에서 수용). 리전은 AWS 호출에 꼭 필요하다. 운영 스위치를 따로 둔 이유는 아래와 같다. GitHub은 `environment: production` job이 처음 돌 때 그 Environment가 없으면 **보호 규칙 없이** 자동으로 만든다. 그러면 승인 없이 운영에 배포된다. 그래서 운영은 보호 규칙을 먼저 설정한 뒤에만 켜도록 따로 막았다.
 
@@ -65,7 +71,8 @@ main push ────▶ deploy.yml
 | `staging` | `contents: read`, `id-token: write` | 스테이징 역할만 쓴다. `environment`를 두지 않는다(아래 신뢰 정책의 `sub`와 맞추기 위해) |
 | `production` | `contents: read`, `id-token: write` | 운영 역할만 쓴다. `environment: production` |
 
-- 동시 실행: `deploy-staging`, `deploy-production` 그룹으로 환경마다 하나만 돈다. 진행 중인 배포는 취소하지 않고, 다음 배포가 기다린다.
+- 동시 실행: `deploy-staging`, `deploy-production` 그룹으로 환경마다 하나만 돈다. 진행 중인 배포는 취소하지 않고, 다음 배포가 기다린다. 수동 발행 build는 `deploy-publish-<ref>` 그룹으로 하나씩만 돈다(취소하지 않음). push 실행의 build는 실행마다 다른 그룹이라 기존처럼 묶이지 않는다.
+- 수동 실행에서는 staging·production job이 돌지 않으므로(`github.event_name == 'push'` 조건) `id-token` 권한을 받는 job이 없고 AWS 호출도 없다.
 - 서드파티 action은 커밋 SHA로 고정했다. `actions/checkout` v7.0.1, `actions/setup-node` v7.1.0, `aws-actions/configure-aws-credentials` v6.3.0.
 - digest 값은 `run:` 안에 식으로 넣지 않고 `env`로 넘긴다. `ssm-deploy.sh`가 형식을 다시 검사한다.
 
@@ -79,6 +86,22 @@ main push ────▶ deploy.yml
 - 태그는 커밋 전체 SHA이고, 배포는 digest로 한다. digest는 job 요약과 output에 남긴다.
 - 웹 이미지를 `scratch`로 만든 이유: 웹은 기존 공개 nginx가 서빙한다. 그래서 이미지는 파일을 옮기는 용도일 뿐이다. 셸·패키지가 없으면 받는 크기와 취약점 대상이 가장 작다. 서버는 `docker create`로 컨테이너를 만들기만 하고(실행하지 않음) `docker cp`로 `/dist`를 꺼낸다. `/dist`는 서버 `deploy.sh`가 꺼내는 경로와 같다(관리 확정). `docker create`가 명령 없는 이미지를 거부하므로 자리표시 `CMD`만 넣었다.
 - frontend 빌드는 워크플로가 `npm ci`·`npm run build`로 한다. frontend 코드는 바꾸지 않는다.
+
+## 첫 배포 이미지 발행
+
+첫 운영 배포에 쓸 api·web 이미지를 사용자 개인 토큰 없이 `GITHUB_TOKEN`으로 GHCR에 올리는 수동 실행이다. 배포 자동화 변수를 켜기 전에도 쓸 수 있다.
+
+- **누가·언제:** 사용자(또는 사용자가 승인한 운영 담당)가 첫 운영 배포 직전에 한다. 승격할 커밋이 develop 끝에 있을 때 실행한다. 실행 기준은 실행 시점의 develop 끝 커밋이다.
+- **방법:** GitHub Actions → `Deploy` → `Run workflow` → 브랜치 `develop` → 실행. 입력은 없다. 다른 브랜치를 고르면 `gate`가 안내만 남기고 끝난다.
+- **하는 일:** push 경로와 같은 `build` job이다. `linux/amd64`, 증명 메타데이터 없음, 태그와 revision 라벨은 커밋 전체 SHA이다. 푸시 뒤 [`image-inventory.sh`](../../.github/scripts/image-inventory.sh)가 job 요약에 다음을 남긴다.
+  - api·web digest, 태그, revision 라벨(커밋 SHA와 다르면 job 실패), 플랫폼, 라벨
+  - api: `/app` 파일 목록(경로·크기), `app.jar` 안 `BOOT-INF/classes`의 `.class`가 아닌 리소스 이름, Env **이름**
+  - web: `/dist` 파일 목록(경로·크기)
+  - 파일 내용과 Env 값은 출력하지 않는다.
+- **확인:** job 요약에서 digest 두 개를 `<ApiDigest>`·`<WebDigest>`로 적는다. 파일 목록에 `.env`·키 파일처럼 들어가면 안 되는 것이 없는지 본다. 그다음 [서버 배포 스크립트](server-deploy.md)의 `deploy.sh production`에 digest를 넘긴다.
+- **배포하지 않는다:** 수동 실행에서는 staging·production job이 돌지 않는다. AWS·OIDC·SSM 호출이 없다.
+- **대체 경로:** 이 실행을 쓸 수 없으면 [활성화 런북 4단계](cd-activation.md)의 사용자 토큰 수동 푸시를 쓴다.
+- **GHCR 권한:** `GITHUB_TOKEN` 푸시는 패키지가 이 저장소에 쓰기 권한을 줘야 한다. 패키지를 개인 토큰으로 먼저 만들었다면 패키지 설정의 Actions 접근에 이 저장소를 쓰기로 추가해야 한다(사용자 설정 항목). 권한이 없으면 build job이 푸시에서 실패하고 배포는 일어나지 않는다.
 
 ## AWS 설정 템플릿(운영 담당이 승인 뒤 설정)
 
