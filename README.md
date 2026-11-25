@@ -15,6 +15,7 @@ backend/    Spring Boot API (Java 21, MySQL)
 docs/       PRD, 결정 기록, 코드·테스트 컨벤션
 fixtures/   평가·시연용 데이터 (fixtures/private/ 는 git 제외)
 deploy/     배포용 Compose와 이미지 빌드·로컬 검증 스크립트
+tools/      오프라인 도구(rule-draft: AI 약관 초안, bridge-test: 브리지 시험 페이지). 배포 대상 아님
 docker-compose.yml   로컬 MySQL
 .env.example         환경변수 예시
 ```
@@ -158,6 +159,16 @@ release 서명 값은 환경 변수 `BEONE_RELEASE_STORE_FILE`·`BEONE_RELEASE_S
 debug 빌드에는 실기기 인증 확인용 **B:ONE 인증 점검** 화면이 함께 설치됩니다(release 미포함). 확인 항목은 [`docs/android/device-checklist.md`](docs/android/device-checklist.md)에 있습니다.
 
 계측 테스트(`connectedAndroidTest`)는 아직 작성하지 않았습니다. 추가하면 기기 또는 에뮬레이터를 연결해 실행합니다. 생체인증·기기 PIN·60초 활성화의 최종 확인은 에뮬레이터가 아닌 실제 Android 기기에서 합니다 ([PRD FR-06](docs/PRD.md)).
+
+### 약관 초안 도구 (`tools/rule-draft`)
+
+backend와 분리된 독립 Gradle 프로젝트입니다. 테스트는 녹화 응답만 쓰고 네트워크를 호출하지 않습니다. 사용법은 [`tools/rule-draft/README.md`](tools/rule-draft/README.md)에 있습니다.
+
+```bash
+cd tools/rule-draft
+./gradlew test
+./gradlew build
+```
 
 ## 보안 원칙
 
