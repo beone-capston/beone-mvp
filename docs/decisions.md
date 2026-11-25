@@ -699,6 +699,59 @@ PR #81(#80) 구현 중 2026-11-16 사용자가 고른 결정이다. 새 D-번호
 - 서버가 정적 확인 화면만 제공하는 동안에는 앱 화면의 실제 시작 경로가 정해지지 않았다. 경로 `/`는 현재 결정이며 프런트 배포 뒤 바뀔 수 있다.
 - 브리지 계약 전체는 [D-21](#d-21-확정-정책)의 2026-11-16 보충과 [계약 문서](android/bridge-contract-candidate.md)를 따른다.
 
+#### 결정 40: 배포 자동화(스테이징 자동 반영, 운영은 승인 1회)
+
+2026-11-25 사용자 결정. 사용자가 채팅으로 전달한 내용의 요지를 관리 기록에서 옮겼다. 배포 기준과 절차를 정하지 않았던 위 미결(「배포 기준·배포 절차」)에 대한 방향 결정이다. 다만 아래 실행 승인 항목이 끝나기 전에는 아무것도 배포하지 않는다.
+
+**사용자 결정 요지**
+
+- `develop`에 병합하면 스테이징에 자동 배포한다. `main`에 병합하면 운영 배포를 하되, GitHub Environment 승인 버튼을 한 번 눌러야 진행한다(지속적 전달).
+- 목적: 팀원의 프론트 변경을 사용자가 직접 배포하지 않아도 바로 반영한다.
+- 로드맵의 팀원 프론트 작업 외 나머지(배포 문서 PR 마무리, CODEF 서버 검증 준비, 공개 배포 준비, Android release 준비)는 미리 진행한다.
+- 구현 범위(작은 `develop` PR로 나눈다)
+  1. `.github/workflows`: PR CI(backend `test`·`webTest`, frontend lint·test·build). `develop` push는 빌드 → GHCR(GitHub 컨테이너 저장소) 푸시(digest 기록) → 스테이징 배포. `main` push는 운영 배포 job(`environment: production`, 필수 승인자는 사용자).
+  2. 서버 접근: GitHub OIDC(장기 키 없이 GitHub 실행이 AWS 역할을 잠시 빌리는 방식)로 AWS IAM 역할을 쓴다. 역할은 `ssm:SendCommand`를 서버 인스턴스 한 대와 지정한 SSM 문서로만 할 수 있다. SSH와 장기 키는 쓰지 않는다.
+  3. 서버 배포 스크립트(`deploy/scripts`): digest로 이미지를 받는다. 운영은 배포 직전에 [backend-compose](deployment/backend-compose.md) 방식으로 DB를 자동 백업하고 짝 기록을 남긴다. 그다음 기동 → health 확인 → 스모크를 하고, 실패하면 이전 digest로 자동 복귀한다. DB는 자동으로 되돌리지 않고 복원 절차로만 되돌린다. 실패하면 닫히는 쪽으로 동작하고(pipefail), 조회 실패를 정상과 구분한다.
+  4. 스테이징: 별도 Compose 프로젝트·별도 DB·메모리 상한을 두고, 메모리가 부족하면 운영보다 먼저 종료되게 한다. 운영과 같은 `prod` 프로필과 실메일을 권장하며, 최종안은 해당 PR에서 근거와 함께 정한다. 접근은 기본 인증으로 제한한다.
+  5. 공개 Nginx 설정 초안(#209 기반)을 맞추고, 웹은 같은 origin의 `/api`를 쓴다.
+  6. 비밀값은 서버 `.env`에만 둔다. GitHub에는 역할 ARN처럼 비밀이 아닌 값만 둔다.
+  7. CODEF는 자동 배포 대상에서 뺀다. 공개 경로·키 차단(결정 38-8, D9)은 그대로다.
+- 프론트 코드는 계속 수정하지 않는다(결정 39-3 철회). 워크플로가 frontend를 빌드·테스트하는 것은 CI 설정이며 코드 수정이 아니다.
+
+**실행 승인이 필요한 항목**(구현 뒤 운영 담당이 사용자에게 묶어서 요청한다)
+
+| 항목 | 내용 |
+|---|---|
+| AWS OIDC·IAM | OIDC 공급자와 배포 역할 생성, SSM 문서 등록 |
+| 스테이징 | DNS, 인증서, 기본 인증 값 |
+| GitHub Environment | `production` 보호 규칙(필수 승인자) 설정 |
+| 운영 첫 배포 | `main` 승격, Flyway V2~V15 적용, 공개 Nginx 변경 |
+| 실메일 | Gmail 앱 비밀번호(결정 39-6) |
+
+**관리 설계 판단**(각 구현 PR에서 근거와 함께 확정한다)
+
+- **꺼진 상태로 병합한다.** 워크플로를 병합하는 것만으로는 외부에 아무 작업도 일어나지 않는다. GHCR 푸시·배포 job은 저장소 변수 `BEONE_CD_ENABLED`가 `true`이고 `AWS_DEPLOY_ROLE_ARN`이 비어 있지 않을 때만 돈다. 변수 설정도 승인 항목이다. PR CI는 비밀값 없이 바로 동작한다.
+- **인터페이스 계약(서버 스크립트와 워크플로 공통)**
+  - SSM 문서 이름은 `BeoneDeploy`다. 파라미터는 `Environment`(`staging` 또는 `production`), `ApiDigest`·`WebDigest`(`sha256:` 뒤 소문자 16진수 64자), `GitSha`(16진수 40자)이며 allowedPattern으로 검증한다.
+  - 서버 스크립트는 `/opt/beone/deploy/deploy.sh`다. 저장소의 `deploy/scripts/deploy.sh`를 운영 담당이 설치하며, 스크립트 갱신도 승인 절차를 거친다.
+  - 이미지: `ghcr.io/beone-capston/beone-api@<digest>`, `ghcr.io/beone-capston/beone-web@<digest>`. web 이미지에는 빌드한 `dist`만 담는다.
+  - 웹 반영(권장): web 이미지에서 `dist`를 꺼내 릴리스 디렉터리에 두고 심볼릭 링크를 한 번에 바꾼다. 복귀는 링크를 되돌린다. 공개 nginx 구조 변경은 `/api` 프록시뿐이다(#209).
+  - 디렉터리: 스테이징 `/opt/beone/staging/`(compose.yaml·.env·릴리스), 운영 backend `/opt/beone/app/`, 공개 nginx `/opt/beone/compose.yaml`.
+- **자동 배포 스모크:** 운영·스테이징 DB에는 T-a(검증 DB에서만 쓰는 인증 갱신, 결정 39-1)를 쓰지 않는다. 그래서 자동 배포 스모크는 데이터를 바꾸지 않는 공개 점검으로 한다(`/` 200 `text/html`, `/api/v1/me` 401, `/actuator` 404, CSRF 쿠키 속성). 회원 전체 스모크는 실메일 인증 경로가 생긴 뒤 따로 한다.
+- **메모리:** 스테이징과 beone-verify는 동시에 띄우지 않는다. 스테이징의 `mem_limit` 합계는 1344MiB 이하로 두고, `oom_score_adj`로 운영보다 먼저 종료되게 한다.
+- **결정 필요 — GHCR 가시성:** 패키지를 public으로 둘지(서버에 자격 증명이 필요 없다), private으로 두고 서버에 읽기 전용 토큰을 둘지 정해야 한다. 관리 권장안은 public이다(저장소가 공개이고 이미지에 비밀값이 없다는 조건). 아직 정하지 않았다.
+
+**계약 수정(2026-11-25, #225 관리 검토)**
+
+위 인터페이스 계약은 처음 기록으로 남기고, 다음과 같이 고친다.
+
+- **고친 이유(운영 승인 우회 위험):** 역할 하나가 develop 브랜치와 `environment:production`을 함께 신뢰하고 SSM 문서 하나(`BeoneDeploy`)가 `Environment`를 파라미터로 받는다고 하자. 그러면 develop 브랜치의 실행이 같은 역할로 `Environment=production`을 넘길 수 있다. 스테이징 job은 물론 develop에 병합된 워크플로 변경도 여기에 들어간다. 결과적으로 운영 승인 없이 운영에 배포할 수 있다. IAM은 SSM 파라미터 값으로 조건을 걸 수 없으므로 문서와 역할을 환경별로 나눈다.
+- **SSM 문서 2개:** `BeoneDeployStaging`, `BeoneDeployProduction`. 파라미터는 `ApiDigest`·`WebDigest`(`sha256:` 뒤 소문자 16진수 64자)와 `GitSha`(16진수 40자)뿐이고 allowedPattern으로 검증한다. 환경 인자는 각 문서 안에 고정한다(`deploy.sh staging …`, `deploy.sh production …`). 서버 `deploy.sh`의 인자 계약 `<staging|production> <ApiDigest> <WebDigest> <GitSha>`는 그대로다.
+- **IAM 역할 2개:** 스테이징 역할은 `sub = repo:beone-capston/beone-mvp:ref:refs/heads/develop`만 신뢰하고, 서버 인스턴스 1대에 `BeoneDeployStaging`만 보낼 수 있다. 운영 역할은 `sub = repo:beone-capston/beone-mvp:environment:production`만 신뢰하고, 서버 인스턴스 1대에 `BeoneDeployProduction`만 보낼 수 있다. 그래서 운영 역할은 Environment `production` job에서만 맡을 수 있고, **Environment 보호 규칙(필수 승인자 사용자, 배포 브랜치 `main`만)이 운영 배포의 승인 지점**이다.
+- **저장소 변수:** `BEONE_CD_ENABLED`, `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN_STAGING`, `AWS_DEPLOY_ROLE_ARN_PRODUCTION`, `BEONE_CD_PRODUCTION_ENABLED`. 위의 단일 `AWS_DEPLOY_ROLE_ARN`은 쓰지 않는다. 운영 스위치 `BEONE_CD_PRODUCTION_ENABLED`는 Environment가 없으면 보호 규칙 없이 자동 생성되는 위험을 막으려고 더했다(관리 검토에서 수용). 모두 비밀이 아닌 값이다.
+- **웹 경로:** web 이미지 안 dist 위치는 `/dist`다. 운영 웹은 `/opt/beone/web/current`, 스테이징 웹은 `/opt/beone/staging/web/current`다. 둘 다 `releases/<GitSha 12자리>-<무작위>`를 가리키는 상대 심볼릭 링크이고, 공개 nginx 정적 루트는 운영 링크로 고정한다.
+- 자세한 정책 JSON·문서 JSON·설정 순서는 [배포 자동화](deployment/cd.md)에 있다.
+
 ## 운영 정책 미결 사항
 
 PRD에 없는 저장소 운영 정책입니다. 팀 합의 전까지 임의로 정하지 않습니다.
