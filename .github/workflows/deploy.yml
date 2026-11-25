@@ -1,0 +1,199 @@
+# 배포 워크플로(결정 40): develop push → 이미지 빌드·GHCR 푸시 → 스테이징 자동 배포,
+# main push → 이미지 빌드·GHCR 푸시 → 운영 배포(Environment production 승인 1회 뒤).
+#
+# 꺼진 상태로 병합한다. 저장소 변수가 모두 켜지기 전에는 gate job만 돌고 "비활성" 안내를 남긴 채 성공한다.
+# 이때 GHCR 푸시·AWS 호출·서버 배포는 일어나지 않는다. 변수 설정은 승인 항목이다(docs/deployment/cd.md).
+#   BEONE_CD_ENABLED              'true'일 때만 빌드·스테이징 배포
+#   AWS_DEPLOY_ROLE_ARN           OIDC로 맡을 IAM 역할 ARN(비밀 아님)
+#   AWS_REGION                    서버 인스턴스 리전(비밀 아님)
+#   BEONE_CD_PRODUCTION_ENABLED   'true'일 때만 운영 배포. Environment 보호 규칙을 먼저 설정한 뒤 켠다
+# 비밀값은 GitHub에 두지 않는다. GHCR 로그인은 실행마다 자동 발급되는 GITHUB_TOKEN만 쓴다.
+name: Deploy
+
+on:
+  push:
+    branches: [develop, main]
+
+# 기본 권한은 읽기만. 쓰기 권한은 필요한 job에서만 준다.
+permissions:
+  contents: read
+
+env:
+  API_IMAGE: ghcr.io/beone-capston/beone-api
+  WEB_IMAGE: ghcr.io/beone-capston/beone-web
+  INSTANCE_ID: i-02c6e351ba6662e2e
+
+jobs:
+  gate:
+    name: gate (저장소 변수 확인)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+      production: ${{ steps.check.outputs.production }}
+    steps:
+      - id: check
+        env:
+          CD_ENABLED: ${{ vars.BEONE_CD_ENABLED }}
+          ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          REGION: ${{ vars.AWS_REGION }}
+          PROD_ENABLED: ${{ vars.BEONE_CD_PRODUCTION_ENABLED }}
+        run: |
+          set -euo pipefail
+          enabled=false
+          production=false
+          reason=''
+          [ "${CD_ENABLED:-}" = 'true' ] || reason="$reason BEONE_CD_ENABLED"
+          [[ "${ROLE_ARN:-}" =~ ^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$ ]] || reason="$reason AWS_DEPLOY_ROLE_ARN"
+          [[ "${REGION:-}" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]$ ]] || reason="$reason AWS_REGION"
+          if [ -z "$reason" ]; then
+            enabled=true
+            if [ "${PROD_ENABLED:-}" = 'true' ]; then production=true; fi
+          fi
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+          echo "production=$production" >> "$GITHUB_OUTPUT"
+          {
+            echo "## 배포 게이트"
+            if [ "$enabled" = true ]; then
+              echo "- 빌드·스테이징: 활성"
+              echo "- 운영: $([ "$production" = true ] && echo 활성 || echo '비활성(BEONE_CD_PRODUCTION_ENABLED)')"
+            else
+              echo "- 비활성: 저장소 변수가 설정되지 않았거나 형식이 틀립니다(${reason# })."
+              echo "- GHCR 푸시·AWS 호출·서버 배포를 하지 않았습니다."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "enabled=$enabled production=$production"
+
+  build:
+    name: build (이미지 빌드·GHCR 푸시)
+    needs: gate
+    if: needs.gate.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      api_digest: ${{ steps.api.outputs.digest }}
+      web_digest: ${{ steps.web.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # 테스트는 PR CI(ci.yml)에서 끝났다. 여기서는 배포할 dist만 만든다.
+      - name: frontend build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: GHCR 로그인
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+      # deploy/scripts/build-image.sh와 같은 방식: linux/amd64 단일 플랫폼, 증명 메타데이터 없음, 리비전 라벨.
+      - name: api 이미지
+        id: api
+        run: |
+          set -euo pipefail
+          docker buildx create --use --name beone-builder >/dev/null
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" --label "beone.source.state=clean" \
+            --tag "${API_IMAGE}:${GITHUB_SHA}" --metadata-file "$RUNNER_TEMP/api.json" --push backend
+          digest="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/api.json")"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "api digest를 얻지 못했습니다" >&2; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: web 이미지(dist만)
+        id: web
+        run: |
+          set -euo pipefail
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --file deploy/web/Dockerfile \
+            --tag "${WEB_IMAGE}:${GITHUB_SHA}" --metadata-file "$RUNNER_TEMP/web.json" --push frontend/dist
+          digest="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/web.json")"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "web digest를 얻지 못했습니다" >&2; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: digest 기록
+        env:
+          API_DIGEST: ${{ steps.api.outputs.digest }}
+          WEB_DIGEST: ${{ steps.web.outputs.digest }}
+        run: |
+          {
+            echo "## 이미지"
+            echo "| 이미지 | 태그 | digest |"
+            echo "|---|---|---|"
+            echo "| ${API_IMAGE} | ${GITHUB_SHA} | \`${API_DIGEST}\` |"
+            echo "| ${WEB_IMAGE} | ${GITHUB_SHA} | \`${WEB_DIGEST}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: GHCR 로그아웃
+        if: always()
+        run: docker logout ghcr.io
+
+  staging:
+    name: staging (develop → 스테이징 배포)
+    needs: [gate, build]
+    if: github.ref == 'refs/heads/develop' && needs.gate.outputs.enabled == 'true'
+    # environment를 두지 않는다. 두면 OIDC sub가 environment:staging으로 바뀌어 신뢰 정책(ref:refs/heads/develop)과 맞지 않는다.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: beone-deploy-staging
+          mask-aws-account-id: true
+      # 값은 env로 넘긴다(run 안에 식을 직접 넣지 않는다). 형식은 스크립트가 다시 검사한다.
+      - name: SSM BeoneDeploy(staging)
+        env:
+          API_DIGEST: ${{ needs.build.outputs.api_digest }}
+          WEB_DIGEST: ${{ needs.build.outputs.web_digest }}
+        run: .github/scripts/ssm-deploy.sh staging "$API_DIGEST" "$WEB_DIGEST" "$GITHUB_SHA"
+
+  production:
+    name: production (main → 운영 배포, 승인 필요)
+    needs: [gate, build]
+    if: github.ref == 'refs/heads/main' && needs.gate.outputs.enabled == 'true' && needs.gate.outputs.production == 'true'
+    # Environment production의 필수 승인자(사용자)가 승인해야 시작한다. OIDC sub는 environment:production이다.
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: beone-deploy-production
+          mask-aws-account-id: true
+      # 값은 env로 넘긴다(run 안에 식을 직접 넣지 않는다). 형식은 스크립트가 다시 검사한다.
+      - name: SSM BeoneDeploy(production)
+        env:
+          API_DIGEST: ${{ needs.build.outputs.api_digest }}
+          WEB_DIGEST: ${{ needs.build.outputs.web_digest }}
+        run: .github/scripts/ssm-deploy.sh production "$API_DIGEST" "$WEB_DIGEST" "$GITHUB_SHA"
