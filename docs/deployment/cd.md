@@ -73,10 +73,10 @@ main push ────▶ deploy.yml
 | 이미지 | 내용 | 빌드 방식 |
 |---|---|---|
 | `ghcr.io/beone-capston/beone-api` | 백엔드 실행 이미지 | [`build-image.sh`](../../deploy/scripts/build-image.sh)와 같은 방식이다. `backend/Dockerfile`, `linux/amd64` 단일 플랫폼, 증명 메타데이터 없음, 리비전 라벨에 전체 SHA |
-| `ghcr.io/beone-capston/beone-web` | frontend `dist`만(이미지 안 `/web`) | [`deploy/web/Dockerfile`](../../deploy/web/Dockerfile), `scratch` 기반 |
+| `ghcr.io/beone-capston/beone-web` | frontend `dist`만(이미지 안 `/dist`) | [`deploy/web/Dockerfile`](../../deploy/web/Dockerfile), `scratch` 기반 |
 
 - 태그는 커밋 전체 SHA이고, 배포는 digest로 한다. digest는 job 요약과 output에 남긴다.
-- 웹 이미지를 `scratch`로 만든 이유: 웹은 기존 공개 nginx가 서빙한다. 그래서 이미지는 파일을 옮기는 용도일 뿐이다. 셸·패키지가 없으면 받는 크기와 취약점 대상이 가장 작다. 서버는 `docker create`로 컨테이너를 만들기만 하고(실행하지 않음) `docker cp`로 `/web`을 꺼낸다. `/web`은 서버 `deploy.sh`의 `WEB_DIST_PATH` 기본값과 같다. `docker create`가 명령 없는 이미지를 거부하므로 자리표시 `CMD`만 넣었다.
+- 웹 이미지를 `scratch`로 만든 이유: 웹은 기존 공개 nginx가 서빙한다. 그래서 이미지는 파일을 옮기는 용도일 뿐이다. 셸·패키지가 없으면 받는 크기와 취약점 대상이 가장 작다. 서버는 `docker create`로 컨테이너를 만들기만 하고(실행하지 않음) `docker cp`로 `/dist`를 꺼낸다. `/dist`는 서버 `deploy.sh`가 꺼내는 경로와 같다(관리 확정). `docker create`가 명령 없는 이미지를 거부하므로 자리표시 `CMD`만 넣었다.
 - frontend 빌드는 워크플로가 `npm ci`·`npm run build`로 한다. frontend 코드는 바꾸지 않는다.
 
 ## AWS 설정 템플릿(운영 담당이 승인 뒤 설정)
