@@ -156,18 +156,31 @@ step_s11b() {
 	record S11b "A 승인(본문 {})" "201 APPROVED, changed 필드 있음·null" "$s $(field '.data.status') changed=$(changed_view)" "$ok"
 }
 
-# 시연 헤더를 붙여도 헤더 없는 A /me와 같은 장부인지 본문 전체(비밀값 없음)로 비교한다
+# /me 응답(본문은 $WORK/body)의 필수 필드가 모두 있고 타입이 맞는지 본다. 필드 누락을 null과 구분한다.
+# demoUser는 키가 있고 값이 null, 식별 필드는 키가 있고 기대 타입이어야 1을 출력한다
+check_me_shape() {
+	jq -e '.data | type == "object"
+		and has("demoUser") and .demoUser == null
+		and has("displayName") and (.displayName | type) == "string"
+		and has("portfolioType") and (.portfolioType | type) == "string"
+		and has("readOnly") and (.readOnly | type) == "boolean"
+		and has("cardCount") and (.cardCount | type) == "number"
+		and has("codefConnected") and (.codefConnected | type) == "boolean"' "$WORK/body" > /dev/null 2>&1 && echo 1 || echo 0
+}
+
+# 시연 헤더를 붙여도 헤더 없는 A /me와 같은 장부인지 본다. 기준·비교 응답 각각의 필수 필드 형태를 먼저 확인한 뒤
+# 본문 전체(비밀값 없음)를 비교한다. 양쪽에서 같은 필드가 빠져 둘 다 null처럼 보여도 통과하지 않는다
 step_s16a() {
-	local s base forged ok=0
-	s=$(req a GET /api/v1/me)
+	local s1 s2 base forged base_shape forged_shape ok=0
+	s1=$(req a GET /api/v1/me)
+	base_shape=$(check_me_shape)
 	base=$(jq -cS '.data' "$WORK/body" 2> /dev/null)
-	local base_ok=0
-	[ "$s" = 200 ] && [ "$(field '.data.demoUser')" = "" ] && [ -n "$base" ] && [ "$base" != null ] && base_ok=1
-	s=$(req a GET /api/v1/me '' 'X-BeONE-Demo-User: VIRTUAL_PORTFOLIO')
+	s2=$(req a GET /api/v1/me '' 'X-BeONE-Demo-User: VIRTUAL_PORTFOLIO')
+	forged_shape=$(check_me_shape)
 	forged=$(jq -cS '.data' "$WORK/body" 2> /dev/null)
-	[ "$base_ok" = 1 ] && [ "$s" = 200 ] && [ "$forged" = "$base" ] && ok=1
-	record S16a "쿠키 + 시연 헤더" "200, 헤더 없는 A /me와 같은 장부(demoUser=null)" \
-		"$s same=$(same "$forged" "$base") demoUser=[$(field '.data.demoUser')]" "$ok"
+	[ "$s1 $s2 $base_shape $forged_shape" = '200 200 1 1' ] && [ "$forged" = "$base" ] && ok=1
+	record S16a "쿠키 + 시연 헤더" "200·200, 양쪽 필수 필드 있음·타입 일치(demoUser 있음·null), 같은 장부" \
+		"$s1/$s2 shape=$base_shape/$forged_shape same=$(same "$forged" "$base")" "$ok"
 }
 
 # 결과 표를 출력하고 실패가 있으면 1을 돌려준다
@@ -202,6 +215,9 @@ self_test() {
 	local good_cookie='set-cookie: __Host-BEONE_SESSION=synthetic; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax\r\n'
 	local me_a='{"data":{"demoUser":null,"displayName":"내 카드","portfolioType":"REAL","readOnly":false,"cardCount":1,"codefConnected":false}}'
 	local me_v='{"data":{"demoUser":"VIRTUAL_PORTFOLIO","displayName":"가상 포트폴리오","portfolioType":"VIRTUAL","readOnly":true,"cardCount":3,"codefConnected":false}}'
+	local me_no_demo='{"data":{"displayName":"내 카드","portfolioType":"REAL","readOnly":false,"cardCount":1,"codefConnected":false}}'
+	local me_no_id='{"data":{"demoUser":null,"readOnly":false,"cardCount":1,"codefConnected":false}}'
+	local me_bad_type='{"data":{"demoUser":null,"displayName":"내 카드","portfolioType":"REAL","readOnly":false,"cardCount":"1","codefConnected":false}}'
 	local approved='{"data":{"status":"APPROVED","recalculation":{"recommendationId":"rec-1","seenRecommendationId":null,"changed":null}}}'
 	# 사례: 이름 | 기대 종료 코드 | 상태 | 헤더 | 본문 | 시연 헤더 본문 | 단계
 	local cases=(
@@ -219,6 +235,12 @@ self_test() {
 		"S11b recalculation 없음|1|201||{\"data\":{\"status\":\"APPROVED\"}}||s11b"
 		"S16a 같은 장부|0|200||$me_a|$me_a|step_s16a"
 		"S16a 다른 장부 응답|1|200||$me_a|$me_v|step_s16a"
+		"S16a 기준 응답 demoUser 누락|1|200||$me_no_demo|$me_a|step_s16a"
+		"S16a 비교 응답 demoUser 누락|1|200||$me_a|$me_no_demo|step_s16a"
+		"S16a 양쪽 demoUser 누락(같은 본문)|1|200||$me_no_demo|$me_no_demo|step_s16a"
+		"S16a 양쪽 식별 필드 누락(같은 본문)|1|200||$me_no_id|$me_no_id|step_s16a"
+		"S16a 양쪽 cardCount 타입 다름|1|200||$me_bad_type|$me_bad_type|step_s16a"
+		"S16a 양쪽 data 없음|1|200||{}|{}|step_s16a"
 	)
 	local c name want step rc
 	echo "| 주입 사례 | 기대 종료 코드 | 실제 종료 코드 | 판정 |"
