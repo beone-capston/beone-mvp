@@ -9,10 +9,11 @@
 # 운영 최초 배포(bootstrap)는 공개 nginx가 /api를 아직 연결하지 않아 공개 스모크를 통과할 수 없으므로 세 단계로 나눈다.
 # 승인 창 안에서 사람이 서버에서 직접 실행한다. 첫 인자가 bootstrap-*라서 SSM 문서(첫 인자 환경 고정)로는 부를 수 없다.
 #   deploy.sh bootstrap-prepare production <ApiDigest> <WebDigest> <GitSha>
-#       상태 파일·대기 파일이 없을 때만. 복귀 기준(실행 중 backend 이미지)·백업 기록 → 1~6단계 → 비공개 검증 → 대기 파일만 쓴다
+#       상태 파일·대기 파일이 없을 때만. 복귀 기준(실행 중 backend 이미지, 없으면 none)·백업 기록(mysql이 있으면 필수,
+#       mysql 컨테이너·볼륨이 없으면 backup=none) → 1~6단계 → 비공개 검증 → 대기 파일만 쓴다
 #   (사람) 공개 nginx 네트워크·마운트·설정 → nginx -t → reload
 #   deploy.sh bootstrap-confirm production   공개 스모크를 통과해야만 상태 파일을 쓴다(실패하면 종료 1, 대기 파일 유지)
-#   deploy.sh bootstrap-abort production     backend를 복귀 기준 이미지로, 웹 링크를 이전 값(없었으면 링크 제거)으로 되돌린다
+#   deploy.sh bootstrap-abort production     backend를 복귀 기준 이미지로(none이면 새 backend 정지), 웹 링크를 이전 값(없었으면 링크 제거)으로 되돌린다
 #
 # 순서
 #   1. 상태 파일에서 현재 digest를 읽는다(없으면 첫 배포)
@@ -159,6 +160,17 @@ boot_base_ref() {
 	if [ "$now" = "$id" ]; then echo "$tag"; else echo "$id"; fi
 }
 
+# bootstrap backend 복귀: 기준이 none이면 새 backend를 멈춘다(볼륨은 지우지 않음), 아니면 기준 이미지로 up·health
+boot_restore_backend() {
+	local tag="$1" id="$2" ref
+	if [ "$tag" = none ]; then
+		compose stop backend > /dev/null && log "backend 정지(복귀 기준 none, 볼륨 유지)"
+		return
+	fi
+	ref=$(boot_base_ref "$tag" "$id")
+	compose_with "$ref" up -d backend && wait_healthy "$ref" && log "backend 복귀(복귀 기준): $ref healthy"
+}
+
 boot_field() { sed -n "s/^$1=//p" "$BOOT_FILE"; }
 
 banner() {
@@ -212,14 +224,11 @@ if [ "$MODE" = confirm ] || [ "$MODE" = abort ]; then
 	# abort
 	ok=1
 	if restore_boot_link "$B_PREV_LINK"; then :; else log "웹 링크 복귀 실패"; ok=0; fi
-	base_ref=$(boot_base_ref "$B_BASE_TAG" "$B_BASE_ID")
-	log "backend 복귀: $base_ref"
-	if compose_with "$base_ref" up -d backend && wait_healthy "$base_ref"; then log "backend 복귀: healthy"
-	else log "backend 복귀 실패"; ok=0; fi
+	boot_restore_backend "$B_BASE_TAG" "$B_BASE_ID" || { log "backend 복귀 실패"; ok=0; }
 	echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) bootstrap-abort api=$API_DIGEST web=$WEB_DIGEST git=$GIT_SHA backup=${BACKUP_ID:-none} rollback=$([ "$ok" = 1 ] && echo ok || echo failed)" >> "$HISTORY_FILE" || true
 	if [ "$ok" = 1 ]; then
 		mv "$BOOT_FILE" "$BOOT_FILE.aborted-$ts" || log "대기 파일 이름 변경 실패(무시)"
-		log "bootstrap 취소 완료(상태 파일 없음. DB는 되돌리지 않음)"
+		log "bootstrap 취소 완료(복귀 기준 $B_BASE_TAG, 상태 파일 없음. DB는 되돌리지 않음)"
 		exit 0
 	fi
 	banner "bootstrap 취소 중 복귀 실패. 대기 파일 유지, 즉시 확인 필요"
@@ -251,6 +260,12 @@ if [ "$MODE" = prepare ]; then
 	[ ! -e "$STATE_FILE" ] || stop_pre "상태 파일이 이미 있음($STATE_FILE). bootstrap은 최초 1회만, 정상 배포를 쓴다"
 	[ ! -e "$BOOT_FILE" ] || stop_pre "bootstrap 대기 파일이 이미 있음($BOOT_FILE). bootstrap-confirm 또는 bootstrap-abort 먼저"
 fi
+# 운영 정상 배포는 bootstrap 확정 뒤에만 한다. 상태 파일이 없거나 bootstrap 대기 중이면 공개 스모크가 반드시 실패하는
+# 첫 배포 경로로 들어가지 않고 아무것도 바꾸지 않은 채 멈춘다(SSM 자동 배포가 먼저 실행돼도 안전)
+if [ "$MODE" = deploy ] && [ "$ENVIRONMENT" = production ]; then
+	[ ! -e "$BOOT_FILE" ] || stop_pre "운영 bootstrap 진행 중($BOOT_FILE). bootstrap-confirm 또는 bootstrap-abort 먼저"
+	[ -e "$STATE_FILE" ] || stop_pre "운영 상태 파일 없음. 운영 최초 배포는 bootstrap-prepare·confirm으로 한다(docs/deployment/server-deploy.md)"
+fi
 if [ -e "$STATE_FILE" ]; then
 	PREV_API=$(sed -n 's/^api_digest=//p' "$STATE_FILE") || stop_pre "상태 파일을 읽지 못함"
 	PREV_WEB=$(sed -n 's/^web_digest=//p' "$STATE_FILE") || stop_pre "상태 파일을 읽지 못함"
@@ -266,6 +281,32 @@ if [ -L "$WEB_BASE/current" ]; then
 	PREV_LINK=$(readlink "$WEB_BASE/current") || stop_pre "현재 웹 링크를 읽지 못함"
 fi
 
+BASE_IMAGE_TAG="" BASE_IMAGE_ID="" DB_PRESENT=1
+# bootstrap-prepare: 복귀 기준(실행 중 backend)과 DB 유무를 판정한다. 조회 명령이 실패하면 없음으로 보지 않고 멈춘다
+if [ "$MODE" = prepare ]; then
+	bcid=$(compose ps -q backend) || stop_pre "backend 조회 실패(없음으로 보지 않음)"
+	if [ -n "$bcid" ]; then
+		BASE_IMAGE_ID=$(docker inspect --format '{{.Image}}' "$bcid") && [ -n "$BASE_IMAGE_ID" ] || stop_pre "복귀 기준 이미지 ID 조회 실패"
+		BASE_IMAGE_TAG=$(docker inspect --format '{{.Config.Image}}' "$bcid") && [ -n "$BASE_IMAGE_TAG" ] || stop_pre "복귀 기준 이미지 이름 조회 실패"
+		log "1-1. 복귀 기준: $BASE_IMAGE_TAG"
+	else
+		BASE_IMAGE_TAG=none BASE_IMAGE_ID=none
+		log "1-1. 복귀 기준: none(실행 중 backend 없음). 실패·취소 시 새 backend를 멈춘다"
+	fi
+	mcid=$(compose ps -q mysql) || stop_pre "mysql 조회 실패(없음으로 보지 않음)"
+	if [ -z "$mcid" ]; then
+		# 멈춘 mysql 컨테이너나 기존 볼륨이 있으면 데이터가 있을 수 있으므로 백업 없이 진행하지 않는다
+		mall=$(compose ps -a -q mysql) || stop_pre "mysql 컨테이너 조회 실패"
+		[ -z "$mall" ] || stop_pre "mysql 컨테이너가 멈춰 있음(데이터가 있을 수 있음). mysql을 띄운 뒤 다시 실행"
+		vols=$(compose config --volumes) || stop_pre "compose 볼륨 조회 실패"
+		for v in $vols; do
+			found=$(docker volume ls -q --filter "name=^${PROJECT}_${v}\$") || stop_pre "볼륨 조회 실패: ${PROJECT}_$v"
+			[ -z "$found" ] || stop_pre "볼륨이 이미 있음(${PROJECT}_$v, 데이터가 있을 수 있음). mysql을 띄운 뒤 다시 실행"
+		done
+		DB_PRESENT=0
+	fi
+fi
+
 # 2. digest로 pull
 log "2. pull"
 docker pull "$NEW_API_REF" > /dev/null || stop_pre "api 이미지 pull 실패"
@@ -273,7 +314,16 @@ docker pull "$NEW_WEB_REF" > /dev/null || stop_pre "web 이미지 pull 실패"
 
 # 3. 운영만: 배포 직전 덤프와 짝 기록(docs/deployment/backend-compose.md 백업 방식)
 BACKUP_ID=""
-if [ "$ENVIRONMENT" = production ]; then
+if [ "$ENVIRONMENT" = production ] && [ "$DB_PRESENT" = 0 ]; then
+	# mysql·볼륨이 모두 없음: 덤프할 DB가 없다. 짝 기록은 같은 키로 남기고 값에 none을 쓴다
+	log "3. DB 백업: none(mysql 컨테이너·볼륨 없음)"
+	rec="$APP_DIR/backups/bootstrap-$(date -u +%Y%m%dT%H%M%SZ)-nobackup.record"
+	printf '%s\n' "backup=none" "dump_file=none" "dump_sha256=none" "image_id=$BASE_IMAGE_ID" "image_tag=$BASE_IMAGE_TAG" \
+		"image_revision=none" "flyway_sha256=none" "deploy_prev_api_digest=none" \
+		"deploy_new_api_digest=$API_DIGEST" "deploy_new_web_digest=$WEB_DIGEST" "deploy_git_sha=$GIT_SHA" > "$rec.partial" \
+		&& mv "$rec.partial" "$rec" || stop_pre "백업 none 짝 기록 실패. 배포하지 않음"
+	BACKUP_ID=none
+elif [ "$ENVIRONMENT" = production ]; then
 	log "3. DB 백업"
 	bd=$(mktemp -d "$APP_DIR/backups/app-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX") || stop_pre "백업 폴더를 만들지 못함"
 	B="$bd/app.sql"
@@ -288,13 +338,16 @@ if [ "$ENVIRONMENT" = production ]; then
 	# 짝 기록: 실제 실행 중인 backend 이미지와 백업 시점 Flyway 이력
 	backup_record() {
 		local cid image_id image_tag revision
+		if [ "$MODE" = prepare ] && [ "$BASE_IMAGE_ID" = none ]; then
+			# bootstrap 복귀 기준 none: DB는 있지만 backend가 없음. 이미지 칸은 none
+			image_id=none image_tag=none revision=none
+		else
 		cid=$(compose ps -q backend) && [ -n "$cid" ] || { log "짝 기록: 실행 중인 backend 없음"; return 1; }
 		image_id=$(docker inspect --format '{{.Image}}' "$cid") && [ -n "$image_id" ] || { log "짝 기록: 이미지 ID 조회 실패"; return 1; }
 		image_tag=$(docker inspect --format '{{.Config.Image}}' "$cid") && [ -n "$image_tag" ] || { log "짝 기록: 이미지 이름 조회 실패"; return 1; }
 		[ "$(docker image inspect --format '{{.Id}}' "$image_tag")" = "$image_id" ] || { log "짝 기록: 실행 중 이미지 ID와 이름 불일치"; return 1; }
-		# bootstrap 복귀 기준(배포 직전 실행 중이던 backend)
-		BASE_IMAGE_TAG="$image_tag" BASE_IMAGE_ID="$image_id"
 		revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_id") || { log "짝 기록: 라벨 조회 실패"; return 1; }
+		fi
 		local dump_sum flyway_sum
 		compose exec -T mysql bash -c 'mysql --defaults-extra-file=<(printf "[client]\nuser=%s\npassword=%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD") -N -B -e "SELECT installed_rank, version, script, checksum, success FROM flyway_schema_history ORDER BY installed_rank" "$MYSQL_DATABASE"' < /dev/null > "$B.flyway.partial" \
 			&& [ -s "$B.flyway.partial" ] || { log "짝 기록: Flyway 이력을 읽지 못함"; return 1; }
@@ -326,10 +379,7 @@ rollback() {
 		else log "웹 링크 복귀 실패"; ok=0; fi
 	fi
 	if [ "$MODE" = prepare ]; then
-		local base_ref
-		base_ref=$(boot_base_ref "$BASE_IMAGE_TAG" "$BASE_IMAGE_ID")
-		if compose_with "$base_ref" up -d backend && wait_healthy "$base_ref"; then log "backend 복귀(복귀 기준): $base_ref healthy"
-		else log "backend 복귀 실패(복귀 기준): $base_ref"; ok=0; fi
+		boot_restore_backend "$BASE_IMAGE_TAG" "$BASE_IMAGE_ID" || { log "backend 복귀 실패(복귀 기준 $BASE_IMAGE_TAG)"; ok=0; }
 	elif [ -z "$PREV_API" ]; then
 		log "backend 복귀 대상 없음(첫 배포). 새 backend 상태를 사람이 확인해야 함"
 		ok=0

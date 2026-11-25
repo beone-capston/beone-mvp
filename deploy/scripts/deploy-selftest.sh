@@ -48,6 +48,7 @@ case "$1" in
 		sub="$1"; shift
 		case "$sub" in
 			config)
+				if [ "${1:-}" = --volumes ]; then echo mysql-data; exit 0; fi
 				if [ "${1:-}" = --services ]; then
 					case "$proj" in beone-app) d='mysql\nbackend\n' ;; *) d='mysql\nbackend\nweb\n' ;; esac
 					printf '%b' "${FAKE_SERVICES-$d}"; exit 0
@@ -63,7 +64,17 @@ case "$1" in
 					*) log "UP_OTHER ${BEONE_API_IMAGE:-}" ;;
 				esac
 				echo "$BEONE_API_IMAGE" > "$FAKE_DIR/running"; exit 0 ;;
-			ps) [ -s "$FAKE_DIR/running" ] && echo bk1; exit 0 ;;
+			ps)
+				# ps [-a] -q <서비스>. mysql은 FAKE_MYSQL(running 기본|stopped|absent)·FAKE_MYSQL_PS_RC로 흉내 낸다
+				svc="${*: -1}" all=0
+				[ "$1" = -a ] && all=1
+				if [ "$svc" = mysql ]; then
+					[ "${FAKE_MYSQL_PS_RC:-0}" = 0 ] || exit "$FAKE_MYSQL_PS_RC"
+					case "${FAKE_MYSQL:-running}" in running) echo my1 ;; stopped) [ "$all" = 1 ] && echo my1 ;; esac
+					exit 0
+				fi
+				[ -s "$FAKE_DIR/running" ] && echo bk1; exit 0 ;;
+			stop) log STOP_BACKEND; : > "$FAKE_DIR/running"; exit "${FAKE_STOP_RC:-0}" ;;
 			exec)
 				case "$*" in
 					*mysqldump*)
@@ -99,6 +110,11 @@ case "$1" in
 			exit 0
 		fi
 		[ "$3" = "$OLD_API_REF" ] && exit "${FAKE_PREV_IMAGE_RC:-0}"
+		exit 0 ;;
+	volume)
+		# volume ls -q --filter name=^<이름>$. FAKE_VOLUME=present면 이름을 낸다
+		[ "${FAKE_VOLUME_RC:-0}" = 0 ] || exit "$FAKE_VOLUME_RC"
+		[ "${FAKE_VOLUME:-}" = present ] && echo beone-app_mysql-data
 		exit 0 ;;
 	create) log CREATE; echo wc1; exit "${FAKE_CREATE_RC:-0}" ;;
 	cp)
@@ -271,7 +287,9 @@ run_deploy "인자 3개" 2 PULL_API,UP_NEW - old old -- staging "$NEW_API" "$NEW
 # run_boot <설명> <기대 종료 코드들(공백)> <금지 동작> <필수 동작> <상태 new|old|none> <링크 new|old|none> <대기 pending|confirmed|aborted|none> <실행 중 new|base> <단계...>
 # 단계: "prepare|confirm|abort|deploy [FAKE_*=값 ...]", "raw:<deploy 인자들>", "sh:<명령>"(사례 폴더 $c에서 실행)
 # 시작 상태: 상태 파일 없음, 웹 링크 없음(공개 nginx는 안내 화면만), backend는 수동으로 띄운 이전 이미지($BASE_REF)
-# 사례 설정: BOOT_PREV_LINK=1(이전 웹 링크 있음), BOOT_SEED_STATE=1(상태 파일 있음), BOOT_WANT_RECORD=1(정상 배포와 같은 짝 기록)
+# 사례 설정: BOOT_PREV_LINK=1(이전 웹 링크 있음), BOOT_SEED_STATE=1(상태 파일 있음), BOOT_WANT_RECORD=1(정상 배포와 같은 짝 기록),
+#   BOOT_NO_BACKEND=1(실행 중 backend 없음), BOOT_CHECK=<사례 폴더에서 실행해 0이어야 하는 셸 식>
+# 실행 중 backend 기대값: new|base|none
 BASE_REF=ghcr.io/beone-capston/beone-api:manual-prev
 run_boot() {
 	local desc="$1" want="$2" forbid="$3" need="$4" want_state="$5" want_link="$6" want_boot="$7" want_run="$8" f bad="" miss="" st="none" ln="none" bt="none" rn="other" extra="" rcs=""
@@ -288,7 +306,7 @@ run_boot() {
 		mkdir -p "$c/web/releases/old"; echo old > "$c/web/releases/old/index.html"; ln -s releases/old "$c/web/current"
 	fi
 	[ -n "${BOOT_SEED_STATE:-}" ] && printf 'api_digest=%s\nweb_digest=%s\ngit_sha=%s\n' "$OLD_API" "$OLD_WEB" "$GIT" > "$c/deploy/state/production.state"
-	printf '%s' "$BASE_REF" > "$c/fake/running"
+	if [ -n "${BOOT_NO_BACKEND:-}" ]; then : > "$c/fake/running"; else printf '%s' "$BASE_REF" > "$c/fake/running"; fi
 	: > "$c/log"; : > "$c/out"
 	local step words args
 	for step in "$@"; do
@@ -324,7 +342,8 @@ run_boot() {
 	if [ -f "$sd/production.bootstrap" ]; then bt=pending
 	elif ls "$sd"/production.bootstrap.confirmed-* > /dev/null 2>&1; then bt=confirmed
 	elif ls "$sd"/production.bootstrap.aborted-* > /dev/null 2>&1; then bt=aborted; fi
-	case "$(cat "$c/fake/running")" in "ghcr.io/beone-capston/beone-api@$NEW_API") rn=new ;; "$BASE_REF" | "sha256:id-$BASE_REF") rn=base ;; esac
+	case "$(cat "$c/fake/running")" in "ghcr.io/beone-capston/beone-api@$NEW_API") rn=new ;; "$BASE_REF" | "sha256:id-$BASE_REF") rn=base ;; "") rn=none ;; esac
+	if [ -n "${BOOT_CHECK:-}" ]; then (cd "$c" && eval "$BOOT_CHECK") || extra="$extra 확인식실패"; fi
 	grep -q "$SECRET" "$c/out" && extra="$extra 비밀값출력"
 	grep -q "$COOKIE_SECRET" "$c/out" && extra="$extra 쿠키값출력"
 	if [ -n "${WANT_MSG:-}" ]; then grep -qF "$WANT_MSG" "$c/out" || extra="$extra 사유문구없음($WANT_MSG)"; fi
@@ -367,6 +386,24 @@ run_boot "다른 배포 실행 중이면 confirm·abort도 거부(잠금)" "0 3 
 run_boot "staging 인자 거부" "2 2 2" PULL_API,CURL,UP_BASE - none none none base "raw:bootstrap-prepare staging $NEW_API $NEW_WEB $GIT" "raw:bootstrap-confirm staging" "raw:bootstrap-abort staging"
 run_boot "SSM 형식(환경 먼저)으로 bootstrap 불가" "2 2" PULL_API,CURL - none none none base "raw:production bootstrap-confirm" "raw:production bootstrap-prepare $NEW_API $NEW_WEB $GIT"
 run_boot "인자 개수 오류" "2 2" PULL_API,CURL - none none none base "raw:bootstrap-confirm" "raw:bootstrap-prepare production $NEW_API $NEW_WEB"
+# 복귀 기준 none(실행 중 backend 없음)
+NONE_ENV="FAKE_MYSQL=absent"
+NONE_OK='grep -qx base_image_tag=none deploy/state/production.bootstrap* && grep -qx base_image_id=none deploy/state/production.bootstrap* && grep -qx backup_id=none deploy/state/production.bootstrap* && grep -qx backup=none app/backups/bootstrap-*-nobackup.record && grep -qx image_tag=none app/backups/bootstrap-*-nobackup.record && grep -qx "deploy_new_api_digest='"$NEW_API"'" app/backups/bootstrap-*-nobackup.record'
+BOOT_NO_BACKEND=1 BOOT_CHECK="$NONE_OK" run_boot "backend·mysql 없음 → prepare 0, 복귀 기준·백업 none" 0 DUMP,CURL,STOP_BACKEND UP_NEW,CREATE none new pending new "prepare $NONE_ENV"
+BOOT_NO_BACKEND=1 BOOT_CHECK="$NONE_OK" WANT_MSG="복귀 기준 none" run_boot "backend·mysql 없음 → abort 0(새 backend 정지)" "0 0" DUMP,UP_BASE,UP_BASE_ID STOP_BACKEND none none aborted none "prepare $NONE_ENV" "abort"
+BOOT_NO_BACKEND=1 run_boot "backend·mysql 없음, 안내 화면만에서 confirm 실패 → 미확정" "0 1" DUMP,STOP_BACKEND CURL none new pending new "prepare $NONE_ENV" "confirm $GUIDE_ONLY"
+BOOT_NO_BACKEND=1 BOOT_CHECK='grep -qx backup_id=none deploy/state/production.state' run_boot "backend·mysql 없음, confirm 성공 → 상태 파일(backup none)" "0 0" DUMP CURL new new confirmed new "prepare $NONE_ENV" "confirm"
+BOOT_NO_BACKEND=1 run_boot "backend 없음 prepare health 실패 → 새 backend 정지(종료 4)" 4 CREATE,CURL UP_NEW,STOP_BACKEND none none none none "prepare $NONE_ENV FAKE_NEW_HEALTH=running/unhealthy"
+BOOT_NO_BACKEND=1 run_boot "backend 없음 정지 실패 → 종료 1" 1 CURL UP_NEW,STOP_BACKEND none none none none "prepare $NONE_ENV FAKE_NEW_HEALTH=running/unhealthy FAKE_STOP_RC=1"
+BOOT_NO_BACKEND=1 WANT_MSG="mysql 조회 실패" run_boot "mysql 조회 오류 → prepare 3" 3 PULL_API,UP_NEW,DUMP - none none none none "prepare FAKE_MYSQL_PS_RC=1"
+BOOT_NO_BACKEND=1 WANT_MSG="볼륨 조회 실패" run_boot "볼륨 조회 오류 → prepare 3" 3 PULL_API,UP_NEW,DUMP - none none none none "prepare $NONE_ENV FAKE_VOLUME_RC=1"
+BOOT_NO_BACKEND=1 WANT_MSG="mysql 컨테이너가 멈춰 있음" run_boot "mysql 멈춤(컨테이너 있음) → prepare 3" 3 PULL_API,UP_NEW,DUMP - none none none none "prepare FAKE_MYSQL=stopped"
+BOOT_NO_BACKEND=1 WANT_MSG="볼륨이 이미 있음" run_boot "mysql 없음·볼륨 있음 → prepare 3" 3 PULL_API,UP_NEW,DUMP - none none none none "prepare $NONE_ENV FAKE_VOLUME=present"
+BOOT_NO_BACKEND=1 BOOT_CHECK='r=$(ls app/backups/*/app.sql.record) && grep -qx image_tag=none "$r" && grep -qx image_id=none "$r" && grep -qE "^dump_sha256=[0-9a-f]{64}$" "$r" && grep -qx base_image_tag=none deploy/state/production.bootstrap && ! grep -qx backup_id=none deploy/state/production.bootstrap' \
+	run_boot "backend 없음·mysql 실행 중 → 덤프·짝 기록 필수(이미지 none)" 0 CURL DUMP,UP_NEW none new pending new "prepare"
+BOOT_NO_BACKEND=1 WANT_MSG="백업 실패(덤프)" run_boot "backend 없음·mysql 실행 중 덤프 실패 → prepare 3" 3 UP_NEW,CREATE DUMP none none none none "prepare FAKE_DUMP_RC=1"
+WANT_MSG="운영 상태 파일 없음" run_boot "상태 파일 없이 운영 정상 배포(SSM) → 거부, 변경 없음" 3 PULL_API,DUMP,UP_NEW,CURL - none none none base "deploy"
+WANT_MSG="운영 bootstrap 진행 중" run_boot "bootstrap 대기 중 운영 정상 배포(SSM) → 거부" "0 3" UP_BASE - none new pending new "prepare" "deploy"
 run_boot "대기 파일 손상 → confirm 거부" "0 3" CURL - none new pending new "prepare" "sh:printf 'api_digest=broken\n' > deploy/state/production.bootstrap" "confirm"
 
 # smoke-public.sh 단독. 종료 코드와 함께 출력(stdout·stderr)에 쿠키 값·비밀값이 없는지 본다
