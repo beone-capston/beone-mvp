@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 서버 배포 스크립트(결정 40). SSM 문서 BeoneDeploy가 서버의 /opt/beone/deploy/deploy.sh로 부른다.
+# 서버 배포 스크립트(결정 40). SSM 문서 BeoneDeployStaging(환경 인자 staging 고정)·BeoneDeployProduction(production 고정)이
+# 서버의 /opt/beone/deploy/deploy.sh로 부른다.
 # 절차·종료 코드·상태 파일 설명: docs/deployment/server-deploy.md
 #
 # 사용: deploy.sh <staging|production> <ApiDigest> <WebDigest> <GitSha>

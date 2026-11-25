@@ -1,6 +1,6 @@
 # 서버 배포 스크립트 (`deploy.sh`)
 
-GitHub Actions가 SSM 문서 `BeoneDeploy`로 서버의 `/opt/beone/deploy/deploy.sh`를 부르면, 이 스크립트가 digest로 고정한 이미지를 받아 backend와 웹을 바꾸고 공개 점검을 한 뒤, 실패하면 이전 상태로 되돌립니다. 결정 40(배포 자동화)의 (3)(7)과 인터페이스 계약을 따릅니다.
+GitHub Actions가 SSM 문서 `BeoneDeployStaging`(스테이징) 또는 `BeoneDeployProduction`(운영)으로 서버의 `/opt/beone/deploy/deploy.sh`를 부르면, 이 스크립트가 digest로 고정한 이미지를 받아 backend와 웹을 바꾸고 공개 점검을 한 뒤, 실패하면 이전 상태로 되돌립니다. 결정 40(배포 자동화)의 (3)(7)과 인터페이스 계약을 따릅니다.
 
 - **상태:** 스크립트와 오프라인 자기검사만 있습니다. 서버 설치, SSM 문서, IAM, 워크플로 연결은 하지 않았습니다. 서버 설치·갱신은 승인 절차(Aside)입니다.
 - **파일:** [`deploy/scripts/deploy.sh`](../../deploy/scripts/deploy.sh), [`deploy/scripts/smoke-public.sh`](../../deploy/scripts/smoke-public.sh), [`deploy/scripts/deploy-selftest.sh`](../../deploy/scripts/deploy-selftest.sh)
@@ -18,7 +18,7 @@ deploy.sh <staging|production> <ApiDigest> <WebDigest> <GitSha>
 # 예: deploy.sh staging sha256:<64자리> sha256:<64자리> <40자리 커밋>
 ```
 
-인자 형식은 SSM 문서의 `allowedPattern`과 같습니다. 환경은 `staging`·`production`만, digest는 `sha256:[0-9a-f]{64}`, GitSha는 `[0-9a-f]{40}`입니다. 다르면 아무것도 하지 않고 종료 2입니다.
+환경 인자는 SSM 문서가 고정해서 넘깁니다(`BeoneDeployStaging` → `staging`, `BeoneDeployProduction` → `production`, 결정 40 계약 수정: 문서·IAM 역할을 환경별로 나눠 스테이징 권한으로 운영 배포를 못 하게 함). digest·GitSha 형식은 SSM 문서의 `allowedPattern`과 같습니다. 환경은 `staging`·`production`만, digest는 `sha256:[0-9a-f]{64}`, GitSha는 `[0-9a-f]{40}`입니다. 다르면 아무것도 하지 않고 종료 2입니다.
 
 | 환경 | compose·env | 프로젝트 | 기동 서비스 | 웹 폴더 | 스모크 기준 주소 |
 |---|---|---|---|---|---|
