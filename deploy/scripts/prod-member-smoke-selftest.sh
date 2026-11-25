@@ -40,7 +40,11 @@ cat > "$T/bin/docker" << 'EOF'
 #!/usr/bin/env bash
 # 합성 시험용 docker. FAKE_LOG_MODE에 따라 compose logs 결과를 흉내 내고, 표준 출력 대상(블록의 임시 파일)의 권한·경로를 남긴다
 f=$(lsof -a -p $$ -d 1 -Fn 2> /dev/null | sed -n 's/^n//p' | head -1)
-[ -n "${FAKE_PROBE:-}" ] && printf '%s %s\n' "$(stat -f %Lp "$f" 2> /dev/null || stat -c %a "$f" 2> /dev/null)" "$f" > "$FAKE_PROBE"
+if [ -n "${FAKE_PROBE:-}" ]; then
+	# BSD stat을 먼저 쓰고, 실패하면 그 출력은 버리고 GNU stat으로 다시 조회한다(GNU의 -f는 실패해도 파일시스템 정보를 출력함)
+	perm=$(stat -f %Lp "$f" 2> /dev/null) || perm=$(stat -c %a "$f" 2> /dev/null) || perm=""
+	printf '%s %s\n' "$perm" "$f" > "$FAKE_PROBE"
+fi
 case "${FAKE_LOG_MODE:-}" in
 	fail) echo "permission denied while trying to connect to the Docker daemon socket (synthetic)" >&2; exit 1 ;;
 	zero) printf 'backend-1 | INFO started (synthetic)\nbackend-1 | INFO request ok (synthetic)\n' ;;
