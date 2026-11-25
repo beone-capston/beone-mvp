@@ -35,6 +35,7 @@
 | [`deploy/compose.yaml`](../../deploy/compose.yaml) | MySQL 8.4.11 + backend. 호스트 포트 공개 없음, 필수 값이 없으면 실패 |
 | [`deploy/scripts/build-image.sh`](../../deploy/scripts/build-image.sh) | 이미지 빌드와 식별자 출력 |
 | [`deploy/scripts/verify-local.sh`](../../deploy/scripts/verify-local.sh) | 로컬의 분리된 검증 프로젝트에서 V2~V13 확인 |
+| [`deploy/scripts/deploy.sh`](../../deploy/scripts/deploy.sh) | 서버 배포 스크립트(결정 40). digest pull → 운영만 배포 직전 덤프·짝 기록 → backend 기동·health → 웹 릴리스 링크 전환 → 공개 스모크([`smoke-public.sh`](../../deploy/scripts/smoke-public.sh)), 실패 시 이전 digest·링크로 복귀. 오프라인 자기검사 [`deploy-selftest.sh`](../../deploy/scripts/deploy-selftest.sh). 절차는 [서버 배포 스크립트](server-deploy.md) |
 
 - 백엔드는 Docker 내부 이름 `mysql:3306`과 앱 전용 계정(`MYSQL_USER`)으로 접속합니다. root 비밀번호는 MySQL 초기화에만 쓰고 백엔드에 넘기지 않습니다.
 - 초기 자원 값은 제안값입니다: MySQL·backend 각각 메모리 1GiB, JVM 힙은 컨테이너 메모리의 70%, InnoDB 버퍼 256MiB, 로그는 10MB×3개 회전. 실제 서버(4GiB)에서의 적합성은 적용 후 확인합니다.
