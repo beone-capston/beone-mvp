@@ -88,8 +88,13 @@ public final class ApprovalRecorder {
 		for (ReviewEdit e : edits) {
 			ObjectNode item = list.addObject();
 			item.put("path", e.path());
-			item.set("before", e.before() == null ? null : e.before().deepCopy());
-			item.set("after", e.after() == null ? null : e.after().deepCopy());
+			// Java null(값 없음)은 키를 생략하고, JSON null(NullNode)만 null로 쓴다. 추가는 before, 삭제는 after가 없다.
+			if (e.before() != null) {
+				item.set("before", e.before().deepCopy());
+			}
+			if (e.after() != null) {
+				item.set("after", e.after().deepCopy());
+			}
 			item.put("reason", e.reason());
 		}
 		root.put("note", NOTE);

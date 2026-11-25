@@ -1,6 +1,7 @@
 package com.beone.ruledraft.review;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
@@ -40,7 +41,7 @@ class ApprovalRecorderTest {
 		assertEquals("검토자A", record.path("reviewer").asText());
 		assertEquals("2026-11-25T01:02:03Z", record.path("approvedAt").asText());
 		assertEquals("x", record.at("/edits/1/after").asText());
-		assertTrue(record.at("/edits/1").has("before") && record.at("/edits/1/before").isNull());
+		assertFalse(record.at("/edits/1").has("before"), "추가 항목은 before 키가 없다");
 		assertEquals("원문 2쪽 표", record.at("/edits/0/reason").asText());
 		assertTrue(record.path("note").asText().contains("별도 커밋"));
 	}
@@ -77,6 +78,28 @@ class ApprovalRecorderTest {
 		assertTrue(problems.contains("수정 전 값이 초안 값과 다르다: /n"), problems.toString());
 		assertEquals(List.of(), ApprovalRecorder.problems(c, "검토자A",
 				List.of(new ReviewEdit("/n", NullNode.getInstance(), IntNode.valueOf(1), "null을 값으로"))));
+	}
+
+	@Test
+	void 추가는_before_키를_삭제는_after_키를_생략하고_null_대입만_after를_JSON_null로_쓴다() throws Exception {
+		JsonNode c = compare(OK_ROWS + ",{'path': '/d', 'status': 'MISSING_IN_MANUAL', 'comparison': 'MISSING_IN_MANUAL', 'draft': 5}");
+		List<ReviewEdit> edits = List.of(new ReviewEdit("/b", null, TextNode.valueOf("x"), "추가"),
+				new ReviewEdit("/d", IntNode.valueOf(5), null, "삭제"),
+				new ReviewEdit("/a", IntNode.valueOf(1), NullNode.getInstance(), "null 대입"));
+		assertEquals(List.of(), ApprovalRecorder.problems(c, "검토자A", edits));
+
+		JsonNode written = mapper.readTree(mapper.writeValueAsString(ApprovalRecorder.record(mapper, c, "99999.compare.json",
+				"s", "검토자A", Instant.parse("2026-11-25T01:02:03Z"), edits)));
+		JsonNode add = written.at("/edits/0");
+		JsonNode del = written.at("/edits/1");
+		JsonNode nul = written.at("/edits/2");
+
+		assertFalse(add.has("before"), add.toString());
+		assertEquals("x", add.path("after").asText());
+		assertEquals(5, del.path("before").asInt());
+		assertFalse(del.has("after"), del.toString());
+		assertEquals(1, nul.path("before").asInt());
+		assertTrue(nul.has("after") && nul.get("after").isNull(), nul.toString());
 	}
 
 }

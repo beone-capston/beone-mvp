@@ -16,9 +16,9 @@ import java.util.List;
 import com.beone.ruledraft.check.OutputGuard;
 import com.beone.ruledraft.review.ApprovalRecorder;
 import com.beone.ruledraft.review.ReviewEdit;
+import com.beone.ruledraft.review.ReviewJson;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 
 /**
  * {@code approve}: 비교 결과와 사람의 수정 항목으로 승인 기록 {@code <카드>-<날짜>.json}을 남긴다.
@@ -33,7 +33,7 @@ final class ApproveCommand {
 
 	static final int MAX_SAME_DAY = 99;
 
-	private final ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+	private final ObjectMapper mapper = ReviewJson.mapper();
 	private final PrintStream out;
 	private final PrintStream err;
 	private final Clock clock;

@@ -151,6 +151,42 @@ class ReviewCliTest {
 	}
 
 	@Test
+	void 비교와_승인은_소수를_double로_뭉개지_않는다() throws IOException {
+		Path draftDir = draftDir(TestPaths.fixture("recorded-99999.json"));
+		Path draftFile = draftDir.resolve("99999.draft.json");
+		String key = "\"maximumTargetAmount\":30000";
+		String manualText = Files.readString(manualFrom(draftFile));
+		assertTrue(manualText.contains(key), manualText);
+		Path same = tmp.resolve("manual-same.json");
+		Path close = tmp.resolve("manual-close.json");
+		// 초안 값 20000. 20000.000000000001은 double로 읽으면 20000.0이 되어 일치로 보인다.
+		Files.writeString(same, manualText.replace(key, "\"maximumTargetAmount\":20000.0"));
+		Files.writeString(close, manualText.replace(key, "\"maximumTargetAmount\":20000.000000000001"));
+
+		assertEquals(0, compare(draftDir, same, tmp.resolve("cmp-same")), err());
+		assertEquals("MATCH", rowStatus(tmp.resolve("cmp-same"), "/services/0/maximumTargetAmount"));
+		Path cmp = tmp.resolve("cmp-close");
+		assertEquals(0, compare(draftDir, close, cmp), err());
+		assertEquals("MISMATCH", rowStatus(cmp, "/services/0/maximumTargetAmount"));
+
+		Path compareJson = cmp.resolve("99999.compare.json");
+		assertEquals(1, approve(compareJson, edits(EDITS.replace("'before': 20000,", "'before': 20000.000000000001,")),
+				tmp.resolve("rev-close")));
+		assertTrue(err().contains("수정 전 값이 초안 값과 다르다: /services/0/maximumTargetAmount"), err());
+		assertEquals(0, approve(compareJson, edits(EDITS.replace("'before': 20000,", "'before': 20000.0,")),
+				tmp.resolve("rev-same")), err());
+	}
+
+	private String rowStatus(Path cmpDir, String path) throws IOException {
+		for (JsonNode r : mapper.readTree(cmpDir.resolve("99999.compare.json").toFile()).path("rows")) {
+			if (path.equals(r.path("path").asText())) {
+				return r.path("status").asText();
+			}
+		}
+		return null;
+	}
+
+	@Test
 	void 같은_날_다시_승인하면_기존_기록을_두고_번호를_붙인다() throws IOException {
 		Path draftDir = draftDir(TestPaths.fixture("recorded-99999.json"));
 		Path cmp = tmp.resolve("cmp");

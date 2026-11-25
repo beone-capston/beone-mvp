@@ -13,10 +13,10 @@ import com.beone.ruledraft.check.Evidence;
 import com.beone.ruledraft.check.OutputGuard;
 import com.beone.ruledraft.review.CompareReport;
 import com.beone.ruledraft.review.CompareRow;
+import com.beone.ruledraft.review.ReviewJson;
 import com.beone.ruledraft.review.RuleComparator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 
 /**
  * {@code compare}: 초안·근거·수동 규칙을 읽어 비교 결과를 {@code <카드>.compare.json}·{@code <카드>.compare.md}로 쓴다.
@@ -26,7 +26,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
  */
 final class CompareCommand {
 
-	private final ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+	private final ObjectMapper mapper = ReviewJson.mapper();
 	private final PrintStream out;
 	private final PrintStream err;
 
