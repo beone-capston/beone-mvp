@@ -15,6 +15,8 @@
 - 블록끼리 변수를 공유하지 않습니다. 각 블록이 `C`(compose 명령)·`Q`(검증 DB 조회)·`fail`을 스스로 정의합니다. compose 명령은 2-1절과 같이 **두 `-f`, `-p beone-codef`, `--env-file`을 항상 명시**합니다(현재 폴더나 다른 구성에 의존하지 않음).
 - 조회 명령(`docker compose ps`·`logs`, `docker volume ls`, DB 조회)이 실패하면 "0건"으로 읽지 않고 즉시 중단합니다. 결과를 세는 `grep -c`는 조회가 성공한 출력에만 씁니다.
 - 각 블록은 끝에 `…_OK`를 출력합니다. 이 줄이 없으면 성공이 아닙니다.
+- 운영 backend·DB(`beone-app`)와 공개 nginx(`beone`)는 [검증 런북](../../deploy/verify/RUNBOOK.md) 0절과 같은 `APP`·`PUB` 정의(`/opt/beone/app/compose.yaml`·`/opt/beone/app/.env`, `/opt/beone/compose.yaml`)로 **`ps`·`config --services`·`inspect` 읽기만** 합니다. `beone-verify`는 검증 런북과 같은 `V`로 2-1의 `verify-down`에서만 씁니다.
+- 컨테이너 상태는 검증 런북 8절과 같은 **정상 목록(allowlist)**으로 판정합니다. 모든 컨테이너가 `running`이고 헬스체크가 있으면 `healthy`(없으면 `running/none`, 예: `verify-web`)일 때만 `ok`입니다. 조회 일부·전체 실패, 빈 결과, 서비스 수보다 적은 컨테이너, `paused`·`created`·`exited`·`restarting`·`starting` 등 그 밖의 상태는 모두 `ok`가 아닙니다(2-1 `ready`, 2-4 `watch`).
 - 이 규칙의 실패 경로(설정 실패 뒤 `up` 미실행, `down -v` 실패 뒤 삭제 미진행, 대상 오식별, 조회 실패)는 가짜 `docker`·`sudo`로 오프라인 점검했습니다([`deploy/scripts/codef-runbook-selftest.sh`](../../deploy/scripts/codef-runbook-selftest.sh)). 서버에서 실행해 본 것은 아닙니다.
 
 ## 1. 코드와 프로필 (K0)
@@ -33,7 +35,25 @@
 
 ### 2-1. 환경 (K1, 승인 ⑨)
 
-- `beone-verify`를 [검증 런북](../../deploy/verify/RUNBOOK.md) 9절대로 **먼저 정리**합니다. 서버 메모리 때문에 두 검증 환경을 동시에 띄우지 않습니다.
+- `beone-verify`를 **먼저 내립니다**(사용자가 "검증 환경 유지 안 함"을 정한 뒤). 서버 메모리 때문에 두 검증 환경을 동시에 띄우지 않습니다.
+- 이때 [검증 런북](../../deploy/verify/RUNBOOK.md) 9절 블록 **전체를 실행하지 않습니다.** 9절은 `down -v` 뒤 검증 이미지(`beone-api:<sha12>`)와 `/opt/beone/verify`(이 런북이 쓰는 `compose.yaml` 포함)까지 지우기 때문입니다. 아래 `verify-down`은 9절의 첫 단계(`$V down -v`)만 하고, 이미지·`/opt/beone/verify`는 `beone-codef`가 다시 쓰도록 남깁니다. 9절의 나머지(이미지·디렉터리 삭제, 영향 없음 확인)는 4-2 폐기 뒤에 합니다.
+
+```bash
+# block: verify-down
+( set -euo pipefail
+V='sudo docker compose -f /opt/beone/verify/compose.yaml -p beone-verify --env-file /opt/beone/verify/.env'
+fail() { echo "중단: $*" >&2; exit 1; }
+$V down -v || fail "beone-verify down -v 실패. beone-codef를 띄우지 않는다"
+left=$($V ps -q -a) || fail "beone-verify 조회 실패(0개와 다름)"
+[ -z "$left" ] || fail "beone-verify 컨테이너가 남음"
+vols=$(sudo docker volume ls --format '{{.Name}}') || fail "볼륨 조회 실패(0개와 다름)"
+n=$(printf '%s\n' "$vols" | grep -c '^beone-verify_' || true)
+[ "$n" = 0 ] || fail "beone-verify 볼륨이 ${n}개 남음"
+sudo test -f /opt/beone/verify/compose.yaml || fail "/opt/beone/verify/compose.yaml 없음(9절로 지웠으면 검증 런북 5·6절 배치부터 다시)"
+echo VERIFY_DOWN_OK
+)
+```
+
 - 같은 compose(`/opt/beone/verify/compose.yaml`)를 별도 프로젝트 이름 `beone-codef`로 띄웁니다. 빈 DB, 별도 볼륨(`beone-codef_verify-mysql-data`), `127.0.0.1:18080`, 메모리 상한과 중단 조건은 검증 런북과 같습니다.
 - 백엔드에만 CODEF 프로필·키·호출 상한 설정을 넘기는 덮어쓰기 파일(`/opt/beone/codef/compose.codef.yaml`) 초안은 아래와 같습니다. 값은 쓰지 않고 `.env`에서 읽으며, 하나라도 없으면 `config`가 실패합니다(`:?`).
 
@@ -55,7 +75,7 @@ services:
       BEONE_CODEF_BUDGET_WINDOW_END: ${BEONE_CODEF_BUDGET_WINDOW_END:?}
 ```
 
-`config`가 실패하면 `up`을 실행하지 않습니다.
+실행 순서는 `verify-down` → 2-2(`.env` 입력, `names`가 `NAMES_OK`) → `up` → `ready` → 2-4 `watch` → 2-3 호출입니다. `config`가 실패하면 `up`을 실행하지 않습니다.
 
 ```bash
 # block: up
@@ -67,6 +87,43 @@ echo CONFIG_OK
 "${C[@]}" up -d || fail "up 실패"
 "${C[@]}" ps --format '{{.Name}} {{.Status}}' || fail "ps 조회 실패"
 echo UP_OK
+)
+```
+
+`up` 뒤에는 검증 런북 7절 V4와 같은 기준(3개 컨테이너 정상, 가용 ≥ 600MiB, 운영 정상 유지)을 아래 `ready`로 확인합니다. backend의 `start_period`(240s) 안에는 `starting`이라 실패할 수 있으니 잠시 뒤 다시 실행합니다. 240s가 지나도 `READY_OK`가 없으면 4-1 `stop`으로 갑니다.
+
+```bash
+# block: ready
+( set -euo pipefail
+C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
+APP='sudo docker compose -f /opt/beone/app/compose.yaml -p beone-app --env-file /opt/beone/app/.env'   # 읽기만
+PUB='sudo docker compose -f /opt/beone/compose.yaml -p beone'                                         # 읽기만
+fail() { echo "중단: $*" >&2; exit 1; }
+# 정상 목록(allowlist) 판정. 검증 런북 8절 health와 같은 기준이며, compose 명령을 인자로 받는다
+health() {
+	local svc ids st n
+	svc=$("$@" config --services) && [ -n "$svc" ] || { echo fail-config; return; }
+	ids=$("$@" ps -q -a) || { echo fail-ps; return; }
+	[ -n "$ids" ] || { echo empty; return; }
+	n=$(printf '%s\n' "$ids" | wc -l | tr -d ' ')
+	[ "$n" -ge "$(printf '%s\n' "$svc" | wc -l | tr -d ' ')" ] || { echo "missing:$n"; return; }
+	st=$(sudo docker inspect --format '{{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' $ids) || { echo fail-inspect; return; }
+	[ "$(printf '%s\n' "$st" | grep -c .)" -eq "$n" ] || { echo partial; return; }
+	if printf '%s\n' "$st" | grep -qvx -e 'running/healthy' -e 'running/none'; then
+		echo "bad:$(printf '%s\n' "$st" | sort -u | tr '\n' ' ')"
+	else
+		echo ok
+	fi
+}
+c=$(health "${C[@]}"); a=$(health $APP); p=$(health $PUB)
+m=$(free -m | awk '/^Mem:/{print $7}') || fail "메모리 조회 실패"
+echo "codef=[$c] app=[$a] pub=[$p] avail=${m}MiB"
+[ "$c" = ok ] || fail "beone-codef가 정상 목록이 아님"
+[ "$a" = ok ] || fail "운영 beone-app이 정상 목록이 아님. 4-1 stop"
+[ "$p" = ok ] || fail "공개 nginx가 정상 목록이 아님. 4-1 stop"
+case "$m" in ''|*[!0-9]*) fail "가용 메모리 값을 읽지 못함" ;; esac
+[ "$m" -ge 600 ] || fail "가용 ${m}MiB < 600MiB. 4-1 stop"
+echo READY_OK
 )
 ```
 
@@ -104,12 +161,83 @@ echo NAMES_OK
 ### 2-3. 호출 (K3, 승인 ⑩)
 
 - 호출 전에 3-1의 `ledger-before`와 3-0의 `budget`(행 0)을 실행해 기준을 남깁니다.
-- 사용자 Mac에서 SSH 터널(검증 런북 8절)로 `http://localhost:18080`에 접속합니다. 합성 회원 1명을 T-a로 인증합니다(검증 런북 7절).
+- 2-4 `watch`를 별도 세션에서 켜고 첫 줄이 `codef=[ok] app=[ok] pub=[ok] codef_oom=[false]`인지 봅니다.
+- 사용자 Mac에서 SSH 터널(검증 런북 8절 첫 줄, 같은 `127.0.0.1:18080`)로 `http://localhost:18080`에 접속해 합성 회원 1명을 가입시킵니다.
+- 인증 완료 상태는 검증 런북 7절과 같은 T-a 범위(검증 DB 한정, 합성 회원 `*@example.test`만, `members.email_verified_at` 갱신과 `users` 장부 행 1개)로 만듭니다. **검증 런북 7절의 T-a 블록은 `$V`(`-p beone-verify`)라 쓰지 않고** 아래 `ta`를 씁니다. 먼저 같은 셸에서 `EMAIL='<합성 주소>'`를 정한 뒤 실행합니다.
+
+```bash
+# block: ta   (먼저 EMAIL='smoke-…@example.test' 지정)
+( set -euo pipefail
+C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
+fail() { echo "중단: $*" >&2; exit 1; }
+: "${EMAIL:?EMAIL을 먼저 지정}"
+case "$EMAIL" in *@example.test) ;; *) fail "합성 주소 아님" ;; esac
+out=$("${C[@]}" exec -T -e EMAIL="$EMAIL" verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u"$MYSQL_USER" -N -B -e "START TRANSACTION; UPDATE members SET email_verified_at=NOW() WHERE email=\"$EMAIL\" AND email_verified_at IS NULL; SELECT ROW_COUNT(); INSERT INTO users (demo_user, member_id, display_name, portfolio_type, read_only) SELECT NULL, m.member_id, \"내 카드\", \"REAL\", FALSE FROM members m WHERE m.email=\"$EMAIL\" AND NOT EXISTS (SELECT 1 FROM users u WHERE u.member_id=m.member_id); SELECT ROW_COUNT(); COMMIT;" "$MYSQL_DATABASE"') || fail "T-a 실행 실패"
+[ "$(printf '%s\n' "$out" | tr '\n' ' ')" = '1 1 ' ] || fail "기대 1·1(인증 1행, 장부 1행)이 아님: $(echo $out)"
+echo TA_OK
+)
+```
+
 - `POST /api/v1/me/codef/connection`: 기관 `0301`(KB국민카드), 동의한 계정 1개. 비밀번호는 사용자가 화면이나 요청에 직접 입력하고 기록하지 않습니다. **1회.**
 - `POST /api/v1/me/codef/syncs`: **1회.**
 - 기록은 HTTP 상태와 `CF-` 결과 코드만 남깁니다. 응답 전문은 저장하지 않습니다.
 - **상한(N14):** API별 최대 3회이며 DB 카운터가 막습니다. 실패해도 자동 재시도는 없습니다(게이트웨이는 재호출하지 않음). 다시 시도하면 횟수에 셉니다. 연결이 `502 CODEF_UNAVAILABLE`이고 `codef_call_budgets`에 행이 없으면 상한 설정 누락·창 밖(닫힘)을 먼저 의심합니다(2-2 `names`).
 - **중단:** 계정 잠김 경고나 인증 실패 계열 `CF-`, 상한 도달, 로그·DB에서 금지 값 발견, 원장 변경, 운영 영향 중 하나라도 해당하면 즉시 멈추고 4절로 갑니다.
+
+### 2-4. 진행 중 감시 (검증 런북 8절과 같은 기준)
+
+`ready` 뒤 별도 세션에서 켜고, 호출·확인이 끝날 때까지 출력을 봅니다. 중단 조건은 검증 런북 0절과 같습니다(가용 < 600MiB, 디스크 ≥ 85%, 운영·공개 nginx가 정상 목록 아님, 검증 컨테이너 OOMKilled). 여기에 `beone-codef` 자신이 정상 목록이 아닌 경우를 더합니다. 조회 실패·빈 결과·값 없음은 모두 중단입니다.
+
+중단 시 동작은 검증 런북과 다르게 **`down -v`가 아니라 `stop`**입니다(대상은 `-p beone-codef` 고정). 호출 상한 카운터 `codef_call_budgets`가 검증 DB 볼륨에 있어서, 볼륨을 지우면 상한이 0부터 다시 세어지기 때문입니다(4-3 마지막 줄과 같은 이유). 볼륨 삭제는 사용자가 4-2로 정합니다. 블록은 중단하면 종료 코드 1로 끝나고, 감시 세션이 끊기면 자동 중지도 멈춥니다.
+
+```bash
+# block: watch
+( set -euo pipefail
+C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
+APP='sudo docker compose -f /opt/beone/app/compose.yaml -p beone-app --env-file /opt/beone/app/.env'   # 읽기만
+PUB='sudo docker compose -f /opt/beone/compose.yaml -p beone'                                         # 읽기만
+# 정상 목록(allowlist) 판정. 검증 런북 8절 health와 같은 기준이며, compose 명령을 인자로 받는다
+health() {
+	local svc ids st n
+	svc=$("$@" config --services) && [ -n "$svc" ] || { echo fail-config; return; }
+	ids=$("$@" ps -q -a) || { echo fail-ps; return; }
+	[ -n "$ids" ] || { echo empty; return; }
+	n=$(printf '%s\n' "$ids" | wc -l | tr -d ' ')
+	[ "$n" -ge "$(printf '%s\n' "$svc" | wc -l | tr -d ' ')" ] || { echo "missing:$n"; return; }
+	st=$(sudo docker inspect --format '{{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' $ids) || { echo fail-inspect; return; }
+	[ "$(printf '%s\n' "$st" | grep -c .)" -eq "$n" ] || { echo partial; return; }
+	if printf '%s\n' "$st" | grep -qvx -e 'running/healthy' -e 'running/none'; then
+		echo "bad:$(printf '%s\n' "$st" | sort -u | tr '\n' ' ')"
+	else
+		echo ok
+	fi
+}
+oom() {
+	local ids o
+	ids=$("$@" ps -q -a) && [ -n "$ids" ] || { echo fail; return; }
+	o=$(sudo docker inspect --format '{{.State.OOMKilled}}' $ids) || { echo fail; return; }
+	[ -n "$o" ] && ! printf '%s\n' "$o" | grep -qvx false && echo false || echo "bad:$(printf '%s\n' "$o" | sort -u | tr '\n' ' ')"
+}
+while sleep 30; do
+	m=$(free -m | awk '/^Mem:/{print $7}') || m=''
+	d=$(df -P / | awk 'NR==2{print $5}' | tr -d %) || d=''
+	c=$(health "${C[@]}"); a=$(health $APP); p=$(health $PUB); o=$(oom "${C[@]}")
+	echo "$(date -u +%T) avail=${m}MiB disk=${d}% codef=[$c] app=[$a] pub=[$p] codef_oom=[$o]"
+	r=''
+	case "$m" in ''|*[!0-9]*) r="$r mem" ;; *) [ "$m" -ge 600 ] || r="$r mem" ;; esac
+	case "$d" in ''|*[!0-9]*) r="$r disk" ;; *) [ "$d" -lt 85 ] || r="$r disk" ;; esac
+	[ "$c" = ok ] || r="$r codef"
+	[ "$a" = ok ] || r="$r app"
+	[ "$p" = ok ] || r="$r pub"
+	[ "$o" = false ] || r="$r oom"
+	if [ -n "$r" ]; then
+		echo "STOP:$r"
+		if "${C[@]}" stop; then echo CODEF_STOP_OK; else echo 'CODEF_STOP_FAILED: 사용자에게 즉시 보고'; fi
+		exit 1
+	fi
+done
+)
+```
 
 ## 3. 확인 (K4~K6)
 
@@ -270,7 +398,7 @@ echo DESTROY_OK
 )
 ```
 
-- 끝나면 검증 런북 9절의 "영향 없음 확인"(운영 `beone-app` healthy·이미지 동일, 복원 회차 그대로)을 실행합니다.
+- `DESTROY_OK` 뒤에는 검증 런북 9절 블록을 **그대로 전체** 실행합니다. `beone-verify`는 2-1 `verify-down`으로 이미 내려가 있어 `$V down -v`는 할 일 없이 성공하고, 이어서 검증 이미지·`/opt/beone/verify`·업로드 폴더를 지운 뒤 "영향 없음 확인"(운영 `beone-app` healthy·이미지 동일, 복원 회차 그대로, `VOLUMES_SAME`, 포트 18080 0)까지 합니다. `VOLUMES_SAME`은 검증 런북 3절 기준 파일(`/tmp/beone-verify-v0-volumes.txt`)이 남아 있어야 나오며, 서버 재부팅 등으로 지워져 `VOLUMES_UNKNOWN`이면 통과가 아닙니다. `beone-verify`를 다시 쓸 계획이면 9절을 실행하지 않고 사용자에게 확인합니다.
 
 ### 4-3. DB를 남기고 CODEF 데이터만 지울 때 (선택, N20 미결)
 
@@ -300,3 +428,4 @@ COMMIT;
 | 계정 API 실호출 전 확인 항목 | [codef 문서](../domains/codef.md#비공개-실연동-프로필-codef-live-lp-1-193)의 '실호출 전 확인 필요' 목록 |
 | 정식 과금 여부와 비용 상한 | N14의 비용 부분. 정식 과금이면 별도 승인 |
 | 서버 블록의 실제 실행 확인 | 오프라인 스텁 점검만 함(0절). 서버 실행은 운영 담당 |
+| 감시 중단 시 `stop`(검증 런북은 `down -v`) | 호출 상한 카운터 보존을 위한 차이(2-4). 다르게 정하려면 사용자 결정 |
