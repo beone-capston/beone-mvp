@@ -200,7 +200,7 @@ server {
 | B5 | `$PUB exec nginx nginx -s reload` | 오류 없음 | 원복 A → 원복 B |
 | B6 | **공개 확인(스모크가 보지 않는 항목).** `http://` 301, certbot 갱신 타이머 유지, `curl -sI 'https://beonepay.site/email-verification?token=x'`에 `Referrer-Policy: no-referrer`, 접근 로그의 해당 줄에 `token=` 없음, 위조 `X-Forwarded-*` 헤더를 보내도 CSRF Set-Cookie 속성이 같음(S17 재확인) | 모두 기대값 | 원복 A → 원복 B |
 | B7 | **공개 스모크와 상태 확정.** `sudo $DEPLOY bootstrap-confirm production`. 웹 링크·backend health를 확인하고 `smoke-public.sh https://beonepay.site`(`/` 200 HTML, `/api/v1/me` 401, `/actuator/health` 404, CSRF 쿠키)를 통과해야만 상태 파일을 씁니다 | 종료 0, `production.state` 생성(준비한 digest·`backup_id`), 대기 파일이 `production.bootstrap.confirmed-<UTC>`로 바뀜, 이력에 `ok bootstrap` 줄 | 종료 1: 상태 파일 없음·대기 파일 유지. nginx 설정 원인이면 원복 A 뒤 B3·B4부터 다시 하고 confirm을 다시 실행. 아니면 원복 A → 원복 B |
-| B8 | **준비 완료 단계 아님(TODO).** 회원 API 스모크는 공개용 실메일 인증 스모크를 별도로 구현·검증한 뒤에 정한다. 현재 `smoke-member.sh`(#199)는 `member` 검증 환경 전용이다. 실메일 대신 검증 DB T-a 훅을 전제로 하고, 운영 DB에는 T-a를 쓰지 않으므로 공개 `prod`에 그대로 실행하지 않는다 | 공개용 스모크가 준비되면 기대값을 정한다 | — |
+| B8 | **준비 완료 단계 아님(초안).** 회원 API 스모크는 [운영 회원 스모크 절차(초안)](prod-member-smoke.md)를 따른다(실메일 1회, 실행 여부·시점은 Aside가 사용자와 정함). 현재 `smoke-member.sh`(#199)는 `member` 검증 환경 전용이다. 실메일 대신 검증 DB T-a 훅을 전제로 하고, 운영 DB에는 T-a를 쓰지 않으므로 공개 `prod`에 그대로 실행하지 않는다 | 절차서 M0~M8 확인값 | 절차서 중단 기준·6절 정리 |
 
 **원복 A: 공개 nginx를 안내 화면으로**
 
