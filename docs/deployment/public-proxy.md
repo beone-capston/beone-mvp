@@ -99,8 +99,8 @@ server {
 ```
 
 - 앱은 `X-Forwarded-*`를 해석하지 않습니다(`forward-headers-strategy: none`). 쿠키의 `Secure`도 요청 scheme과 관계없이 붙습니다. 그래도 로그·후속 변경에 대비해 nginx에서 전달 헤더를 덮어씁니다.
-  - 같은 방식을 쓰는 검증 환경 설정(`deploy/verify/nginx.conf`)은 **PR #206에서 추가하며 아직 develop에 병합되지 않았습니다.** 스모크 스크립트(`deploy/scripts/smoke-member.sh`)도 **PR #199로 미병합**입니다.
-  - 위조 헤더를 보내도 Set-Cookie가 같다는 S17 관측은 **C2 후보(`ef01309`) 검증 환경**(로컬 사전 스모크와 운영 담당의 서버 루프백 `beone-verify` 실행)에서 나온 것입니다. 공개 서버에 반영됐다는 증거가 아닙니다. 공개 반영 뒤에는 P5에서 다시 확인합니다.
+  - 같은 방식을 쓰는 검증 환경 설정(`deploy/verify/nginx.conf`)은 **PR #206에서 추가하며 아직 develop에 병합되지 않았습니다.** 스모크 스크립트([`deploy/scripts/smoke-member.sh`](../../deploy/scripts/smoke-member.sh))는 #199로 develop에 병합됐습니다.
+  - 위조 헤더를 보내도 Set-Cookie가 같다는 S17 관측은 **C2 후보(`ef01309`) 검증 환경**(로컬 사전 스모크와 운영 담당의 서버 루프백 `beone-verify` 실행)에서 나온 것입니다. 공개 서버에 반영됐다는 증거가 아닙니다. 공개 반영 뒤에는 4-1절 B6에서 다시 확인합니다.
 - **N2 조건:** 인증 링크 경로(`/email-verification`, `/password-reset`)는 `Referrer-Policy: no-referrer`를 붙이고, 공개 접근 로그에 이 경로의 query를 남기지 않습니다. 위 초안은 `$request` 대신 `$uri`를 쓰는 로그 형식으로 처리했습니다. 기존 서버 `access_log` 경로와 형식은 1절에서 대조해 맞춥니다.
 - 반영하면 지금의 정적 안내 화면은 SPA로 바뀝니다. 안내 화면은 4절 백업이 원복 대상입니다.
 
@@ -177,26 +177,61 @@ server {
 
 ## 4. 반영·원복 절차 (승인 ⑧)
 
+운영 **최초 반영(bootstrap)**과 그 **이후 정상 배포**를 나눕니다.
+
+- **나누는 이유:** 정상 배포(`deploy.sh production`)는 `https://beonepay.site` 공개 스모크(`/api/v1/me` 401, CSRF 쿠키)를 통과해야 성공합니다. 그런데 공개 nginx의 `/api` 프록시와 웹 링크 마운트는 이 절의 nginx 변경에서 처음 생깁니다. 그래서 nginx 변경 전에 정상 배포를 돌리면 반드시 실패하고, 복귀 대상도 없어 새 backend와 웹 링크가 남습니다(순환 의존). 최초 1회는 `deploy.sh`의 bootstrap 세 단계로 합니다([서버 배포 스크립트 - 운영 최초 배포](server-deploy.md#운영-최초-배포-bootstrap)).
+- **전제:** bootstrap 명령은 #242에 있으며 아직 develop에 병합되지 않았습니다. 병합과 서버 설치(승인 절차) 전에는 4-1을 실행할 수 없습니다.
+- **금지**
+  - 공개 스모크를 건너뛰고 확정하지 않습니다. 확정은 `bootstrap-confirm`의 공개 스모크 통과로만 합니다.
+  - 종료 1을 무시하고 다음 단계로 가지 않습니다.
+  - `/opt/beone/deploy/state/production.state`를 손으로 쓰거나 고치지 않습니다.
+  - bootstrap 도중에 정상 배포나 SSM 자동 배포로 우회하지 않습니다. 운영 정상 배포는 상태 파일이 없거나 bootstrap 대기 중이면 아무것도 바꾸지 않고 종료 3으로 멈춥니다.
+
+### 4-1. 최초 반영 (bootstrap, 1회, 승인 창 안)
+
+명령은 서버에서 직접 실행합니다. `DEPLOY=/opt/beone/deploy/deploy.sh`, `PUB='sudo docker compose -f /opt/beone/compose.yaml -p beone'`로 둡니다. 원복 A·B는 표 아래에 있습니다.
+
 | # | 단계 | 확인값 | 실패 시 |
 |---|---|---|---|
-| P3 | 설정 백업: `sudo tar -czf /opt/beone-backup/pre-mvp-<UTC>.tgz /opt/beone/compose.yaml /opt/beone/nginx/conf.d <기존 정적 루트>`(지금의 안내 화면 위치, 1절 대조값) | tgz 존재, 크기 > 0 | 진행 안 함 |
-| P4 | `prod` backend 기동과 웹 첫 배치. 운영 첫 배포는 승인 항목이며, 자동 배포(`deploy.sh production`, [배포 자동화](cd.md))나 같은 스크립트의 수동 실행으로 `/opt/beone/web/current`를 만든다 | `beone-app` healthy, `/opt/beone/web/current/index.html` 존재 | 앱·링크만 원복 |
-| P5-1 | 설정 수정 → `sudo docker compose -f /opt/beone/compose.yaml -p beone exec nginx nginx -t` | `syntax is ok`, `test is successful` | 파일을 백업본으로 되돌림 |
-| P5-2 | `sudo docker compose -f /opt/beone/compose.yaml -p beone exec nginx nginx -s reload` | 아래 확인 통과 | 원복 |
-| P5-3 | 확인: `curl -sI https://beonepay.site/` 200, `curl -s -o /dev/null -w '%{http_code}' https://beonepay.site/api/v1/me` 401, `https://beonepay.site/actuator/health` 404, `http://` 301, certbot 갱신 타이머 유지, `curl -sI 'https://beonepay.site/email-verification?token=x'`에 `Referrer-Policy: no-referrer`, 접근 로그의 해당 줄에 `token=` 없음 | 모두 기대값 | 원복 |
-| P5-4 | **준비 완료 단계 아님(TODO).** 회원 API 스모크는 공개용 실메일 인증 스모크를 별도로 구현·검증한 뒤에 정한다. 현재 `smoke-member.sh`(#199, 미병합)는 `member` 검증 환경 전용이다. 실메일 대신 검증 DB T-a 훅을 전제로 하고, 운영 DB에는 T-a를 쓰지 않으므로 공개 `prod`에 그대로 실행하지 않는다 | 공개용 스모크가 준비되면 기대값을 정한다 | — |
+| B1 | **백업·복귀 기준 확보.** 설정 백업 `sudo tar -czf /opt/beone-backup/pre-mvp-<UTC>.tgz /opt/beone/compose.yaml /opt/beone/nginx/conf.d <기존 정적 루트>`(지금의 안내 화면 위치, 1절 대조값). 이어서 기존 이미지 식별자를 `/opt/beone-backup/pre-mvp-<UTC>.ids`에 적습니다: 공개 nginx 컨테이너의 이미지 이름·ID(`$PUB ps -q nginx`와 `docker inspect --format '{{.Config.Image}} {{.Image}}'`), `beone-app`의 backend·mysql 컨테이너 유무(`docker compose … -p beone-app ps -a`, 값 출력 없음) | tgz 존재·크기 > 0, ids 파일에 nginx 이미지 이름·ID와 `beone-app` 상태 | 진행 안 함 |
+| B2 | **비공개 준비·검증.** `sudo $DEPLOY bootstrap-prepare production <ApiDigest> <WebDigest> <GitSha>`. 스크립트가 복귀 기준(실행 중 backend 이미지, 없으면 `none`)을 판정하고, mysql이 있으면 덤프·짝 기록을 남깁니다(mysql 컨테이너·볼륨이 모두 없으면 `backup=none`). 이어서 backend 기동·health, 웹 릴리스·`current` 링크를 만들고 비공개 검증을 합니다. 공개 스모크는 하지 않습니다 | 종료 0, 출력 "준비 완료(미확정)", `production.bootstrap` 있음·`production.state` 없음, 출력의 복귀 기준·백업 id(운영 backend·mysql이 아직 없으면 둘 다 `none`이 정상), `/opt/beone/web/current/index.html` 있음, 공개 화면은 아직 안내 화면 | 종료 3: 변경 없음. 원인을 고쳐 다시 하거나 창 종료. 종료 4: 스크립트가 복귀 기준으로 되돌림(기준 none이면 새 backend 정지). 창 종료. 종료 1: 즉시 확인([백엔드 배포 기반](backend-compose.md)). nginx 단계로 가지 않음 |
+| B3 | **네트워크·마운트.** 3절의 연결 방식(A 또는 B)과 웹 마운트(`/opt/beone/web:/srv/beone/web:ro`)를 `/opt/beone/compose.yaml`에 넣고 `$PUB up -d nginx`(재생성, 짧은 중단) | nginx 실행 중, 공개 화면은 아직 안내 화면(설정은 그대로) | 원복 A → 원복 B |
+| B4 | **설정 적용과 `nginx -t`.** 2절 server 블록(N4 자리표시는 결정값으로)을 `conf.d`에 둔 뒤 `$PUB exec nginx nginx -t` | `syntax is ok`, `test is successful` | reload하지 않음. 원복 A → 원복 B |
+| B5 | `$PUB exec nginx nginx -s reload` | 오류 없음 | 원복 A → 원복 B |
+| B6 | **공개 확인(스모크가 보지 않는 항목).** `http://` 301, certbot 갱신 타이머 유지, `curl -sI 'https://beonepay.site/email-verification?token=x'`에 `Referrer-Policy: no-referrer`, 접근 로그의 해당 줄에 `token=` 없음, 위조 `X-Forwarded-*` 헤더를 보내도 CSRF Set-Cookie 속성이 같음(S17 재확인) | 모두 기대값 | 원복 A → 원복 B |
+| B7 | **공개 스모크와 상태 확정.** `sudo $DEPLOY bootstrap-confirm production`. 웹 링크·backend health를 확인하고 `smoke-public.sh https://beonepay.site`(`/` 200 HTML, `/api/v1/me` 401, `/actuator/health` 404, CSRF 쿠키)를 통과해야만 상태 파일을 씁니다 | 종료 0, `production.state` 생성(준비한 digest·`backup_id`), 대기 파일이 `production.bootstrap.confirmed-<UTC>`로 바뀜, 이력에 `ok bootstrap` 줄 | 종료 1: 상태 파일 없음·대기 파일 유지. nginx 설정 원인이면 원복 A 뒤 B3·B4부터 다시 하고 confirm을 다시 실행. 아니면 원복 A → 원복 B |
+| B8 | **준비 완료 단계 아님(TODO).** 회원 API 스모크는 공개용 실메일 인증 스모크를 별도로 구현·검증한 뒤에 정한다. 현재 `smoke-member.sh`(#199)는 `member` 검증 환경 전용이다. 실메일 대신 검증 DB T-a 훅을 전제로 하고, 운영 DB에는 T-a를 쓰지 않으므로 공개 `prod`에 그대로 실행하지 않는다 | 공개용 스모크가 준비되면 기대값을 정한다 | — |
 
-**원복**
+**원복 A: 공개 nginx를 안내 화면으로**
 
 ```bash
 exec bash
 sudo tar -xzf /opt/beone-backup/pre-mvp-<UTC>.tgz -C /
 PUB='sudo docker compose -f /opt/beone/compose.yaml -p beone'
+$PUB up -d nginx                               # B3에서 재생성했다면 백업한 compose.yaml로 다시 만든다
 $PUB exec nginx nginx -t && $PUB exec nginx nginx -s reload
 curl -sI https://beonepay.site/ | head -1    # 200, 이전 안내 화면
 ```
 
-3절에서 컨테이너를 재생성했다면, 백업한 `/opt/beone/compose.yaml`로 `sudo docker compose -f /opt/beone/compose.yaml -p beone up -d nginx`를 다시 실행합니다.
+복원한 nginx 이미지 ID가 B1의 ids 파일과 같은지 확인합니다.
+
+**원복 B: 앱·웹 링크를 bootstrap 전으로**
+
+```bash
+sudo /opt/beone/deploy/deploy.sh bootstrap-abort production
+```
+
+- 원복 A를 먼저 합니다. 공개 nginx가 아직 새 링크·backend를 가리키는 상태에서 링크를 지우거나 backend를 멈추지 않기 위해서입니다.
+- 종료 0이면 끝입니다. backend는 복귀 기준 이미지로 돌아가고, 기준이 `none`이면 새 backend를 멈춥니다(볼륨은 지우지 않음). 웹 링크는 이전 값으로 돌아가고, 이전 링크가 없었으면 새 링크만 지웁니다. 상태 파일은 생기지 않고 대기 파일은 `.aborted-<UTC>`가 됩니다.
+- 종료 1이면 대기 파일이 남습니다. 원인을 확인한 뒤 같은 명령을 다시 실행합니다.
+- DB는 되돌리지 않습니다. prepare가 새 마이그레이션을 적용했다면 [서버 배포 스크립트](server-deploy.md#새-마이그레이션-뒤-구-앱으로-복귀할-때)의 확인을 따르고, 필요하면 B2 백업으로 [복원 절차](backend-compose.md)를 밟습니다(`backup=none`이면 복원할 DB가 없었던 것).
+
+### 4-2. 이후 정상 배포
+
+- B7이 종료 0으로 끝난 뒤에만 정상 배포를 씁니다. 웹·backend 변경은 자동 배포(SSM `BeoneDeployProduction` → `deploy.sh production …`, [배포 자동화](cd.md))로 합니다. 공개 nginx 정적 루트가 `current` 링크라서 배포마다 nginx 설정을 바꾸지 않습니다.
+- 공개 스모크가 실패하면 `deploy.sh`가 `production.state`의 이전 digest와 이전 웹 링크로 되돌립니다(종료 4). 종료 1이면 사람이 바로 확인합니다([서버 배포 스크립트](server-deploy.md#실패와-복귀)).
+- 상태 파일이 없거나 bootstrap 대기 중이면 정상 배포는 종료 3으로 멈춥니다. 이때는 4-1을 끝내거나 원복합니다.
+- nginx 설정 자체를 바꾸는 변경(N4 값 조정 등)은 정상 배포가 아니라 별도 승인입니다. B1처럼 설정을 백업하고, `nginx -t` → reload → `deploy/scripts/smoke-public.sh https://beonepay.site` 수동 실행과 B6 확인을 합니다. 실패하면 원복 A만 합니다(앱은 그대로).
 
 ## 5. 남은 결정
 
@@ -205,7 +240,8 @@ curl -sI https://beonepay.site/ | head -1    # 200, 이전 안내 화면
 | N4 보안 헤더·요청 제한·본문 크기 | 결정 대기. 권장안은 인증 경로만 제한, HSTS를 짧게 시작, CSP는 Report-Only로 먼저(ROADMAP 8절) |
 | 프로젝트 연결 방식(3절 A·B) | 승인 ⑧에서 결정 |
 | 공개 환경 스모크의 회원 인증 | TODO. 실메일(N1, 결정 39-6) 구현 뒤 공개용 실메일 인증 스모크를 별도로 구현·검증한다. 운영 DB에는 T-a를 쓰지 않음 |
-| 검증 환경 근거(#206·#199) | 미병합. 병합되면 이 문서의 참조를 병합된 경로로 확정 |
+| 검증 환경 근거(#206·#199) | #199(`smoke-member.sh`)는 병합됨. #206(`deploy/verify/`)은 미병합이며, 병합되면 이 문서의 참조를 병합된 경로로 확정 |
+| bootstrap 명령(#242) | 미병합. 병합·서버 설치 전에는 4-1을 실행할 수 없음 |
 | 스테이징 도메인·인증서·기본 인증 값 | 승인 항목(결정 40). 정해지기 전에는 2-1절 `<스테이징 도메인>`·계정 파일을 넣지 않음 |
 | `<스테이징 web 기본 인증 리스너>` | 스테이징 web(#230)의 기본 인증 리스너. 공개 nginx가 호스트 네트워크면 `127.0.0.1:18082`, 브리지면 스테이징 네트워크 연결 뒤 `<별칭>:8080`(1절 대조·3절 연결 방식에 따름) |
 | `index.html` 캐시 설정 | 권장(2절 주석). 승인 ⑧에서 반영 여부 확인 |
