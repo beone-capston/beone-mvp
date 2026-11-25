@@ -47,8 +47,16 @@
    # 이름·조직 등 인증서 정보와 비밀번호는 프롬프트에서 입력
    ```
 
-2. **보관:** 키 파일과 비밀번호는 Git·`gradle.properties`·`local.properties`·문서·이슈·PR·채팅·CI 변수에 넣지 않습니다. 저장소 폴더 안에도 두지 않습니다. 백업 위치와 담당은 N8에서 정합니다. 키를 잃어버리면 같은 앱으로 업데이트할 수 없습니다.
-3. **주입과 서명 빌드:** 값은 그 셸에서만 환경 변수로 넣습니다.
+2. **인증서 지문 사전 기록:** 키를 만든 직후, 서명 빌드 전에 키 저장소에서 별칭 인증서의 SHA-256 지문을 확인합니다. 그 값을 N8에서 정한 위치에 기록합니다. 비밀번호는 프롬프트로 입력하고, 출력 중 지문 줄만 옮깁니다.
+
+   ```bash
+   keytool -list -v -keystore <저장소 밖 경로>/beone-release.jks -alias <키 별칭> | grep -E 'SHA256:'
+   # 예: SHA256: AB:CD:…(32바이트). 이 값이 이후 모든 서명본의 기준이다
+   ```
+
+   지문은 비밀이 아닙니다. 다만 3절에서 서명본을 판정하는 기준이 되므로, APK를 만들기 **전에** 키에서 직접 읽은 값을 기록해야 합니다. 첫 APK에서 읽은 값을 기준으로 삼으면 잘못된 키로 서명한 첫 APK를 걸러 내지 못합니다.
+3. **보관:** 키 파일과 비밀번호는 Git·`gradle.properties`·`local.properties`·문서·이슈·PR·채팅·CI 변수에 넣지 않습니다. 저장소 폴더 안에도 두지 않습니다. 백업 위치와 담당은 N8에서 정합니다. 키를 잃어버리면 같은 앱으로 업데이트할 수 없습니다.
+4. **주입과 서명 빌드:** 값은 그 셸에서만 환경 변수로 넣습니다.
 
    ```bash
    cd android
@@ -76,10 +84,10 @@ APKSIGNER="$ANDROID_HOME/build-tools/<버전>/apksigner"
 |---|---|
 | `Verifies` | 첫 줄이 `Verifies` |
 | 서명 방식 | `Verified using v2 scheme (APK Signature Scheme v2): true`(minSdk 30이라 v2 이상이면 충분) |
-| 서명자 인증서 | `Signer #1 certificate SHA-256 digest`가 보관한 키의 지문과 같음. debug 키(`CN=Android Debug`)가 아님 |
+| 서명자 인증서 | `Signer #1 certificate SHA-256 digest`가 2절 2단계에서 **키에서 미리 기록한 지문**과 같음(콜론·대소문자 차이만 무시). 첫 APK의 값이 아니라 사전 기록값과 비교함. debug 키(`CN=Android Debug`)가 아님 |
 | 패키지 | `aapt2 dump badging <apk>`의 `package: name='com.beone.app'`, versionCode·versionName이 의도한 값 |
 
-인증서 SHA-256 지문은 비밀이 아닙니다. 다음 서명본과 비교할 수 있게 N8에서 정한 곳에 기록합니다.
+인증서 SHA-256 지문은 비밀이 아닙니다. 사전 기록값과 다르면 그 APK는 설치·전달하지 않고 키와 환경 변수를 다시 확인합니다. 이후 서명본도 같은 사전 기록값과 비교합니다.
 
 ## 4. 설치 (승인 항목)
 
@@ -97,14 +105,20 @@ APKSIGNER="$ANDROID_HOME/build-tools/<버전>/apksigner"
 
 최종 확인은 실제 Android 기기에서 합니다. 에뮬레이터 결과를 최종 확인으로 보고하지 않습니다. 기록에는 기기 모델·OS 버전·확인 날짜·APK 인증서 지문을 함께 적고, 생체·PIN·개인 정보가 보이는 화면은 첨부하지 않습니다.
 
-**전제:** `https://beonepay.site`가 실제 앱 화면과 같은 origin `/api`를 제공해야 합니다(공개 배포, 승인 ⑧). 그 전에는 정적 확인 화면만 보이므로 R1(시작 주소)만 의미가 있습니다.
+**전제:** 항목마다 필요한 서버 상태가 다릅니다.
+
+| 서버 상태 | 확인할 수 있는 항목 |
+|---|---|
+| 지금(정적 확인 화면만) | R1 |
+| 승인된 임시 시험 페이지(T)를 같은 origin `/bridge-test/`에 잠시 올린 상태([브리지 시험 페이지 서버 적용 절차](bridge-test-page.md), 사용자 실행) | R1, R2·R3, R4(T의 `http://` 링크), R5~R9(T에서 `auth.request`·`state.get`으로 확인) |
+| 공개 배포 뒤(웹과 같은 origin `/api`, 승인 ⑧) | 전부. R10은 이때만 |
 
 | # | 확인 | 기대 | 연결 항목 |
 |---|---|---|---|
 | R1 | release 앱 실행 | `https://beonepay.site/`를 열고 "웹 화면 주소가 설정되지 않았습니다" 안내가 없음. PC `chrome://inspect`에 WebView가 보이지 않음 | [BR22](../android/device-checklist.md#release-시작-주소와-단일-origin), W5 release |
 | R2 | 서버에서 서빙하는 시험 페이지로 브리지 기본 동작 | debug와 같은 결과 | [BR23](../android/device-checklist.md#release-시작-주소와-단일-origin)(BR1·BR2·BR3·BR17②·BR18④ 반복) |
 | R3 | `https://www.beonepay.site/`, `http://beonepay.site/` 링크 | 열리지 않고 차단 안내. 신뢰 origin은 `https://beonepay.site` 하나 | [BR24](../android/device-checklist.md#release-시작-주소와-단일-origin) |
-| R4 | 평문 HTTP 주소로 이동·요청 | 차단(release는 `cleartextTrafficPermitted="false"`) | 위 1절 |
+| R4 | 평문 HTTP 주소로 이동(T의 `http://beonepay.site/` 링크 등) | 차단(탐색 정책, release는 `cleartextTrafficPermitted="false"`) | 위 1절, BR24와 같은 링크 |
 | R5 | 지문 인증 → 활성 | `BIOMETRIC`으로 활성, 60초부터 줄어듦 | [#22 기기 인증 2번](../android/device-checklist.md#기기-인증과-60초-활성-상태-22) |
 | R6 | 60초 대기 | 0초에 비활성, 만료·재인증 안내 | #22 3번 |
 | R7 | 지문 불일치 → 잠김 → 같은 창에서 PIN | PIN 성공 시 `DEVICE_CREDENTIAL`로 활성 | #22 7·8번 |
@@ -122,5 +136,5 @@ APKSIGNER="$ANDROID_HOME/build-tools/<버전>/apksigner"
 | N8: 키 보관 위치·담당·백업, versionCode 규칙 | 결정 대기 | 사용자 |
 | 키 생성·서명 빌드 | 승인 대기 | 사용자 실행 |
 | APK 전달·adb 설치·기존 debug 앱 삭제 | 승인 대기 | 사용자 실행 |
-| 실기기 확인(R1~R10) | 승인 대기. R2·R10은 공개 배포 뒤 | 사용자 실행 |
+| 실기기 확인(R1~R10) | 승인 대기. R2~R9는 임시 시험 페이지 배치(승인) 뒤, R10은 공개 배포 뒤 | 사용자 실행 |
 | 스토어 배포 | MVP 밖(결정 38-9) | — |
