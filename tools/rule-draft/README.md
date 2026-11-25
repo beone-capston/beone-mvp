@@ -7,10 +7,11 @@ PRD FR-08(AI 약관 초안 추출·사람 검증·수동 작성 비교)을 위�
 
 서비스 업무 API에는 넣지 않았고(D-14) 배포 대상도 아닙니다.
 
-- **현재 범위(D41-1):** 텍스트 추출, 초안 생성 흐름, 스키마 검사, 근거 검사, 녹화 응답 재생, 실제 제공자 어댑터(컴파일만)
+- **현재 범위:**
+  - D41-1: 텍스트 추출, 초안 생성 흐름, 스키마 검사, 근거 검사, 녹화 응답 재생, 실제 제공자 어댑터(컴파일만)
+  - D41-2: 초안·수동 규칙 비교(`compare`), 사람 승인 기록(`approve`)
 - **아직 없는 것:**
-  - 비교기·사람 승인 기록(D41-2)
-  - 원문 스냅샷·평가 양식(D41-3)
+  - 실제 카드의 비교·승인 기록. 도구만 있고 기록은 아직 하나도 없습니다.
   - 실제 AI 호출. 제공자·모델·비용은 사용자 승인 전이라 한 번도 호출하지 않았습니다.
 
 ## 구조적 분리: AI 출력이 계산에 들어가지 않는 이유
@@ -20,7 +21,7 @@ PRD FR-08(AI 약관 초안 추출·사람 검증·수동 작성 비교)을 위�
 | 별도 Gradle 프로젝트 | backend `settings.gradle`에 포함하지 않습니다. 이 도구의 클래스와 의존성(PDFBox, Jackson)은 backend 클래스패스에 없습니다. |
 | 규칙 경로 쓰기 금지 | [`OutputGuard`](src/main/java/com/beone/ruledraft/check/OutputGuard.java)가 다음 경로에 쓰려고 하면 실패합니다(종료 1). 경로의 존재하는 앞부분은 운영체제 방식으로 풀어 링크와 그 뒤의 `..`까지 반영하고, 아직 없는 부분의 `.`·`..`는 거부합니다. 도구는 검사가 돌려준 경로에만 씁니다. 규칙 JSON은 읽기만 합니다.<br>- 기준 표본 디렉터리 아래<br>- 이름이 `backend/src/main/resources/rules`인 경로 아래 |
 | 상태 고정 | 초안의 `status`는 모델이 무엇을 내든 `AI_DRAFT`로 바꿉니다. backend [`VerificationStatus`](../../backend/src/main/java/com/beone/api/benefit/rule/VerificationStatus.java)의 값이며, 계산에는 `VERIFIED`만 씁니다. 모델이 다른 값을 냈으면 근거 파일의 `modelStatus`에 남깁니다. |
-| 사람 반영 | `VERIFIED` 반영은 사람이 원문과 대조해 rules JSON을 고친 뒤 별도 커밋으로만 합니다. |
+| 사람 반영 | `VERIFIED` 반영은 사람이 원문과 대조해 rules JSON을 고친 뒤 별도 커밋으로만 합니다. `compare`·`approve`도 규칙 파일을 읽기만 하고, 출력 경로는 같은 `OutputGuard` 검사를 거칩니다. 승인 기록은 "이렇게 고치기로 했다"는 기록일 뿐 규칙을 바꾸지 않습니다. 테스트([`ReviewCliTest`](src/test/java/com/beone/ruledraft/ReviewCliTest.java))가 모든 명령 전후로 기준 규칙 디렉터리 내용이 같은지와, 규칙 경로 출력이 종료 1인지 확인합니다. |
 
 ## 실행
 
@@ -76,6 +77,57 @@ PDF를 쪽마다 따로 추출해 각 쪽 앞에 `[[page N]]` 줄을 붙입니�
 | 2 | 인자·실행 조건 오류. `--live`·키 조건도 여기에 해당합니다 |
 | 3 | 초안·근거 파일은 썼지만 근거가 빠졌거나 확인되지 않은 값이 있음 |
 
+### 3. 초안·수동 규칙 비교 (`compare`)
+
+```bash
+./gradlew run --args="compare --draft build/rule-draft/99999.draft.json --evidence build/rule-draft/99999.evidence.json \
+  --manual <수동 규칙 JSON> --out build/rule-review"
+```
+
+[`RuleComparator`](src/main/java/com/beone/ruledraft/review/RuleComparator.java)가 자식이 없는 값마다 JSON Pointer 경로로 비교하고, `<카드ID>.compare.json`과 `<카드ID>.compare.md`(Markdown 표)를 씁니다.
+
+| 분류 | 뜻 |
+|---|---|
+| 일치 | 두 값이 같습니다. 숫자는 표기와 상관없이 값으로 비교합니다(`10000`과 `10000.0`은 같음) |
+| 불일치 | 값이나 값 종류가 다릅니다(`"1"`과 `1`, `null`과 `0`은 다름) |
+| 누락(초안에 없음) | 수동 규칙에만 있습니다 |
+| 누락(수동에 없음) | 초안에만 있습니다 |
+| 근거 없음 | 초안 값에 확인된 근거가 자기·조상 경로 어디에도 없습니다. 값 비교 결과는 JSON의 `comparison`과 표의 괄호에 남깁니다 |
+
+- **배열:** 번호끼리 비교합니다. 순서가 다르면 불일치·누락으로 나옵니다.
+- **`/status`:** 비교하지 않습니다. 초안은 항상 `AI_DRAFT`이기 때문입니다.
+- **근거:** 근거 파일의 `fields`(draft가 원문과 대조해 확인한 근거)만 씁니다. 근거 파일의 `draftSha256`이 초안 파일 내용과 다르면 다른 실행의 짝이므로 비교하지 않습니다(종료 1). compare는 원문을 다시 읽지 않습니다.
+- **근거를 요구하지 않는 필드:** 근거 검사와 같습니다(`/evaluationOnly`, `/sources` 아래, `evidence` 키).
+- **종료 코드:** 근거 없음 항목이 있으면 결과 파일은 쓰고 종료 3, 없으면 0입니다.
+
+### 4. 사람 승인 기록 (`approve`)
+
+```bash
+./gradlew run --args="approve --compare build/rule-review/99999.compare.json --edits <수정 항목 JSON> --reviewer <승인자>"
+```
+
+승인자·시각·수정 항목을 `docs/rules/reviews/<카드ID>-<날짜>.json`(기본값, `--out`으로 바꿈)에 남깁니다. 날짜는 서울 시간 기준이고 시각은 UTC ISO-8601입니다. 수정 항목 파일은 다음 모양입니다. 고친 것이 없으면 `"edits": []`입니다.
+
+```json
+{
+  "edits": [
+    { "path": "/services/0/maximumTargetAmount", "before": 20000, "after": 30000, "reason": "원문 2쪽 한도 표 재확인" }
+  ]
+}
+```
+
+- `before`·`after` 키를 **생략**하면 "그 경로가 없음"(추가·삭제)이고, JSON `null`은 null 값입니다.
+- 승인 기록도 같은 규칙으로 씁니다. 추가 항목은 `before` 키가, 삭제 항목은 `after` 키가 없고, null 대입만 `"after": null`로 남습니다.
+- 숫자는 compare·approve 모두 소수를 double을 거치지 않고 정확한 십진수(BigDecimal)로 읽어 값으로 비교합니다. `10000`과 `10000.0`은 같고, `0.10000000000000001`과 `0.1`은 다릅니다.
+- 다음 경우는 거부하고 아무것도 쓰지 않습니다(종료 1). 문제를 모두 모아 알립니다.
+  - 비교 결과에 근거 없음 항목이 남음
+  - 승인자·수정 사유가 빔
+  - 비교 결과에 없는 경로, `/`로 시작하지 않는 경로, 같은 경로 중복
+  - `before`가 비교 결과의 초안 값과 다름, `before`와 `after`가 같음
+- 기록에는 비교 결과 파일의 sha256, 초안 sha256, 수동 규칙 파일 이름·sha256, 분류별 건수를 함께 남깁니다.
+- 기존 기록은 덮어쓰지 않습니다. 같은 날 기록이 있으면 `-2`, `-3` … 을 붙입니다.
+- **근거 없음 해소:** 지금은 원문 근거를 채워 `draft`부터 다시 만드는 방법뿐입니다. 사람이 찾은 근거를 따로 넣는 기능은 없습니다.
+
 ## 실제 호출 조건 (`--live`)
 
 [`LiveGate`](src/main/java/com/beone/ruledraft/LiveGate.java)가 정합니다.
@@ -102,7 +154,7 @@ PDF를 쪽마다 따로 추출해 각 쪽 앞에 `[[page N]]` 줄을 붙입니�
 - **모르는 키:** 표본에 없는 경로가 있으면 실패합니다.
 - **값 종류:** 경로마다 표본에서 본 값 종류(object·array·string·number·boolean·null) 중 하나여야 합니다.
 - **필수 키:** 객체마다 표본의 같은 경로 객체들에 공통으로 있던 키는 초안에도 있어야 합니다. 예를 들어 `/validity`에는 `from`·`to`가 필요합니다.
-- **값:** 금액·비율 같은 값 자체는 검사하지 않습니다. 값 비교는 비교기(D41-2) 몫입니다.
+- **값:** 금액·비율 같은 값 자체는 검사하지 않습니다. 값 비교는 `compare` 몫입니다.
 
 ## 근거 검사
 
@@ -144,6 +196,9 @@ PDF를 쪽마다 따로 추출해 각 쪽 앞에 `[[page N]]` 줄을 붙입니�
 | [`MainTest`](src/test/java/com/beone/ruledraft/MainTest.java) | 녹화 응답 → 초안·근거 생성, 근거 누락·인용 불일치(종료 3), 스키마 불일치(종료 1, 파일 없음), `--live` 없음·키 없음·빈 키·동시 지정(종료 2), 규칙 경로 출력 거부 |
 | [`RuleKeySchemaTest`](src/test/java/com/beone/ruledraft/check/RuleKeySchemaTest.java) | 표본 4개 로드, 표본 자신 통과, 모르는 키·종류 불일치·필수 키 누락, 표본 파일 선택 규칙 |
 | [`EvidenceCheckerTest`](src/test/java/com/beone/ruledraft/check/EvidenceCheckerTest.java) | 조상 경로 덮기, 누락, 확인 실패 사유, NBSP·공백만 있는 인용 거부 |
+| [`RuleComparatorTest`](src/test/java/com/beone/ruledraft/review/RuleComparatorTest.java) | 다섯 분류, 숫자 값 비교, 근거 없음과 원래 분류, 관리 필드, `/status` 제외, 표 칸 처리 |
+| [`ApprovalRecorderTest`](src/test/java/com/beone/ruledraft/review/ApprovalRecorderTest.java) | 승인 기록 내용, 근거 없음 거부, 수정 항목 형식 오류 |
+| [`ReviewCliTest`](src/test/java/com/beone/ruledraft/ReviewCliTest.java) | draft → compare → approve 흐름, 짝이 아닌 초안 거부, 근거 없음(compare 종료 3, approve 거부), 같은 날 재승인 번호, 규칙 경로 출력 거부, 규칙 디렉터리 불변 |
 | [`OutputGuardTest`](src/test/java/com/beone/ruledraft/check/OutputGuardTest.java) | 규칙 경로·하위·링크 거부 |
 | [`SourceLoaderTest`](src/test/java/com/beone/ruledraft/source/SourceLoaderTest.java) | 쪽 표시 텍스트 해석, PDF 쪽별 추출(테스트 안에서 만든 영문 PDF) |
 | [`AnthropicMessagesModelTest`](src/test/java/com/beone/ruledraft/model/AnthropicMessagesModelTest.java) | 요청 본문에 키 없음, 응답 텍스트 해석, `end_turn` 외 종료 실패 |
