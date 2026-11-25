@@ -123,6 +123,18 @@ class MainTest {
 	}
 
 	@Test
+	void NBSP만_있는_인용으로_필수_근거를_바꾸면_종료_3() throws IOException {
+		Path recorded = mutated(root -> ((ObjectNode) root.at("/evidence/~1services~10")).put("quote", "\u00A0\u00A0\u00A0"));
+		Path outDir = tmp.resolve("out");
+
+		assertEquals(3, draft(recorded, outDir), err());
+		JsonNode evidence = mapper.readTree(outDir.resolve("99999.evidence.json").toFile());
+		assertTrue(evidence.path("unverified").toString().contains("/services/0: 인용문 없음"), evidence.toString());
+		assertTrue(evidence.path("missing").toString().contains("/services/0/maximumTargetAmount"));
+		assertFalse(evidence.path("fields").has("/services/0"));
+	}
+
+	@Test
 	void 스키마가_맞지_않으면_아무것도_쓰지_않고_종료_1() throws IOException {
 		Path recorded = mutated(root -> {
 			((ObjectNode) root.at("/draft/policy")).put("bonusRate", 5);

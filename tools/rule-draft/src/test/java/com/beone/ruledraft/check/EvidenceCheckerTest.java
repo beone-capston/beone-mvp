@@ -55,4 +55,16 @@ class EvidenceCheckerTest {
 		assertEquals(List.of("/limitBuckets/0/monthlyCap", "/services/0/rate"), r.missing());
 	}
 
+
+	@Test
+	void NBSP만_있는_인용은_확인되지_않고_아래_값도_덮지_못한다() throws Exception {
+		EvidenceReport r = EvidenceChecker.check(draft(), Map.of(
+				"/limitBuckets", new Evidence(1, "\u00A0\u00A0"),
+				"/services", new Evidence(2, " \u00A0 \t\u3000 ")), source);
+		assertEquals(List.of("/limitBuckets: 인용문 없음", "/services: 인용문 없음"), r.unverified());
+		assertTrue(r.verified().isEmpty());
+		assertEquals(List.of("/limitBuckets/0/monthlyCap", "/services/0/rate"), r.missing());
+		assertFalse(r.complete());
+	}
+
 }

@@ -112,7 +112,7 @@ PDF를 쪽마다 따로 추출해 각 쪽 앞에 `[[page N]]` 줄을 붙입니�
 - **확인 방식:** 인용문이 지정한 쪽 텍스트에 공백을 무시하고 그대로 있어야 확인된 근거로 칩니다. 다음 경우는 `unverified`에 사유와 함께 남기고, 그 근거는 아무 값도 덮지 않습니다.
   - 초안에 없는 경로
   - 원문에 없는 쪽
-  - 빈 인용문
+  - 빈 인용문. 공백(NBSP·전각 공백 포함)을 지운 결과가 비는 인용도 여기에 들고, 포함 검사와 같은 정규화로 판단합니다
   - 인용문을 원문에서 찾지 못함
 - **누락:** 확인된 근거가 자기·조상 경로 어디에도 없는 값은 `missing`에 남습니다.
 - **근거를 요구하지 않는 필드:** 원문이 아닌 프로젝트가 정하는 값들입니다.
@@ -142,7 +142,7 @@ PDF를 쪽마다 따로 추출해 각 쪽 앞에 `[[page N]]` 줄을 붙입니�
 |---|---|
 | [`MainTest`](src/test/java/com/beone/ruledraft/MainTest.java) | 녹화 응답 → 초안·근거 생성, 근거 누락·인용 불일치(종료 3), 스키마 불일치(종료 1, 파일 없음), `--live` 없음·키 없음·빈 키·동시 지정(종료 2), 규칙 경로 출력 거부 |
 | [`RuleKeySchemaTest`](src/test/java/com/beone/ruledraft/check/RuleKeySchemaTest.java) | 표본 4개 로드, 표본 자신 통과, 모르는 키·종류 불일치·필수 키 누락, 표본 파일 선택 규칙 |
-| [`EvidenceCheckerTest`](src/test/java/com/beone/ruledraft/check/EvidenceCheckerTest.java) | 조상 경로 덮기, 누락, 확인 실패 사유 |
+| [`EvidenceCheckerTest`](src/test/java/com/beone/ruledraft/check/EvidenceCheckerTest.java) | 조상 경로 덮기, 누락, 확인 실패 사유, NBSP·공백만 있는 인용 거부 |
 | [`OutputGuardTest`](src/test/java/com/beone/ruledraft/check/OutputGuardTest.java) | 규칙 경로·하위·링크 거부 |
 | [`SourceLoaderTest`](src/test/java/com/beone/ruledraft/source/SourceLoaderTest.java) | 쪽 표시 텍스트 해석, PDF 쪽별 추출(테스트 안에서 만든 영문 PDF) |
 | [`AnthropicMessagesModelTest`](src/test/java/com/beone/ruledraft/model/AnthropicMessagesModelTest.java) | 요청 본문에 키 없음, 응답 텍스트 해석, `end_turn` 외 종료 실패 |

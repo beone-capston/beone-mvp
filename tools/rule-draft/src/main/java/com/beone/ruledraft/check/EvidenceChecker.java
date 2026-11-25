@@ -17,7 +17,8 @@ import com.fasterxml.jackson.databind.JsonNode;
  *
  * <ul>
  *   <li>근거는 값 경로 자신 또는 조상 경로에 달 수 있다(예: {@code /limitBuckets/0} 근거가 그 아래 값 전체를 덮는다).</li>
- *   <li>인용문은 해당 쪽 텍스트에 공백을 무시하고 그대로 있어야 확인된 근거로 친다.</li>
+ *   <li>인용문은 해당 쪽 텍스트에 공백을 무시하고 그대로 있어야 확인된 근거로 친다. 공백(NBSP·전각 공백 포함)을
+ *       지운 결과가 빈 인용은 거부한다.</li>
  *   <li>프로젝트 관리 필드는 원문 근거를 요구하지 않는다: {@code /status}(도구가 AI_DRAFT로 고정),
  *       {@code /evaluationOnly}, {@code /sources} 아래, 이름이 {@code evidence}이거나 {@code Evidence}로 끝나는 키
  *       (docs/rules 근거 표 번호).</li>
@@ -58,14 +59,17 @@ public final class EvidenceChecker {
 		if (path.isEmpty() || !draftPaths.contains(path)) {
 			return Optional.of("초안에 없는 경로");
 		}
-		if (ev.quote() == null || ev.quote().isBlank()) {
+		// 포함 검사와 같은 정규화 결과로 비었는지 본다. isBlank()는 NBSP 등을 공백으로 보지 않아,
+		// 정규화 뒤 빈 문자열이 되어 contains("")로 모든 쪽에 일치하는 우회가 생긴다
+		String quote = ev.quote() == null ? "" : normalize(ev.quote());
+		if (quote.isEmpty()) {
 			return Optional.of("인용문 없음");
 		}
 		Optional<SourcePage> page = source.page(ev.page());
 		if (page.isEmpty()) {
 			return Optional.of("원문에 없는 쪽 " + ev.page());
 		}
-		if (!normalize(page.get().text()).contains(normalize(ev.quote()))) {
+		if (!normalize(page.get().text()).contains(quote)) {
 			return Optional.of(ev.page() + "쪽에서 인용문을 찾지 못함");
 		}
 		return Optional.empty();
