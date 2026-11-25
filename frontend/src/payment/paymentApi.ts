@@ -99,12 +99,16 @@ export const apiPaymentGateway: PaymentGateway = {
     return data
   },
   async detail(mode, id) {
-    const data = await read(mode, 'simulated-payments/' + encodeURIComponent(id)) as PaymentDetail
-    if (!approval(data, ['APPROVED', 'FAILED', 'PARTIALLY_CANCELLED', 'CANCELLED']) ||
-      data.simulatedPaymentId !== id || !list(data.cancellations, item => record(item) &&
-      string(item.cancellationId) && won(item.amountWon) && string(item.cancelledAt) && string(item.ledgerTransactionId))) {
-      throw new PaymentError('UNEXPECTED')
-    }
-    return data
+    return parsePaymentDetail(await read(mode, 'simulated-payments/' + encodeURIComponent(id)), id)
   },
+}
+
+export function parsePaymentDetail(payload: unknown, id: string): PaymentDetail {
+  const data = payload as PaymentDetail
+  if (!approval(data, ['APPROVED', 'FAILED', 'PARTIALLY_CANCELLED', 'CANCELLED']) ||
+    data.simulatedPaymentId !== id || !list(data.cancellations, item => record(item) &&
+    string(item.cancellationId) && won(item.amountWon) && string(item.cancelledAt) && string(item.ledgerTransactionId))) {
+    throw new PaymentError('UNEXPECTED')
+  }
+  return data
 }
