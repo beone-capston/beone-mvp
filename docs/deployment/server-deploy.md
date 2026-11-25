@@ -97,11 +97,16 @@ deploy_git_sha=<GitSha>
 | P1 | `GET /` 200, `Content-Type: text/html` |
 | P2 | `GET /api/v1/me` 401(쿠키 없음) |
 | P3 | `GET /actuator/health` 404 |
-| P4 | `GET /api/v1/auth/csrf` 200, `__Host-BEONE_SESSION` Set-Cookie 한 줄, `Path=/`·`Secure`·`HttpOnly`·`SameSite=Lax`, `Domain` 없음 |
+| P4 | `GET /api/v1/auth/csrf` 200. cookie-pair(첫 `;` 앞) 이름이 정확히 `__Host-BEONE_SESSION`(대소문자 구분)이고 값이 비어 있지 않은 Set-Cookie가 1줄. 그 쿠키의 속성에 `Path=/`·`Secure`·`HttpOnly`·`SameSite=Lax`가 있고 `Domain`이 없음 |
 
 - 가입·로그인·T-a는 하지 않습니다. 운영·스테이징 DB에는 T-a를 쓰지 않습니다.
 - 업무 데이터를 바꾸지 않습니다. 다만 P4 때문에 세션 저장소(`auth_sessions`)에 CSRF용 익명 세션 1행이 생길 수 있고, idle-timeout 뒤 만료로 정리됩니다(관리 판단으로 허용).
-- 쿠키 값과 응답 본문은 출력하지 않습니다.
+- P4의 이름 판정은 줄 안의 부분 문자열로 하지 않습니다. 따라서 다음 쿠키는 통과하지 못합니다.
+  - 다른 쿠키의 값 안에 이름이 든 경우(`other=__Host-BEONE_SESSION=…`)
+  - 접두어가 붙은 이름(`prefix__Host-…`)
+  - 대소문자가 다른 이름
+  - 속성이 다른 쿠키 줄에만 있는 경우
+- 쿠키 값과 응답 본문은 출력하지 않습니다. 쿠키는 판정 결과와 무관하게 cookie-pair 값을 첫 `;` 또는 줄 끝까지 `<값>`으로 가린 뒤 출력합니다. 세미콜론 없는 값, `=`이 없는 cookie-pair, 다중 Set-Cookie도 마찬가지입니다.
 
 ## 출력과 상태 파일
 
@@ -115,4 +120,4 @@ deploy_git_sha=<GitSha>
 deploy/scripts/deploy-selftest.sh
 ```
 
-가짜 `docker`·`curl`·`flock`·`sleep`을 PATH 앞에 두고, 사례마다 임시 폴더를 서버 루트로 써서 실제 `deploy.sh`·`smoke-public.sh`를 실행합니다. 각 사례의 종료 코드, 실행되면 안 되는 동작과 꼭 실행돼야 하는 동작(pull·백업·`up`·복귀), 끝난 뒤 상태 파일·웹 링크, 운영 짝 기록 내용, 중단 사유 문구, 출력에 비밀값이 없는지를 봅니다. 임시 폴더는 지우지 않고 경로만 출력합니다. 실제 Docker·레지스트리·서버·네트워크에는 손대지 않습니다.
+가짜 `docker`·`curl`·`flock`·`sleep`을 PATH 앞에 두고, 사례마다 임시 폴더를 서버 루트로 써서 실제 `deploy.sh`·`smoke-public.sh`를 실행합니다. 각 사례의 종료 코드, 실행되면 안 되는 동작과 꼭 실행돼야 하는 동작(pull·백업·`up`·복귀), 끝난 뒤 상태 파일·웹 링크, 운영 짝 기록 내용, 중단 사유 문구, 출력(stdout·stderr)에 비밀값과 가짜 쿠키 값이 없는지를 봅니다. `smoke-public.sh` 단독 사례도 종료 코드와 함께 쿠키 값 미출력을 확인합니다. 임시 폴더는 지우지 않고 경로만 출력합니다. 실제 Docker·레지스트리·서버·네트워크에는 손대지 않습니다.

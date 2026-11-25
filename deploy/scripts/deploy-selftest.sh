@@ -21,6 +21,8 @@ NEW_API="sha256:$(printf 'c%.0s' $(seq 64))"
 NEW_WEB="sha256:$(printf 'd%.0s' $(seq 64))"
 GIT="$(printf '1234567890%.0s' 1 2 3 4)"
 SECRET=selftest-secret-value-must-not-appear
+# 가짜 csrf 쿠키 값. 스모크 출력에 나오면 실패로 본다(가짜 curl의 기본값과 같은 문자열)
+COOKIE_SECRET=selftest-cookie-value-must-not-appear
 
 # 가짜 docker. 실행 중 backend 이미지는 $FAKE_DIR/running 파일로 흉내 낸다
 cat > "$WORK/bin/docker" << 'EOF'
@@ -119,7 +121,7 @@ case "$path" in
 	/) code="${FAKE_ROOT_CODE:-200}"; hdr="content-type: ${FAKE_ROOT_CT:-text/html}" ;;
 	/api/v1/me) code="${FAKE_ME_CODE:-401}"; hdr='content-type: application/json' ;;
 	/actuator/health) code="${FAKE_ACTUATOR_CODE:-404}" ;;
-	/api/v1/auth/csrf) code=200; hdr="${FAKE_CSRF_COOKIE-set-cookie: __Host-BEONE_SESSION=synthetic; Path=/; Max-Age=7200; Secure; HttpOnly; SameSite=Lax}" ;;
+	/api/v1/auth/csrf) code="${FAKE_CSRF_CODE:-200}"; hdr="${FAKE_CSRF_COOKIE-set-cookie: __Host-BEONE_SESSION=selftest-cookie-value-must-not-appear; Path=/; Max-Age=7200; Secure; HttpOnly; SameSite=Lax}" ;;
 esac
 printf 'HTTP/1.1 %s\r\n' "$code"
 [ -n "$hdr" ] && printf '%b\r\n' "$hdr"
@@ -199,6 +201,7 @@ run_deploy() {
 		case "$(readlink "$webbase/current")" in releases/old) ln=old ;; "releases/${GIT:0:12}-"*) ln=new ;; *) ln=other ;; esac
 	fi
 	grep -q "$SECRET" "$c/out" && extra="$extra 비밀값출력"
+	grep -q "$COOKIE_SECRET" "$c/out" && extra="$extra 쿠키값출력"
 	if [ -n "${WANT_MSG:-}" ]; then grep -qF "$WANT_MSG" "$c/out" || extra="$extra 사유문구없음($WANT_MSG)"; fi
 	if [ -n "${WANT_RECORD:-}" ]; then
 		local rec
@@ -258,27 +261,44 @@ run_deploy "web digest가 태그" 2 PULL_API,UP_NEW - old old -- staging "$NEW_A
 run_deploy "GitSha 12자리" 2 PULL_API,UP_NEW - old old -- staging "$NEW_API" "$NEW_WEB" "${GIT:0:12}"
 run_deploy "인자 3개" 2 PULL_API,UP_NEW - old old -- staging "$NEW_API" "$NEW_WEB"
 
-# smoke-public.sh 단독
+# smoke-public.sh 단독. 종료 코드와 함께 출력(stdout·stderr)에 쿠키 값·비밀값이 없는지 본다
 run_smoke() {
-	local desc="$1" want="$2" rc verdict=PASS
+	local desc="$1" want="$2" rc verdict=PASS extra=''
 	shift 2
 	n=$((n + 1))
 	env -i PATH="$WORK/bin:/usr/bin:/bin" "$@" bash "$SMOKE" "${SMOKE_ARG-http://127.0.0.1:18081}" > "$WORK/cases/smoke-$n.out" 2>&1
 	rc=$?
-	[ "$rc" = "$want" ] || { verdict=FAIL; failures=$((failures + 1)); }
-	echo "| $n | smoke-public $desc | $want | $rc | - | - | - | $verdict |"
+	grep -q "$COOKIE_SECRET" "$WORK/cases/smoke-$n.out" && extra="$extra 쿠키값출력"
+	grep -q "$SECRET" "$WORK/cases/smoke-$n.out" && extra="$extra 비밀값출력"
+	if [ "$rc" != "$want" ] || [ -n "$extra" ]; then verdict=FAIL; failures=$((failures + 1)); fi
+	echo "| $n | smoke-public $desc | $want | $rc | - | - |${extra:- -} | $verdict |"
 }
+C="$COOKIE_SECRET"
+OK_ATTRS='Path=/; Secure; HttpOnly; SameSite=Lax'
 run_smoke "정상" 0
 run_smoke "/ 상태 500" 1 FAKE_ROOT_CODE=500
 run_smoke "/ Content-Type JSON" 1 FAKE_ROOT_CT=application/json
 run_smoke "/api/v1/me 200" 1 FAKE_ME_CODE=200
 run_smoke "/actuator/health 200" 1 FAKE_ACTUATOR_CODE=200
 run_smoke "csrf 쿠키 없음" 1 FAKE_CSRF_COOKIE=
-run_smoke "csrf 쿠키 HttpOnly 없음" 1 'FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=s; Path=/; Secure; SameSite=Lax'
-run_smoke "csrf 쿠키 Path 다름" 1 'FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=s; Path=/api; Secure; HttpOnly; SameSite=Lax'
-run_smoke "csrf 쿠키 Domain 있음" 1 'FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=s; Path=/; Domain=beonepay.site; Secure; HttpOnly; SameSite=Lax'
-run_smoke "csrf 쿠키 SameSite 다름" 1 'FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=s; Path=/; Secure; HttpOnly; SameSite=None'
-run_smoke "csrf 쿠키 2줄" 1 'FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=s; Path=/; Secure; HttpOnly; SameSite=Lax\r\nset-cookie: __Host-BEONE_SESSION=t; Path=/; Secure; HttpOnly; SameSite=Lax'
+run_smoke "csrf 쿠키 HttpOnly 없음" 1 "FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=$C; Path=/; Secure; SameSite=Lax"
+run_smoke "csrf 쿠키 Path 다름" 1 "FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=$C; Path=/api; Secure; HttpOnly; SameSite=Lax"
+run_smoke "csrf 쿠키 Domain 있음" 1 "FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=$C; Path=/; Domain=beonepay.site; Secure; HttpOnly; SameSite=Lax"
+run_smoke "csrf 쿠키 SameSite 다름" 1 "FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=$C; Path=/; Secure; HttpOnly; SameSite=None"
+run_smoke "csrf 쿠키 2줄" 1 "FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=$C; $OK_ATTRS\r\nset-cookie: __Host-BEONE_SESSION=$C-2; $OK_ATTRS"
+# 마스킹: 세미콜론 없는 값·빈 값·다중 헤더·비정상 상태에서도 쿠키 값이 출력되지 않아야 한다
+run_smoke "csrf 쿠키 세미콜론 없음(속성 없음)" 1 "FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=$C"
+run_smoke "csrf 쿠키 빈 값" 1 "FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=; $OK_ATTRS"
+run_smoke "csrf 쿠키 공백 값" 1 "FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=  ; $OK_ATTRS"
+run_smoke "csrf 다른 쿠키와 다중 헤더(정상)" 0 "FAKE_CSRF_COOKIE=set-cookie: other=$C-other; Path=/\r\nset-cookie: __Host-BEONE_SESSION=$C; $OK_ATTRS"
+run_smoke "csrf 다른 쿠키만(세미콜론 없음)" 1 "FAKE_CSRF_COOKIE=set-cookie: other=$C"
+run_smoke "csrf = 없는 cookie-pair" 1 "FAKE_CSRF_COOKIE=set-cookie: $C"
+run_smoke "csrf 상태 500에 정상 쿠키" 1 FAKE_CSRF_CODE=500
+# 정확한 이름: 다른 쿠키 값 안·접두어·대소문자 차이는 통과하면 안 된다
+run_smoke "csrf 거짓 이름(다른 쿠키 값 안)" 1 "FAKE_CSRF_COOKIE=set-cookie: other=__Host-BEONE_SESSION=$C; $OK_ATTRS"
+run_smoke "csrf 거짓 이름(접두어)" 1 "FAKE_CSRF_COOKIE=set-cookie: prefix__Host-BEONE_SESSION=$C; $OK_ATTRS"
+run_smoke "csrf 거짓 이름(대소문자)" 1 "FAKE_CSRF_COOKIE=set-cookie: __host-beone_session=$C; $OK_ATTRS"
+run_smoke "csrf 속성이 다른 쿠키에만 있음" 1 "FAKE_CSRF_COOKIE=set-cookie: __Host-BEONE_SESSION=$C\r\nset-cookie: other=x; $OK_ATTRS"
 run_smoke "연결 실패" 1 FAKE_CURL_RC=1
 SMOKE_ARG='' run_smoke "인자 없음" 2
 SMOKE_ARG='beonepay.site' run_smoke "scheme 없는 인자" 2
