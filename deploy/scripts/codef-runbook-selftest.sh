@@ -24,7 +24,10 @@ block() {
 	' "$DOC"
 }
 
-# 가짜 docker: compose 옵션을 건너뛰고 하위 명령별로 주입값을 따른다
+# 가짜 docker: compose 옵션을 읽고 하위 명령별로 주입값을 따른다.
+# compose.codef.yaml을 -f로 받으면 ${CODEF_*:?} 필수 보간을 흉내 낸다. FAKE_KEYS가 present가 아니면(empty·deleted·nofile)
+# 실제 Compose처럼 하위 명령(ps·stop·down·config 포함)에 닿기 전에 구성 로딩 실패(종료 1)로 끝난다.
+# 라벨 경로(docker ps/stop/rm/volume/network --filter label=…)는 compose 구성을 읽지 않으므로 FAKE_KEYS와 무관하다
 cat > "$WORK/bin/docker" << 'EOF'
 #!/usr/bin/env bash
 log() { echo "$*" >> "$FAKE_LOG"; }
@@ -32,15 +35,23 @@ log() { echo "$*" >> "$FAKE_LOG"; }
 pv() { local v="FAKE_${1}_${proj}"; printf '%s' "${!v-$2}"; }
 if [ "${1:-}" = compose ]; then
 	shift
-	proj=""
+	proj="" overlay=0
 	while [ $# -gt 0 ]; do
 		case "$1" in
 			-p) case "$2" in beone-codef) proj=codef ;; beone-app) proj=app ;; beone) proj=pub ;; beone-verify) proj=verify ;; *) proj=other ;; esac; shift 2 ;;
-			-f | --env-file) shift 2 ;;
+			-f) case "$2" in *compose.codef.yaml) overlay=1 ;; esac; shift 2 ;;
+			--env-file) shift 2 ;;
 			*) break ;;
 		esac
 	done
 	sub="$1"; shift
+	if [ "$overlay" = 1 ]; then
+		case "${FAKE_KEYS:-present}" in
+			present) ;;
+			nofile) log COMPOSE_LOAD_FAIL; echo "couldn't find env file: /opt/beone/codef/.env" >&2; exit 1 ;;
+			*) log COMPOSE_LOAD_FAIL; echo 'error while interpolating services.verify-backend.environment.CODEF_CLIENT_ID: required variable CODEF_CLIENT_ID is missing a value' >&2; exit 1 ;;
+		esac
+	fi
 	case "$sub" in
 		config)
 			if [ "${1:-}" = --services ]; then
@@ -76,6 +87,25 @@ if [ "${1:-}" = compose ]; then
 	esac
 	exit 0
 fi
+# 라벨 경로. 기본 대상은 beone-codef 컨테이너 3개·볼륨 1개·네트워크 1개. 삭제 뒤 조회는 남은 것 없음
+has() { grep -qx "$1" "$FAKE_LOG"; }
+case "${1:-} ${2:-}" in
+	"ps -a" | "ps -q")
+		case "$*" in *label=com.docker.compose.project=beone-codef*) ;; *) exit 0 ;; esac
+		if [ "$2" = -q ]; then
+			[ "${FAKE_LRUN_RC:-0}" = 0 ] || exit "$FAKE_LRUN_RC"; printf '%b' "${FAKE_LRUN-}"; exit 0
+		fi
+		if [ "$3" = -q ]; then   # 삭제 뒤 확인(ps -a -q)
+			has DRM && { printf '%b' "${FAKE_LPS_AFTER-}"; exit 0; }
+		fi
+		[ "${FAKE_LPS_RC:-0}" = 0 ] || exit "$FAKE_LPS_RC"
+		printf '%b' "${FAKE_LPS-c1|beone-codef-verify-mysql-1|beone-codef\nc2|beone-codef-verify-backend-1|beone-codef\nc3|beone-codef-verify-web-1|beone-codef\n}"; exit 0 ;;
+	"stop "*) log DSTOP; exit "${FAKE_DSTOP_RC:-0}" ;;
+	"rm "*) log DRM; exit "${FAKE_DRM_RC:-0}" ;;
+	"network ls") [ "${FAKE_LNET_RC:-0}" = 0 ] || exit "$FAKE_LNET_RC"; printf '%b' "${FAKE_LNETS-beone-codef_default|beone-codef\n}"; exit 0 ;;
+	"network rm") log DNRM; exit "${FAKE_DNRM_RC:-0}" ;;
+	"volume rm") log DVRM; exit "${FAKE_DVRM_RC:-0}" ;;
+esac
 # 컨테이너 상태·OOM 조회. 기본은 c3(웹)만 헬스체크 없음, 나머지 running/healthy
 if [ "${1:-}" = inspect ]; then
 	[ "${FAKE_INSPECT_RC:-0}" = 0 ] || exit "$FAKE_INSPECT_RC"
@@ -92,6 +122,11 @@ if [ "${1:-}" = inspect ]; then
 	exit 0
 fi
 if [ "${1:-}" = volume ]; then
+	case "$*" in
+		*label=com.docker.compose.project=beone-codef*)
+			[ "${FAKE_LVOL_RC:-0}" = 0 ] || exit "$FAKE_LVOL_RC"
+			printf '%b' "${FAKE_LVOLS-beone-codef_verify-mysql-data|beone-codef\n}"; exit 0 ;;
+	esac
 	[ "${FAKE_VOL_RC:-0}" = 0 ] || exit "$FAKE_VOL_RC"
 	printf '%b' "${FAKE_VOLS-beone-app_mysql-data\n}"
 	exit 0
@@ -180,6 +215,9 @@ run verify-down "beone-verify 볼륨 남음" 1 - FAKE_VOLS='beone-verify_verify-
 run verify-down "compose.yaml 없음(9절로 지움)" 1 - FAKE_COMPOSE_RC=1
 run up "정상" 0 -
 run up "config 실패" 1 UP FAKE_CONFIG_RC=1
+run up "키 빈 값(보간 실패, 닫힘)" 1 UP FAKE_KEYS=empty
+run up "키 삭제(보간 실패, 닫힘)" 1 UP FAKE_KEYS=deleted
+run up ".env 없음(구성 로딩 실패, 닫힘)" 1 UP FAKE_KEYS=nofile
 run ready "정상(web은 running/none)" 0 -
 run ready "backend starting" 1 - FAKE_ST_ID=c2 FAKE_ST=running/starting
 run ready "beone-codef 컨테이너 수 부족" 1 - FAKE_PSQ_codef='c1\nc2\n'
@@ -193,6 +231,7 @@ run ready "inspect 실패" 1 - FAKE_INSPECT_RC=1
 run ready "inspect 결과 일부 빠짐" 1 - FAKE_ST_ID=a1 FAKE_ST=
 run ready "가용 메모리 부족" 1 - FAKE_MEM=500
 run ready "메모리 조회 실패" 1 - FAKE_FREE_RC=1
+run ready "키 삭제(구성 로딩 실패)" 1 - FAKE_KEYS=deleted
 run names "이름·값 모두 있음" 0 -
 run names "호출 상한 키 3개 없음" 1 - FAKE_ENV_NAMES="$NO_BUDGET_NAMES"
 run names "빈 값 있음" 1 - FAKE_ENV_EMPTY='CODEF_PUBLIC_KEY\n'
@@ -203,15 +242,18 @@ run ta "합성 주소 아님" 1 - EMAIL=user@gmail.com
 run ta "0·0(주소 오타)" 1 - EMAIL=smoke-a-1@example.test FAKE_TA='0\n0\n'
 run ta "DB 실행 실패" 1 - EMAIL=smoke-a-1@example.test FAKE_Q_RC=1
 run watch "정상(한 번 돌고 끝)" 0 STOP,DOWN
-REQUIRE=STOP run watch "가용 메모리 부족" 1 DOWN FAKE_MEM=500
-REQUIRE=STOP run watch "메모리 값 없음" 1 DOWN FAKE_FREE_RC=1
-REQUIRE=STOP run watch "디스크 85%" 1 DOWN FAKE_DISK=85
-REQUIRE=STOP run watch "운영 컨테이너 restarting" 1 DOWN FAKE_ST_ID=a1 FAKE_ST=restarting/none
-REQUIRE=STOP run watch "운영 조회 실패" 1 DOWN FAKE_PSQ_RC_app=1
-REQUIRE=STOP run watch "공개 nginx 없음" 1 DOWN FAKE_PSQ_pub=''
-REQUIRE=STOP run watch "beone-codef 컨테이너 unhealthy" 1 DOWN FAKE_ST_ID=c1 FAKE_ST=running/unhealthy
-REQUIRE=STOP run watch "beone-codef OOMKilled" 1 DOWN FAKE_OOM_ID=c2
-REQUIRE=STOP run watch "inspect 실패" 1 DOWN FAKE_INSPECT_RC=1
+REQUIRE=DSTOP run watch "가용 메모리 부족" 1 DOWN FAKE_MEM=500
+REQUIRE=DSTOP run watch "메모리 값 없음" 1 DOWN FAKE_FREE_RC=1
+REQUIRE=DSTOP run watch "디스크 85%" 1 DOWN FAKE_DISK=85
+REQUIRE=DSTOP run watch "운영 컨테이너 restarting" 1 DOWN FAKE_ST_ID=a1 FAKE_ST=restarting/none
+REQUIRE=DSTOP run watch "운영 조회 실패" 1 DOWN FAKE_PSQ_RC_app=1
+REQUIRE=DSTOP run watch "공개 nginx 없음" 1 DOWN FAKE_PSQ_pub=''
+REQUIRE=DSTOP run watch "beone-codef 컨테이너 unhealthy" 1 DOWN FAKE_ST_ID=c1 FAKE_ST=running/unhealthy
+REQUIRE=DSTOP run watch "beone-codef OOMKilled" 1 DOWN FAKE_OOM_ID=c2
+REQUIRE=DSTOP run watch "inspect 실패" 1 DOWN FAKE_INSPECT_RC=1
+REQUIRE=DSTOP run watch "감시 중 키 삭제(codef fail-config → 라벨 경로 중지)" 1 DOWN,STOP FAKE_KEYS=deleted
+REQUIRE=DSTOP run watch "감시 중 .env 없음(라벨 경로 중지)" 1 DOWN,STOP FAKE_KEYS=nofile
+run watch "중지 대상에 운영 컨테이너 섞임(중지 안 함)" 1 DSTOP,DOWN FAKE_MEM=500 FAKE_LPS='c1|beone-codef-verify-mysql-1|beone-codef\na1|beone-app-backend-1|beone-app\n'
 run budget "창 1개·최대 1" 0 -
 run budget "호출 전 행 0" 0 - FAKE_BUDGET_STAT='0\t0\n'
 run budget "창 2개(재기동 때 창 변경)" 1 - FAKE_BUDGET_STAT='2\t1\n'
@@ -231,16 +273,37 @@ run logs "정상" 0 -
 run logs "logs 조회 실패" 1 - FAKE_LOGS_RC=1
 run logs "로그 비어 있음" 1 - FAKE_LOGS=''
 run logs "금지 패턴 있음" 1 - FAKE_LOGS='password=x\n'
-run stop "정상" 0 -
-run stop "운영 컨테이너 섞임" 1 STOP FAKE_PS='beone-codef-verify-backend-1\nbeone-app-backend-1\n'
-run destroy "정상" 0 -
-run destroy "운영 컨테이너 섞임(오식별)" 1 DOWN,RM FAKE_PS='beone-codef-verify-backend-1\nbeone-app-backend-1\n'
-run destroy "검증 컨테이너 섞임(오식별)" 1 DOWN,RM FAKE_PS='beone-verify-verify-backend-1\n'
-run destroy "대상 조회 실패" 1 DOWN,RM FAKE_PS_RC=1
-run destroy "대상 없음" 1 DOWN,RM FAKE_PS=''
-run destroy "down -v 실패" 1 RM,RMDIR FAKE_DOWN_RC=1
+REQUIRE=DSTOP run stop "정상(키 있음)" 0 STOP,COMPOSE_LOAD_FAIL
+REQUIRE=DSTOP run stop "키 빈 값" 0 STOP,COMPOSE_LOAD_FAIL FAKE_KEYS=empty
+REQUIRE=DSTOP run stop "키 삭제" 0 STOP,COMPOSE_LOAD_FAIL FAKE_KEYS=deleted
+REQUIRE=DSTOP run stop ".env 없음" 0 STOP,COMPOSE_LOAD_FAIL FAKE_KEYS=nofile
+run stop "운영 라벨 행 섞임" 1 DSTOP FAKE_LPS='c1|beone-codef-verify-mysql-1|beone-codef\na1|beone-app-backend-1|beone-app\n'
+run stop "공개 nginx 라벨 행 섞임" 1 DSTOP FAKE_LPS='p1|beone-nginx-1|beone\n'
+run stop "라벨은 같고 이름이 다름" 1 DSTOP FAKE_LPS='x1|beone-verify-verify-backend-1|beone-codef\n'
+run stop "대상 조회 실패" 1 DSTOP FAKE_LPS_RC=1
+run stop "대상 없음" 1 DSTOP FAKE_LPS=''
+run stop "stop 실패" 1 - FAKE_DSTOP_RC=1
+run stop "정지 뒤에도 실행 중" 1 - FAKE_LRUN='c2\n'
+run stop "정지 확인 조회 실패" 1 - FAKE_LRUN_RC=1
+REQUIRE=DVRM run destroy "정상(키 있음)" 0 DOWN,COMPOSE_LOAD_FAIL
+REQUIRE=DVRM run destroy "키 빈 값" 0 DOWN,COMPOSE_LOAD_FAIL FAKE_KEYS=empty
+REQUIRE=DVRM run destroy "키 삭제" 0 DOWN,COMPOSE_LOAD_FAIL FAKE_KEYS=deleted
+REQUIRE=DVRM run destroy ".env 없음" 0 DOWN,COMPOSE_LOAD_FAIL FAKE_KEYS=nofile
+run destroy "운영 라벨 행 섞임(오식별)" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LPS='c1|beone-codef-verify-mysql-1|beone-codef\na1|beone-app-backend-1|beone-app\n'
+run destroy "검증 이름 섞임(오식별)" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LPS='v1|beone-verify-verify-backend-1|beone-codef\n'
+run destroy "대상 조회 실패" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LPS_RC=1
+run destroy "대상 없음" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LPS=''
+run destroy "운영 볼륨 섞임" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LVOLS='beone-codef_verify-mysql-data|beone-codef\nbeone-app_mysql-data|beone-app\n'
+run destroy "볼륨 라벨 조회 실패" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LVOL_RC=1
+run destroy "공개 네트워크 섞임" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LNETS='beone_default|beone\n'
+run destroy "네트워크 조회 실패" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LNET_RC=1
+run destroy "stop 실패" 1 DRM,DVRM,DNRM,RM,RMDIR FAKE_DSTOP_RC=1
+run destroy "컨테이너 삭제 실패" 1 DVRM,DNRM,RM,RMDIR FAKE_DRM_RC=1
+run destroy "볼륨 삭제 실패" 1 DNRM,RM,RMDIR FAKE_DVRM_RC=1
+run destroy "네트워크 삭제 실패" 1 RM,RMDIR FAKE_DNRM_RC=1
 run destroy "키 파일 삭제 실패" 1 RMDIR FAKE_RM_RC=1
-run destroy "볼륨 조회 실패" 1 - FAKE_VOL_RC=1
+run destroy "삭제 뒤 컨테이너 남음" 1 - FAKE_LPS_AFTER='c1\n'
+run destroy "확인 볼륨 조회 실패" 1 - FAKE_VOL_RC=1
 run destroy "볼륨 남음" 1 - FAKE_VOLS='beone-codef_verify-mysql-data\n'
 run destroy "폴더 남음" 1 - FAKE_DIR_LEFT_RC=0
 
