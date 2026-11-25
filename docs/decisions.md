@@ -741,6 +741,17 @@ PR #81(#80) 구현 중 2026-11-16 사용자가 고른 결정이다. 새 D-번호
 - **메모리:** 스테이징과 beone-verify는 동시에 띄우지 않는다. 스테이징의 `mem_limit` 합계는 1344MiB 이하로 두고, `oom_score_adj`로 운영보다 먼저 종료되게 한다.
 - **결정 필요 — GHCR 가시성:** 패키지를 public으로 둘지(서버에 자격 증명이 필요 없다), private으로 두고 서버에 읽기 전용 토큰을 둘지 정해야 한다. 관리 권장안은 public이다(저장소가 공개이고 이미지에 비밀값이 없다는 조건). 아직 정하지 않았다.
 
+**계약 수정(2026-11-25, #225 관리 검토)**
+
+위 인터페이스 계약은 처음 기록으로 남기고, 다음과 같이 고친다.
+
+- **고친 이유(운영 승인 우회 위험):** 역할 하나가 develop 브랜치와 `environment:production`을 함께 신뢰하고 SSM 문서 하나(`BeoneDeploy`)가 `Environment`를 파라미터로 받는다고 하자. 그러면 develop 브랜치의 실행이 같은 역할로 `Environment=production`을 넘길 수 있다. 스테이징 job은 물론 develop에 병합된 워크플로 변경도 여기에 들어간다. 결과적으로 운영 승인 없이 운영에 배포할 수 있다. IAM은 SSM 파라미터 값으로 조건을 걸 수 없으므로 문서와 역할을 환경별로 나눈다.
+- **SSM 문서 2개:** `BeoneDeployStaging`, `BeoneDeployProduction`. 파라미터는 `ApiDigest`·`WebDigest`(`sha256:` 뒤 소문자 16진수 64자)와 `GitSha`(16진수 40자)뿐이고 allowedPattern으로 검증한다. 환경 인자는 각 문서 안에 고정한다(`deploy.sh staging …`, `deploy.sh production …`). 서버 `deploy.sh`의 인자 계약 `<staging|production> <ApiDigest> <WebDigest> <GitSha>`는 그대로다.
+- **IAM 역할 2개:** 스테이징 역할은 `sub = repo:beone-capston/beone-mvp:ref:refs/heads/develop`만 신뢰하고, 서버 인스턴스 1대에 `BeoneDeployStaging`만 보낼 수 있다. 운영 역할은 `sub = repo:beone-capston/beone-mvp:environment:production`만 신뢰하고, 서버 인스턴스 1대에 `BeoneDeployProduction`만 보낼 수 있다. 그래서 운영 역할은 Environment `production` job에서만 맡을 수 있고, **Environment 보호 규칙(필수 승인자 사용자, 배포 브랜치 `main`만)이 운영 배포의 승인 지점**이다.
+- **저장소 변수:** `BEONE_CD_ENABLED`, `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN_STAGING`, `AWS_DEPLOY_ROLE_ARN_PRODUCTION`, `BEONE_CD_PRODUCTION_ENABLED`. 위의 단일 `AWS_DEPLOY_ROLE_ARN`은 쓰지 않는다. 운영 스위치 `BEONE_CD_PRODUCTION_ENABLED`는 Environment가 없으면 보호 규칙 없이 자동 생성되는 위험을 막으려고 더했다(관리 검토에서 수용). 모두 비밀이 아닌 값이다.
+- **웹 경로:** web 이미지 안 dist 위치는 `/dist`다. 운영 웹은 `/opt/beone/web/current`, 스테이징 웹은 `/opt/beone/staging/web/current`다. 둘 다 `releases/<GitSha 12자리>-<무작위>`를 가리키는 상대 심볼릭 링크이고, 공개 nginx 정적 루트는 운영 링크로 고정한다.
+- 자세한 정책 JSON·문서 JSON·설정 순서는 [배포 자동화](deployment/cd.md)에 있다.
+
 ## 운영 정책 미결 사항
 
 PRD에 없는 저장소 운영 정책입니다. 팀 합의 전까지 임의로 정하지 않습니다.
