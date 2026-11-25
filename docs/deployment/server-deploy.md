@@ -43,6 +43,10 @@ deploy.sh <staging|production> <ApiDigest> <WebDigest> <GitSha>
 | 7 | 무변경 공개 스모크(`smoke-public.sh`) | 복귀 |
 | 끝 | 상태 파일 갱신과 이력(`<환경>.history`) 한 줄 추가 | 상태 기록 실패는 종료 1 |
 
+### 운영 compose의 필수 키
+
+운영 compose(`/opt/beone/app/compose.yaml` = 저장소 `deploy/compose.yaml`)는 `SPRING_PROFILES_ACTIVE`(운영은 `prod`)와 메일 키 6개를 backend에 넘기며 모두 필수입니다([백엔드 배포 기반](backend-compose.md#공개-프로필-prod와-메일-키-compose-필수)). env 파일에 하나라도 없거나 비어 있으면 0-2단계 `compose config --quiet`가 실패해 배포 전에 멈춥니다(종료 3). 값은 출력하지 않습니다.
+
 ### CODEF 가드
 
 CODEF는 자동 배포 대상이 아닙니다(결정 40-7). env 파일에 `CODEF_`·`BEONE_CODEF_`로 시작하는 키 **이름**이 있거나, env·compose 파일에 `codef-live`라는 글자가 있으면 배포를 거부합니다. 값은 출력하지 않습니다. 앱의 `PublicProfileGuard`(prod에서 CODEF 키·`codef-live` 거부)보다 앞에서 막는 보강입니다.
