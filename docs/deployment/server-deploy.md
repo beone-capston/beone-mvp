@@ -78,9 +78,39 @@ deploy_git_sha=<GitSha>
 
 ### 첫 배포
 
-상태 파일이 없으면 첫 배포로 처리합니다. 이때 backend 복귀 대상이 없으므로 4~7단계가 실패하면 새 backend를 그대로 둔 채 종료 1입니다. 웹은 이전 `current` 링크가 있으면 되돌리고, 없으면 그대로 둡니다. 운영의 첫 자동 배포(지금 운영 backend는 `docker load`한 태그 이미지)는 승인 항목이며 사람이 지켜보는 상태에서 합니다.
+상태 파일이 없으면 첫 배포로 처리합니다. 이때 backend 복귀 대상이 없으므로 4~7단계가 실패하면 새 backend를 그대로 둔 채 종료 1입니다. 웹은 이전 `current` 링크가 있으면 되돌리고, 없으면 그대로 둡니다. 스테이징은 루프백 점검 포트로 스모크를 하므로 첫 배포도 이 경로를 씁니다. **운영의 첫 배포는 이 경로를 쓰지 않고 [운영 최초 배포(bootstrap)](#운영-최초-배포-bootstrap)를 씁니다.**
+
+## 운영 최초 배포 (bootstrap)
+
+운영 첫 배포는 정상 경로로 할 수 없습니다. `deploy.sh production`은 `https://beonepay.site` 공개 스모크(P2 `/api/v1/me` 401, P4 CSRF 쿠키)를 통과해야 성공하는데, 공개 nginx의 `/api` 프록시와 웹 링크 마운트는 그 뒤 nginx 변경([공개 nginx 초안](public-proxy.md) 4절)에서 처음 연결됩니다. 그대로 실행하면 첫 배포가 반드시 실패하고, 복귀 대상이 없어 새 backend와 웹 링크가 남은 채 종료 1이 됩니다(순환 의존). 그래서 운영 최초 1회는 세 단계로 나눕니다.
+
+- **실행 주체:** 승인 창 안에서 사람(Aside)이 서버에서 직접 실행합니다. 첫 인자가 `bootstrap-*`라서 첫 인자를 환경으로 고정하는 SSM 문서로는 부를 수 없습니다. 정상 배포 계약(`deploy.sh <staging|production> …`, SSM 문서 2개)은 바뀌지 않습니다.
+- **운영 전용:** 환경 인자는 `production`만 받습니다. `staging`이면 종료 2입니다.
+- **잠금:** 세 단계 모두 정상 배포와 같은 `deploy.lock`을 씁니다. 다른 배포가 실행 중이면 종료 3입니다.
+- **대기 파일:** `/opt/beone/deploy/state/production.bootstrap`. "준비 완료, 아직 미확정"을 뜻합니다. 상태 파일(`production.state`)은 `bootstrap-confirm`이 공개 스모크를 통과했을 때만 씁니다. 사람이 상태 파일을 손으로 쓰지 않습니다.
+
+```bash
+deploy.sh bootstrap-prepare production <ApiDigest> <WebDigest> <GitSha>
+# (사람) 공개 nginx 네트워크·마운트·설정 적용 → nginx -t → reload
+deploy.sh bootstrap-confirm production
+# 되돌릴 때
+deploy.sh bootstrap-abort production
+```
+
+| 단계 | 하는 일 | 종료 코드 |
+|---|---|---|
+| `bootstrap-prepare` | 상태 파일이나 대기 파일이 있으면 거부합니다. 정상 배포와 같은 가드·compose 확인·digest pull을 합니다. 배포 직전 덤프와 짝 기록도 [정상 배포와 같은 형식](#운영-배포-직전-백업과-짝-기록)으로 남깁니다(`deploy_prev_api_digest=none`). 짝 기록의 `image_tag`·`image_id`는 실행 중이던 backend이고, 이것을 **복귀 기준**으로 대기 파일에 함께 적습니다. 이어서 backend `up -d`, health, 웹 릴리스와 `current` 링크 전환을 합니다. 공개 nginx가 아직 이 링크를 서빙하지 않으므로 공개 화면은 바뀌지 않습니다. 공개 스모크 대신 비공개 검증(backend healthy, 링크로 `index.html` 확인)을 하고 대기 파일만 씁니다. | 0 준비 완료(미확정). 3 변경 없음(상태·대기 파일 있음, 잠금, 가드, pull, 백업 실패. 실행 중 backend가 없어도 짝 기록 실패로 3). 4 실패 뒤 복귀 기준으로 복귀 성공. 1 복귀 실패. 2 인자 오류 |
+| (사람) nginx | [공개 nginx 초안](public-proxy.md) 4절의 순서대로 적용합니다. `nginx -t`가 실패하면 reload하지 않고 nginx 설정을 백업으로 복원한 뒤 `bootstrap-abort`를 실행합니다. | - |
+| `bootstrap-confirm` | 대기 파일이 필요합니다. 웹 링크가 준비한 릴리스인지, backend가 준비한 digest로 healthy인지 확인한 뒤 공개 스모크(`smoke-public.sh https://beonepay.site`)를 합니다. 통과해야만 상태 파일을 쓰고, 대기 파일 이름을 `production.bootstrap.confirmed-<UTC>`로 바꿉니다. | 0 확정. 1 미확정(상태 파일 없음, 대기 파일 유지). 원인을 고쳐 다시 confirm하거나, nginx를 백업으로 복원한 뒤 abort합니다. 3 대기 파일 없음·손상, 상태 파일 이미 있음, 잠금 |
+| `bootstrap-abort` | 대기 파일이 필요합니다. 웹 링크를 이전 값으로 되돌리고, 이전 링크가 없었으면(안내 화면만 있던 상태) 새 링크만 지웁니다. 릴리스 폴더는 남깁니다. backend는 복귀 기준 이미지로 `up -d`하고 health를 기다립니다. 기록한 이름이 지금 다른 이미지를 가리키면 기록한 이미지 ID로 띄웁니다. 상태 파일은 쓰지 않습니다. | 0 복귀 완료(대기 파일은 `.aborted-<UTC>`). 1 복귀 실패(대기 파일 유지, 다시 실행 가능). 3 대기 파일 없음·손상, 잠금 |
+
+- DB는 어느 단계에서도 되돌리지 않습니다. prepare가 새 마이그레이션을 적용했다면 [구 앱으로 복귀할 때](#새-마이그레이션-뒤-구-앱으로-복귀할-때)의 확인을 똑같이 따릅니다.
+- 확정 뒤에는 정상 경로(`deploy.sh production …`, SSM)만 씁니다. 상태 파일이 있으면 prepare는 거부됩니다.
 
 ## 종료 코드
+
+정상 배포(`deploy.sh <staging|production> …`)의 종료 코드입니다. bootstrap 단계별 종료 코드는 [위 표](#운영-최초-배포-bootstrap)를 봅니다.
+
 
 | 코드 | 뜻 | 서비스 상태 |
 |---|---|---|
@@ -111,7 +141,7 @@ deploy_git_sha=<GitSha>
 ## 출력과 상태 파일
 
 - 출력은 단계·digest·백업 id뿐입니다. `docker compose config`는 `--quiet`·`--services`로만 실행해 env 값이 풀려 나오지 않게 합니다.
-- `/opt/beone/deploy/state/`(권한 700): `<환경>.state`(현재 `api_digest`·`web_digest`·`git_sha`·`web_release`·`backup_id`·`deployed_at`), `<환경>.history`(성공·실패 한 줄씩), `deploy.lock`.
+- `/opt/beone/deploy/state/`(권한 700): `<환경>.state`(현재 `api_digest`·`web_digest`·`git_sha`·`web_release`·`backup_id`·`deployed_at`), `<환경>.history`(성공·실패 한 줄씩), `deploy.lock`. 운영 bootstrap 중에는 `production.bootstrap`(준비한 digest·릴리스·이전 링크·`backup_id`·복귀 기준 `base_image_tag`·`base_image_id`)이 있고, 끝나면 `.confirmed-<UTC>` 또는 `.aborted-<UTC>`로 이름이 바뀝니다.
 - 오래된 웹 릴리스 폴더와 이전 이미지는 지우지 않습니다. 릴리스 보존 개수 정리는 후속 과제입니다.
 
 ## 오프라인 자기검사
@@ -120,4 +150,4 @@ deploy_git_sha=<GitSha>
 deploy/scripts/deploy-selftest.sh
 ```
 
-가짜 `docker`·`curl`·`flock`·`sleep`을 PATH 앞에 두고, 사례마다 임시 폴더를 서버 루트로 써서 실제 `deploy.sh`·`smoke-public.sh`를 실행합니다. 각 사례의 종료 코드, 실행되면 안 되는 동작과 꼭 실행돼야 하는 동작(pull·백업·`up`·복귀), 끝난 뒤 상태 파일·웹 링크, 운영 짝 기록 내용, 중단 사유 문구, 출력(stdout·stderr)에 비밀값과 가짜 쿠키 값이 없는지를 봅니다. `smoke-public.sh` 단독 사례도 종료 코드와 함께 쿠키 값 미출력을 확인합니다. 임시 폴더는 지우지 않고 경로만 출력합니다. 실제 Docker·레지스트리·서버·네트워크에는 손대지 않습니다.
+가짜 `docker`·`curl`·`flock`·`sleep`을 PATH 앞에 두고, 사례마다 임시 폴더를 서버 루트로 써서 실제 `deploy.sh`·`smoke-public.sh`를 실행합니다. 각 사례의 종료 코드, 실행되면 안 되는 동작과 꼭 실행돼야 하는 동작(pull·백업·`up`·복귀), 끝난 뒤 상태 파일·웹 링크, 운영 짝 기록 내용, 중단 사유 문구, 출력(stdout·stderr)에 비밀값과 가짜 쿠키 값이 없는지를 봅니다. `smoke-public.sh` 단독 사례도 종료 코드와 함께 쿠키 값 미출력을 확인합니다. bootstrap 사례는 한 임시 폴더에서 단계(prepare → confirm·abort, 이어지는 정상 배포)를 차례로 실행합니다. 각 단계 종료 코드, 상태 파일·대기 파일, 웹 링크, 끝난 뒤 실행 중인 backend(새 이미지 또는 복귀 기준)를 확인합니다. 안내 화면만 있고 `/api`가 연결되지 않은 공개 응답에서 confirm이 상태 파일을 쓰지 않는 사례도 포함합니다. 임시 폴더는 지우지 않고 경로만 출력합니다. 실제 Docker·레지스트리·서버·네트워크에는 손대지 않습니다.

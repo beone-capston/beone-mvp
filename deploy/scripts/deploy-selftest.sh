@@ -57,6 +57,9 @@ case "$1" in
 				case "${BEONE_API_IMAGE:-}" in
 					"$NEW_API_REF") log UP_NEW; [ "${FAKE_UP_NEW_RC:-0}" = 0 ] || exit 1 ;;
 					"$OLD_API_REF") log UP_OLD; [ "${FAKE_UP_OLD_RC:-0}" = 0 ] || exit 1 ;;
+					# bootstrap 복귀 기준: 이름(태그)으로 또는 이미지 ID로
+					"${FAKE_BASE_REF:-<none>}") log UP_BASE; [ "${FAKE_UP_BASE_RC:-0}" = 0 ] || exit 1 ;;
+					"sha256:id-${FAKE_BASE_REF:-<none>}") log UP_BASE_ID; [ "${FAKE_UP_BASE_RC:-0}" = 0 ] || exit 1 ;;
 					*) log "UP_OTHER ${BEONE_API_IMAGE:-}" ;;
 				esac
 				echo "$BEONE_API_IMAGE" > "$FAKE_DIR/running"; exit 0 ;;
@@ -90,6 +93,8 @@ case "$1" in
 	image)
 		# image inspect [--format F] <ref>
 		if [ "${3:-}" = --format ]; then
+			# $FAKE_DIR/retagged가 있으면 복귀 기준 이름이 다른 이미지를 가리키는 상황을 흉내 낸다
+			if [ -e "$FAKE_DIR/retagged" ] && [ "$5" = "${FAKE_BASE_REF:-<none>}" ]; then echo sha256:retagged; exit 0; fi
 			case "$4" in *revision*) echo '<no value>' ;; *) echo "sha256:id-$5" ;; esac
 			exit 0
 		fi
@@ -112,6 +117,7 @@ EOF
 # 가짜 curl: 마지막 인자의 경로별로 헤더와 상태 코드를 낸다(-D - -o /dev/null -w '\n%{http_code}' 형태)
 cat > "$WORK/bin/curl" << 'EOF'
 #!/usr/bin/env bash
+[ -n "${FAKE_LOG:-}" ] && echo CURL >> "$FAKE_LOG"
 url="${*: -1}"
 path="/${url#*://*/}"
 [ "$path" = "/$url" ] && path=/
@@ -260,6 +266,108 @@ run_deploy "digest 길이 부족" 2 PULL_API,UP_NEW - old old -- staging "sha256
 run_deploy "web digest가 태그" 2 PULL_API,UP_NEW - old old -- staging "$NEW_API" latest "$GIT"
 run_deploy "GitSha 12자리" 2 PULL_API,UP_NEW - old old -- staging "$NEW_API" "$NEW_WEB" "${GIT:0:12}"
 run_deploy "인자 3개" 2 PULL_API,UP_NEW - old old -- staging "$NEW_API" "$NEW_WEB"
+
+# 운영 최초 배포(bootstrap). 한 사례 폴더에서 단계를 차례로 실행한다
+# run_boot <설명> <기대 종료 코드들(공백)> <금지 동작> <필수 동작> <상태 new|old|none> <링크 new|old|none> <대기 pending|confirmed|aborted|none> <실행 중 new|base> <단계...>
+# 단계: "prepare|confirm|abort|deploy [FAKE_*=값 ...]", "raw:<deploy 인자들>", "sh:<명령>"(사례 폴더 $c에서 실행)
+# 시작 상태: 상태 파일 없음, 웹 링크 없음(공개 nginx는 안내 화면만), backend는 수동으로 띄운 이전 이미지($BASE_REF)
+# 사례 설정: BOOT_PREV_LINK=1(이전 웹 링크 있음), BOOT_SEED_STATE=1(상태 파일 있음), BOOT_WANT_RECORD=1(정상 배포와 같은 짝 기록)
+BASE_REF=ghcr.io/beone-capston/beone-api:manual-prev
+run_boot() {
+	local desc="$1" want="$2" forbid="$3" need="$4" want_state="$5" want_link="$6" want_boot="$7" want_run="$8" f bad="" miss="" st="none" ln="none" bt="none" rn="other" extra="" rcs=""
+	shift 8
+	n=$((n + 1))
+	local c="$WORK/cases/$n"
+	mkdir -p "$c/fake" "$c/app/backups" "$c/staging" "$c/deploy/state" "$c/web"
+	local e
+	for e in app staging; do
+		printf 'MYSQL_DATABASE=beone\nMYSQL_USER=beone\nMYSQL_PASSWORD=%s\nMYSQL_ROOT_PASSWORD=%s\nBEONE_API_IMAGE=%s\n' "$SECRET" "$SECRET" "$BASE_REF" > "$c/$e/.env"
+		printf 'services: {}\n' > "$c/$e/compose.yaml"
+	done
+	if [ -n "${BOOT_PREV_LINK:-}" ]; then
+		mkdir -p "$c/web/releases/old"; echo old > "$c/web/releases/old/index.html"; ln -s releases/old "$c/web/current"
+	fi
+	[ -n "${BOOT_SEED_STATE:-}" ] && printf 'api_digest=%s\nweb_digest=%s\ngit_sha=%s\n' "$OLD_API" "$OLD_WEB" "$GIT" > "$c/deploy/state/production.state"
+	printf '%s' "$BASE_REF" > "$c/fake/running"
+	: > "$c/log"; : > "$c/out"
+	local step words args
+	for step in "$@"; do
+		case "$step" in
+			sh:*) (cd "$c" && eval "${step#sh:}"); continue ;;
+			raw:*) read -r -a args <<< "${step#raw:}"; words=() ;;
+			*)
+				read -r -a words <<< "$step"
+				case "${words[0]}" in
+					prepare) args=(bootstrap-prepare production "$NEW_API" "$NEW_WEB" "$GIT") ;;
+					confirm) args=(bootstrap-confirm production) ;;
+					abort) args=(bootstrap-abort production) ;;
+					deploy) args=(production "$NEW_API" "$NEW_WEB" "$GIT") ;;
+				esac
+				words=("${words[@]:1}") ;;
+		esac
+		echo "### ${args[*]}" >> "$c/out"
+		env -i PATH="$WORK/bin:/usr/bin:/bin" BEONE_DEPLOY_ROOT="$c" BEONE_DEPLOY_HEALTH_TIMEOUT=20 \
+			FAKE_LOG="$c/log" FAKE_DIR="$c/fake" FAKE_NEW_API="$NEW_API" FAKE_OLD_API="$OLD_API" FAKE_BASE_REF="$BASE_REF" ${words[@]+"${words[@]}"} \
+			bash "$DEPLOY" "${args[@]}" >> "$c/out" 2>&1
+		rcs="$rcs $?"
+	done
+	rcs="${rcs# }"
+	if [ "$forbid" != - ]; then for f in ${forbid//,/ }; do grep -qx "$f" "$c/log" && bad="$bad $f"; done; fi
+	if [ "$need" != - ]; then for f in ${need//,/ }; do grep -qx "$f" "$c/log" || miss="$miss $f"; done; fi
+	local sd="$c/deploy/state"
+	if [ -f "$sd/production.state" ]; then
+		case "$(sed -n 's/^api_digest=//p' "$sd/production.state")" in "$NEW_API") st=new ;; "$OLD_API") st=old ;; *) st=other ;; esac
+	fi
+	if [ -L "$c/web/current" ]; then
+		case "$(readlink "$c/web/current")" in releases/old) ln=old ;; "releases/${GIT:0:12}-"*) ln=new ;; *) ln=other ;; esac
+	fi
+	if [ -f "$sd/production.bootstrap" ]; then bt=pending
+	elif ls "$sd"/production.bootstrap.confirmed-* > /dev/null 2>&1; then bt=confirmed
+	elif ls "$sd"/production.bootstrap.aborted-* > /dev/null 2>&1; then bt=aborted; fi
+	case "$(cat "$c/fake/running")" in "ghcr.io/beone-capston/beone-api@$NEW_API") rn=new ;; "$BASE_REF" | "sha256:id-$BASE_REF") rn=base ;; esac
+	grep -q "$SECRET" "$c/out" && extra="$extra 비밀값출력"
+	grep -q "$COOKIE_SECRET" "$c/out" && extra="$extra 쿠키값출력"
+	if [ -n "${WANT_MSG:-}" ]; then grep -qF "$WANT_MSG" "$c/out" || extra="$extra 사유문구없음($WANT_MSG)"; fi
+	if [ -n "${BOOT_WANT_RECORD:-}" ]; then
+		local rec
+		rec=$(ls "$c"/app/backups/*/app.sql.record 2> /dev/null | head -n 1)
+		{ [ -n "$rec" ] && grep -qx "deploy_prev_api_digest=none" "$rec" && grep -qx "deploy_new_api_digest=$NEW_API" "$rec" && grep -qx "image_tag=$BASE_REF" "$rec" \
+			&& grep -qE '^dump_sha256=[0-9a-f]{64}$' "$rec" && grep -qE '^flyway_sha256=[0-9a-f]{64}$' "$rec" && [ -f "${rec%.record}" ] && [ -f "${rec%.record}.flyway" ] \
+			&& grep -qx "base_image_tag=$BASE_REF" "$sd/production.bootstrap" && grep -qx "base_image_id=sha256:id-$BASE_REF" "$sd/production.bootstrap" \
+			&& grep -qx "backup_id=$(basename "$(dirname "$rec")")" "$sd/production.bootstrap"; } || extra="$extra 짝기록·복귀기준없음"
+	fi
+	local verdict=PASS
+	{ [ "$rcs" = "$want" ] && [ -z "$bad" ] && [ -z "$miss" ] && [ "$st" = "$want_state" ] && [ "$ln" = "$want_link" ] && [ "$bt" = "$want_boot" ] && [ "$rn" = "$want_run" ] && [ -z "$extra" ]; } \
+		|| { verdict=FAIL; failures=$((failures + 1)); }
+	local note="대기:$bt(기대 $want_boot) 실행:$rn(기대 $want_run) 금지:${forbid} 필수:${need}${bad:+ (실행됨:$bad)}${miss:+ (빠짐:$miss)}${extra}"
+	echo "| $n | bootstrap $desc | $want | $rcs | $st(기대 $want_state) | $ln(기대 $want_link) | $note | $verdict |"
+}
+# 안내 화면만 있고 /api 미연결인 공개 nginx(/는 200 HTML, /api/v1/me·csrf는 404·쿠키 없음)
+GUIDE_ONLY="FAKE_ME_CODE=404 FAKE_CSRF_CODE=404 FAKE_CSRF_COOKIE="
+BOOT_WANT_RECORD=1 run_boot "prepare 정상: 대기 파일만, 공개 스모크 없음" 0 CURL,UP_BASE PULL_API,PULL_WEB,DUMP,UP_NEW,CREATE none new pending new "prepare"
+WANT_MSG="공개 스모크 실패" run_boot "안내 화면만·API 미연결·상태 파일 없음에서 confirm 스모크 실패 → 미확정" "0 1" UP_BASE UP_NEW,CURL none new pending new "prepare" "confirm $GUIDE_ONLY"
+run_boot "confirm 스모크 실패 뒤 abort → 기존 앱·링크 없음(안내 화면)" "0 1 0" - UP_NEW,CURL,UP_BASE none none aborted base "prepare" "confirm $GUIDE_ONLY" "abort"
+run_boot "confirm 실패 뒤 원인 수정·재시도 → 확정" "0 1 0" UP_BASE CURL new new confirmed new "prepare" "confirm $GUIDE_ONLY" "confirm"
+run_boot "confirm 성공 → 상태 파일, 이후 정상 배포 실패는 복귀(종료 4)" "0 0 4" UP_BASE CURL new new confirmed new "prepare" "confirm" "deploy FAKE_ME_CODE=200"
+run_boot "confirm 공개 /actuator 노출 → 미확정" "0 1" UP_BASE CURL none new pending new "prepare" "confirm FAKE_ACTUATOR_CODE=200"
+run_boot "confirm health 실패 → 미확정(스모크 전)" "0 1" CURL - none new pending new "prepare" "confirm FAKE_NEW_HEALTH=running/unhealthy"
+run_boot "confirm 웹 링크가 준비 값과 다름 → 미확정" "0 1" CURL - none other pending new "prepare" "sh:ln -sfn releases/x web/current" "confirm"
+run_boot "prepare health 실패 → 복귀 기준으로 복귀" 4 CREATE,CURL UP_NEW,UP_BASE none none none base "prepare FAKE_NEW_HEALTH=running/unhealthy"
+run_boot "prepare 웹 추출 실패 → 복귀 기준·링크 없음" 4 CURL UP_NEW,UP_BASE none none none base "prepare FAKE_CP_RC=1"
+run_boot "prepare index.html 없음 → 복귀" 4 CURL UP_NEW,UP_BASE none none none base "prepare FAKE_NO_INDEX=1"
+WANT_MSG="즉시 확인 필요" run_boot "prepare 실패 뒤 복귀 기준 up 실패" 1 CURL UP_NEW,UP_BASE none none none new "prepare FAKE_NEW_HEALTH=running/unhealthy FAKE_UP_BASE_RC=1"
+WANT_MSG="백업 실패(덤프)" run_boot "prepare 백업 실패 → 변경 없음" 3 UP_NEW,CREATE DUMP none none none base "prepare FAKE_DUMP_RC=1"
+BOOT_PREV_LINK=1 run_boot "이전 웹 링크가 있던 상태에서 abort → 이전 링크" "0 0" - UP_BASE none old aborted base "prepare" "abort"
+run_boot "abort 때 복귀 기준 이름이 다른 이미지 → 이미지 ID로 복귀" "0 0" UP_BASE UP_BASE_ID none none aborted base "prepare" "sh:touch fake/retagged" "abort"
+WANT_MSG="대기 파일 유지" run_boot "abort 복귀 실패 → 대기 파일 유지, 재실행 성공" "0 1 0" - UP_BASE none none aborted base "prepare" "abort FAKE_UP_BASE_RC=1" "abort"
+BOOT_SEED_STATE=1 WANT_MSG="상태 파일이 이미 있음" run_boot "상태 파일이 있으면 prepare 거부" 3 PULL_API,UP_NEW,DUMP - old none none base "prepare"
+WANT_MSG="대기 파일이 이미 있음" run_boot "대기 파일이 있으면 prepare 재실행 거부" "0 3" UP_BASE - none new pending new "prepare" "prepare"
+WANT_MSG="대기 파일 없음" run_boot "대기 파일 없이 confirm·abort 거부" "3 3" CURL,UP_BASE,UP_NEW - none none none base "confirm" "abort"
+run_boot "다른 배포 실행 중이면 confirm·abort도 거부(잠금)" "0 3 3" CURL,UP_BASE - none new pending new "prepare" "confirm FAKE_FLOCK_RC=1" "abort FAKE_FLOCK_RC=1"
+run_boot "staging 인자 거부" "2 2 2" PULL_API,CURL,UP_BASE - none none none base "raw:bootstrap-prepare staging $NEW_API $NEW_WEB $GIT" "raw:bootstrap-confirm staging" "raw:bootstrap-abort staging"
+run_boot "SSM 형식(환경 먼저)으로 bootstrap 불가" "2 2" PULL_API,CURL - none none none base "raw:production bootstrap-confirm" "raw:production bootstrap-prepare $NEW_API $NEW_WEB $GIT"
+run_boot "인자 개수 오류" "2 2" PULL_API,CURL - none none none base "raw:bootstrap-confirm" "raw:bootstrap-prepare production $NEW_API $NEW_WEB"
+run_boot "대기 파일 손상 → confirm 거부" "0 3" CURL - none new pending new "prepare" "sh:printf 'api_digest=broken\n' > deploy/state/production.bootstrap" "confirm"
 
 # smoke-public.sh 단독. 종료 코드와 함께 출력(stdout·stderr)에 쿠키 값·비밀값이 없는지 본다
 run_smoke() {
