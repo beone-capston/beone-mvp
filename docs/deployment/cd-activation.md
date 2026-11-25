@@ -16,7 +16,8 @@
 | 항목 | 상태 | 근거·남은 일 |
 |---|---|---|
 | 서버 스크립트 설치(2단계) | 완료(운영) | `deploy.sh`·`smoke-public.sh`를 `/opt/beone/deploy/`에 설치하고 체크섬을 대조했다 |
-| 운영 첫 배치(8-1 bootstrap) | 완료 | 2026-11-25 `bootstrap-confirm production` 종료 0, `production.state` 기록, 공개 스모크 P1~P4 통과. 배포 커밋 `6974880`(#253 병합 커밋)이다. 운영 `compose.yaml`은 #245의 prod·메일 키 필수 버전이다 |
+| 운영 첫 배치(8-1 bootstrap) | 완료 | 2026-11-25 `bootstrap-confirm production` 종료 0, `production.state` 기록, 공개 스모크 P1~P4 통과. 배포 GitSha·이미지 revision 기준은 `6974880`(#253 병합 커밋)이다(아래 main 행과 구분). 운영 `compose.yaml`은 #245의 prod·메일 키 필수 버전이다 |
+| main 승격 | 완료 | #247 병합 커밋 `5f54706`. develop `23bca21`(#248 포함)까지 들어 있다. 배포 기준 `6974880`과의 차이(`6974880..23bca21`)는 `tools/rule-draft/`·`docs/rules/`뿐이라 배포 이미지·서버 파일에 영향이 없다. 그래서 main 기준 커밋과 배포 기준 커밋이 다르다 |
 | 공개 nginx 연결 | 완료(운영) | `/api` 프록시와 웹 링크(`/opt/beone/web/current`) 마운트를 반영했다([공개 nginx 초안](public-proxy.md) 4절 순서) |
 | GHCR 가시성 | 완료: public | `beone-api`·`beone-web`를 public으로 바꿨다(사용자 결정). 서버에 GHCR 토큰이 필요 없다 |
 | 이미지 발행 경로 | 있음 | `GITHUB_TOKEN` 수동 실행([cd.md 첫 배포 이미지 발행](cd.md#첫-배포-이미지-발행), #253). 첫 운영 배포 이미지를 이 경로로 만들었다 |
