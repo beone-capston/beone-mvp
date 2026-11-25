@@ -22,7 +22,7 @@
 | 환경 | 호스트 폴더 | `current` 링크 대상 | 서빙 주체 |
 |---|---|---|---|
 | 운영 | `/opt/beone/web/` | `releases/<GitSha 12자리>-<무작위>`(상대 경로) | 공개 nginx(`beone`) |
-| 스테이징 | `/opt/beone/staging/web/` | 같은 형식 | 스테이징 프로젝트의 web 컨테이너. 공개 nginx는 기본 인증을 걸고 그 컨테이너로 넘김(2-1절) |
+| 스테이징 | `/opt/beone/staging/web/` | 같은 형식 | 스테이징 프로젝트의 web 컨테이너(컨테이너 안 `/srv/web/current`, 기본 인증도 이 컨테이너가 함, #230). 공개 nginx는 TLS만 맡고 그 컨테이너로 넘김(2-1절) |
 
 - 링크 대상이 **상대 경로**라서, 폴더를 컨테이너 안 다른 경로에 마운트해도 링크가 풀립니다. 절대 경로(`/opt/beone/web/releases/…`)였다면 컨테이너 안에서 깨집니다.
 - nginx는 요청마다 경로를 새로 찾습니다(기본값 `open_file_cache off`, `disable_symlinks off`). 그래서 링크를 바꾸면 reload 없이 다음 요청부터 새 릴리스가 나갑니다. `open_file_cache`를 켜려면 이 동작을 다시 확인해야 합니다.
@@ -104,9 +104,16 @@ server {
 - **N2 조건:** 인증 링크 경로(`/email-verification`, `/password-reset`)는 `Referrer-Policy: no-referrer`를 붙이고, 공개 접근 로그에 이 경로의 query를 남기지 않습니다. 위 초안은 `$request` 대신 `$uri`를 쓰는 로그 형식으로 처리했습니다. 기존 서버 `access_log` 경로와 형식은 1절에서 대조해 맞춥니다.
 - 반영하면 지금의 정적 안내 화면은 SPA로 바뀝니다. 안내 화면은 4절 백업이 원복 대상입니다.
 
-## 2-1. 스테이징 server 블록 (기본 인증)
+## 2-1. 스테이징 server 블록 (기본 인증은 스테이징 web이 함)
 
-결정 40의 스테이징은 develop 병합마다 자동 반영되는 비공개 확인용 환경입니다. 별도 Compose 프로젝트 `beone-staging`(`/opt/beone/staging/`)가 자기 web 컨테이너와 backend·DB를 갖습니다. web 컨테이너는 `/opt/beone/staging/web/current`를 정적 루트로 쓰고 `/api/`를 스테이징 backend로 넘깁니다. 공개 nginx는 TLS와 기본 인증만 맡고, 요청 전체를 스테이징 web 컨테이너로 넘깁니다. 이렇게 하면 화면과 `/api`가 스테이징 도메인 하나에서 같은 origin이 됩니다.
+결정 40의 스테이징은 develop 병합마다 자동 반영되는 비공개 확인용 환경입니다. 별도 Compose 프로젝트 `beone-staging`(`/opt/beone/staging/`, #230)이 web·backend·DB를 갖습니다. 스테이징 web 컨테이너가 하는 일은 다음과 같습니다([스테이징](staging.md), #230).
+
+| 호스트 포트 | 역할 |
+|---|---|
+| `127.0.0.1:18082`(컨테이너 8080) | **기본 인증**(`auth_basic`, 서버의 `/opt/beone/staging/htpasswd`). `/`는 `/srv/web/current`(SPA), `/api/`는 스테이징 backend. backend로 `Authorization`을 넘기지 않음. N2 두 경로(`Referrer-Policy: no-referrer`, query 미기록 로그), `/actuator/` 404 |
+| `127.0.0.1:18081`(컨테이너 8081) | 인증 없는 배포 스모크 전용. `/`, `/api/v1/me`, `/api/v1/auth/csrf`만 열고 나머지는 404. **공개 nginx가 넘기지 않음** |
+
+공개 nginx는 스테이징 도메인의 TLS만 맡고, 요청 전체를 기본 인증 리스너(18082에 해당하는 8080)로 넘깁니다. 화면과 `/api`가 스테이징 도메인 하나에서 같은 origin이 됩니다.
 
 ```nginx
 server {
@@ -114,33 +121,33 @@ server {
     server_name <스테이징 도메인>;                 # 승인 항목(DNS·인증서). 정해지기 전에는 넣지 않는다
     # ssl_certificate·ssl_certificate_key: 스테이징 도메인 인증서(<스테이징 인증서 경로>, certbot 발급은 승인 항목)
 
-    # 기본 인증. 계정 파일은 서버에만 두고 저장소·GitHub에 넣지 않는다(값은 승인 항목)
-    auth_basic           "BeONE staging";
-    auth_basic_user_file /etc/nginx/beone-staging.htpasswd;
+    # 기본 인증은 스테이징 web nginx가 한다(#230). 여기서 auth_basic을 또 걸지 않는다.
+    # Authorization 헤더도 지우지 않는다. 지우면 스테이징 web의 기본 인증이 항상 401이 된다.
+    # backend로 넘기지 않는 것은 스테이징 web이 한다.
 
-    # 보안 헤더는 운영과 같은 N4 결정을 따른다(자리표시). 검색 노출 방지만 먼저 둔다
-    add_header X-Robots-Tag "noindex, nofollow" always;
+    access_log /var/log/nginx/access.log beone_noquery;   # 인증 링크 query를 남기지 않는다(N2). 로그 경로는 1절 대조값
+    add_header X-Robots-Tag "noindex, nofollow" always;   # 검색 노출 방지. 보안 헤더는 운영과 같은 N4 결정을 따른다
 
     location / {
-        proxy_pass http://<스테이징 web 주소>;   # 스테이징 compose의 web 서비스(별도 PR, 3절 연결 방식)
+        # 스테이징 web의 기본 인증 리스너(호스트 127.0.0.1:18082 = 컨테이너 8080). 주소 형식은 아래 참고
+        proxy_pass http://<스테이징 web 기본 인증 리스너>;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
         proxy_set_header X-Forwarded-For   $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Forwarded         "";
-        # 기본 인증 자격 증명을 뒤로 넘기지 않는다(앱·로그에 남지 않게)
-        proxy_set_header Authorization     "";
         client_max_body_size <N4: 본문 크기, 검증 환경은 64k>;
         proxy_read_timeout 30s;
     }
-
-    location /actuator/ { return 404; }
 }
 ```
 
-- **인증 링크 경로(N2):** 스테이징 web 컨테이너가 운영과 같은 `/email-verification`·`/password-reset` location(`Referrer-Policy: no-referrer`, query를 남기지 않는 로그 형식)을 가져야 합니다. 공개 nginx의 스테이징 블록도 접근 로그에 query를 남기지 않도록 `access_log … beone_noquery`를 쓰는 것을 권장합니다. 스테이징 compose를 추가하는 PR에서 함께 맞춥니다.
-- **기본 인증과 같은 origin:** 브라우저는 같은 origin 요청(`/api/` 포함)에 기본 인증 헤더를 자동으로 붙입니다. 그래서 화면에서 부르는 API도 막히지 않습니다. 공개 nginx가 `Authorization`을 지우므로 backend는 이 값을 받지 않습니다. 회원 세션 쿠키(`__Host-`)는 스테이징 도메인에만 묶여 운영 쿠키와 섞이지 않습니다.
-- **자동 배포 스모크:** `deploy.sh`는 기본 인증이 없는 루프백 점검 포트(`http://127.0.0.1:18081`, 스테이징 compose 기준)로 점검합니다. 이 포트는 호스트 루프백에만 열고 외부에 공개하지 않습니다.
+- **`<스테이징 web 기본 인증 리스너>` 채우는 법:** 스테이징 web의 기본 인증 포트는 호스트 `127.0.0.1:18082`에만 열려 있습니다. 공개 nginx가 컨테이너라면 컨테이너 안의 `127.0.0.1`은 컨테이너 자신이라서 이 포트에 닿지 않습니다. 그래서 1절 대조 결과에 따라 둘 중 하나로 채웁니다(3절).
+  - 공개 nginx가 호스트 네트워크(`network_mode: host`)로 돈다면 `127.0.0.1:18082`.
+  - 일반 브리지 네트워크라면 공개 nginx를 스테이징 네트워크에 연결하고 `<web 서비스 별칭>:8080`. compose 서비스 이름 `web`은 다른 프로젝트와 겹칠 수 있으므로, 연결할 때 별칭(예 `beone-staging-web`)을 붙여 씁니다.
+- **기본 인증 위치를 한 곳으로 둔 이유:** 스테이징 web(#230)이 이미 기본 인증과 `Authorization` 제거를 합니다. 공개 nginx에서도 걸면 계정 파일이 두 곳에 생기고, 공개 nginx가 헤더를 지우면 인증이 깨집니다. 그래서 공개 nginx는 TLS와 전달만 맡습니다. 루프백에서 18082로 직접 붙어도 기본 인증이 걸려 있습니다.
+- **같은 origin과 기본 인증:** 브라우저는 같은 origin 요청(`/api/` 포함)에 기본 인증 헤더를 자동으로 붙이므로 화면에서 부르는 API도 막히지 않습니다. 회원 세션 쿠키(`__Host-`)는 스테이징 도메인에만 묶여 운영 쿠키와 섞이지 않습니다.
+- **배포 스모크 리스너(18081):** 인증이 없으므로 공개 nginx에서 절대 넘기지 않습니다. `deploy.sh`가 서버 안에서만 씁니다.
 - **운영과의 차이:** 운영 블록(2절)은 공개 nginx가 정적 파일을 직접 서빙하고 `/api/`만 backend로 넘깁니다. 스테이징은 비공개 환경을 한 덩어리로 넘겨, 공개 nginx 설정을 배포마다 바꾸지 않게 했습니다.
 
 ## 3. 두 Compose 프로젝트 연결
@@ -154,7 +161,7 @@ server {
 | A | `beone`의 nginx 서비스에 외부 네트워크 `beone-app_default`를 추가하고, `proxy_pass http://backend:8080`(서비스 이름) | `/opt/beone/compose.yaml` 수정과 nginx 컨테이너 재생성. 짧은 중단 |
 | B | 전용 외부 네트워크(예 `beone-edge`)를 만들고 두 프로젝트를 모두 연결, backend에 별칭 부여 | 두 프로젝트의 compose 수정과 재생성 |
 
-어느 안이든 backend의 호스트 포트는 계속 공개하지 않습니다. 스테이징을 쓰면 같은 방식으로 `beone-staging` 네트워크(또는 전용 네트워크)에도 연결하고, `<스테이징 web 주소>`를 그 서비스 이름으로 채웁니다.
+어느 안이든 backend의 호스트 포트는 계속 공개하지 않습니다. 스테이징을 쓰면 같은 방식으로 `beone-staging` 네트워크(또는 전용 네트워크)에도 연결하고, 2-1절의 `<스테이징 web 기본 인증 리스너>`를 그 별칭과 컨테이너 포트 8080으로 채웁니다. 공개 nginx가 호스트 네트워크로 돈다면 네트워크 연결 없이 `127.0.0.1:18082`를 씁니다.
 
 **웹 릴리스 폴더 마운트(두 안 공통):** 공개 nginx 서비스에 다음 볼륨을 더합니다. 읽기 전용이라 nginx가 릴리스 폴더를 바꿀 수 없습니다.
 
@@ -162,8 +169,7 @@ server {
 # /opt/beone/compose.yaml의 nginx 서비스(초안, 승인 ⑧에서 반영)
     volumes:
       - /opt/beone/web:/srv/beone/web:ro
-      # 스테이징 기본 인증 파일(값은 서버에만)
-      - /opt/beone/nginx/beone-staging.htpasswd:/etc/nginx/beone-staging.htpasswd:ro
+      # 스테이징 기본 인증 파일은 공개 nginx에 마운트하지 않는다(스테이징 web이 갖는다, 2-1절)
 ```
 
 - `current`가 상대 링크라 컨테이너 안 `/srv/beone/web/current`에서도 `releases/…`로 풀립니다.
@@ -201,5 +207,5 @@ curl -sI https://beonepay.site/ | head -1    # 200, 이전 안내 화면
 | 공개 환경 스모크의 회원 인증 | TODO. 실메일(N1, 결정 39-6) 구현 뒤 공개용 실메일 인증 스모크를 별도로 구현·검증한다. 운영 DB에는 T-a를 쓰지 않음 |
 | 검증 환경 근거(#206·#199) | 미병합. 병합되면 이 문서의 참조를 병합된 경로로 확정 |
 | 스테이징 도메인·인증서·기본 인증 값 | 승인 항목(결정 40). 정해지기 전에는 2-1절 `<스테이징 도메인>`·계정 파일을 넣지 않음 |
-| `<스테이징 web 주소>` | 스테이징 compose PR(별도)의 web 서비스 이름과 3절 연결 방식에 따라 채움 |
+| `<스테이징 web 기본 인증 리스너>` | 스테이징 web(#230)의 기본 인증 리스너. 공개 nginx가 호스트 네트워크면 `127.0.0.1:18082`, 브리지면 스테이징 네트워크 연결 뒤 `<별칭>:8080`(1절 대조·3절 연결 방식에 따름) |
 | `index.html` 캐시 설정 | 권장(2절 주석). 승인 ⑧에서 반영 여부 확인 |
