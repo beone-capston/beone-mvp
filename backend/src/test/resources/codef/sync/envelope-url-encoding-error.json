@@ -1,0 +1,5 @@
+{
+  "_fixture": {"synthetic": true, "basis": "공식 SDK ResponseHandler의 UTF-8 URL 디코딩. 잘못된 퍼센트 인코딩", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "SYN-TX-ENV-0009"},
+  "data": "%ZZ"
+}

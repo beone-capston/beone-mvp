@@ -95,11 +95,25 @@ project_name() {
 	esac
 }
 
+# 배포 Compose는 prod 프로필과 메일 키 6개를 필수로 받는다(운영과 같은 조건). 검증 프로젝트는 운영과 같은 prod로 띄우고,
+# 메일 키에는 실제로 쓰이지 않는 자리표시 값을 셸 환경으로 준다(셸 환경이 --env-file보다 우선).
+# prod는 메일 상태 확인을 끄고(application-prod.yml) 메일은 발송할 때만 접속하며, 이 검증은 메일을 보내지 않는다.
+# 자리표시는 예약 도메인(.invalid)이라 외부로 나가지 않는다. 비밀값이 아니다.
+verify_profile_env=(
+	SPRING_PROFILES_ACTIVE=prod
+	SPRING_MAIL_HOST=smtp.invalid
+	SPRING_MAIL_PORT=587
+	SPRING_MAIL_USERNAME=verify@beone.invalid
+	SPRING_MAIL_PASSWORD=verify-placeholder-not-used
+	BEONE_MAIL_FROM=verify@beone.invalid
+	BEONE_MAIL_LINK_BASE_URL=https://verify.invalid
+)
+
 dc() {
 	local project
 	project="$(project_name "$1")"
 	shift
-	docker compose -f "$compose_file" -p "$project" --env-file "$VERIFY_ENV" "$@"
+	env "${verify_profile_env[@]}" docker compose -f "$compose_file" -p "$project" --env-file "$VERIFY_ENV" "$@"
 }
 
 # 대상 Compose가 mysql·backend 두 서비스만 가진 배포 Compose인지 확인한다. nginx가 보이면 멈춘다.

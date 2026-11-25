@@ -1,0 +1,309 @@
+package com.beone.api.card.application;
+
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
+
+import com.beone.api.card.persistence.UserCardEntity;
+import com.beone.api.card.persistence.UserCardRepository;
+import com.beone.api.user.application.CurrentUser;
+import com.beone.api.user.application.UserProfile;
+import com.beone.api.user.application.UserProfileService;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * 현재 사용자의 보유 카드를 조회·등록·변경·해제한다(docs/api/cards.md, D-15·D-19·D-23).
+ *
+ * <p>쓰기 검사 순서는 가상 포트폴리오 409 → 카드 없음 404 → 상품 없음 404 → 중복 409다(요청 형식 400은 웹 계층, 결정 27 A2-9).
+ * 다른 사용자·해제한 카드는 없는 카드와 같게 다룬다(D-09). 매핑 변경에 따른 추천 재계산은 추천(B2)이 생긴 뒤 연결한다.
+ */
+@Service
+public class UserCardService {
+
+	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+
+	// V4__user_cards.sql의 같은 상품 중복 금지 유니크 인덱스 이름.
+	private static final String ACTIVE_PRODUCT_UNIQUE = "uk_user_cards_active_product";
+
+	private final UserCardRepository userCardRepository;
+
+	private final CardProductService cardProductService;
+
+	private final UserProfileService userProfileService;
+
+	private final RepresentativeCardGuard representativeCardGuard;
+
+	private final Supplier<RecommendationInvalidationLookup> invalidationLookup;
+
+	private final Supplier<CodefConnectionLookup> connectionLookup;
+
+	private final Clock clock;
+
+	/**
+	 * 대표 카드 확장 지점 빈이 없으면 {@link RepresentativeCardGuard#NONE}을, {@link Clock} 빈이 하나 있으면 그것을 쓴다.
+	 * @param userCardRepository 보유 카드 저장소
+	 * @param cardProductService 상품 존재 확인
+	 * @param userProfileService 현재 사용자 표시 정보
+	 * @param representativeCardGuard 결제 전 설정(A4)의 대표 카드 검사
+	 * @param invalidationLookup 무효화된 추천 조회 포트. 추천이 보유 카드에 의존하므로 순환을 피하려고 부를 때 찾는다(#120)
+	 * @param connectionLookup CODEF 연결 여부 조회 포트. codef가 보유 카드에 의존하므로 같은 이유로 부를 때 찾는다(#136)
+	 * @param clock 등록·확인·해제 시각을 정할 시계
+	 */
+	@Autowired
+	public UserCardService(UserCardRepository userCardRepository, CardProductService cardProductService,
+			UserProfileService userProfileService, ObjectProvider<RepresentativeCardGuard> representativeCardGuard,
+			ObjectProvider<RecommendationInvalidationLookup> invalidationLookup,
+			ObjectProvider<CodefConnectionLookup> connectionLookup, ObjectProvider<Clock> clock) {
+		this(userCardRepository, cardProductService, userProfileService,
+				representativeCardGuard.getIfAvailable(() -> RepresentativeCardGuard.NONE),
+				() -> invalidationLookup.getIfAvailable(() -> RecommendationInvalidationLookup.NONE),
+				() -> connectionLookup.getIfAvailable(() -> CodefConnectionLookup.NONE),
+				clock.getIfUnique(Clock::systemUTC));
+	}
+
+	UserCardService(UserCardRepository userCardRepository, CardProductService cardProductService,
+			UserProfileService userProfileService, RepresentativeCardGuard representativeCardGuard,
+			Supplier<RecommendationInvalidationLookup> invalidationLookup,
+			Supplier<CodefConnectionLookup> connectionLookup, Clock clock) {
+		this.userCardRepository = Objects.requireNonNull(userCardRepository, "userCardRepository");
+		this.cardProductService = Objects.requireNonNull(cardProductService, "cardProductService");
+		this.userProfileService = Objects.requireNonNull(userProfileService, "userProfileService");
+		this.representativeCardGuard = Objects.requireNonNull(representativeCardGuard, "representativeCardGuard");
+		this.invalidationLookup = Objects.requireNonNull(invalidationLookup, "invalidationLookup");
+		this.connectionLookup = Objects.requireNonNull(connectionLookup, "connectionLookup");
+		this.clock = Objects.requireNonNull(clock, "clock").withZone(SEOUL);
+	}
+
+	/**
+	 * 현재 사용자 표시 정보, 해제하지 않은 보유 카드 수, CODEF 연결 여부. 연결 여부는 codef의 연결 행 존재다({@link CodefConnectionLookup},
+	 * #136).
+	 * @param user 현재 사용자
+	 * @return 사용자 요약
+	 */
+	@Transactional(readOnly = true)
+	public CurrentUserSummary summarize(CurrentUser user) {
+		return new CurrentUserSummary(this.userProfileService.profileOf(user),
+				this.userCardRepository.countByUserIdAndReleasedAtIsNull(user.userId()),
+				this.connectionLookup.get().isConnected(user));
+	}
+
+	/**
+	 * 해제하지 않은 보유 카드를 등록 순으로 돌려준다(결정 27 A2-2).
+	 * @param user 현재 사용자
+	 * @return 보유 카드 목록
+	 */
+	@Transactional(readOnly = true)
+	public List<UserCardView> list(CurrentUser user) {
+		return this.userCardRepository.findByUserIdAndReleasedAtIsNullOrderByUserCardIdAsc(user.userId())
+			.stream()
+			.map(UserCardService::toView)
+			.toList();
+	}
+
+	/**
+	 * 보유 카드를 수동 등록한다.
+	 * @param user 현재 사용자
+	 * @param card 등록할 카드 입력
+	 * @return 등록한 카드
+	 * @throws PortfolioReadOnlyException 가상 포트폴리오 사용자
+	 * @throws CardProductNotFoundException 지원하지 않는 상품
+	 * @throws UserCardDuplicatedException 같은 상품의 {@code USER_CONFIRMED} 카드가 이미 있음
+	 */
+	@Transactional
+	public UserCardView register(CurrentUser user, NewUserCard card) {
+		requireWritable(user);
+		MappingStatus status = card.mappingStatus();
+		if (status == MappingStatus.USER_CONFIRMED) {
+			this.cardProductService.requireSupported(card.cardProductId());
+			if (this.userCardRepository.existsByUserIdAndCardProductIdAndMappingStatusAndReleasedAtIsNull(
+					user.userId(), card.cardProductId(), MappingStatus.USER_CONFIRMED)) {
+				throw new UserCardDuplicatedException();
+			}
+		}
+		LocalDateTime now = now();
+		boolean unmapped = status == MappingStatus.UNMAPPED;
+		UserCardEntity entity = UserCardEntity.manual(user.userId(), card.displayName(), status, card.cardProductId(),
+				unmapped ? null : ConfirmationMethod.MANUAL_SELECTION, unmapped ? null : now, now);
+		return toView(saveGuardingDuplicate(entity));
+	}
+
+	/**
+	 * 매핑을 확인·변경한다. 같은 카드를 같은 상품으로 다시 확인하면 확인 시각만 바뀐다(결정 27 A2-8).
+	 * @param user 현재 사용자
+	 * @param userCardId 보유 카드 ID 외부 표현
+	 * @param change 매핑 변경 입력
+	 * @return 바뀐 카드와 무효화 목록
+	 * @throws PortfolioReadOnlyException 가상 포트폴리오 사용자
+	 * @throws UserCardNotFoundException 없거나 다른 사용자·해제한 카드
+	 * @throws CandidateMismatchException {@code CODEF_CANDIDATE}인데 현재 후보와 다름
+	 * @throws CardProductNotFoundException 지원하지 않는 상품
+	 * @throws UserCardDuplicatedException 다른 카드가 이미 같은 상품으로 {@code USER_CONFIRMED}
+	 */
+	@Transactional
+	public UserCardChangeResult changeMapping(CurrentUser user, String userCardId, MappingChange change) {
+		requireWritable(user);
+		UserCardEntity entity = find(user, userCardId);
+		if (change.confirmationMethod() == ConfirmationMethod.CODEF_CANDIDATE) {
+			// CANDIDATE는 2차 CODEF만 만든다. 1차 카드에는 후보가 없으므로 항상 일치하지 않는다(결정 27 A2-7).
+			throw new CandidateMismatchException();
+		}
+		if (change.status() == MappingStatus.USER_CONFIRMED) {
+			this.cardProductService.requireSupported(change.cardProductId());
+			if (this.userCardRepository.existsByUserIdAndCardProductIdAndMappingStatusAndReleasedAtIsNullAndUserCardIdNot(
+					user.userId(), change.cardProductId(), MappingStatus.USER_CONFIRMED, entity.getUserCardId())) {
+				throw new UserCardDuplicatedException();
+			}
+		}
+		LocalDateTime confirmedAt = (change.status() == MappingStatus.UNMAPPED) ? null : now();
+		RecommendationInvalidationLookup lookup = this.invalidationLookup.get();
+		List<String> candidates = lookup.validUsing(user, entity.getUserCardId());
+		entity.changeMapping(change.status(), change.cardProductId(), change.confirmationMethod(), confirmedAt);
+		UserCardView saved = toView(saveGuardingDuplicate(entity));
+		return new UserCardChangeResult(saved, lookup.invalidatedByMapping(user, candidates));
+	}
+
+	/**
+	 * 표시 이름·추천 제외를 바꾼다. 추천 제외 값이 실제로 바뀔 때만 무효화 목록을 담는다(docs/api/cards.md).
+	 * @param user 현재 사용자
+	 * @param userCardId 보유 카드 ID 외부 표현
+	 * @param change 표시 이름·추천 제외 변경 입력
+	 * @return 바뀐 카드와 무효화 목록
+	 * @throws PortfolioReadOnlyException 가상 포트폴리오 사용자
+	 * @throws UserCardNotFoundException 없거나 다른 사용자·해제한 카드
+	 */
+	@Transactional
+	public UserCardChangeResult update(CurrentUser user, String userCardId, UserCardChange change) {
+		requireWritable(user);
+		UserCardEntity entity = find(user, userCardId);
+		boolean exclusionChanged = change.excludedFromRecommendation() != null
+				&& change.excludedFromRecommendation() != entity.isExcludedFromRecommendation();
+		if (exclusionChanged && change.excludedFromRecommendation()) {
+			this.representativeCardGuard.beforeExclusion(user, entity.getUserCardId());
+		}
+		RecommendationInvalidationLookup lookup = this.invalidationLookup.get();
+		List<String> candidates = exclusionChanged ? lookup.validUsing(user, entity.getUserCardId()) : List.of();
+		if (change.displayName() != null) {
+			entity.rename(change.displayName());
+		}
+		if (exclusionChanged) {
+			entity.changeExclusion(change.excludedFromRecommendation());
+		}
+		UserCardView saved = toView(this.userCardRepository.saveAndFlush(entity));
+		return new UserCardChangeResult(saved, exclusionChanged ? lookup.invalidatedByMapping(user, candidates) : null);
+	}
+
+	/**
+	 * 등록을 해제한다. 행을 지우지 않고 해제 시각을 남긴다. 이미 해제한 카드는 없는 카드다(D-23).
+	 * @param user 현재 사용자
+	 * @param userCardId 보유 카드 ID 외부 표현
+	 * @throws PortfolioReadOnlyException 가상 포트폴리오 사용자
+	 * @throws UserCardNotFoundException 없거나 다른 사용자·이미 해제한 카드
+	 */
+	@Transactional
+	public void release(CurrentUser user, String userCardId) {
+		requireWritable(user);
+		UserCardEntity entity = find(user, userCardId);
+		this.representativeCardGuard.beforeRelease(user, entity.getUserCardId());
+		entity.release(now());
+		this.userCardRepository.saveAndFlush(entity);
+	}
+
+	/**
+	 * 모의 승인 전에 이 사용자의 해제하지 않은 보유 카드 행을 ID 오름차순으로 쓰기 잠금한다(#122). 추천 재계산은 이 카드들을 모두
+	 * 비교하고 각 카드의 스냅샷 뒤 원장 차감액을 읽으므로, 같은 사용자의 다른 주문 승인은 앞 승인이 커밋할 때까지 기다린 뒤 그
+	 * 원장을 반영해 계산한다. 잠금은 호출자 트랜잭션이 끝날 때 풀린다. 호출자의 트랜잭션 안에서만 부른다.
+	 * @param user 현재 사용자
+	 * @return 잠근 카드 수
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public int lockHeldCardsForPayment(CurrentUser user) {
+		return this.userCardRepository.lockActiveByUserIdOrderByUserCardId(user.userId()).size();
+	}
+
+	/**
+	 * CODEF 동기화 저장 전에 이 사용자의 해제하지 않은 보유 카드 행을 ID 오름차순으로 쓰기 잠금하고, 그중 CODEF 카드 ID를 돌려준다
+	 * (#129). 모의 승인과 같은 순서(보유 카드 → 사용자 행)로 잠가 서로 교착하지 않게 하고, 같은 사용자의 카드 해제와도 차례로
+	 * 처리한다. 호출자의 트랜잭션 안에서만 부른다.
+	 * @param user 현재 사용자
+	 * @return 해제하지 않은 CODEF 카드 ID(오름차순)
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public List<Long> lockHeldCardsForCodefSync(CurrentUser user) {
+		return this.userCardRepository.lockActiveByUserIdOrderByUserCardId(user.userId())
+			.stream()
+			.filter(card -> card.getHoldingSource() == HoldingSource.CODEF)
+			.map(UserCardEntity::getUserCardId)
+			.toList();
+	}
+
+	/**
+	 * CODEF 보유카드로 새 보유 카드를 만든다(#129). 매핑은 {@code UNMAPPED}, 상품 후보는 없다(결정 20 R3). 가상 포트폴리오 검사와
+	 * 표시 이름 검사(1~30자)는 호출자가 마친 뒤 부른다. 호출자의 트랜잭션 안에서만 부른다.
+	 * @param user 현재 사용자
+	 * @param displayName 앞뒤 공백을 뗀 1~30자 표시 이름
+	 * @return 만든 보유 카드의 저장소 번호
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public long registerCodefCard(CurrentUser user, String displayName) {
+		UserCardEntity entity = UserCardEntity.codef(user.userId(), displayName, now());
+		return this.userCardRepository.saveAndFlush(entity).getUserCardId();
+	}
+
+	// 쓰기 가능 여부는 현재 사용자의 readOnly로 판단한다(시연 사용자 구분이 없는 회원 장부 포함, 결정 37)
+	private static void requireWritable(CurrentUser user) {
+		if (user.readOnly()) {
+			throw new PortfolioReadOnlyException();
+		}
+	}
+
+	private UserCardEntity find(CurrentUser user, String userCardId) {
+		return UserCardId.parse(userCardId)
+			.flatMap(id -> this.userCardRepository.findByUserCardIdAndUserIdAndReleasedAtIsNull(id, user.userId()))
+			.orElseThrow(UserCardNotFoundException::new);
+	}
+
+	// 서비스 검사와 저장 사이에 같은 상품이 먼저 저장되면 DB 유니크(uk_user_cards_active_product)가 막는다. 그 제약 위반만 409로
+	// 바꾸고, 다른 제약 위반은 원래 예외 그대로 둔다(500).
+	private UserCardEntity saveGuardingDuplicate(UserCardEntity entity) {
+		try {
+			return this.userCardRepository.saveAndFlush(entity);
+		}
+		catch (DataIntegrityViolationException ex) {
+			if (violatesActiveProductUnique(ex)) {
+				throw new UserCardDuplicatedException(ex);
+			}
+			throw ex;
+		}
+	}
+
+	private static boolean violatesActiveProductUnique(DataIntegrityViolationException ex) {
+		String message = ex.getMostSpecificCause().getMessage();
+		return message != null && message.contains(ACTIVE_PRODUCT_UNIQUE);
+	}
+
+	private LocalDateTime now() {
+		return LocalDateTime.now(this.clock).truncatedTo(ChronoUnit.SECONDS);
+	}
+
+	private static UserCardView toView(UserCardEntity entity) {
+		boolean synthetic = entity.getHoldingSource() == HoldingSource.SYNTHETIC;
+		UserCardMapping mapping = synthetic ? null : new UserCardMapping(entity.getMappingStatus(),
+				entity.getCardProductId(), entity.getConfirmationMethod(), entity.getConfirmedAt());
+		return new UserCardView(UserCardId.format(entity.getUserCardId()), entity.getDisplayName(),
+				entity.getHoldingSource(), synthetic ? entity.getCardProductId() : null, mapping,
+				entity.isExcludedFromRecommendation(),
+				RecommendationEligibility.of(entity.getHoldingSource(), entity.getMappingStatus(),
+						entity.isExcludedFromRecommendation()),
+				entity.getRegisteredAt());
+	}
+
+}

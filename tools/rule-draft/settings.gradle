@@ -1,0 +1,2 @@
+// backend와 분리된 독립 Gradle 프로젝트(결정 41). backend settings에 포함하지 않는다.
+rootProject.name = 'rule-draft'

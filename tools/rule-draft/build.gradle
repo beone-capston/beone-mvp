@@ -1,0 +1,45 @@
+plugins {
+	id 'java'
+	id 'application'
+}
+
+group = 'com.beone'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+// 의존성은 이 도구에만 둔다. backend 클래스패스와 섞이지 않는다(결정 41 구조적 분리).
+dependencies {
+	implementation 'org.apache.pdfbox:pdfbox:3.0.8'
+	implementation 'com.fasterxml.jackson.core:jackson-databind:2.22.4'
+	testImplementation platform('org.junit:junit-bom:6.1.3')
+	testImplementation 'org.junit.jupiter:junit-jupiter'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+	mainClass = 'com.beone.ruledraft.Main'
+}
+
+// 기준 표본: backend 규칙 JSON. 읽기만 한다.
+def rulesDir = layout.projectDirectory.dir('../../backend/src/main/resources/rules')
+
+tasks.named('test', Test) {
+	useJUnitPlatform()
+	systemProperty 'ruledraft.rulesDir', rulesDir.asFile.absolutePath
+	inputs.dir(rulesDir).withPathSensitivity(PathSensitivity.RELATIVE)
+	// 테스트에는 키를 넘기지 않는다. 키가 설정된 셸에서 실행해도 실제 호출 경로가 열리지 않는다.
+	environment.remove('BEONE_RULE_DRAFT_API_KEY')
+}
+
+tasks.named('run', JavaExec) {
+	workingDir = layout.projectDirectory.asFile
+}

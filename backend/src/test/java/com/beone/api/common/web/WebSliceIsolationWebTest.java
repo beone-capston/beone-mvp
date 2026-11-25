@@ -5,10 +5,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 import javax.sql.DataSource;
 
+import com.beone.api.card.application.CardProductService;
 import com.beone.api.support.WebSliceTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -22,6 +24,10 @@ class WebSliceIsolationWebTest {
 
 	@Autowired
 	MockMvc mockMvc;
+
+	// 모든 프로필에 등록되는 카드 상품 컨트롤러(#105)가 전체 스캔 슬라이스에 들어오므로 그 의존성만 대신한다.
+	@MockitoBean
+	CardProductService cardProductService;
 
 	@Test
 	void testControllersFromOtherTestsAreNotRegistered() throws Exception {

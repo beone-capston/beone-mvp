@@ -27,6 +27,7 @@ import com.beone.api.benefit.money.Won;
  * @param requiresSelection 사용자가 선택해야 적용되는 선택형 서비스면 참(09271)
  * @param stackableWith 같은 거래에서 함께 받을 수 있는 서비스. 빈 집합이면 가장 큰 단일 혜택만 적용한다(PRD FR-05)
  * @param fractionalWon 원 미만 금액 처리 방식
+ * @param details 서비스별 추가 값
  */
 public record BenefitService(ServiceId id, BenefitKind kind, MerchantTarget target, Set<MerchantClass> excludedClasses,
 		Set<PaymentMethod> paymentMethods, Won minimumAmount, Optional<Won> maximumTargetAmount,
@@ -74,6 +75,18 @@ public record BenefitService(ServiceId id, BenefitKind kind, MerchantTarget targ
 
 	/**
 	 * 추가 값 없이 계산 조건만 있는 서비스.
+	 * @param id 규칙 안의 서비스 식별자
+	 * @param kind 포인트 적립 또는 청구 할인(D-11)
+	 * @param target 대상 가맹점
+	 * @param excludedClasses 혜택에서 제외하는 업종
+	 * @param paymentMethods 대상 결제 방식
+	 * @param minimumAmount 건당 최소 금액
+	 * @param maximumTargetAmount 건당 할인 대상 금액 상한. 없으면 빈 값
+	 * @param tiers 전월 실적 구간별 계산 방식
+	 * @param limitBuckets 혜택이 차감하는 한도
+	 * @param requiresSelection 선택형 서비스면 참
+	 * @param stackableWith 같은 거래에서 함께 받을 수 있는 서비스
+	 * @param fractionalWon 원 미만 금액 처리 방식
 	 */
 	public BenefitService(ServiceId id, BenefitKind kind, MerchantTarget target, Set<MerchantClass> excludedClasses,
 			Set<PaymentMethod> paymentMethods, Won minimumAmount, Optional<Won> maximumTargetAmount,
@@ -104,6 +117,7 @@ public record BenefitService(ServiceId id, BenefitKind kind, MerchantTarget targ
 
 	/**
 	 * 계산이 전월 실적에 따라 달라지면 참. 구간이 둘 이상이거나 단일 구간의 최소 실적이 0원보다 크면 해당한다.
+	 * @return 전월 실적에 따라 계산이 달라지면 {@code true}
 	 */
 	public boolean hasPerformanceRequirement() {
 		return tiers.size() > 1 || tiers.get(0).minimumPerformance().isPositive();
@@ -111,6 +125,7 @@ public record BenefitService(ServiceId id, BenefitKind kind, MerchantTarget targ
 
 	/**
 	 * 계산식 자체가 미확정인 사유. 하나라도 있으면 이 서비스는 계산하지 않는다.
+	 * @return 계산식 미확정 사유 목록. 없으면 빈 목록
 	 */
 	public List<String> unresolvedCalculationReasons() {
 		return tiers.stream()
@@ -122,6 +137,7 @@ public record BenefitService(ServiceId id, BenefitKind kind, MerchantTarget targ
 
 	/**
 	 * 입력에 따라서만 필요한 미확정 조건(중복 허용, 원 미만 처리).
+	 * @return 입력에 따라 필요한 미확정 조건 목록
 	 */
 	public List<ConditionalTerm> unresolvedConditionalTerms() {
 		List<ConditionalTerm> unresolved = new ArrayList<>();

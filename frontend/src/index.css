@@ -1,7 +1,809 @@
+/* 기본 색상: 첨부된 Figma 프레임 */
 :root {
-  font-family: system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
+  --app-bg: #F3F5F7;
+  --surface: #FFFFFF;
+  --text-primary: #1B2C42;
+  --text-muted: #808D99;
+  --brand-primary: #2D86A3;
+  --brand-secondary: #355D87;
+  --brand-wordmark: #142235;
+  --border-subtle: #D3DBDE;
+  --chevron-color: #485F7C;
+  --nav-inactive: #829397;
+  --on-brand: #FFFFFF;
+  --more-icon-fill: #D9D9D9;
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif;
+  color: var(--text-primary);
+  background: var(--app-bg);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: 0;
+}
+
+button,
+a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 3px;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button:active:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 866px 디자인 좌표를 모바일 논리 너비로 축소 */
+.wallet-app {
+  width: 100%;
+  max-width: 480px;
+  min-height: 100dvh;
+  margin: auto;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  background: var(--app-bg);
+}
+
+.wallet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 66px;
+  flex: 0 0 66px;
+  padding: 12px 22px 10px 28px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--brand-wordmark);
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  text-decoration: none;
+}
+
+.brand-colon {
+  color: var(--brand-secondary);
+}
+
+/* 새 파란 로고 원본의 심볼 영역만 표시: 재착색·재작도 없음 */
+.brand-symbol {
+  position: relative;
+  display: inline-block;
+  width: 24px;
+  height: 31px;
+  overflow: hidden;
+}
+
+.brand-symbol img {
+  position: absolute;
+  width: 67.5px;
+  max-width: none;
+  left: -21.75px;
+  top: -7.125px;
+  /* PNG 실제 외곽에서 추출한 클리핑: 배경만 숨기고 흰 숫자 1 보존 */
+  clip-path: polygon(32.2222% 12.5000%, 56.6667% 12.5000%, 57.8889% 12.7632%, 59.7778% 13.4211%, 61.2222% 14.2105%, 62.1111% 14.8684%, 62.8889% 15.6579%, 63.1111% 15.7895%, 63.8889% 16.7105%, 63.8889% 16.8421%, 64.3333% 17.3684%, 64.3333% 17.5000%, 64.6667% 17.8947%, 64.7778% 18.2895%, 65.0000% 18.5526%, 65.0000% 18.6842%, 65.3333% 19.3421%, 65.3333% 19.6053%, 65.5556% 20.0000%, 65.5556% 20.3947%, 65.6667% 20.5263%, 65.6667% 20.7895%, 65.7778% 20.9211%, 65.7778% 21.4474%, 65.8889% 21.5789%, 65.8889% 24.8684%, 65.7778% 25.0000%, 65.7778% 25.5263%, 65.6667% 25.6579%, 65.6667% 26.0526%, 65.5556% 26.1842%, 65.5556% 26.5789%, 65.4444% 26.7105%, 65.4444% 26.9737%, 65.2222% 27.3684%, 65.2222% 27.6316%, 65.1111% 27.7632%, 65.1111% 27.8947%, 65.0000% 28.0263%, 64.6667% 28.9474%, 64.4444% 29.2105%, 64.4444% 29.3421%, 64.2222% 29.6053%, 64.2222% 29.7368%, 64.0000% 30.0000%, 64.0000% 30.1316%, 63.4444% 30.7895%, 63.4444% 30.9211%, 62.2222% 32.3684%, 62.0000% 32.5000%, 61.5556% 33.0263%, 60.6667% 33.8158%, 57.0000% 36.7105%, 58.1111% 36.8421%, 59.6667% 37.2368%, 60.6667% 37.6316%, 61.8889% 38.2895%, 63.1111% 39.2105%, 64.0000% 40.1316%, 64.2222% 40.2632%, 65.4444% 41.8421%, 65.4444% 41.9737%, 65.7778% 42.3684%, 65.7778% 42.5000%, 66.0000% 42.7632%, 66.1111% 43.1579%, 66.3333% 43.4211%, 66.3333% 43.5526%, 67.0000% 45.0000%, 67.0000% 45.2632%, 67.1111% 45.3947%, 67.1111% 45.6579%, 67.2222% 45.7895%, 67.2222% 46.0526%, 67.3333% 46.1842%, 67.3333% 46.4474%, 67.4444% 46.5789%, 67.4444% 46.9737%, 67.5556% 47.1053%, 67.5556% 47.5000%, 67.6667% 47.6316%, 67.6667% 48.2895%, 67.7778% 48.4211%, 67.7778% 52.1053%, 67.6667% 52.2368%, 67.6667% 53.0263%, 67.5556% 53.1579%, 67.5556% 53.6842%, 67.4444% 53.8158%, 67.4444% 54.2105%, 67.3333% 54.3421%, 67.3333% 54.6053%, 67.2222% 54.7368%, 67.2222% 55.1316%, 67.1111% 55.2632%, 67.1111% 55.5263%, 66.8889% 55.9211%, 66.8889% 56.1842%, 66.5556% 56.8421%, 66.5556% 57.1053%, 66.2222% 57.6316%, 66.2222% 57.7632%, 66.1111% 57.8947%, 66.0000% 58.2895%, 65.7778% 58.5526%, 65.6667% 58.9474%, 65.1111% 59.7368%, 65.1111% 59.8684%, 64.6667% 60.3947%, 64.6667% 60.5263%, 63.3333% 62.1053%, 63.1111% 62.2368%, 62.6667% 62.7632%, 61.3333% 63.8158%, 59.2222% 65.0000%, 57.6667% 65.5263%, 56.4444% 65.7895%, 32.2222% 65.9211%);
+}
+
+.header-actions {
+  display: flex;
+  gap: 1px;
+}
+
+.header-actions button {
+  color: var(--text-primary);
+  width: 40px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.header-actions button:first-child svg {
+  width: 27px;
+  height: 27px;
+}
+
+/* 내 카드 / 가상 포트폴리오 */
+.mode-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 80px 134px;
+  margin: 0 27px 0 30px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mode-tabs button {
+  min-height: 36px;
+  padding: 4px 0 9px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  transition: color 200ms;
+}
+
+.mode-tabs button[aria-selected='true'] {
+  color: var(--text-primary);
+  font-weight: 750;
+}
+
+.mode-underline {
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 52px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--brand-primary);
+  transform: translateX(calc(var(--mode-index) * 80px));
+  transition: transform 200ms, width 200ms;
+}
+
+.mode-tabs:has(button:nth-of-type(2)[aria-selected='true']) .mode-underline {
+  width: 126px;
+}
+
+.wallet-app > main {
+  flex: 1;
+  min-width: 0;
+}
+
+.quick-payment {
+  animation: content-in 150ms ease-out;
+}
+
+.card-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 54px;
+  margin: 0 28px 0 30px;
+  padding-top: 7px;
+}
+
+.card-section-heading h2 {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+}
+
+.card-section-heading h2 > span {
+  margin-left: 3px;
+  color: var(--brand-secondary);
+}
+
+/* 카드 폭과 중앙 여백: 다음 카드가 오른쪽에 일부 노출됨 */
+.card-carousel {
+  --card-width: min(65vw, 330px);
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 5px calc((100% - var(--card-width)) / 2) 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: calc((100% - var(--card-width)) / 2);
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.card-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.card-slide {
+  flex: 0 0 var(--card-width);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  scroll-snap-align: center;
+}
+
+.payment-card {
+  width: 100%;
+  aspect-ratio: 1.586;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 5px 10px -8px #10283b66;
+  color: #edf5fa;
+  border: 1px solid #ffffff1a;
+}
+
+.navy {
+  background: linear-gradient(125deg, #35516d, #152a41 75%);
+}
+
+.mint-card {
+  background: linear-gradient(125deg, #b6dfcf, #6ba791);
+  color: #214a40;
+}
+
+.silver {
+  background: linear-gradient(125deg, #e3e9ee, #a5b5c2);
+  color: #324657;
+}
+
+.forest {
+  background: linear-gradient(125deg, #447d72, #173c3d);
+}
+
+.card-topline {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.card-topline small {
+  font-size: 9px;
+  font-weight: 400;
+  margin-left: 5px;
+  opacity: 0.75;
+}
+
+.example-label {
+  font-size: 7px;
+  letter-spacing: 1px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 4px 5px;
+  opacity: 0.65;
+}
+
+.payment-card .card-name {
+  position: relative;
+  z-index: 1;
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 7px;
+  letter-spacing: -0.4px;
+}
+
+.card-decoration {
+  position: absolute;
+  width: 210px;
+  height: 250px;
+  top: -17px;
+  right: -50px;
+  transform: rotate(32deg);
+}
+
+.card-decoration i {
+  position: absolute;
+  width: 85px;
+  height: 260px;
+  border-radius: 60px;
+  background: linear-gradient(#b9e3ce66, #8dc9b31a);
+}
+
+.card-decoration i:last-child {
+  left: 90px;
+  top: 30px;
+  opacity: 0.45;
+}
+
+.chip {
+  position: absolute;
+  top: 52%;
+  left: 23px;
+  width: 33px;
+  height: 26px;
+  border: 1px solid #b9c7bd;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #e4e9d6, #aebcad);
+  overflow: hidden;
+}
+
+.chip::before,
+.chip::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  background: #7c948b;
+  top: 8px;
+}
+
+.chip::after {
+  top: 16px;
+}
+
+.chip span {
+  position: absolute;
+  width: 14px;
+  height: 100%;
+  left: 9px;
+  border-inline: 1px solid #7c948b;
+}
+
+.card-footline {
+  position: absolute;
+  bottom: 20px;
+  left: 22px;
+  right: 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-footline > span {
+  font-size: 6px;
+  letter-spacing: 1.4px;
+  opacity: 0.75;
+}
+
+.card-footline strong {
+  font-size: 19px;
+  letter-spacing: -1px;
+}
+
+.card-footline strong span {
+  color: #9bd1b8;
+}
+
+/* 카드 외형은 유지하고 버튼 기본 스타일만 해제 */
+.payment-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  flex-shrink: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.card-name {
+  display: block;
+}
+
+/* 각 카드에 붙는 부가서비스 */
+.card-services {
+  width: calc(100% - 12px);
+  min-height: 40px;
+  margin-top: -7px;
+  padding: 12px 8px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0 0 18px 18px;
+  background: var(--surface);
+  color: var(--brand-secondary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.card-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: -3px;
+}
+
+.card-pagination button {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 23px;
+  padding: 0;
+  background: transparent;
+}
+
+.card-pagination span {
+  width: 4px;
+  height: 4px;
+  border-radius: 5px;
+  background: var(--border-subtle);
+  transition: width 180ms, background 180ms;
+}
+
+.card-pagination button[aria-pressed='true'] {
+  width: 23px;
+}
+
+.card-pagination button[aria-pressed='true'] span {
+  width: 15px;
+  background: var(--brand-secondary);
+}
+
+.card-caption {
+  margin-top: 3px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.simulation-disclaimer {
+  margin: 16px 20px;
+  color: var(--text-muted);
+  font-size: 9px;
+  text-align: center;
+}
+
+/* 결제 방식 드롭다운 */
+.preference {
+  position: relative;
+}
+
+.preference-trigger {
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chevron {
+  display: inline-flex;
+  color: var(--chevron-color);
+  transition: transform 140ms;
+}
+
+.chevron svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.preference-popover {
+  position: absolute;
+  top: calc(100% - 3px);
+  right: 0;
+  z-index: 4;
+  width: 174px;
+  max-width: calc(100vw - 56px);
+  padding: 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text-primary) 11%, transparent);
+  animation: popover-in 140ms ease-out;
+}
+
+.preference-popover button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 11px;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+}
+
+.preference-popover button[aria-checked='true'] {
+  color: var(--brand-primary);
+  background: var(--app-bg);
+}
+
+.preference-popover svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 하단 메뉴: 선택 타원이 이동 */
+.bottom-nav {
+  position: relative;
+  z-index: 3;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: calc(100% - 40px);
+  margin: 18px auto 0;
+  padding: 3px;
+  border-radius: 50px;
+  background: var(--surface);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--text-primary) 3%, transparent);
+}
+
+.nav-indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 3);
+  border-radius: 40px;
+  background: var(--brand-primary);
+  transform: translateX(calc(var(--active-index) * 100%));
+  transition: transform 360ms cubic-bezier(0.22, 0.8, 0.25, 1);
+}
+
+.bottom-nav button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  min-height: 49px;
+  padding: 6px 4px;
+  background: transparent;
+  border-radius: 40px;
+  color: var(--nav-inactive);
+  font-size: 10px;
+  transition: color 200ms;
+}
+
+.bottom-nav button[aria-current='page'] {
+  color: var(--on-brand);
+  font-weight: 700;
+}
+
+.bottom-nav svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 모달 · 부가서비스 · 인증 안내 */
+.sheet-backdrop {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--text-primary) 33%, transparent);
+}
+
+.sheet {
+  width: 100%;
+  max-width: 448px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 22px;
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: 0 12px 44px color-mix(in srgb, var(--text-primary) 13%, transparent);
+  animation: popover-in 150ms ease-out;
+}
+
+.sheet-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sheet-heading h2 {
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.close-button {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 26px;
+}
+
+.sheet-description,
+.auth-message,
+.payment-entry p {
+  margin-bottom: 16px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-muted);
+}
+
+.primary-button {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--brand-primary);
+  color: var(--on-brand);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.representative-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 20px;
+  padding: 0;
+  border: 0;
+}
+
+.representative-options label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.representative-options input {
+  accent-color: var(--brand-primary);
+}
+
+.auth-countdown {
+  margin-bottom: 15px;
+  color: var(--brand-primary);
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.payment-entry {
+  margin-top: 20px;
+}
+
+.payment-entry small {
+  display: block;
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.toast {
+  position: fixed;
+  z-index: 8;
+  bottom: calc(90px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: calc(100% - 40px);
+  max-width: 440px;
+  padding: 10px 10px 10px 17px;
+  border-radius: 12px;
+  background: var(--text-primary);
+  color: var(--on-brand);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.empty-state,
+.placeholder-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  min-height: 280px;
+  padding: 35px;
+  text-align: center;
+}
+
+.empty-state h3 {
+  font-size: 18px;
+}
+
+.empty-state p,
+.placeholder-page p {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.placeholder-page > span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@keyframes content-in {
+  from {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-height: 650px) {
+  .wallet-header {
+    height: 60px;
+    flex-basis: 60px;
+    padding-top: 6px;
+  }
+
+  .mode-tabs {
+    margin-top: 0;
+  }
+
+  .card-section-heading {
+    min-height: 51px;
+  }
+
+  .card-carousel {
+    --card-width: min(65vw, 270px);
+  }
+
+  .simulation-disclaimer {
+    margin-block: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -50,6 +50,7 @@ public final class CodefApiKeys {
 
 	/**
 	 * 비어 있는 환경 변수의 이름. 값과 길이는 담지 않는다.
+	 * @return 비어 있는 환경 변수 이름 목록
 	 */
 	public List<String> missingVariables() {
 		return missingVariables;

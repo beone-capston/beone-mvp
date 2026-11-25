@@ -26,11 +26,12 @@ final class EngineTestData {
 
 	static HeldCardInput confirmed(String userCardId, String product) {
 		return new HeldCardInput(userCardId, "USER_CONFIRMED", product, null, false, "MANUAL", StateInput.notEntered(),
-				emptyState());
+				emptyState(), PolicyEvidenceInput.undetermined());
 	}
 
 	static HeldCardInput unmapped(String userCardId) {
-		return new HeldCardInput(userCardId, "UNMAPPED", null, null, false, "MANUAL", StateInput.notEntered(), emptyState());
+		return new HeldCardInput(userCardId, "UNMAPPED", null, null, false, "MANUAL", StateInput.notEntered(), emptyState(),
+				PolicyEvidenceInput.undetermined());
 	}
 
 	static AppliedRuleOutput rule() {

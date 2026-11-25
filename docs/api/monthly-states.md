@@ -2,7 +2,9 @@
 
 카드별 월간 상태의 조회·수동 입력과, 2차의 출처 충돌 선택을 다룹니다(D-04, D-16, D-17).
 
-공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 모든 API는 구현 전입니다.
+공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 구현 상태는 [README](README.md#업무-api-1차-명세)의 상태 항목을 봅니다.
+
+프로필: 세 API는 `local`·`demo`와 로컬 회원 프로필 `member`에 등록돼 있습니다(G3a #159). 아래 `X-BeONE-Demo-User` 헤더는 `local`·`demo`의 방식입니다. `member`에서는 헤더 대신 회원 세션 쿠키(`__Host-BEONE_SESSION`)로 현재 사용자를 정하고 PUT 두 개에 `X-CSRF-TOKEN`이 필요합니다. 검사 순서는 401 `UNAUTHENTICATED` → 403 `CSRF_INVALID` → 400 → 404 → 409이고 모든 응답에 `Cache-Control: no-store`가 붙습니다([회원 세션 규칙](../api.md#회원-세션member-프로필)). 출처 충돌 계산 기준 선택은 `member`에서도 항상 409 `SOURCE_CONFLICT_NOT_FOUND`이고 저장하지 않습니다(결정 32 Q1).
 
 ## GET /api/v1/me/cards/{userCardId}/monthly-states/{month} — 월간 상태 조회
 
@@ -312,8 +314,10 @@ registeredOn
 
 ### 구현 시 주의
 
-- D-17의 음수 전월 실적 판정은 구현 전이며, 현재 판정기는 음수를 거부합니다. 판정기 변경이 이 API 구현의 선행 작업입니다.
-- 코드 `CardMonthlyState`에는 선택 없음을 담을 곳이 없습니다(`ServiceSelection`은 서비스가 필수). 구현 때 입력 모델에 추가해야 합니다.
+- 엔진 입구는 음수 전월 실적을 받아 `확인 필요`로 처리합니다(D-22). D-17의 음수 구간 판정 규칙은 구현 전이며 판정기(`PerformanceTiers`)는 음수를 계속 거부하지만, 엔진이 그 전에 `UNKNOWN`으로 바꿉니다. 이 API는 음수를 그대로 저장하고 엔진에 넘깁니다.
+- 엔진 입구는 `serviceSelectionStatus=NONE`과 서비스가 없는 선택 항목 하나로 선택 없음을 받습니다(`MonthlyStateInput`). 미입력은 `UNKNOWN`과 빈 목록입니다.
+- `otherBucketsUsedWon`은 미입력이어도 엔진 입력에서 생략할 수 없습니다. 미입력이면 `StateInput.notEntered()`로 넘깁니다.
+- `period`가 맞지 않다고 `usable=false`·`reason=PERIOD_MISMATCH`로 저장하거나 엔진에 넘기지 않습니다. 기간 판단은 엔진이 하며, 엔진은 `PERIOD_MISMATCH`를 받으면 계약 위반으로 예외를 던집니다(D-22).
 - 모의 승인은 스냅샷 뒤 사용액으로 체인 안 모든 버킷에 더합니다. 모의 원장 기준이며 실제 카드사 차감 시점이 아닙니다.
 
 ### 근거
@@ -328,6 +332,8 @@ registeredOn
 월간 상태 값의 출처 충돌을 사용자가 해소하는 API. 선택은 그 값 하나에만 적용한다.
 
 충돌은 같은 카드·같은 항목·같은 기준 기간에 출처가 다른 값이 서로 다를 때만 생깁니다. 값이 같거나, 기준 기간이 다르거나, `UNKNOWN`이거나, 사용자가 참고해 입력한 MANUAL 값과 그 CODEF 값이면 충돌이 아닙니다. 1차(수동 입력만)에서는 충돌이 생기지 않습니다.
+
+> 현재 구현은 제한 구현입니다. 충돌이 생기는 경로가 생기기 전까지 요청 검증 400·카드 404 뒤 항상 409 `SOURCE_CONFLICT_NOT_FOUND`로 끝나고, 선택을 저장하지 않습니다. 아래 200 응답은 그 뒤에 구현할 형식입니다(#135, 사용자 확인 결정 32 Q1, 2026-11-18).
 
 ### Request Header
 

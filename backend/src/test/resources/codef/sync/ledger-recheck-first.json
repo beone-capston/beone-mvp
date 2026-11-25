@@ -1,0 +1,10 @@
+{
+  "_fixture": {"synthetic": true, "basis": "참고 승인내역 취소건!I14(type1 한 행에 승인·취소) I15(정상 행). R2 재조회 대조 1회차, Type1 행이 재조회 때 정상에서 취소로 바뀐다는 전제는 시트 설명에서 추론, 관측 전", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "SYN-TX-LRECHK-0001"},
+  "data": [
+    {"resUsedDate": "20261101", "resUsedTime": "100000", "resCardName": "SYN CARD A", "resUsedAmount": "12000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-R31"},
+    {"resUsedDate": "20261101", "resUsedTime": "110000", "resCardName": "SYN CARD A", "resUsedAmount": "13000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-R32"},
+    {"resUsedDate": "20261101", "resUsedTime": "120000", "resCardName": "SYN CARD A", "resUsedAmount": "14000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "1", "resCancelAmount": "14000", "resApprovalNo": "SYN-APR-R33"},
+    {"resUsedDate": "20261101", "resUsedTime": "130000", "resCardName": "SYN CARD A", "resUsedAmount": "15000", "resAccountCurrency": "KRW", "resHomeForeignType": "1", "resCancelYN": "0", "resCancelAmount": "", "resApprovalNo": "SYN-APR-R34"}
+  ]
+}

@@ -59,6 +59,7 @@ chore(android): Gradle 데몬 JDK 버전 고정
 - 변경 내용, 검증 결과, 리뷰가 필요한 부분을 적습니다.
 - UI를 변경했다면 가능할 때 화면 캡처를 첨부합니다.
 - 원칙적으로 다른 팀원 한 명의 리뷰를 받은 뒤 병합합니다.
+- 제한된 예외: 사용자가 승인한 관리측 장기 개발 범위에서는 [장기 연속 개발 운영 규칙](docs/development/autonomous-workflow.md) 2-1절의 실제 검증·정확한 HEAD 리뷰 판단·충돌·보호 조건을 충족한 `develop` PR만 작업자가 Squash 병합할 수 있습니다. 일반 작업·팀원 작업·`main`에는 적용하지 않고, 사람의 승인이나 보호 규칙을 대신하거나 위조하지 않습니다.
 - 작업 브랜치 → `develop` PR은 squash merge를 사용합니다.
 - `develop` → `main` PR은 merge commit을 사용합니다. 두 브랜치의 허용 병합 방식은 각각 GitHub 룰셋으로 제한합니다.
 
@@ -88,6 +89,6 @@ chore(android): Gradle 데몬 JDK 버전 고정
 1. `develop` 대상 PR을 연 뒤 CodeRabbit의 상태 댓글과 실제 리뷰 댓글을 확인합니다. 자동 리뷰가 시작되었다면 중복으로 수동 명령을 남기지 않습니다.
 2. 자동 리뷰가 시작되지 않으면 상태 댓글의 **Trigger review**를 누르거나 PR의 일반 댓글에 `@coderabbitai full review`를 남겨 전체 리뷰를 요청합니다. 요약·상태 댓글만으로 코드 리뷰가 완료됐다고 판단하지 않습니다.
 3. 후속 커밋을 올린 뒤 자동 증분 리뷰가 달렸는지 확인합니다. 시작되지 않으면 `@coderabbitai review`로 새 변경분을 요청합니다. 전체 변경을 처음부터 다시 검토해야 할 때만 `@coderabbitai full review`를 사용합니다.
-4. CodeRabbit의 의견은 참고 자료입니다. 실제 오류 여부와 수정 사항을 사람이 확인하고, 팀원 리뷰와 관련 테스트를 거친 뒤 병합합니다. CodeRabbit 자동 승인이나 체크를 필수 병합 조건으로 사용하지 않습니다.
+4. CodeRabbit의 의견은 참고 자료입니다. 일반 작업은 실제 오류와 수정 사항을 사람이 확인하고 팀원 리뷰와 관련 테스트를 거쳐 병합합니다. 위에서 사용자 승인한 관리측 조건부 운영에만 운영 규칙 2-1절을 적용하며 작업자는 반영/비반영 근거와 남은 위험을 기록합니다. CodeRabbit 자동 승인이나 체크만으로 검토·테스트·사람 승인을 대체하지 않습니다.
 
 리뷰 시작 조건과 명령은 [CodeRabbit 자동 리뷰 설정](https://docs.coderabbit.ai/configuration/auto-review), [리뷰 명령](https://docs.coderabbit.ai/reference/review-commands), [플랜별 조건](https://docs.coderabbit.ai/management/plans)을 참고합니다.
