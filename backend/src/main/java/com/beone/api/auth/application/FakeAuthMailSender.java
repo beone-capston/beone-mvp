@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>오래 켜 둔 시연 서버에서 메모리가 늘지 않도록 최근 {@value #CAPACITY}통만 둔다. {@code local}·{@code demo}·{@code member} 프로필 전용이다.
  *
- * <p>공개 프로필 {@code prod}(프로필 그룹으로 {@code member}가 함께 켜짐)에서는 등록하지 않는다(결정 38-6). 실메일 발송기(N1 결정 대기)가 없으므로
- * {@code prod}는 {@link AuthMailSender} 빈이 없어 기동에 실패한다. 이 실패는 의도한 것이다.
+ * <p>공개 프로필 {@code prod}(프로필 그룹으로 {@code member}가 함께 켜짐)에서는 등록하지 않는다(결정 38-6). {@code prod}는 SMTP 발송기
+ * ({@link SmtpMailConfiguration}, 결정 39-6)를 쓰며, 메일 설정이 없으면 기동하지 않는다.
  */
 @Component
 @Profile("(local | demo | member) & !prod")
