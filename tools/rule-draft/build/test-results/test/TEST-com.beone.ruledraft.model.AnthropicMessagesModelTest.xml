@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.beone.ruledraft.model.AnthropicMessagesModelTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-25T04:42:26.189Z" hostname="imjaeyeong-ui-MacBookPro.local" time="0.001">
+  <properties/>
+  <testcase name="응답_텍스트를_모으고_비정상_종료는_실패한다()" classname="com.beone.ruledraft.model.AnthropicMessagesModelTest" time="0.0"/>
+  <testcase name="빈_키는_거부한다()" classname="com.beone.ruledraft.model.AnthropicMessagesModelTest" time="0.001"/>
+  <testcase name="요청_본문에_키가_없고_전송을_쓰지_않는다()" classname="com.beone.ruledraft.model.AnthropicMessagesModelTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

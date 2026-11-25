@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.beone.ruledraft.check.EvidenceCheckerTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-25T04:42:26.163Z" hostname="imjaeyeong-ui-MacBookPro.local" time="0.005">
+  <properties/>
+  <testcase name="확인할_수_없는_근거는_덮지_못한다()" classname="com.beone.ruledraft.check.EvidenceCheckerTest" time="0.001"/>
+  <testcase name="조상_경로_근거가_아래_값을_덮고_공백은_무시한다()" classname="com.beone.ruledraft.check.EvidenceCheckerTest" time="0.002"/>
+  <testcase name="근거_없는_값은_누락으로_남는다()" classname="com.beone.ruledraft.check.EvidenceCheckerTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

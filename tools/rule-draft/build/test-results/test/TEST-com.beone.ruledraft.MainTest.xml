@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.beone.ruledraft.MainTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-11-25T04:42:26.033Z" hostname="imjaeyeong-ui-MacBookPro.local" time="0.129">
+  <properties/>
+  <testcase name="recorded와_live를_함께_쓰면_종료_2()" classname="com.beone.ruledraft.MainTest" time="0.014"/>
+  <testcase name="근거가_빠지면_파일은_쓰고_종료_3()" classname="com.beone.ruledraft.MainTest" time="0.034"/>
+  <testcase name="live에_키가_없으면_종료_2()" classname="com.beone.ruledraft.MainTest" time="0.001"/>
+  <testcase name="스키마가_맞지_않으면_아무것도_쓰지_않고_종료_1()" classname="com.beone.ruledraft.MainTest" time="0.009"/>
+  <testcase name="live_없이_키만_있으면_호출하지_않고_종료_2()" classname="com.beone.ruledraft.MainTest" time="0.001"/>
+  <testcase name="원문에_없는_인용은_확인_실패로_남고_종료_3()" classname="com.beone.ruledraft.MainTest" time="0.006"/>
+  <testcase name="카드_ID가_다르면_종료_1()" classname="com.beone.ruledraft.MainTest" time="0.005"/>
+  <testcase name="모르는_옵션과_명령은_종료_2()" classname="com.beone.ruledraft.MainTest" time="0.001"/>
+  <testcase name="text_명령은_쪽_표시_텍스트를_쓴다()" classname="com.beone.ruledraft.MainTest" time="0.002"/>
+  <testcase name="live에_빈_키도_종료_2()" classname="com.beone.ruledraft.MainTest" time="0.001"/>
+  <testcase name="녹화_응답으로_초안과_근거를_만든다()" classname="com.beone.ruledraft.MainTest" time="0.005"/>
+  <testcase name="규칙_경로로_출력하면_종료_1()" classname="com.beone.ruledraft.MainTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

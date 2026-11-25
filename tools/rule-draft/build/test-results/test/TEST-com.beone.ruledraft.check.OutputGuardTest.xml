@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.beone.ruledraft.check.OutputGuardTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-25T04:42:26.168Z" hostname="imjaeyeong-ui-MacBookPro.local" time="0.009">
+  <properties/>
+  <testcase name="그_밖의_경로는_허용한다()" classname="com.beone.ruledraft.check.OutputGuardTest" time="0.0"/>
+  <testcase name="규칙_디렉터리와_그_아래는_거부한다()" classname="com.beone.ruledraft.check.OutputGuardTest" time="0.001"/>
+  <testcase name="규칙_디렉터리로_가는_링크도_거부한다()" classname="com.beone.ruledraft.check.OutputGuardTest" time="0.006"/>
+  <testcase name="다른_기준_표본을_지정해도_저장소_규칙_경로_이름은_거부한다()" classname="com.beone.ruledraft.check.OutputGuardTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[11월 25, 2026 1:42:26 오후 org.junit.jupiter.api.io.TempDirDeletionStrategy$Standard$1 warnAboutLinkWithTargetOutsideTempDir
+WARNING: Deleting symbolic link from location inside of temp dir (/var/folders/2h/cr5vkh1d4sj_yd2d19_ds69h0000gn/T/junit-3466710716209276090/link) to location outside of temp dir (/Users/jaeyeong/orca/workspaces/beone-mvp/feat-card-products-api/backend/src/main/resources/rules) but not the target file/directory
+]]></system-err>
+</testsuite>
