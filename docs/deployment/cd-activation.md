@@ -15,7 +15,7 @@
 |---|---|---|---|
 | #226 | `deploy/scripts/deploy.sh`, `smoke-public.sh`, `deploy-selftest.sh`, [서버 배포 스크립트](server-deploy.md) | 2·4·8·9단계 | develop 병합(준비 스크립트일 뿐, 서버 실행·운영 첫 배포 승인은 아님) |
 | #229 | [공개 nginx 초안](public-proxy.md) 2-1절(스테이징 server 블록)·3절(네트워크 연결)·운영 첫 배치(bootstrap) 순서 | 7·8단계 | **미병합(선행).** 운영 첫 배치 순서는 #229에서 보완 중이다 |
-| 번호 미정 | `deploy.sh` 운영 전용 하위 명령(`bootstrap-prepare`·`bootstrap-confirm`·`bootstrap-abort`) | 8-1 | **선행(코드 PR 예정).** 명령 이름·종료 코드는 그 PR이 확정한 값을 따른다 |
+| #242 | `deploy.sh` 운영 전용 하위 명령(`bootstrap-prepare`·`bootstrap-confirm`·`bootstrap-abort` `production`), [운영 최초 배포(bootstrap)](server-deploy.md#운영-최초-배포-bootstrap) | 2·8-1단계 | **미병합(선행).** 이슈 #241, 관리자 검증 통과(head `47ea243`) |
 
 develop에 이미 있는 근거: [배포 자동화](cd.md)(#225), [스테이징](staging.md)·`deploy/staging/`(#230), [백엔드 배포 기반](backend-compose.md).
 
@@ -36,7 +36,7 @@ develop에 이미 있는 근거: [배포 자동화](cd.md)(#225), [스테이징]
 5 AWS(OIDC·스테이징 역할·BeoneDeployStaging) ─▶ 6 GitHub 변수 → 첫 자동 배포(스테이징)
    │
    ▼
-7 스테이징 공개 접근(DNS·인증서·공개 nginx, 승인) ─▶ 8-1 운영 첫 배치(#229 bootstrap, 선행)
+7 스테이징 공개 접근(DNS·인증서·공개 nginx, 승인) ─▶ 8-1 운영 첫 배치(#242 bootstrap, 선행)
                                                      ─▶ 8-2 운영 자동 배포 켜기(역할·문서·Environment·변수·승격·승인 1회)
 
 9 끄기와 되돌리기: 어느 단계에서든 쓴다
@@ -74,6 +74,8 @@ for f in deploy/scripts/deploy.sh deploy/scripts/smoke-public.sh \
 done
 # #229의 스테이징 server 블록 절(7단계)
 if git show "$BASE:docs/deployment/public-proxy.md" | grep -q '^## 2-1\. 스테이징 server 블록'; then echo "OK   public-proxy 2-1절"; else echo "FAIL public-proxy 2-1절 없음(#229 미병합)"; missing=1; fi
+# #242의 운영 bootstrap 하위 명령(8-1단계)
+if git show "$BASE:deploy/scripts/deploy.sh" | grep -q 'bootstrap-prepare'; then echo "OK   deploy.sh bootstrap"; else echo "FAIL deploy.sh bootstrap 없음(#242 미병합)"; missing=1; fi
 [ "$missing" = 0 ] || { echo "FAIL: 필수 파일·절 누락. 1단계에서 멈춘다"; exit 1; }
 echo "PRECHECK OK $BASE"
 EOF
@@ -345,30 +347,60 @@ sudo /opt/beone/deploy/smoke-public.sh http://127.0.0.1:18081; echo "exit=$?"
 
 운영은 두 부분으로 나눈다. 8-1(첫 배치)이 끝나기 전에는 8-2를 시작하지 않는다.
 
-### 8-1. 운영 첫 배치(bootstrap): #229 절차를 따른다(선행)
+### 8-1. 운영 첫 배치(bootstrap)
 
 | 항목 | 내용 |
 |---|---|
-| 실행 | 운영 담당이 **서버에서 승인 창 안에 직접** 실행(SSM으로 부르지 않음), 사용자 승인 |
-| 전제 | 6단계(필요하면 7단계)까지 통과. 운영 첫 배포 승인(main 승격, Flyway V2~V15, 공개 nginx 변경, [cd.md 실행 승인 항목](cd.md#실행-승인-항목)). #229의 bootstrap 절차와 `deploy.sh` 운영 전용 하위 명령 PR(선행, 번호 미정)이 develop에 병합됨 |
+| 실행 | 운영 담당이 **서버에서 root로 직접** 실행(SSM으로는 부를 수 없음), 승인 창 안에서. 사용자 승인 |
+| 전제 | 6단계(필요하면 7단계)까지 통과. 운영 첫 배포 승인(main 승격, Flyway V2~V15, 공개 nginx 변경, [cd.md 실행 승인 항목](cd.md#실행-승인-항목)). 선행 PR #242(`deploy.sh` bootstrap 하위 명령)와 #229(공개 nginx 반영 순서)가 develop에 병합되고, 2단계로 그 커밋의 `deploy.sh`를 설치함 |
 
-운영 첫 배치는 정상 `deploy.sh production`(SSM)으로 하지 않는다. 지금 공개 주소는 기존 안내 화면만 주고 `/api`와 웹 릴리스 폴더가 공개 nginx에 연결되어 있지 않다. 그래서 정상 배포의 필수 공개 스모크(`https://<운영 도메인>`의 P1~P4)가 이 시점에 성공한다고 전제할 수 없다. 첫 배포는 상태 파일이 없어 실패하면 종료 1이고 새 backend·웹 링크가 남을 수 있다([첫 배포](server-deploy.md#첫-배포)). 그래서 **준비 → nginx 연결 → 공개 확인 뒤 확정**으로 나눈다. 종료 1을 무시하거나, 스모크를 건너뛰거나, 상태 파일을 손으로 만들어 성공으로 기록하지 않는다.
+운영 첫 배치는 정상 `deploy.sh production`(SSM)으로 하지 않는다. 정상 배포는 `https://<운영 도메인>` 공개 스모크(P1~P4)를 통과해야 성공하는데, 공개 nginx의 `/api` 프록시와 웹 링크 마운트는 그 뒤 nginx 변경에서 처음 연결된다. 그래서 **준비 → nginx 연결 → 공개 확인 뒤 확정**의 세 단계로 나눈다. 명령·파일·종료 코드의 기준 설명은 [서버 배포 스크립트의 운영 최초 배포(bootstrap)](server-deploy.md#운영-최초-배포-bootstrap)(#242)다. 종료 1을 무시하거나, 스모크를 건너뛰거나, 상태 파일을 손으로 쓰지 않는다.
 
-아래 하위 명령 이름·종료 코드·파일 이름은 관리자가 전달한 설계 요지를 따른 것이다. **확정값은 선행 코드 PR과 #229가 정하며, 다르면 그쪽을 따른다.**
+- 파일(`/opt/beone/deploy/state/`): `production.bootstrap`(대기, "준비 완료, 미확정"), `production.state`(확정, `bootstrap-confirm`만 씀), `production.history`.
+- 환경 인자는 `production`만 받는다. `staging`이면 종료 2다.
+- 세 단계 모두 정상 배포와 같은 잠금을 쓴다. 다른 배포가 실행 중이면 종료 3이다.
 
-| # | 단계 | 하는 일(설계 요지) | 확인 | 실패하면 |
-|---|---|---|---|---|
-| B1 | `sudo /opt/beone/deploy/deploy.sh bootstrap-prepare <ApiDigest> <WebDigest> <GitSha>` | `production.state`가 있으면 거부. 복귀 기준(지금 실행 중인 backend 이미지)과 배포 직전 백업·짝 기록을 남김. 새 backend를 올려 health 확인, 웹 `current` 전환. 비공개 검증만 하고 공개 스모크는 하지 않음. 대기 파일 `production.bootstrap`만 씀 | 종료 0(= **준비 완료, 미확정**). `production.bootstrap` 있음, `production.state` 없음 | B4(abort) |
-| B2 | 사람 단계: 공개 nginx의 네트워크·마운트·설정 반영 → `nginx -t` → reload([공개 nginx 3·4절](public-proxy.md#3-두-compose-프로젝트-연결), P3 백업 선행) | 공개 nginx가 `/api`와 `/opt/beone/web/current`를 보게 함 | `syntax is ok`, `test is successful`, reload 성공 | `nginx -t` 실패면 P3 tar로 nginx 설정을 복원(reload)한 뒤 B4 |
-| B3 | `sudo /opt/beone/deploy/deploy.sh bootstrap-confirm` | 공개 스모크(`https://<운영 도메인>`)를 통과했을 때만 `production.state`를 기록 | 종료 0, `production.state` 생김 | 종료 1이면 상태 파일 없음. 대기 파일이 남아 원인을 고친 뒤 B3을 다시 할 수 있음. 포기하면 nginx를 P3로 복원한 뒤 B4 |
-| B4 | `sudo /opt/beone/deploy/deploy.sh bootstrap-abort` | 복귀 기준 이미지로 backend를 되돌리고 웹 링크 원복. 상태 파일은 쓰지 않음 | 기존 backend 이미지로 healthy, 공개 주소가 기존 안내 화면(`200`) | 사람이 바로 확인([백엔드 배포 기반 롤백](backend-compose.md#롤백)) |
+**B0. 시작 전 확인(읽기만)**
 
-8-1이 끝났다고 보는 조건(8-2의 전제). B3이 성공한 뒤에만 확인한다.
+```bash
+sudo test ! -e /opt/beone/deploy/state/production.state && sudo test ! -e /opt/beone/deploy/state/production.bootstrap && echo "bootstrap 가능"
+sudo docker compose -f /opt/beone/app/compose.yaml -p beone-app ps --format '{{.Service}} {{.State}}'
+```
+
+| 확인 | 기대 |
+|---|---|
+| 상태·대기 파일 | `bootstrap 가능`(둘 다 없음). 있으면 멈추고 관리자에게 알린다 |
+| 운영 컨테이너 | 아래 「복귀 기준과 백업」 표에서 어느 경우인지 기록. mysql이 멈춰 있거나, 컨테이너 없이 볼륨만 있으면 prepare가 종료 3으로 멈추므로 사람이 먼저 확인한다 |
+| 공개 nginx 백업 | [공개 nginx 4절](public-proxy.md#4-반영원복-절차-승인-⑧) P3 tar가 있고 크기 > 0 |
+
+**복귀 기준과 백업(prepare가 정함)**
+
+| 상황 | 복귀 기준 | 백업 |
+|---|---|---|
+| `beone-app` backend 실행 중 | 그 컨테이너의 이미지 | mysql 판정을 따름 |
+| backend 없음 | `none`(abort 시 새 backend를 `stop`, 볼륨 유지) | mysql 판정을 따름 |
+| mysql 실행 중 | - | 덤프·짝 기록 필수. 실패하면 종료 3 |
+| mysql 컨테이너가 멈춰 있음, 또는 컨테이너 없이 볼륨만 있음 | - | 종료 3. 사람이 확인한 뒤 다시 실행 |
+| mysql 컨테이너·볼륨 모두 없음 | - | `backup=none`(짝 기록만 남김) |
+
+**B1~B4**
+
+| # | 명령 | 기대 | 종료 코드와 다음 행동 |
+|---|---|---|---|
+| B1 | `sudo /opt/beone/deploy/deploy.sh bootstrap-prepare production <ApiDigest> <WebDigest> <GitSha>; echo "exit=$?"` | `exit=0`, `production.bootstrap` 있음, `production.state` 없음. 공개 화면은 아직 그대로(기존 안내 화면) | 0 준비 완료(미확정) → B2. 2 인자 오류 → 값 확인. 3 배포 전 단계 실패(잠금·가드·대기·상태 파일 존재·pull·백업·판정 조회 실패), 변경 없음 → 원인 확인 뒤 다시 B1. 4 실패 뒤 복귀 기준으로 복귀 → 원인 확인 뒤 다시 B1. 1 복귀 실패 → 사람이 바로 확인 |
+| B2 | 사람 단계: [공개 nginx 3·4절](public-proxy.md#3-두-compose-프로젝트-연결) 순서로 네트워크·마운트·설정 반영 → `nginx -t` → reload | `syntax is ok`, `test is successful`, reload 성공 | `nginx -t`가 실패하면 reload하지 않고, P3 tar로 nginx 설정을 복원한 뒤 B4 |
+| B3 | `sudo /opt/beone/deploy/deploy.sh bootstrap-confirm production; echo "exit=$?"` | `exit=0`, `production.state` 생김, 대기 파일 이름이 `production.bootstrap.confirmed-<UTC>`로 바뀜 | 0 확정 → 아래 완료 조건. 1 미확정(health·스모크·상태 기록 실패, 상태 파일 없음, 대기 파일 유지) → 원인을 고쳐 다시 B3, 포기하면 nginx를 P3로 복원한 뒤 B4. 3 대기 파일 없음·손상, 상태 파일 이미 있음, 잠금 → 멈추고 확인. 2 인자 오류 |
+| B4 | `sudo /opt/beone/deploy/deploy.sh bootstrap-abort production; echo "exit=$?"` | `exit=0`, 상태 파일 없음, 대기 파일이 `.aborted-<UTC>`로 바뀜. backend는 복귀 기준 이미지로 healthy(기준 `none`이면 새 backend 정지), 웹 링크 원복, 공개 주소가 기존 안내 화면 | 0 복귀 완료. 1 복귀 실패(대기 파일 유지) → 다시 B4, 그래도 실패하면 사람이 바로 확인. 3 대기 파일 없음·손상·잠금 → 멈추고 확인. 2 인자 오류 |
+
+DB는 어느 단계에서도 되돌리지 않는다. prepare가 새 마이그레이션을 적용한 뒤 abort했다면 [구 앱으로 복귀할 때](server-deploy.md#새-마이그레이션-뒤-구-앱으로-복귀할-때)의 확인을 따른다.
+
+**8-1 완료 조건(8-2의 전제).** B3이 종료 0일 때만 확인한다.
 
 | 확인 | 명령 | 기대 |
 |---|---|---|
-| 운영 상태 파일 | `sudo grep -cE '^(api_digest\|web_digest)=sha256:[0-9a-f]{64}$' /opt/beone/deploy/state/production.state` | `2`(B3이 기록한 값) |
-| 대기 파일 정리 | 선행 코드 PR이 정한 방식으로 `production.bootstrap` 상태 확인 | 확정 뒤 상태(그 PR 기준) |
+| 운영 상태 파일 | `sudo grep -cE '^(api_digest\|web_digest)=sha256:[0-9a-f]{64}$' /opt/beone/deploy/state/production.state` | `2` |
+| 대기 파일 정리 | `sudo test ! -e /opt/beone/deploy/state/production.bootstrap && echo ok` | `ok`(`.confirmed-<UTC>`로 바뀜) |
+| 이력 | `sudo tail -1 /opt/beone/deploy/state/production.history` | 확정 한 줄 |
 | 공개 스모크 | `sudo /opt/beone/deploy/smoke-public.sh https://<운영 도메인>; echo "exit=$?"` | `exit=0` |
 | 웹 | `sudo test -f /opt/beone/web/current/index.html && echo ok` | `ok` |
 
@@ -380,6 +412,8 @@ sudo /opt/beone/deploy/smoke-public.sh http://127.0.0.1:18081; echo "exit=$?"
 |---|---|
 | 실행 | 운영 담당(AWS·GitHub 설정), 사용자(Environment 승인자, 운영 배포 승인), 관리자(승격 PR) |
 | 전제 | 8-1 완료 조건을 모두 만족 |
+
+운영 정상 배포(`deploy.sh production`, SSM 자동 배포 포함)는 `production.state`가 없거나 대기 파일(`production.bootstrap`)이 있으면 아무것도 바꾸지 않고 종료 3이다(#242). 그래서 아래 변수를 8-1보다 먼저 켜더라도 bootstrap 확정 전에는 운영에 배포되지 않는다. 다만 그때 운영 job은 실패로 끝나므로, 이 런북은 8-1 확정 뒤에 켜는 순서로 둔다.
 
 순서가 중요하다. **Environment 보호 규칙을 먼저 만들고, 운영 스위치는 마지막에 켠다.** 보호 규칙 없이 운영 job이 돌면 GitHub이 Environment를 보호 규칙 없이 자동으로 만들어 승인 없이 배포된다([cd.md 게이트](cd.md#게이트꺼진-상태로-병합)).
 
@@ -462,6 +496,6 @@ aws ssm get-command-invocation --command-id <SSM 명령 ID> --instance-id <인�
 | 5 | OIDC·IAM(스테이징), SSM 문서 `BeoneDeployStaging` |
 | 6 | 저장소 변수(스테이징 3개) |
 | 7 | DNS, 인증서, 공개 nginx 변경 |
-| 8-1 | 운영 첫 배치(main 승격, Flyway, 공개 nginx, 서버 직접 실행 bootstrap 3단계). 절차는 #229 bootstrap(선행) |
+| 8-1 | 운영 첫 배치(main 승격, Flyway, 공개 nginx, 서버 root 직접 실행 bootstrap prepare·confirm·abort). 선행 #242·#229 |
 | 8-2 | OIDC·IAM(운영), `BeoneDeployProduction`, Environment 보호 규칙, 저장소 변수(운영 2개), 실메일 |
 | 9 | 진행 중인 run 취소, SSM 명령 취소 |
