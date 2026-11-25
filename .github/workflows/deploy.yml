@@ -1,12 +1,14 @@
 # 배포 워크플로(결정 40): develop push → 이미지 빌드·GHCR 푸시 → 스테이징 자동 배포,
 # main push → 이미지 빌드·GHCR 푸시 → 운영 배포(Environment production 승인 1회 뒤).
 #
-# 꺼진 상태로 병합한다. 저장소 변수가 모두 켜지기 전에는 gate job만 돌고 "비활성" 안내를 남긴 채 성공한다.
+# 꺼진 상태로 병합한다. 저장소 변수가 켜지기 전에는 gate job만 돌고 "비활성" 안내를 남긴 채 성공한다.
 # 이때 GHCR 푸시·AWS 호출·서버 배포는 일어나지 않는다. 변수 설정은 승인 항목이다(docs/deployment/cd.md).
-#   BEONE_CD_ENABLED              'true'일 때만 빌드·스테이징 배포
-#   AWS_DEPLOY_ROLE_ARN           OIDC로 맡을 IAM 역할 ARN(비밀 아님)
-#   AWS_REGION                    서버 인스턴스 리전(비밀 아님)
-#   BEONE_CD_PRODUCTION_ENABLED   'true'일 때만 운영 배포. Environment 보호 규칙을 먼저 설정한 뒤 켠다
+#   BEONE_CD_ENABLED                'true'일 때만 빌드·배포
+#   AWS_REGION                      서버 인스턴스 리전(비밀 아님)
+#   AWS_DEPLOY_ROLE_ARN_STAGING     스테이징 역할(develop ref만 신뢰, BeoneDeployStaging 문서만 실행)
+#   AWS_DEPLOY_ROLE_ARN_PRODUCTION  운영 역할(environment:production만 신뢰, BeoneDeployProduction 문서만 실행)
+#   BEONE_CD_PRODUCTION_ENABLED     'true'일 때만 운영 배포. Environment 보호 규칙을 먼저 설정한 뒤 켠다
+# 역할·SSM 문서를 환경별로 나눠 develop 실행이 운영 문서를 부를 수 없게 한다(운영 승인 우회 차단).
 # 비밀값은 GitHub에 두지 않는다. GHCR 로그인은 실행마다 자동 발급되는 GITHUB_TOKEN만 쓴다.
 name: Deploy
 
@@ -29,45 +31,58 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
-      enabled: ${{ steps.check.outputs.enabled }}
+      build: ${{ steps.check.outputs.build }}
+      staging: ${{ steps.check.outputs.staging }}
       production: ${{ steps.check.outputs.production }}
     steps:
       - id: check
         env:
           CD_ENABLED: ${{ vars.BEONE_CD_ENABLED }}
-          ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           REGION: ${{ vars.AWS_REGION }}
+          ROLE_STAGING: ${{ vars.AWS_DEPLOY_ROLE_ARN_STAGING }}
+          ROLE_PRODUCTION: ${{ vars.AWS_DEPLOY_ROLE_ARN_PRODUCTION }}
           PROD_ENABLED: ${{ vars.BEONE_CD_PRODUCTION_ENABLED }}
         run: |
           set -euo pipefail
-          enabled=false
+          arn='^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$'
+          common=''
+          [ "${CD_ENABLED:-}" = 'true' ] || common="$common BEONE_CD_ENABLED"
+          [[ "${REGION:-}" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]$ ]] || common="$common AWS_REGION"
+          staging=false
           production=false
-          reason=''
-          [ "${CD_ENABLED:-}" = 'true' ] || reason="$reason BEONE_CD_ENABLED"
-          [[ "${ROLE_ARN:-}" =~ ^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$ ]] || reason="$reason AWS_DEPLOY_ROLE_ARN"
-          [[ "${REGION:-}" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]$ ]] || reason="$reason AWS_REGION"
-          if [ -z "$reason" ]; then
-            enabled=true
-            if [ "${PROD_ENABLED:-}" = 'true' ]; then production=true; fi
-          fi
-          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
-          echo "production=$production" >> "$GITHUB_OUTPUT"
+          s_reason="$common"
+          p_reason="$common"
+          [[ "${ROLE_STAGING:-}" =~ $arn ]] || s_reason="$s_reason AWS_DEPLOY_ROLE_ARN_STAGING"
+          [[ "${ROLE_PRODUCTION:-}" =~ $arn ]] || p_reason="$p_reason AWS_DEPLOY_ROLE_ARN_PRODUCTION"
+          [ "${PROD_ENABLED:-}" = 'true' ] || p_reason="$p_reason BEONE_CD_PRODUCTION_ENABLED"
+          if [ "$GITHUB_REF" = 'refs/heads/develop' ] && [ -z "$s_reason" ]; then staging=true; fi
+          if [ "$GITHUB_REF" = 'refs/heads/main' ] && [ -z "$p_reason" ]; then production=true; fi
+          build=false
+          if [ "$staging" = true ] || [ "$production" = true ]; then build=true; fi
           {
-            echo "## 배포 게이트"
-            if [ "$enabled" = true ]; then
-              echo "- 빌드·스테이징: 활성"
-              echo "- 운영: $([ "$production" = true ] && echo 활성 || echo '비활성(BEONE_CD_PRODUCTION_ENABLED)')"
+            echo "build=$build"
+            echo "staging=$staging"
+            echo "production=$production"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## 배포 게이트 ($GITHUB_REF)"
+            if [ "$build" = true ]; then
+              echo "- 활성: 빌드·$([ "$staging" = true ] && echo 스테이징 || echo 운영) 배포를 진행합니다."
             else
-              echo "- 비활성: 저장소 변수가 설정되지 않았거나 형식이 틀립니다(${reason# })."
+              case "$GITHUB_REF" in
+                refs/heads/develop) echo "- 비활성: 설정되지 않았거나 형식이 틀린 변수:${s_reason}" ;;
+                refs/heads/main) echo "- 비활성: 설정되지 않았거나 형식이 틀린 변수:${p_reason}" ;;
+                *) echo "- 비활성: develop·main이 아닌 ref" ;;
+              esac
               echo "- GHCR 푸시·AWS 호출·서버 배포를 하지 않았습니다."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "enabled=$enabled production=$production"
+          echo "build=$build staging=$staging production=$production"
 
   build:
     name: build (이미지 빌드·GHCR 푸시)
     needs: gate
-    if: needs.gate.outputs.enabled == 'true'
+    if: needs.gate.outputs.build == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -138,7 +153,7 @@ jobs:
   staging:
     name: staging (develop → 스테이징 배포)
     needs: [gate, build]
-    if: github.ref == 'refs/heads/develop' && needs.gate.outputs.enabled == 'true'
+    if: github.ref == 'refs/heads/develop' && needs.gate.outputs.staging == 'true'
     # environment를 두지 않는다. 두면 OIDC sub가 environment:staging으로 바뀌어 신뢰 정책(ref:refs/heads/develop)과 맞지 않는다.
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -155,12 +170,12 @@ jobs:
           sparse-checkout: .github/scripts
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_STAGING }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: beone-deploy-staging
           mask-aws-account-id: true
       # 값은 env로 넘긴다(run 안에 식을 직접 넣지 않는다). 형식은 스크립트가 다시 검사한다.
-      - name: SSM BeoneDeploy(staging)
+      - name: SSM BeoneDeployStaging
         env:
           API_DIGEST: ${{ needs.build.outputs.api_digest }}
           WEB_DIGEST: ${{ needs.build.outputs.web_digest }}
@@ -169,8 +184,9 @@ jobs:
   production:
     name: production (main → 운영 배포, 승인 필요)
     needs: [gate, build]
-    if: github.ref == 'refs/heads/main' && needs.gate.outputs.enabled == 'true' && needs.gate.outputs.production == 'true'
+    if: github.ref == 'refs/heads/main' && needs.gate.outputs.production == 'true'
     # Environment production의 필수 승인자(사용자)가 승인해야 시작한다. OIDC sub는 environment:production이다.
+    # 운영 역할은 이 sub에서만 맡을 수 있으므로 Environment 보호 규칙이 운영 배포의 승인 지점이다.
     environment: production
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -187,12 +203,12 @@ jobs:
           sparse-checkout: .github/scripts
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN_PRODUCTION }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: beone-deploy-production
           mask-aws-account-id: true
       # 값은 env로 넘긴다(run 안에 식을 직접 넣지 않는다). 형식은 스크립트가 다시 검사한다.
-      - name: SSM BeoneDeploy(production)
+      - name: SSM BeoneDeployProduction
         env:
           API_DIGEST: ${{ needs.build.outputs.api_digest }}
           WEB_DIGEST: ${{ needs.build.outputs.web_digest }}
