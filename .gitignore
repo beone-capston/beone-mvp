@@ -26,3 +26,8 @@ fixtures/private/
 
 # Local tool state
 .omc/
+
+# tools/ 아래 독립 Gradle 프로젝트의 빌드 산출물·캐시, IDE 출력
+tools/*/build/
+tools/*/.gradle/
+out/
