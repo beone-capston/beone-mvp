@@ -11,7 +11,9 @@
 #   - 없으면 실행할 SQL을 안내하고 Enter를 기다린다.
 #
 # 환경 변수(선택): SMOKE_EMAIL_A, SMOKE_EMAIL_B(기본 실행마다 다른 *@example.test), SMOKE_PASSWORD(합성 비밀번호),
-#   SMOKE_MONTH(기본 2026-11)
+#   SMOKE_MONTH(기본: 서울 기준 이번 달 YYYY-MM). 주문일은 서버가 '이번 달'만 받으므로(InCurrentMonth) 이번 달만 지원한다.
+#   다른 월이나 형식이 틀린 값은 요청을 보내기 전에 종료 코드 2로 멈춘다. 주문일은 서울 기준 오늘, 월간 상태의
+#   전월 실적 기간은 MONTH의 전월 1일~말일로 함께 유도한다.
 # 출력: PASS·FAIL 표. 실패가 하나라도 있으면 종료 코드 1. 쿠키 값·CSRF 토큰·비밀번호는 출력하지 않는다.
 set -uo pipefail
 
@@ -28,7 +30,8 @@ RUN_ID="$(date +%s)"
 EMAIL_A="${SMOKE_EMAIL_A:-smoke-a-${RUN_ID}@example.test}"
 EMAIL_B="${SMOKE_EMAIL_B:-smoke-b-${RUN_ID}@example.test}"
 PASSWORD="${SMOKE_PASSWORD:-Synthetic-pw-2026!}"
-MONTH="${SMOKE_MONTH:-2026-11}"
+TODAY="$(TZ=Asia/Seoul date +%Y-%m-%d)"
+MONTH="${SMOKE_MONTH:-${TODAY:0:7}}"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -52,8 +55,8 @@ code() { field '.code'; }
 # null·없음만 빈 값으로 바꾼다. jq의 '// empty'는 false·0까지 지우므로 쓰지 않는다
 field() { jq -r "$1 | if . == null then empty else . end" "$WORK/body" 2> /dev/null; }
 header() { grep -i "^$1:" "$WORK/head" | tr -d '\r'; }
-# 쿠키 값은 지우고 속성만 남긴다
-cookie_attrs() { header set-cookie | sed -E 's/^[^:]*: //; s/=[^;]*;/=<값>;/'; }
+# 쿠키 값은 지우고 속성만 남긴다. 줄마다 첫 '=' 뒤부터 ';' 또는 줄 끝까지를 가린다(세미콜론 없는 값도 가림)
+cookie_attrs() { header set-cookie | sed -E 's/^[^:]*: *//; s/^([^=;]*)=[^;]*/\1=<값>/'; }
 csrf() {
 	req "$1" GET /api/v1/auth/csrf > /dev/null
 	field '.data.token'
@@ -108,23 +111,45 @@ step_login() {
 	local jar="$1" p="$2" login="$3" s t
 	t=$(csrf "$jar")
 	s=$(req "$jar" POST /api/v1/auth/login "$login" "X-CSRF-TOKEN: $t")
-	record "${p}4" "로그인" "200, __Host-BEONE_SESSION(Path=/, Secure, HttpOnly, Domain 없음)" "$s; $(cookie_attrs)" \
+	record "${p}4" "로그인" "200, __Host-BEONE_SESSION(Path=/, Secure, HttpOnly, SameSite=Lax, Domain 없음)" "$s; $(cookie_attrs)" \
 		"$(check_session_cookie "$s" "$(cookie_attrs)")"
 }
 
-# check_session_cookie <상태> <속성 줄들> → 1|0. 세션 쿠키 한 줄에 네 속성이 모두 있어야 한다
+# check_session_cookie <상태> <속성 줄들> → 1|0. 세션 쿠키(__Host-BEONE_SESSION) 줄 하나에서 정확한 경계로
+# Path=/, Secure, HttpOnly, SameSite=Lax가 모두 있고 Domain이 없어야 한다. 다른 쿠키 줄의 속성은 합치지 않는다
 check_session_cookie() {
 	[ "$1" = 200 ] || { echo 0; return; }
 	local line
 	while IFS= read -r line; do
 		case "$line" in __Host-BEONE_SESSION=*) ;; *) continue ;; esac
-		if echo "$line" | grep -qE '; *Path=/(;|$)' && echo "$line" | grep -qiE '; *Secure(;|$)' \
-			&& echo "$line" | grep -qiE '; *HttpOnly(;|$)' && ! echo "$line" | grep -qi 'domain='; then
+		if echo "$line" | grep -qE '; *Path=/ *(;|$)' && echo "$line" | grep -qiE '; *Secure *(;|$)' \
+			&& echo "$line" | grep -qiE '; *HttpOnly *(;|$)' && echo "$line" | grep -qiE '; *SameSite=Lax *(;|$)' \
+			&& ! echo "$line" | grep -qiE '; *Domain='; then
 			echo 1
 			return
 		fi
 	done <<< "$2"
 	echo 0
+}
+
+# 월 유도. month_dates <YYYY-MM> → "<전월 1일> <전월 말일>"(달력 계산, date 명령의 GNU·BSD 차이를 피한다)
+month_dates() {
+	local y=$((10#${1:0:4})) m=$((10#${1:5:2})) py pm last
+	if [ "$m" = 1 ]; then py=$((y - 1)); pm=12; else py=$y; pm=$((m - 1)); fi
+	case "$pm" in
+		1|3|5|7|8|10|12) last=31 ;;
+		4|6|9|11) last=30 ;;
+		2) if { [ $((py % 4)) = 0 ] && [ $((py % 100)) != 0 ]; } || [ $((py % 400)) = 0 ]; then last=29; else last=28; fi ;;
+	esac
+	printf '%04d-%02d-01 %04d-%02d-%02d\n' "$py" "$pm" "$py" "$pm" "$last"
+}
+# check_month <MONTH> <TODAY> → 0이면 지원, 아니면 이유를 표준 오류로 알리고 1
+check_month() {
+	if ! [[ "$1" =~ ^[0-9]{4}-(0[1-9]|1[0-2])$ ]]; then echo "SMOKE_MONTH 형식이 틀립니다(YYYY-MM): $1" >&2; return 1; fi
+	if [ "$1" != "${2:0:7}" ]; then
+		echo "SMOKE_MONTH=$1 은 지원하지 않습니다. 주문일은 서버의 이번 달(서울 ${2:0:7})만 받으므로 이번 달만 실행합니다" >&2
+		return 1
+	fi
 }
 
 # check_html <상태> <Content-Type> → 1|0
@@ -183,6 +208,31 @@ step_s16a() {
 		"$s1/$s2 shape=$base_shape/$forged_shape same=$(same "$forged" "$base")" "$ok"
 }
 
+# S5 익명 세션 쿠키. 세션 쿠키 줄 하나에서 속성을 정확한 경계로 본다
+step_s5() {
+	local s attrs
+	s=$(req anon GET /api/v1/auth/csrf)
+	attrs=$(cookie_attrs)
+	record S5 "익명 세션 쿠키 속성" "200, __Host-BEONE_SESSION 한 줄에 Path=/, Secure, HttpOnly, SameSite=Lax, Domain 없음" \
+		"$s; $attrs" "$(check_session_cookie "$s" "$attrs")"
+}
+
+# S17 전달 헤더 위조. 양쪽 모두 200과 유효한 세션 쿠키를 먼저 요구한 뒤 속성(값은 가림) 동일·Location 없음을 본다
+step_s17() {
+	local s1 s2 plain forged ok1 ok2 loc1 loc2 ok=0
+	s1=$(req f1 GET /api/v1/auth/csrf)
+	plain=$(cookie_attrs)
+	ok1=$(check_session_cookie "$s1" "$plain")
+	loc1=$(header location | wc -l | tr -d ' ')
+	s2=$(req f2 GET /api/v1/auth/csrf '' 'X-Forwarded-Host: evil.invalid' 'X-Forwarded-Proto: http' 'X-Forwarded-For: 192.0.2.1')
+	forged=$(cookie_attrs)
+	ok2=$(check_session_cookie "$s2" "$forged")
+	loc2=$(header location | wc -l | tr -d ' ')
+	[ "$ok1 $ok2" = '1 1' ] && [ "$plain" = "$forged" ] && [ "$loc1 $loc2" = '0 0' ] && ok=1
+	record S17 "X-Forwarded-* 위조" "양쪽 200·유효 세션 쿠키, Set-Cookie 속성 동일, Location 없음" \
+		"$s1/$s2 cookie=$ok1/$ok2 same=$(same "$plain" "$forged") location=$loc1/$loc2" "$ok"
+}
+
 # 결과 표를 출력하고 실패가 있으면 1을 돌려준다
 summarize() {
 	local pass fail
@@ -203,24 +253,77 @@ self_test() {
 	got="$(field '.data.f'),$(field '.data.z'),$(field '.data.t'),[$(field '.data.n')],[$(field '.data.missing')],$(field '.data.s'),$(code)"
 	if [ "$got" = "false,0,true,[],[],v,X" ]; then echo "field PASS ($got)"; else echo "field FAIL ($got)"; failures=$((failures + 1)); fi
 
-	FIX_STATUS=200 FIX_HEAD='' FIX_BODY='' FIX_BODY2=''
+	# 쿠키 값 마스킹: 세미콜론 없는 값·있는 값 모두 합성 표식이 출력에 남지 않고 속성은 보존되는지 본다
+	local mark='SYNTHMARK-7f3a' masked
+	printf 'HTTP/1.1 200\r\nset-cookie: __Host-BEONE_SESSION=%s\r\nset-cookie: other=%s; Path=/; Secure\r\n' "$mark" "$mark" > "$WORK/head"
+	masked=$(cookie_attrs)
+	if [ "$masked" = $'__Host-BEONE_SESSION=<값>\nother=<값>; Path=/; Secure' ] && ! grep -q "$mark" <<< "$masked"; then
+		echo "cookie_attrs 마스킹 PASS (세미콜론 없는 값 포함, 표식 비노출)"
+	else
+		echo "cookie_attrs 마스킹 FAIL"; failures=$((failures + 1))
+	fi
+
+	# 월 유도와 지원 밖 월 사전 거부
+	got="$(month_dates 2026-11)|$(month_dates 2027-01)|$(month_dates 2028-03)|$(month_dates 2026-03)"
+	if [ "$got" = "2026-10-01 2026-10-31|2026-12-01 2026-12-31|2028-02-01 2028-02-29|2026-02-01 2026-02-28" ]; then
+		echo "month_dates PASS ($got)"
+	else
+		echo "month_dates FAIL ($got)"; failures=$((failures + 1))
+	fi
+	local mc
+	for mc in "2026-11 2026-11-25 0" "2026-10 2026-11-25 1" "2026-12 2026-11-25 1" "2026-13 2026-11-25 1" "2026-1 2026-11-25 1"; do
+		set -- $mc
+		check_month "$1" "$2" 2> /dev/null; rc=$?
+		if [ "$rc" = "$3" ]; then echo "check_month $1(오늘 $2) 기대 $3 → $rc PASS"; else echo "check_month $1 기대 $3 → $rc FAIL"; failures=$((failures + 1)); fi
+	done
+	# 실제 실행 경로: 지원 밖 월이면 요청 전에 종료 2. 접속할 수 없는 주소를 주어 요청이 나가면 다른 결과가 되게 한다
+	local this_month other_out
+	this_month="$(TZ=Asia/Seoul date +%Y-%m)"
+	other_out=$(SMOKE_MONTH=1999-01 SMOKE_VERIFY_HOOK=/bin/false bash "$0" http://127.0.0.1:9 2>&1); rc=$?
+	if [ "$rc" = 2 ] && grep -q '지원하지 않습니다' <<< "$other_out" && ! grep -q '| S1 |' <<< "$other_out"; then
+		echo "다른 월(SMOKE_MONTH=1999-01, 이번 달 $this_month) 사전 거부 PASS(종료 2, 요청 없음)"
+	else
+		echo "다른 월 사전 거부 FAIL(종료 $rc)"; failures=$((failures + 1))
+	fi
+
+	FIX_STATUS=200 FIX_HEAD='' FIX_BODY='' FIX_BODY2='' FIX_STATUS2='' FIX_HEAD2=''
 	req() {
-		local h
+		local h st="$FIX_STATUS" hd="$FIX_HEAD"
 		printf '%s' "$FIX_BODY" > "$WORK/body"
-		for h in "$@"; do case "$h" in X-BeONE-Demo-User:*) printf '%s' "$FIX_BODY2" > "$WORK/body" ;; esac; done
-		printf 'HTTP/1.1 %s\r\n%s' "$FIX_STATUS" "$FIX_HEAD" > "$WORK/head"
-		echo "$FIX_STATUS"
+		for h in "$@"; do
+			case "$h" in
+				X-BeONE-Demo-User:*) printf '%s' "$FIX_BODY2" > "$WORK/body" ;;
+				X-Forwarded-Host:*) [ -n "$FIX_STATUS2" ] && st="$FIX_STATUS2"; hd="$FIX_HEAD2" ;;
+			esac
+		done
+		printf 'HTTP/1.1 %s\r\n%s' "$st" "$hd" > "$WORK/head"
+		echo "$st"
 	}
 	csrf() { echo synthetic-csrf; }
 	local good_cookie='set-cookie: __Host-BEONE_SESSION=synthetic; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax\r\n'
+	local good_cookie2='set-cookie: __Host-BEONE_SESSION=other-synthetic; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax\r\n'
 	local me_a='{"data":{"demoUser":null,"displayName":"내 카드","portfolioType":"REAL","readOnly":false,"cardCount":1,"codefConnected":false}}'
 	local me_v='{"data":{"demoUser":"VIRTUAL_PORTFOLIO","displayName":"가상 포트폴리오","portfolioType":"VIRTUAL","readOnly":true,"cardCount":3,"codefConnected":false}}'
 	local me_no_demo='{"data":{"displayName":"내 카드","portfolioType":"REAL","readOnly":false,"cardCount":1,"codefConnected":false}}'
 	local me_no_id='{"data":{"demoUser":null,"readOnly":false,"cardCount":1,"codefConnected":false}}'
 	local me_bad_type='{"data":{"demoUser":null,"displayName":"내 카드","portfolioType":"REAL","readOnly":false,"cardCount":"1","codefConnected":false}}'
 	local approved='{"data":{"status":"APPROVED","recalculation":{"recommendationId":"rec-1","seenRecommendationId":null,"changed":null}}}'
-	# 사례: 이름 | 기대 종료 코드 | 상태 | 헤더 | 본문 | 시연 헤더 본문 | 단계
+	# 사례: 이름 | 기대 종료 코드 | 상태 | 헤더 | 본문 | 시연 헤더 본문 | 단계 | 위조 요청 상태 | 위조 요청 헤더
 	local cases=(
+		"S5 정상|0|200|$good_cookie|||step_s5"
+		"S5 Path=/api|1|200|set-cookie: __Host-BEONE_SESSION=synthetic; Path=/api; Secure; HttpOnly; SameSite=Lax\r\n|||step_s5"
+		"S5 여러 줄에 속성 분산|1|200|set-cookie: __Host-BEONE_SESSION=synthetic; Path=/api; Secure\r\nset-cookie: other=x; Path=/; HttpOnly; SameSite=Lax\r\n|||step_s5"
+		"S5 SameSite 누락|1|200|set-cookie: __Host-BEONE_SESSION=synthetic; Path=/; Secure; HttpOnly\r\n|||step_s5"
+		"S5 SameSite=Strict|1|200|set-cookie: __Host-BEONE_SESSION=synthetic; Path=/; Secure; HttpOnly; SameSite=Strict\r\n|||step_s5"
+		"S5 Domain 있음|1|200|set-cookie: __Host-BEONE_SESSION=synthetic; Path=/; Domain=beonepay.site; Secure; HttpOnly; SameSite=Lax\r\n|||step_s5"
+		"S5 세미콜론 없는 쿠키만|1|200|set-cookie: __Host-BEONE_SESSION=synthetic\r\n|||step_s5"
+		"S17 정상(값만 다름)|0|200|$good_cookie|||step_s17|200|$good_cookie2"
+		"S17 양쪽 500·쿠키 없음|1|500||||step_s17|500|"
+		"S17 위조 쪽만 500|1|200|$good_cookie|||step_s17|500|$good_cookie2"
+		"S17 위조 쪽 쿠키 누락|1|200|$good_cookie|||step_s17|200|"
+		"S17 양쪽 쿠키 누락(같은 빈 값)|1|200||||step_s17|200|"
+		"S17 위조 쪽 속성 다름|1|200|$good_cookie|||step_s17|200|set-cookie: __Host-BEONE_SESSION=x; Path=/; Secure; HttpOnly; SameSite=None\r\n"
+		"S17 위조 쪽 Location 있음|1|200|$good_cookie|||step_s17|200|${good_cookie2}location: https://evil.invalid/\r\n"
 		"S1 정상|0|200|content-type: text/html;charset=UTF-8\r\n|||step_s1"
 		"S1 Content-Type 잘못됨|1|200|content-type: application/json\r\n|||step_s1"
 		"로그인 쿠키 정상|0|200|$good_cookie|||login"
@@ -246,8 +349,9 @@ self_test() {
 	echo "| 주입 사례 | 기대 종료 코드 | 실제 종료 코드 | 판정 |"
 	echo "|---|---|---|---|"
 	for c in "${cases[@]}"; do
-		IFS='|' read -r name want FIX_STATUS FIX_HEAD FIX_BODY FIX_BODY2 step <<< "$c"
+		IFS='|' read -r name want FIX_STATUS FIX_HEAD FIX_BODY FIX_BODY2 step FIX_STATUS2 FIX_HEAD2 <<< "$c"
 		FIX_HEAD=$(printf '%b' "$FIX_HEAD")
+		FIX_HEAD2=$(printf '%b' "$FIX_HEAD2")
 		: > "$RESULTS"
 		case "$step" in
 			login) step_login fx T '{}' ;;
@@ -269,6 +373,11 @@ if [ "$BASE" = "--self-test" ]; then
 	exit $?
 fi
 
+# 월·주문일·전월 기간을 함께 정한다. 지원 밖 월은 요청을 보내기 전에 멈춘다
+check_month "$MONTH" "$TODAY" || exit 2
+ORDER_DATE="$TODAY"
+read -r PREV_FROM PREV_TO <<< "$(month_dates "$MONTH")"
+
 # S1~S5 공통
 step_s1
 s=$(req - GET /api/v1/me)
@@ -279,12 +388,7 @@ s=$(req - GET /api/v1/card-products)
 record S3 "GET /api/v1/card-products" 200 "$s" "$(same "$s" 200)"
 s=$(req - GET /actuator/health)
 record S4 "GET /actuator/health(프록시 비노출)" 404 "$s" "$(same "$s" 404)"
-s=$(req anon GET /api/v1/auth/csrf)
-attrs=$(cookie_attrs)
-ok=0
-if echo "$attrs" | grep -q '__Host-BEONE_SESSION' && echo "$attrs" | grep -q 'Path=/' && echo "$attrs" | grep -q 'Secure' \
-	&& echo "$attrs" | grep -q 'HttpOnly' && echo "$attrs" | grep -q 'SameSite=Lax' && ! echo "$attrs" | grep -qi 'domain='; then ok=1; fi
-record S5 "익명 세션 쿠키 속성" "__Host-, Path=/, Secure, HttpOnly, SameSite=Lax, Domain 없음" "$s; $attrs" "$ok"
+step_s5
 
 # S6~S8 A 준비와 /me
 member_ready a "$EMAIL_A" A
@@ -302,12 +406,12 @@ count=$(jq '(.data.items // .data) | length' "$WORK/body" 2> /dev/null)
 record S9b "A 카드 목록" "200, 1장" "$s, ${count}장" "$(same "$s $count" '200 1')"
 t=$(csrf a)
 s=$(req a PUT "/api/v1/me/cards/$card_a/monthly-states/$MONTH" \
-	'{"previousMonthPerformanceWon":{"value":0,"period":{"from":"2026-10-01","to":"2026-10-31"}},"registeredOn":{"value":"2026-01-01","period":{"from":"2026-01-01","to":"2026-01-01"}}}' \
+	"{\"previousMonthPerformanceWon\":{\"value\":0,\"period\":{\"from\":\"$PREV_FROM\",\"to\":\"$PREV_TO\"}},\"registeredOn\":{\"value\":\"2026-01-01\",\"period\":{\"from\":\"2026-01-01\",\"to\":\"2026-01-01\"}}}" \
 	"X-CSRF-TOKEN: $t")
 record S9c "A 월간 상태 입력(CSRF)" 200 "$s $(code)" "$(same "$s" 200)"
 
 # S10 주문 2건과 목록
-order='{"amountWon":10000,"orderDate":"2026-11-25","orderTime":null,"merchantName":"합성 가맹점","merchantClass":"ORDINARY_DOMESTIC","paymentMethod":"DIRECT"}'
+order="{\"amountWon\":10000,\"orderDate\":\"$ORDER_DATE\",\"orderTime\":null,\"merchantName\":\"합성 가맹점\",\"merchantClass\":\"ORDINARY_DOMESTIC\",\"paymentMethod\":\"DIRECT\"}"
 t=$(csrf a)
 s=$(req a POST /api/v1/me/orders "$order" "X-CSRF-TOKEN: $t")
 order1=$(field '.data.orderId')
@@ -390,13 +494,7 @@ s=$(req - GET /api/v1/me '' 'X-BeONE-Demo-User: MY_CARDS')
 record S16b "시연 헤더만" "401 UNAUTHENTICATED" "$s $(code)" "$(same "$s $(code)" '401 UNAUTHENTICATED')"
 
 # S17 전달 헤더 위조 시 쿠키 속성 불변
-req f1 GET /api/v1/auth/csrf > /dev/null
-plain=$(cookie_attrs)
-req f2 GET /api/v1/auth/csrf '' 'X-Forwarded-Host: evil.invalid' 'X-Forwarded-Proto: http' 'X-Forwarded-For: 192.0.2.1' > /dev/null
-forged=$(cookie_attrs)
-location=$(header location | wc -l | tr -d ' ')
-record S17 "X-Forwarded-* 위조" "Set-Cookie 속성 동일, Location 없음" "same=$(same "$plain" "$forged") location=$location" \
-	"$([ "$plain" = "$forged" ] && [ "$location" = 0 ] && echo 1 || echo 0)"
+step_s17
 
 # S18 로그아웃 뒤 401
 t=$(csrf a)
