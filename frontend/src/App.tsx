@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { BenefitsPage } from './benefits/BenefitsPage'
+import { benefitsApi } from './benefits/config'
+import type { BenefitsApi } from './benefits/model'
 import { CardCarousel } from './components/CardCarousel'
 import { Icon } from './components/Icon'
 import { PaymentPreferenceMenu } from './components/PaymentPreferenceMenu'
@@ -28,8 +31,8 @@ interface ModeState {
 const mockDevice = import.meta.env.DEV && import.meta.env.VITE_DEVICE_AUTH_MODE === 'mock'
 const mockPayments = import.meta.env.DEV && import.meta.env.VITE_PAYMENT_API_MODE === 'mock'
 
-function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, mockAuth = mockDevice }: {
-  cardSource?: CardSource; orders?: OrderApi; paymentGateway?: PaymentGateway; mockAuth?: boolean
+function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, mockAuth = mockDevice, benefits = benefitsApi }: {
+  cardSource?: CardSource; orders?: OrderApi; paymentGateway?: PaymentGateway; mockAuth?: boolean; benefits?: BenefitsApi
 }) {
   const [menu, setMenu] = useState<Menu>('빠른결제')
   const [mode, setMode] = useState<PortfolioMode>('MY_CARDS')
@@ -95,7 +98,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
   }
 
   return (
-    <div className={authOpen ? "wallet-app wallet-payment" : "wallet-app"}>
+    <div className={authOpen ? "wallet-app wallet-payment" : menu === '혜택' ? "wallet-app wallet-benefits" : "wallet-app"}>
       <header className="wallet-header">
         <a
           className="brand"
@@ -115,7 +118,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
             B<span className="brand-colon">:</span>ONE
           </span>
         </a>
-        {!authOpen && myMode && menu !== '모의결제' && (
+        {!authOpen && myMode && menu === '빠른결제' && (
           <div className="header-actions">
             <button
               aria-label="카드 추가"
@@ -137,9 +140,9 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
         )}
       </header>
 
-      {!authOpen && menu !== '모의결제' && <PortfolioModeTabs mode={mode} onChange={selectMode} />}
+      {!authOpen && menu === '빠른결제' && <PortfolioModeTabs mode={mode} onChange={selectMode} />}
       <main id="main">
-        <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode} hidden={authOpen || menu === '모의결제'}>
+        <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode} hidden={authOpen || menu !== '빠른결제'}>
           {menu === '빠른결제' ? (
             <section className="quick-payment" key={mode}>
               <h1 className="sr-only">B:ONE 빠른결제</h1>
@@ -195,18 +198,9 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
               )}
               <p className="simulation-disclaimer">실제 결제 및 금융거래는 발생하지 않습니다.</p>
             </section>
-          ) : menu === '혜택' ? (
-            <section className="placeholder-page">
-              <Icon name="benefit" />
-              <h1>혜택</h1>
-              <p>달별로 받은 혜택과 결제 정보를 확인할 수 있는 공간이에요.</p>
-              <span>준비 중이에요</span>
-              <button className="primary-button" onClick={() => selectMenu('빠른결제')}>
-                빠른결제로 돌아가기
-              </button>
-            </section>
           ) : null}
         </div>
+        <BenefitsPage mode={mode} api={benefits} active={!authOpen && menu === '혜택'} />
         {(['MY_CARDS', 'VIRTUAL_PORTFOLIO'] as const).map(orderMode => (
           <OrderWorkspace key={orderMode} mode={orderMode} api={orders}
             active={!authOpen && menu === '모의결제' && mode === orderMode} onSelect={openSelectedOrder}
