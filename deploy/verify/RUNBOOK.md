@@ -5,7 +5,7 @@
 - **근거:** 결정 39-1(N17: 서버 루프백 검증 환경에서 `member` 프로필 사용 허용, N16: 검증 DB에서만 합성 회원 인증 상태 재현), 결정 39-2(N6: SSH 22는 사용자 Mac 공인 IP/32에만 임시로 열고 끝나면 삭제). 상세 설계는 관리 기록 ROADMAP-next-20261125 3-3~3-8·5-1·5-2절입니다.
 - **승인 단계:** 서버 명령은 모두 승인 묶음 ② 검증 환경 생성(2~6절, 11절 대안 전송은 4·6절을 대신하므로 ②), ③ 검증 배포·스모크(7~8절, 10절 웹 교체는 같은 검증 환경의 재배포라 ③), ④ 검증 환경 정리(9·12절)에 속합니다. 10절은 새 웹 번들이 생겼을 때 사용자가 ③ 범위인지 다시 확인한 뒤 실행합니다. 승인 없이 실행하지 않습니다.
 - **실행 주체:** SG 변경과 서버 명령은 운영 담당(AWS 콘솔·SSM), `.env` 값 입력은 사용자입니다. 이 저장소는 파일과 순서만 제공합니다.
-- **파일:** [`compose.yaml`](compose.yaml), [`nginx.conf`](nginx.conf), [`env.template`](env.template)(키 이름만), 이미지 빌드 [`../scripts/build-image.sh`](../scripts/build-image.sh). 스모크 스크립트 `deploy/scripts/smoke-member.sh`와 그 T-a 훅(`SMOKE_VERIFY_HOOK`)은 **PR #199에서 추가하며 아직 develop에 없습니다.** #199 병합 전에는 운영 담당에게 넘긴 산출물 폴더의 `smoke-member.sh`(sha256을 `SHA256SUMS`로 대조)를 씁니다.
+- **파일:** [`compose.yaml`](compose.yaml), [`nginx.conf`](nginx.conf), [`env.template`](env.template)(키 이름만), 이미지 빌드 [`../scripts/build-image.sh`](../scripts/build-image.sh). 스모크 스크립트 [`../scripts/smoke-member.sh`](../scripts/smoke-member.sh)와 그 T-a 훅(`SMOKE_VERIFY_HOOK`)은 PR #199로 develop에 병합됐습니다(`98ab48d`). 산출물에는 검증할 커밋의 이 파일을 복사하고, 서버 쪽에서는 sha256을 `SHA256SUMS`로 대조합니다. 이 스크립트는 서울 기준 이번 달만 지원하며 다른 `SMOKE_MONTH`는 요청 전에 종료 코드 2로 멈춥니다(머리말).
 - **검증 기록:** C2 후보(`ef01309`)로 로컬 사전 스모크 43/43. 서버 실행은 운영 담당이 2026-11-25 05:33~05:45에 EC2 `beone-verify`에서 직접 했고 PASS 42 / FAIL 1이었습니다. FAIL 1건(S8)은 jq `// empty`가 `false`를 빈 값으로 바꾼 스크립트 판정 오류이며, 실제 `/api/v1/me` 200·`codefConnected=false`를 직접 확인했습니다(스크립트는 이후 수정). 이 결과는 그 후보에 대한 기록이며, 다른 후보는 다시 확인해야 합니다.
 
 ## 산출물 만들기 (로컬)
@@ -20,7 +20,7 @@ gzip -9 -n <산출물 폴더>/beone-api-<sha12>.tar
 (cd frontend && npm ci && npm run lint && npm test && npm run build)
 COPYFILE_DISABLE=1 tar --no-xattrs -C frontend/dist -czf <산출물 폴더>/web-<sha12>.tgz .
 cp deploy/verify/compose.yaml deploy/verify/nginx.conf deploy/verify/env.template <산출물 폴더>/
-cp deploy/scripts/smoke-member.sh <산출물 폴더>/   # #199 병합 뒤. 그 전에는 #199 head의 파일을 쓴다
+cp deploy/scripts/smoke-member.sh <산출물 폴더>/   # #199 병합본(98ab48d 이후)의 검증 대상 커밋 파일
 cd <산출물 폴더> && shasum -a 256 beone-api-<sha12>.tar.gz web-<sha12>.tgz compose.yaml nginx.conf smoke-member.sh > SHA256SUMS
 ```
 
@@ -28,7 +28,7 @@ cd <산출물 폴더> && shasum -a 256 beone-api-<sha12>.tar.gz web-<sha12>.tgz 
 
 1. 산출물의 `compose.yaml`·`nginx.conf`를 로컬 폴더에 복사하고 `name:`을 `beone-verify-local`로, 포트를 로컬에서 비어 있는 주소(예: `127.0.0.1:28080:80`)로 바꿉니다. `web/`에 웹 tgz를 풉니다.
 2. 합성 값만 넣은 env 파일(권한 600)로 `docker compose -f <로컬 compose> -p beone-verify-local --env-file <합성 env> up -d --wait`.
-3. `SMOKE_VERIFY_HOOK=<훅 스크립트> bash smoke-member.sh http://localhost:28080`. 훅은 7절 T-a SQL을 `-p beone-verify-local`로 실행하는 작은 스크립트입니다(훅 인터페이스는 #199의 `smoke-member.sh` 머리말).
+3. `SMOKE_VERIFY_HOOK=<훅 스크립트> bash smoke-member.sh http://localhost:28080`. 훅은 7절 T-a SQL을 `-p beone-verify-local`로 실행하는 작은 스크립트입니다(훅 인터페이스는 `deploy/scripts/smoke-member.sh` 머리말).
 4. 끝나면 `docker compose -f <로컬 compose> -p beone-verify-local --env-file <합성 env> down -v`.
 
 ## 0. 먼저 읽을 것
@@ -206,7 +206,7 @@ bash -o pipefail -c 'bash "$1" http://localhost:18080 | tee "$2"' _ <산출물 �
 
 | 확인값 | 실패 시 |
 |---|---|
-| 결과 표 마지막 줄 `FAIL=0` **그리고** `smoke_exit=0`(pipefail이라 `tee`가 아닌 스모크의 종료 코드). 로컬 사전 스모크와 같은 PASS 수 | 실패 행을 기록하고 9절 원복 여부를 사용자와 정한다. 이 스모크는 회원 API의 표시 기대값을 확인할 뿐, 저장 안 됨·격리 전체를 증명하지 않는다 |
+| 결과 표 마지막 줄 `FAIL=0` **그리고** `smoke_exit=0`(pipefail이라 `tee`가 아닌 스모크의 종료 코드). 로컬 사전 스모크와 같은 PASS 수 | `smoke_exit=1`이면 실패 행을 기록하고 9절 원복 여부를 사용자와 정한다. `smoke_exit=2`는 요청 전 거부(주소 인자 없음, `curl`·`jq` 없음, `SMOKE_MONTH`가 서울 기준 이번 달이 아님)라 서버에 아무 요청도 가지 않았으므로, 값을 고쳐 다시 실행한다. 이 스모크는 회원 API의 표시 기대값을 확인할 뿐, 저장 안 됨·격리 전체를 증명하지 않는다 |
 
 화면(Chrome 고정, Safari 아님, `http://localhost:18080`):
 
