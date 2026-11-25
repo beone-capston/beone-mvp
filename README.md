@@ -22,7 +22,7 @@ docker-compose.yml   로컬 MySQL
 
 세 애플리케이션은 각각 독립적으로 빌드·테스트합니다. 루트에는 공용 빌드 도구가 없습니다.
 
-백엔드 배포 이미지와 배포 Compose는 [백엔드 배포 기반](docs/deployment/backend-compose.md)에 있습니다. 로컬 개발 실행은 아래 절차를 그대로 따릅니다.
+백엔드 배포 이미지와 배포 Compose는 [백엔드 배포 기반](docs/deployment/backend-compose.md)에 있습니다. 배포 자동화(스테이징 자동 반영·운영 승인 배포, 현재 꺼진 상태)는 [배포 자동화](docs/deployment/cd.md)에 있습니다. 로컬 개발 실행은 아래 절차를 그대로 따릅니다.
 
 ## 요구 환경
 
