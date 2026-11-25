@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { BenefitsPage } from './benefits/BenefitsPage'
 import { benefitsApi } from './benefits/config'
 import type { BenefitsApi } from './benefits/model'
+import { CardServicesPage } from './card-services/CardServicesPage'
 import { CardCarousel } from './components/CardCarousel'
 import { Icon } from './components/Icon'
 import { PaymentPreferenceMenu } from './components/PaymentPreferenceMenu'
@@ -55,6 +56,27 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
   const cards = useMemo(() => cardSource.getCards(mode), [cardSource, mode])
   const activeIndex = Math.max(0, Math.min(modes[mode].activeIndex, cards.length - 1))
   const myMode = mode === 'MY_CARDS'
+  const servicePage = services?.source === 'VIRTUAL' ? services : null
+  const serviceTrigger = useRef<HTMLElement | null>(null)
+
+  function openServices(card: WalletCard) {
+    setServices(card)
+    if (card.source === 'VIRTUAL') {
+      serviceTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>('.services-page h1 button')?.focus()
+        window.scrollTo(0, 0)
+      })
+    }
+  }
+
+  function closeServices() {
+    setServices(null)
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0)
+      serviceTrigger.current?.focus({ preventScroll: true })
+    })
+  }
 
   function selectMode(value: PortfolioMode) {
     setMode(value)
@@ -98,7 +120,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
   }
 
   return (
-    <div className={authOpen ? "wallet-app wallet-payment" : menu === '혜택' ? "wallet-app wallet-benefits" : "wallet-app"}>
+    <div className={servicePage ? "wallet-app wallet-services-open" : authOpen ? "wallet-app wallet-payment" : menu === '혜택' ? "wallet-app wallet-benefits" : "wallet-app"}>
       <header className="wallet-header">
         <a
           className="brand"
@@ -106,7 +128,10 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
           aria-label="B:ONE 빠른결제 홈"
           onClick={event => {
             if (authOpen) event.preventDefault()
-            else selectMenu('빠른결제')
+            else if (servicePage) {
+              event.preventDefault()
+              closeServices()
+            } else selectMenu('빠른결제')
           }}
           aria-disabled={authOpen || undefined}
           tabIndex={authOpen ? -1 : undefined}
@@ -140,9 +165,10 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
         )}
       </header>
 
-      {!authOpen && menu === '빠른결제' && <PortfolioModeTabs mode={mode} onChange={selectMode} />}
+      {!authOpen && !servicePage && menu === '빠른결제' && <PortfolioModeTabs mode={mode} onChange={selectMode} />}
       <main id="main">
-        <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode} hidden={authOpen || menu !== '빠른결제'}>
+        {servicePage && <CardServicesPage key={servicePage.id} card={servicePage} onClose={closeServices} />}
+        <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode} hidden={authOpen || Boolean(servicePage) || menu !== '빠른결제'}>
           {menu === '빠른결제' ? (
             <section className="quick-payment" key={mode}>
               <h1 className="sr-only">B:ONE 빠른결제</h1>
@@ -179,7 +205,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
                     }))
                   }
                   onCardTap={openPayment}
-                  onServices={setServices}
+                  onServices={openServices}
                 />
               ) : (
                 <div className="empty-state">
@@ -211,7 +237,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
           onBack={() => { setAuthOpen(false); window.scrollTo(0, 0) }} onReturn={returnToOrders} />}
       </main>
 
-      {!authOpen && <nav
+      {!authOpen && !servicePage && <nav
         className="bottom-nav"
         aria-label="주요 메뉴"
         style={{ '--active-index': menus.indexOf(menu) } as CSSProperties}
@@ -237,7 +263,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
           </button>
         </div>
       )}
-      {services && (
+      {services && !servicePage && (
         <Sheet title={services.name + ' 부가서비스'} onClose={() => setServices(null)}>
           <p className="sheet-description">
             {services.source === 'DESIGN_SAMPLE'
