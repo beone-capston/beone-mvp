@@ -96,6 +96,8 @@ case "$1" in
 	create) log CREATE; echo wc1; exit "${FAKE_CREATE_RC:-0}" ;;
 	cp)
 		[ "${FAKE_CP_RC:-0}" = 0 ] || exit 1
+		# web 이미지 dist 위치 계약(/dist)과 다르면 실제 docker cp처럼 실패한다
+		[ "$2" = "wc1:/dist/." ] || { log "CP_WRONG_SRC $2"; exit 1; }
 		dest="$3"
 		[ -n "${FAKE_NO_INDEX:-}" ] || echo '<!doctype html>' > "$dest/index.html"
 		echo 'app' > "$dest/app.js"

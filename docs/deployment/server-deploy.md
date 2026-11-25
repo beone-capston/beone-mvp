@@ -4,7 +4,7 @@ GitHub Actions가 SSM 문서 `BeoneDeployStaging`(스테이징) 또는 `BeoneDep
 
 - **상태:** 스크립트와 오프라인 자기검사만 있습니다. 서버 설치, SSM 문서, IAM, 워크플로 연결은 하지 않았습니다. 서버 설치·갱신은 승인 절차(Aside)입니다.
 - **파일:** [`deploy/scripts/deploy.sh`](../../deploy/scripts/deploy.sh), [`deploy/scripts/smoke-public.sh`](../../deploy/scripts/smoke-public.sh), [`deploy/scripts/deploy-selftest.sh`](../../deploy/scripts/deploy-selftest.sh)
-- **서버 배치:** `deploy.sh`와 `smoke-public.sh`를 같은 폴더(`/opt/beone/deploy/`)에 둡니다. `deploy.sh`는 자기 폴더의 `smoke-public.sh`를 부릅니다. SSM은 root로 실행하므로 스크립트 안에서 `sudo`를 쓰지 않습니다.
+- **서버 설치(승인 절차, Aside):** `deploy.sh`와 `smoke-public.sh`를 **같은 폴더 `/opt/beone/deploy/`에 실행 권한과 함께** 설치합니다(예: `install -m 755 deploy.sh smoke-public.sh /opt/beone/deploy/`). `deploy.sh`는 자기 폴더의 `smoke-public.sh`를 부릅니다. SSM 문서 `BeoneDeployStaging`·`BeoneDeployProduction`이 이 경로를 실행합니다. SSM은 root로 실행하므로 스크립트 안에서 `sudo`를 쓰지 않습니다. 스크립트 갱신도 같은 승인 절차입니다.
 
 ## 용어
 
@@ -26,8 +26,8 @@ deploy.sh <staging|production> <ApiDigest> <WebDigest> <GitSha>
 | `production` | `/opt/beone/app/compose.yaml`, `.env` | `beone-app` | `backend`만(MySQL은 다시 만들지 않음) | `/opt/beone/web` | `https://beonepay.site` |
 
 - 이미지: `ghcr.io/beone-capston/beone-api@<ApiDigest>`, `ghcr.io/beone-capston/beone-web@<WebDigest>`. backend는 compose의 `BEONE_API_IMAGE`를 셸 환경으로 덮어써 digest 이미지로 띄웁니다(셸 환경이 `--env-file`보다 우선). 서버 `.env`는 바꾸지 않습니다.
-- web 이미지 안 dist 위치는 `/web`으로 둡니다(`WEB_DIST_PATH`). 워크플로의 web 이미지 정의와 같아야 합니다.
-- 운영 웹 폴더(`/opt/beone/web/current`)를 공개 nginx 정적 루트로 쓰는 것은 공개 nginx 반영(승인 ⑧, [공개 nginx 초안](public-proxy.md))에서 함께 정합니다. 그 전에는 운영 웹 링크를 바꿔도 공개 화면이 바뀌지 않습니다.
+- web 이미지 안 dist 위치는 `/dist`입니다(`WEB_DIST_PATH`). 워크플로의 `deploy/web/Dockerfile`(`COPY . /dist/`, #225)과 같습니다.
+- 운영 웹 폴더는 `/opt/beone/web`(`releases/`와 `current` 링크)으로 확정입니다. 공개 nginx 정적 루트를 이 링크에 맞추는 일은 공개 nginx 정합 작업(B-CD3, [공개 nginx 초안](public-proxy.md))이 합니다. 그 반영 전에는 운영 웹 링크를 바꿔도 공개 화면이 바뀌지 않습니다.
 
 ## 순서
 
@@ -100,14 +100,14 @@ deploy_git_sha=<GitSha>
 | P4 | `GET /api/v1/auth/csrf` 200, `__Host-BEONE_SESSION` Set-Cookie 한 줄, `Path=/`·`Secure`·`HttpOnly`·`SameSite=Lax`, `Domain` 없음 |
 
 - 가입·로그인·T-a는 하지 않습니다. 운영·스테이징 DB에는 T-a를 쓰지 않습니다.
-- P4는 CSRF용 **익명 세션 1행**을 만듭니다(`auth_sessions`, 회원·업무 데이터 아님, idle-timeout 뒤 만료). "DB를 쓰지 않는다"를 엄격히 적용하려면 P4를 빼야 하므로 결정이 필요합니다.
+- 업무 데이터를 바꾸지 않습니다. 다만 P4 때문에 세션 저장소(`auth_sessions`)에 CSRF용 익명 세션 1행이 생길 수 있고, idle-timeout 뒤 만료로 정리됩니다(관리 판단으로 허용).
 - 쿠키 값과 응답 본문은 출력하지 않습니다.
 
 ## 출력과 상태 파일
 
 - 출력은 단계·digest·백업 id뿐입니다. `docker compose config`는 `--quiet`·`--services`로만 실행해 env 값이 풀려 나오지 않게 합니다.
 - `/opt/beone/deploy/state/`(권한 700): `<환경>.state`(현재 `api_digest`·`web_digest`·`git_sha`·`web_release`·`backup_id`·`deployed_at`), `<환경>.history`(성공·실패 한 줄씩), `deploy.lock`.
-- 오래된 웹 릴리스 폴더와 이전 이미지는 지우지 않습니다. 디스크 정리는 따로 판단합니다.
+- 오래된 웹 릴리스 폴더와 이전 이미지는 지우지 않습니다. 릴리스 보존 개수 정리는 후속 과제입니다.
 
 ## 오프라인 자기검사
 

@@ -42,8 +42,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 STATE_DIR="$ROOT/deploy/state"
 API_REPO=ghcr.io/beone-capston/beone-api
 WEB_REPO=ghcr.io/beone-capston/beone-web
-# web 이미지 안의 dist 위치(워크플로의 web 이미지 정의와 맞춘다)
-WEB_DIST_PATH="${BEONE_WEB_DIST_PATH:-/web}"
+# web 이미지 안의 dist 위치. 워크플로의 deploy/web/Dockerfile(COPY . /dist/)과 같다
+WEB_DIST_PATH="${BEONE_WEB_DIST_PATH:-/dist}"
 HEALTH_TIMEOUT="${BEONE_DEPLOY_HEALTH_TIMEOUT:-300}"
 HEALTH_INTERVAL=5
 
@@ -53,7 +53,7 @@ case "$ENVIRONMENT" in
 		PROJECT=beone-app
 		EXPECTED_SERVICES='backend mysql'
 		UP_SERVICES=(backend)          # 운영 MySQL은 다시 만들지 않는다
-		WEB_BASE="$ROOT/web"           # 공개 nginx 정적 루트가 $WEB_BASE/current를 가리켜야 한다(승인 ⑧)
+		WEB_BASE="$ROOT/web"           # 운영 웹 폴더(current 링크). 공개 nginx 정적 루트가 이 링크를 쓴다
 		SMOKE_BASE="${BEONE_DEPLOY_SMOKE_BASE:-https://beonepay.site}"
 		;;
 	staging)

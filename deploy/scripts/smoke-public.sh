@@ -10,7 +10,7 @@
 #   P3 GET /actuator/health  404(외부 비노출)
 #   P4 GET /api/v1/auth/csrf 200, Set-Cookie 한 줄에 __Host-BEONE_SESSION, Path=/, Secure, HttpOnly, SameSite=Lax, Domain 없음
 #
-# P4는 CSRF용 익명 세션을 하나 만든다(회원·업무 데이터 아님, idle-timeout 뒤 만료). T-a·가입·로그인은 하지 않는다.
+# 업무 데이터를 바꾸지 않는다(P4 때문에 세션 저장소에 익명 세션 1행이 생길 수 있고, idle-timeout 뒤 만료된다). T-a·가입·로그인은 하지 않는다.
 # 쿠키 값과 응답 본문은 출력하지 않는다.
 set -euo pipefail
 
