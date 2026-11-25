@@ -214,7 +214,7 @@ sudo ls -ld $S $S/.env $S/htpasswd $S/web $S/web/releases
 | 실행 | 운영 담당(승인 뒤). 이미지 수동 푸시는 사용자 또는 운영 담당 |
 | 전제 | 3단계 통과. GHCR에 api·web 이미지가 **digest로 받을 수 있게** 올라가 있음 |
 
-**이미지 준비:** `deploy.sh`는 `ghcr.io/beone-capston/beone-api@<digest>` 형식으로 레지스트리에서 pull한다. 그래서 로컬 [`build-image.sh`](../../deploy/scripts/build-image.sh) 결과(서버에 `docker load`한 태그 이미지)는 그대로 쓸 수 없다. 빌드한 이미지를 GHCR에 수동으로 한 번 푸시해 digest를 얻는다.
+**이미지 준비:** 먼저 `GITHUB_TOKEN`으로 올리는 수동 실행([cd.md 첫 배포 이미지 발행](cd.md#첫-배포-이미지-발행))을 쓴다. 아래 사용자 토큰 푸시는 그것을 쓸 수 없을 때의 대체 경로다. `deploy.sh`는 `ghcr.io/beone-capston/beone-api@<digest>` 형식으로 레지스트리에서 pull한다. 그래서 로컬 [`build-image.sh`](../../deploy/scripts/build-image.sh) 결과(서버에 `docker load`한 태그 이미지)는 그대로 쓸 수 없다. 빌드한 이미지를 GHCR에 수동으로 한 번 푸시해 digest를 얻는다.
 
 - api: `build-image.sh final`로 만든 이미지에 `ghcr.io/beone-capston/beone-api:<GitSha>` 태그를 붙여 푸시한다.
 - web: `frontend/`에서 `npm ci && npm run build`를 한 뒤, `frontend/dist`를 빌드 컨텍스트로 [`deploy/web/Dockerfile`](../../deploy/web/Dockerfile)을 빌드해 `beone-web:<GitSha>`로 푸시한다.
