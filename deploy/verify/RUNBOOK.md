@@ -218,25 +218,48 @@ bash -o pipefail -c 'bash "$1" http://localhost:18080 | tee "$2"' _ <산출물 �
 | B4 | DevTools → Cookies | `__Host-BEONE_SESSION` 존재 |
 | B5 | 결제 | 브라우저에는 브리지가 없어 결제 불가가 기대 동작 |
 
-진행 중 감시(서버, 별도 세션, 30초 간격). 중단 조건 5개를 모두 본다. 걸리면 **검증 프로젝트만** `down -v` 한다. 이 자동 원복은 결정 39-1이 이미 승인한 중단 범위(가용 600MiB 미만·운영 이상 시 즉시 `down -v`)이고, 대상은 `$V`(`-p beone-verify`) 하나로 고정이다. 운영 프로젝트에는 쓰지 않는다. 조회가 실패해도 중단으로 본다. 이미지·디렉터리 삭제와 확인은 운영 담당이 이어서 9절로 한다. 감시 세션이 끊기면 자동 원복도 멈추므로, 운영 담당은 검증 중 이 세션 출력을 계속 본다.
+진행 중 감시(서버, 별도 세션, 30초 간격). 중단 조건 5개를 모두 본다. 걸리면 **검증 프로젝트만** `down -v` 한다. 이 자동 원복은 결정 39-1이 이미 승인한 중단 범위(가용 600MiB 미만·운영 이상 시 즉시 `down -v`)이고, 대상은 `$V`(`-p beone-verify`) 하나로 고정이다. 운영 프로젝트에는 쓰지 않는다. 조회가 실패해도 중단으로 본다. 운영(APP)·공개(PUB) 컨테이너는 **정상 목록**으로 판정한다. 모든 컨테이너가 `running`이고 헬스체크가 있으면 `healthy`여야 하며, 조회 일부·전체 실패, 빈 결과, 서비스 수보다 적은 컨테이너, `paused`·`created`·`exited`·`restarting`·`starting` 같은 그 밖의 상태는 모두 중단이다. 이미지·디렉터리 삭제와 확인은 운영 담당이 이어서 9절로 한다. 감시 세션이 끊기면 자동 원복도 멈추므로, 운영 담당은 검증 중 이 세션 출력을 계속 본다.
 
 ```bash
 exec bash
+set -o pipefail
 V='sudo docker compose -f /opt/beone/verify/compose.yaml -p beone-verify --env-file /opt/beone/verify/.env'
 APP='sudo docker compose -f /opt/beone/app/compose.yaml -p beone-app --env-file /opt/beone/app/.env'
 PUB='sudo docker compose -f /opt/beone/compose.yaml -p beone'
-health() { local ids; ids=$($1 ps -q) && [ -n "$ids" ] || { echo fail; return; }; sudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' $ids | sort -u | tr '\n' ' '; }
+# 정상 목록(allowlist) 판정: 모든 컨테이너가 running+healthy(헬스체크 없으면 running)일 때만 ok.
+# 조회 실패·빈 결과·컨테이너 수 부족·그 밖의 상태(paused, created, exited, restarting, starting 등)는 모두 ok가 아니다.
+health() {
+  local svc ids st n
+  svc=$($1 config --services) && [ -n "$svc" ] || { echo fail-config; return; }
+  ids=$($1 ps -q -a) || { echo fail-ps; return; }
+  [ -n "$ids" ] || { echo empty; return; }
+  n=$(printf '%s\n' "$ids" | wc -l | tr -d ' ')
+  [ "$n" -ge "$(printf '%s\n' "$svc" | wc -l | tr -d ' ')" ] || { echo "missing:$n"; return; }
+  st=$(sudo docker inspect --format '{{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' $ids) || { echo fail-inspect; return; }
+  [ "$(printf '%s\n' "$st" | grep -c .)" -eq "$n" ] || { echo partial; return; }
+  if printf '%s\n' "$st" | grep -qvx -e 'running/healthy' -e 'running/none'; then
+    echo "bad:$(printf '%s\n' "$st" | sort -u | tr '\n' ' ')"
+  else
+    echo ok
+  fi
+}
+oom() {
+  local ids o
+  ids=$($V ps -q -a) && [ -n "$ids" ] || { echo fail; return; }
+  o=$(sudo docker inspect --format '{{.State.OOMKilled}}' $ids) || { echo fail; return; }
+  [ -n "$o" ] && ! printf '%s\n' "$o" | grep -qvx false && echo false || echo "bad:$(printf '%s\n' "$o" | sort -u | tr '\n' ' ')"
+}
 while sleep 30; do
-  m=$(free -m | awk '/^Mem:/{print $7}'); d=$(df -P / | awk 'NR==2{print $5}' | tr -d %)
-  a=$(health "$APP"); p=$(health "$PUB")
-  o=$(vid=$($V ps -q -a) && [ -n "$vid" ] && sudo docker inspect --format '{{.State.OOMKilled}}' $vid | sort -u | tr '\n' ' ' || echo fail)
+  m=$(free -m | awk '/^Mem:/{print $7}') || m=''
+  d=$(df -P / | awk 'NR==2{print $5}' | tr -d %) || d=''
+  a=$(health "$APP"); p=$(health "$PUB"); o=$(oom)
   echo "$(date -u +%T) avail=${m}MiB disk=${d}% app=[$a] pub=[$p] verify_oom=[$o]"
   r=''
-  [ -n "$m" ] && [ "$m" -ge 600 ] || r="$r mem"
-  [ -n "$d" ] && [ "$d" -lt 85 ] || r="$r disk"
-  [ "$a" = "healthy " ] || r="$r app"
-  case "$p" in fail|*exited*|*unhealthy*|*restarting*|*dead*) r="$r pub" ;; esac
-  [ "$o" = "false " ] || r="$r oom"
+  case "$m" in ''|*[!0-9]*) r="$r mem" ;; *) [ "$m" -ge 600 ] || r="$r mem" ;; esac
+  case "$d" in ''|*[!0-9]*) r="$r disk" ;; *) [ "$d" -lt 85 ] || r="$r disk" ;; esac
+  [ "$a" = ok ] || r="$r app"
+  [ "$p" = ok ] || r="$r pub"
+  [ "$o" = false ] || r="$r oom"
   if [ -n "$r" ]; then
     echo "STOP:$r"
     if $V down -v; then echo VERIFY_DOWN_OK; else echo 'VERIFY_DOWN_FAILED: 9절 수동 원복, 사용자에게 즉시 보고'; fi
@@ -244,6 +267,8 @@ while sleep 30; do
   fi
 done
 ```
+
+감시를 켠 직후 첫 줄이 `app=[ok] pub=[ok] verify_oom=[false]`인지 본다. 운영 프로젝트에 남은 일회성 컨테이너(예: `exited` 상태) 때문에 `bad:`가 나오면 검증을 시작하지 않고 원인을 운영 담당이 먼저 확인한다. 정상 목록 판정이라 이런 경우에도 중단 쪽으로 닫힌다.
 
 ## 9. 중단·원복 (서버)
 
