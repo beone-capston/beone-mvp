@@ -38,17 +38,29 @@ services:
     logging: *default-logging
 
   backend:
-    image: ${BEONE_API_IMAGE:?set BEONE_API_IMAGE to the loaded image tag}
-    # 레지스트리가 없다. 이미지는 docker load로 미리 들여온다.
+    image: ${BEONE_API_IMAGE:?set BEONE_API_IMAGE to the image reference}
+    # compose가 pull하지 않는다. deploy.sh가 digest로 먼저 pull하고(ghcr.io/beone-capston/beone-api@sha256:…) 이 변수를 덮어쓴다.
+    # 수동 절차는 docker load로 들여온 태그를 쓴다
     pull_policy: never
     depends_on:
       mysql:
         condition: service_healthy
     environment:
+      # 공개 프로필(prod → member 그룹, 결정 38-6). 운영 환경 파일에 SPRING_PROFILES_ACTIVE=prod를 둔다.
+      # 기본값을 두지 않는다. 비면 compose가 바로 실패한다. 검증(verify-local.sh)은 자기 값으로 prod를 명시한다
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:?set SPRING_PROFILES_ACTIVE (prod) in the env file}
       # Docker 내부 이름으로 접속한다. application.yml의 localhost 기본값으로 떨어지지 않게 항상 넣는다.
       DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:?set MYSQL_DATABASE in the env file}
       DB_USERNAME: ${MYSQL_USER:?set MYSQL_USER in the env file}
       DB_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in the env file}
+      # 실메일(N1, 결정 39-6). prod는 하나라도 없으면 기동하지 않는다. 앱 비밀번호는 서버 환경 파일에만 둔다
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:?set SPRING_MAIL_HOST in the env file}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:?set SPRING_MAIL_PORT in the env file}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:?set SPRING_MAIL_USERNAME in the env file}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:?set SPRING_MAIL_PASSWORD in the env file}
+      BEONE_MAIL_FROM: ${BEONE_MAIL_FROM:?set BEONE_MAIL_FROM in the env file}
+      BEONE_MAIL_LINK_BASE_URL: ${BEONE_MAIL_LINK_BASE_URL:?set BEONE_MAIL_LINK_BASE_URL (https) in the env file}
+      # CODEF 키는 넣지 않는다(prod 미등록, 결정 38-8·40-7). deploy.sh는 env에 CODEF 키 이름이 있으면 배포를 거부한다
       TZ: Asia/Seoul
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError
     healthcheck:

@@ -53,7 +53,8 @@
 | `MYSQL_USER` | 앱 전용 계정 이름(root 아님) |
 | `MYSQL_PASSWORD` | 앱 계정 비밀번호 |
 | `MYSQL_ROOT_PASSWORD` | MySQL root 비밀번호. 초기화 전용 |
-| `BEONE_API_IMAGE` | `docker load`로 들여온 이미지 태그(예: `beone-api:<커밋 12자리>`) |
+| `BEONE_API_IMAGE` | backend 이미지 참조. 자동 배포는 `deploy.sh`가 `ghcr.io/beone-capston/beone-api@<digest>`로 덮어쓰고, 수동 절차는 `docker load`로 들여온 태그(예: `beone-api:<커밋 12자리>`)를 씁니다. compose가 필수로 요구하므로 항상 값을 둡니다 |
+| `SPRING_PROFILES_ACTIVE` | `prod`(공개 프로필, 이 값만). 아래 메일 키 절 참고 |
 
 **비밀번호 형식 계약:** `MYSQL_PASSWORD`·`MYSQL_ROOT_PASSWORD`는 비어 있지 않은 16진수(`0-9`, `a-f`, `A-F`)만 씁니다. 정상 생성 방법은 `openssl rand -hex 24`입니다. 백업·복원·이력 조회 명령은 비밀번호를 옵션 파일(`[client]` 아래 `password=`)에 그대로 넣기 때문에 `#`·따옴표·공백 같은 문자는 받지 않습니다.
 
@@ -65,9 +66,15 @@ sudo awk 'BEGIN { need["MYSQL_PASSWORD"]; need["MYSQL_ROOT_PASSWORD"] } { i = in
 
 값이 비어 있으면 `docker compose`가 바로 실패합니다. `docker compose config`를 옵션 없이 실행하면 비밀값이 풀려 출력되므로 `--quiet` 또는 `--services`로만 확인합니다.
 
-### 공개 프로필 `prod`의 메일 키 (아직 Compose에 넣지 않음)
+### 공개 프로필 `prod`와 메일 키 (Compose 필수)
 
-지금 Compose는 `prod` 프로필을 켜지 않으며, 아래 키를 backend 컨테이너에 넘기지도 않습니다(프로필 지정·서버 반영은 별도 작업). `prod`를 켤 때는 다음 키가 모두 있어야 하고, 하나라도 없으면 백엔드가 키 이름만 적은 메시지와 함께 기동하지 않습니다(결정 39-6, #207). 앱 비밀번호는 서버 `.env`에만 두고 출력하지 않습니다.
+Compose는 backend에 `SPRING_PROFILES_ACTIVE`와 아래 메일 키 6개를 넘기고, 모두 필수 보간(`${KEY:?…}`)으로 받습니다(#244). 운영 `.env`에는 `SPRING_PROFILES_ACTIVE=prod`와 메일 키를 모두 둡니다.
+
+- 하나라도 없거나 비어 있으면 `docker compose`가 키 이름을 적은 메시지로 바로 실패합니다. 이 검사는 compose 파일 전체에 걸리므로 `APP` 명령 모두(백업 덤프·이력 조회·복원 프로젝트 포함)가 이 키를 요구합니다. 서버의 `compose.yaml`을 이 버전으로 바꾸기 전에 `.env`에 키를 먼저 넣습니다.
+- `prod`는 메일 키가 하나라도 없으면 백엔드가 키 이름만 적은 메시지와 함께 기동하지 않습니다(결정 39-6, #207). Compose 검사는 그보다 앞에서 막습니다.
+- 기본값을 두지 않습니다. 프로필을 빠뜨렸을 때 조용히 기본 프로필로 뜨지 않게 하기 위해서입니다.
+- CODEF 키는 넘기지 않습니다(prod 미등록, 결정 38-8·40-7).
+- 앱 비밀번호는 서버 `.env`에만 두고 출력하지 않습니다. 값 확인은 키 이름·빈 값 여부만 봅니다.
 
 | 키 | 설명 |
 | --- | --- |
@@ -91,6 +98,8 @@ sudo awk 'BEGIN { need["MYSQL_PASSWORD"]; need["MYSQL_ROOT_PASSWORD"] } { i = in
 ## 로컬 검증
 
 기존 개발 DB(`docker-compose.yml`, 컨테이너 `beone-mysql`)와 분리된 프로젝트 `beone-deploy-verify`·`beone-deploy-restore`를 씁니다. 검증 전용 스키마 `verify_persist`와 계정 `verify_backup`은 이 스크립트에서만 만들고 업무 Flyway·시드에는 넣지 않습니다.
+
+검증 프로젝트도 운영과 같은 `prod` 프로필로 띄웁니다. Compose가 프로필과 메일 키를 필수로 받으므로, 스크립트가 `SPRING_PROFILES_ACTIVE=prod`와 메일 키 자리표시(예약 도메인 `.invalid`, 비밀값 아님)를 셸 환경으로 줍니다. 셸 환경이 `VERIFY_ENV`보다 우선합니다. `prod`는 메일 상태 확인을 끄고 메일은 발송할 때만 접속하며, 검증은 메일을 보내지 않습니다. `init-env`가 만드는 검증 환경 파일은 그대로입니다.
 
 ```bash
 export VERIFY_ENV=<저장소 밖 폴더>/verify.env
@@ -301,6 +310,8 @@ else echo "기록 미시작: 이번 덤프의 성공이 확인되지 않았습�
 복원은 운영 프로젝트(`beone-app`)에 하지 않습니다. 같은 Compose 파일을 **복원 회차마다 새 프로젝트**(`beone-app-restore-<UTC 시각>`)로 띄워, 그 프로젝트 전용의 새 볼륨에 덤프를 넣습니다. 기존 DB를 비우거나 볼륨을 지우는 방식은 쓰지 않으며, 이미 있는 프로젝트·볼륨은 다시 쓰지 않습니다. 운영 DB에는 쓰지 않고(이력 조회만 참고로 함), 운영 `.env`도 바꾸지 않습니다. 운영 DB를 덤프로 바꾸는 일은 이 확인이 끝난 뒤의 별도 결정이며 이 문서에 명령을 두지 않습니다.
 
 backend는 다음 네 조건을 **모두** 만족할 때만 기동합니다. ① 현재 회차 사전 검사 통과(2단계) ② 선택한 덤프의 반입 성공(5단계) ③ 백업 시점 이력 일치(6단계) ④ 덤프와 짝지어진 이미지 확인(3단계). ②~④는 현재 `RP`와 덤프 `D`에 묶여 있어 회차나 덤프를 바꾸면 무효가 됩니다. `RESTORE`도 같은 조건을 검사해, 조건을 채우지 못하면 `mysql`만 지정한 기동 외의 기동 명령(서비스 이름을 생략한 `up` 포함)을 막습니다. 멈춤(`stop`)과 진단 조회(`ps`·`logs`·`config`·`exec`)는 언제나 됩니다.
+
+복원 프로젝트도 운영 `.env`를 쓰므로 backend는 `prod` 프로필과 운영 메일 설정으로 뜹니다. 호스트 포트가 없고 요청을 보내지 않으므로 메일은 나가지 않습니다.
 
 backend는 **덤프와 짝지어진 기록의 이미지**로만 기동합니다. 최신 이미지로 대신 기동하거나 복원 DB에 새 마이그레이션을 적용하지 않습니다. 짝 기록이나 같은 이미지를 확보하지 못하면 DB 반입·이력 조회까지만 하고, 앱 기동·health 검증은 **미실행(미검증)**으로 남깁니다. 이 경우 복원·롤백 전체가 끝났다고 기록하지 않습니다.
 
