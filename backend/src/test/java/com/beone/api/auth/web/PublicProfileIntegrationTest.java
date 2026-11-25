@@ -7,36 +7,40 @@ import static com.beone.api.auth.web.MemberApiTestClient.userCardId;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import com.beone.api.auth.application.AuthMail;
 import com.beone.api.auth.application.AuthMailSender;
 import com.beone.api.auth.application.FakeAuthMailSender;
+import com.beone.api.auth.application.SmtpAuthMailSender;
+import com.beone.api.auth.application.SmtpStubServer;
 import com.beone.api.auth.web.MemberApiTestClient.Session;
 import com.beone.api.support.IntegrationTest;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * 공개 프로필 {@code prod}를 실제 HTTP·MySQL로 띄워 회원 흐름이 동작하고 시연 부품·강제 실패가 막히는지 확인한다(결정 38-6, G5 L3).
  *
  * <p>{@code prod}는 프로필 그룹으로 {@code member}를 함께 켜지만 테스트의 {@code @ActiveProfiles}는 그룹을 펼치지 않으므로 두 프로필을
- * 직접 켠다. 실메일 발송기가 아직 없어(N1 결정 대기) 실제 {@code prod}는 기동하지 않는다. 그래서 메일을 메모리에 담는 테스트 전용 발송기를
- * {@link TestMailConfiguration}으로 넣고 인증 토큰을 거기서 꺼낸다. 메일 발송기가 없을 때의 기동 실패는 {@code AuthMailSenderProfileTest}가
- * 단위로 고정한다.
+ * 직접 켠다. 메일은 실제 prod 구성 그대로 SMTP 발송기(결정 39-6, #207)가 보내고, 받는 쪽은 루프백 스텁 SMTP({@link SmtpStubServer})다.
+ * 인증 토큰은 받은 메일의 링크에서 꺼낸다. 스텁이 STARTTLS를 지원하지 않으므로 이 시험에서만 STARTTLS를 끈다. 메일 설정이 없을 때의 기동
+ * 실패는 {@code AuthMailSenderProfileTest}·{@code SmtpMailConfigurationTest}가 단위로 고정한다.
  *
  * <p>기대값 출처: 결정 38-6(공개 구성의 시연·Fake·강제 실패 차단), 결정 38-1(member의 {@code simulateFailure: true}는 400·미저장),
  * docs/api/auth.md·cards.md·orders.md·mock-payments.md. 주문·월간 상태 값은 {@code MemberPaymentIntegrationTest}와 같은 평가 자료
@@ -44,9 +48,17 @@ import org.springframework.test.context.ActiveProfiles;
  */
 @IntegrationTest
 @ActiveProfiles({ "prod", "member" })
-@Import({ AuthSessionIntegrationTest.MutableClockConfiguration.class,
-		PublicProfileIntegrationTest.TestMailConfiguration.class })
+@Import(AuthSessionIntegrationTest.MutableClockConfiguration.class)
+@TestPropertySource(properties = { "spring.mail.host=127.0.0.1", "spring.mail.username=synthetic-user",
+		"spring.mail.password=synthetic-app-password", "spring.mail.properties[mail.smtp.starttls.enable]=false",
+		"spring.mail.properties[mail.smtp.starttls.required]=false", "beone.mail.from=no-reply@beone.example.test",
+		"beone.mail.link-base-url=https://beone.example.test" })
 class PublicProfileIntegrationTest {
+
+	private static final SmtpStubServer SMTP = new SmtpStubServer();
+
+	private static final Pattern VERIFICATION_TOKEN = Pattern
+		.compile("https://beone\\.example\\.test/email-verification\\?token=([A-Za-z0-9_-]{43})");
 
 	private static final Instant START = Instant.parse("2026-11-18T01:00:00Z");
 
@@ -71,8 +83,15 @@ class PublicProfileIntegrationTest {
 	@Autowired
 	AuthSessionIntegrationTest.MutableClock clock;
 
-	@Autowired
-	RecordingMailSender mailSender;
+	@DynamicPropertySource
+	static void smtpPort(DynamicPropertyRegistry registry) {
+		registry.add("spring.mail.port", SMTP::port);
+	}
+
+	@AfterAll
+	static void stopSmtp() {
+		SMTP.close();
+	}
 
 	@Autowired
 	ApplicationContext context;
@@ -89,7 +108,7 @@ class PublicProfileIntegrationTest {
 	@AfterEach
 	void clearTables() {
 		this.members.clearMemberData();
-		this.mailSender.clear();
+		SMTP.clear();
 	}
 
 	@Test
@@ -97,7 +116,7 @@ class PublicProfileIntegrationTest {
 		assertThat(this.context.getEnvironment().getActiveProfiles()).contains("prod", "member")
 			.doesNotContain("local", "demo");
 		assertThat(this.context.getBeanNamesForType(FakeAuthMailSender.class)).isEmpty();
-		assertThat(this.context.getBean(AuthMailSender.class)).isSameAs(this.mailSender);
+		assertThat(this.context.getBean(AuthMailSender.class)).isInstanceOf(SmtpAuthMailSender.class);
 		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = FALSE",
 				Integer.class))
 			.isZero();
@@ -184,10 +203,13 @@ class PublicProfileIntegrationTest {
 				"{\"email\":\"" + EMAIL + "\",\"password\":\"" + PASSWORD + "\"}")
 			.getStatusCode()
 			.value()).isEqualTo(202);
-		AuthMail mail = this.mailSender.onlyMail();
-		assertThat(mail.to()).isEqualTo(EMAIL);
+		SmtpStubServer.Received mail = SMTP.received().getFirst();
+		assertThat(SMTP.received()).hasSize(1);
+		assertThat(mail.recipients()).containsExactly(EMAIL);
+		Matcher token = VERIFICATION_TOKEN.matcher(mail.text());
+		assertThat(token.find()).isTrue();
 		assertThat(send(HttpMethod.POST, "/api/v1/auth/email-verifications", anonymous,
-				"{\"token\":\"" + mail.token() + "\"}")
+				"{\"token\":\"" + token.group(1) + "\"}")
 			.getStatusCode()
 			.value()).isEqualTo(204);
 		return this.members.login(anonymous, EMAIL);
@@ -210,37 +232,6 @@ class PublicProfileIntegrationTest {
 	private static String orderId(String body) {
 		int start = body.indexOf("\"orderId\":\"") + "\"orderId\":\"".length();
 		return body.substring(start, body.indexOf('"', start));
-	}
-
-	/** 실메일 발송기 대신 쓰는 테스트 전용 발송기. 보낸 메일을 메모리에만 담는다. */
-	@TestConfiguration(proxyBeanMethods = false)
-	static class TestMailConfiguration {
-
-		@Bean
-		RecordingMailSender recordingMailSender() {
-			return new RecordingMailSender();
-		}
-
-	}
-
-	static final class RecordingMailSender implements AuthMailSender {
-
-		private final List<AuthMail> sent = new ArrayList<>();
-
-		@Override
-		public synchronized void send(AuthMail mail) {
-			this.sent.add(mail);
-		}
-
-		synchronized AuthMail onlyMail() {
-			assertThat(this.sent).hasSize(1);
-			return this.sent.get(0);
-		}
-
-		synchronized void clear() {
-			this.sent.clear();
-		}
-
 	}
 
 }

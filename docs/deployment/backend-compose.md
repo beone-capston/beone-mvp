@@ -63,6 +63,19 @@ sudo awk 'BEGIN { need["MYSQL_PASSWORD"]; need["MYSQL_ROOT_PASSWORD"] } { i = in
 
 값이 비어 있으면 `docker compose`가 바로 실패합니다. `docker compose config`를 옵션 없이 실행하면 비밀값이 풀려 출력되므로 `--quiet` 또는 `--services`로만 확인합니다.
 
+### 공개 프로필 `prod`의 메일 키 (아직 Compose에 넣지 않음)
+
+지금 Compose는 `prod` 프로필을 켜지 않으며, 아래 키를 backend 컨테이너에 넘기지도 않습니다(프로필 지정·서버 반영은 별도 작업). `prod`를 켤 때는 다음 키가 모두 있어야 하고, 하나라도 없으면 백엔드가 키 이름만 적은 메시지와 함께 기동하지 않습니다(결정 39-6, #207). 앱 비밀번호는 서버 `.env`에만 두고 출력하지 않습니다.
+
+| 키 | 설명 |
+| --- | --- |
+| `SPRING_MAIL_HOST` | SMTP 호스트(예: Gmail `smtp.gmail.com`) |
+| `SPRING_MAIL_PORT` | STARTTLS 포트(예: `587`). `prod`는 STARTTLS 필수 |
+| `SPRING_MAIL_USERNAME` | SMTP 계정 |
+| `SPRING_MAIL_PASSWORD` | SMTP 앱 비밀번호. 비밀값 |
+| `BEONE_MAIL_FROM` | 발신 주소 |
+| `BEONE_MAIL_LINK_BASE_URL` | 메일 링크 기준 주소(`https://`로 시작). 권장값은 웹과 `/api`를 함께 두는 공개 HTTPS origin이며 값은 N2 결정 대기 |
+
 ## 이미지 빌드와 식별
 
 이미지는 빌드 장비에서 만들고 서버에서는 빌드하지 않습니다(서버 메모리·CPU 크레딧 보호).
