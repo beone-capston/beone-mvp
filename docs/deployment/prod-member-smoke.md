@@ -3,7 +3,9 @@
 운영 주소 `https://beonepay.site`에서 실제 메일 1통으로 회원 흐름 하나를 확인하는 절차 **초안**입니다. [공개 nginx 4-1](public-proxy.md#4-1-최초-반영-bootstrap-1회-승인-창-안)의 B8 항목입니다.
 
 - **상태:** 초안입니다. 아직 실행하지 않았습니다. 실행 여부와 시점은 Aside(운영 담당)가 사용자와 정합니다.
-- **기준 코드:** `develop` `23bca21`(Flyway 마이그레이션 V15까지)을 읽고 썼습니다. 실행 전에 운영 backend가 이 기준과 같은지 2절에서 확인합니다.
+- **기준 두 가지:** 아래 둘을 구분합니다. 실행 전에 둘 사이에 backend 변경이 없는지 2절에서 확인합니다.
+  - **문서 조사 기준 커밋:** `develop` `23bca21`(Flyway 마이그레이션 V15까지). 이 문서를 쓸 때 대조한 소스입니다.
+  - **운영 이미지 기준:** 지금 운영 backend는 GitSha·이미지 revision `6974880`, ApiDigest `sha256:9a887bd8a67b1577eedfea11d5158fc11d3e1545922d3e2992c919eed495cacd`입니다(첫 운영 배포, 2026-11-25). `6974880`은 `23bca21`의 조상이고, 둘 사이의 변경은 `tools/rule-draft`·`docs/rules`뿐입니다. `backend/`·`frontend/` 변경은 없어서 이 문서의 대조 결과가 그대로 적용됩니다.
 - **결정 필요(실행 전):** 이메일 인증 화면이 아직 없습니다(1-3절). 인증 단계를 어떤 방식으로 할지 정해야 실행할 수 있습니다.
 
 ## 1. 목적과 범위
@@ -39,7 +41,7 @@
 
 - **링크 형식:** 메일 링크는 `<BEONE_MAIL_LINK_BASE_URL>/email-verification?token=<토큰>`입니다([`SmtpAuthMailSender`](../../backend/src/main/java/com/beone/api/auth/application/SmtpAuthMailSender.java)). 토큰은 43자이고 30분 동안 유효하며 1회만 쓸 수 있습니다.
 - **링크만 열어서는 인증되지 않음:** 인증은 화면이 토큰을 `POST /api/v1/auth/email-verifications`로 보내야 끝납니다([API 문서](../api/auth.md)).
-- **화면이 없음:** `develop` `23bca21`의 frontend에는 이 화면이 없습니다. [`AuthEntry.tsx`](../../frontend/src/auth/AuthEntry.tsx)는 `/password-reset`의 토큰만 읽습니다. [`api.ts`](../../frontend/src/auth/api.ts)에도 `email-verifications` 호출이 없습니다.
+- **화면이 없음:** `develop` `23bca21`의 frontend에는 이 화면이 없습니다. 운영 웹 `6974880`도 같습니다(둘 사이 `frontend/` 변경 없음). [`AuthEntry.tsx`](../../frontend/src/auth/AuthEntry.tsx)는 `/password-reset`의 토큰만 읽습니다. [`api.ts`](../../frontend/src/auth/api.ts)에도 `email-verifications` 호출이 없습니다.
   - 그래서 브라우저나 메일 앱에서 링크를 열어도 첫 화면만 뜨고, 인증되지 않습니다.
   - 링크를 열면 토큰이 브라우저 방문 기록에도 남습니다. 공개 nginx 접근 로그는 `$uri` 형식이라 query를 남기지 않습니다(public-proxy 2절 `beone_noquery`).
 
@@ -59,7 +61,8 @@ B도 "토큰을 출력·로그·문서에 남기지 않는다"는 조건은 지�
 | 조건 | 확인 방법·기준 |
 |---|---|
 | 승인 창 | Aside와 사용자가 실행 시각과 끝 시각을 정함. 배포(수동·자동)가 진행 중이 아님. 4-1의 B7까지 끝나 `production.state`가 있음 |
-| 운영 backend 기준 | 운영 backend 이미지의 커밋이 이 문서의 기준(`23bca21`) 이후이고, Flyway 이력이 V15까지임(6-2절 C0). 그보다 새 마이그레이션이 있으면 6절의 외래키를 다시 대조함 |
+| 운영 이미지와 조사 기준 대조 | 실행 시점에 승인된 실제 운영 이미지의 revision(GitSha)과 ApiDigest를 확인함. 확인 방법은 승인 창의 배포 기록이나 운영 상태 파일입니다. 지금 값은 머리말의 `6974880`과 `sha256:9a887bd8…`입니다. 이어서 저장소에서 `git diff --stat <운영 revision> 23bca21 -- backend/`의 출력이 비어 있는지 봄(지금 `6974880`이면 비어 있음). 비어 있지 않으면 바뀐 backend 파일을 이 문서의 1·4·6절과 다시 대조하기 전에는 실행하지 않음. 새 배포나 다른 운영 실행은 요구하지 않음 |
+| Flyway 최신 버전 | 운영 DB의 Flyway 최신 성공 버전이 15임(6-3절 C0과 같은 확인). 15보다 크면 6-2절의 외래키를 새 마이그레이션과 다시 대조하기 전에는 6절 정리를 하지 않음 |
 | 메일 발송 | 결정 39-6의 Gmail SMTP 설정이 운영 `.env`에 있음(backend가 떠 있으면 충족. 없으면 기동하지 않음). 이 절차는 최대 2통(가입 1, 재요청 1)을 보냄 |
 | 발송 한도·비용 | 사용자가 프로젝트 Gmail 계정의 일일 발송 한도와 남은 양, 추가 비용 여부를 확인함. 값은 계정 종류마다 다르므로 이 문서에 정하지 않음. 실행 기록에 "확인함"만 적음 |
 | 대상 메일 주소 | 1개. **사용자가 소유한 전용 테스트 주소**(3절) |
