@@ -31,7 +31,8 @@
 
 구현하지 않은 범위:
 
-- 실메일 발송·외부 공급자·메일 링크 주소 형식(미정)
+- 실제 계정으로의 메일 발송 확인(앱 비밀번호는 사용자 제공 대기, 결정 39-6). 코드에는 `prod` 전용 SMTP 발송기가 있고 시험은 루프백 스텁 SMTP로만 했습니다(#207)
+- 메일 링크 기준 주소 값(N2 미결)과 토큰 위치를 URL 조각(`#token=`)으로 바꿀지(결정 28 후속, frontend와 함께 결정 필요)
 - `local`·`demo`에서 회원과 `/me` 업무 자원의 연결. 이 두 프로필은 시연 헤더 방식을 유지합니다. 회원 연결은 `member` 프로필의 `/me`·보유 카드·월간 상태·결제 전 설정(G3a #159)·주문·예정 소비·추천(G3b #160)·원장 조회(#165)·모의 결제(G3c #161, 결정 38)까지입니다. 공개 회원의 CODEF 연결 범위(D9)는 미결이고, 회원용 가상 포트폴리오(D1b)는 후순위입니다(결정 38-3).
 - 공개 프로필 활성화와 공개 CORS(O1~O3 미결). 인증 부품은 `local`·`demo`·`member` 프로필에서만 등록됩니다.
 
@@ -92,6 +93,7 @@ com.beone.api.auth
 │   ├── PasswordHasher            Argon2id 해시·비교
 │   ├── EmailAddresses·MemberIds  이메일 정규화·검사, 회원 ID 발급
 │   ├── AuthMailSender·FakeAuthMailSender·AuthMail 메일 발송 포트, 가짜 발송기, 메일 내용
+│   ├── SmtpAuthMailSender·SmtpMailConfiguration prod SMTP 발송기와 필수 설정 검사(#207)
 │   ├── MailRateLimitedException·AuthTokenInvalidException 429·400 예외
 │   ├── MemberLoginService        로그인 판정·로그아웃·현재 세션, local·demo·member
 │   ├── LoginAttemptThrottle      같은 이메일 15분 5회 실패 잠금
@@ -127,7 +129,11 @@ com.beone.api.auth
 - [`MailRequestThrottle`](../../backend/src/main/java/com/beone/api/auth/application/MailRequestThrottle.java)은 이메일의 SHA-256 해시로 `auth_mail_throttles` 행을 만들거나 배타 잠금을 건 뒤(`INSERT ... ON DUPLICATE KEY UPDATE`) 잠금 읽기로 마지막 접수 시각을 봅니다. 60초 안이면 남은 초로 `MailRateLimitedException`을 던지고, 아니면 시각을 바꿉니다. 처음부터 배타 잠금을 쓰므로 같은 주소의 동시 요청은 차례로 판정되고 교착이 없습니다(공유 잠금 뒤 배타 잠금으로 올리던 첫 구현은 동시 시험에서 교착 500이 났습니다).
 - [`PasswordHasher`](../../backend/src/main/java/com/beone/api/auth/application/PasswordHasher.java)는 Bouncy Castle의 Argon2 구현으로 m=19456KiB·t=2·p=1, 솔트 16바이트, 해시 32바이트의 PHC 문자열을 만듭니다. `matches`는 저장값의 파라미터로 다시 계산해 상수 시간으로 비교하며 로그인 단위(U3)가 씁니다.
 - [`FakeAuthMailSender`](../../backend/src/main/java/com/beone/api/auth/application/FakeAuthMailSender.java)는 메일을 보내지 않고 최근 100통을 메모리에만 담습니다. 로그를 남기지 않고, 테스트가 `sentMails()`로 토큰을 꺼냅니다.
-- 가짜 발송기는 `local`·`demo`·`member`에서만 등록하고 공개 프로필 `prod`에서는 등록하지 않습니다(결정 38-6, #189). 실메일 발송기(N1 결정 대기)가 없으므로 실메일 결정 전에는 `prod`가 메일 발송기 빈이 없어 기동하지 않습니다.
+- 가짜 발송기는 `local`·`demo`·`member`에서만 등록하고 공개 프로필 `prod`에서는 등록하지 않습니다(결정 38-6, #189).
+- `prod`의 메일은 [`SmtpAuthMailSender`](../../backend/src/main/java/com/beone/api/auth/application/SmtpAuthMailSender.java)가 SMTP로 보냅니다(N1, 결정 39-6, #207). [`SmtpMailConfiguration`](../../backend/src/main/java/com/beone/api/auth/application/SmtpMailConfiguration.java)이 `prod`에서만 이 발송기를 만들고, 필수 설정 6개(`spring.mail.host`·`port`·`username`·`password`, `beone.mail.from`, `beone.mail.link-base-url`) 중 하나라도 없거나 기준 주소가 `https://`가 아니면 기동을 멈춥니다. 메시지에는 키 이름만 넣습니다. 값은 환경 변수(`SPRING_MAIL_HOST`·`SPRING_MAIL_PORT`·`SPRING_MAIL_USERNAME`·`SPRING_MAIL_PASSWORD`·`BEONE_MAIL_FROM`·`BEONE_MAIL_LINK_BASE_URL`)로만 넣습니다.
+  - TLS: `application-prod.yml`이 SMTP 인증과 STARTTLS(평문 연결을 TLS로 올리는 SMTP 확장)를 필수로 켜고 연결·읽기·쓰기 시간 제한 10초(제안값)를 둡니다. 포트는 STARTTLS용을 환경 변수로 줍니다. 예시: Gmail은 호스트 `smtp.gmail.com`, 포트 `587`(문서 예시일 뿐 코드 기본값 아님). 메일 상태 확인(actuator mail health)은 확인할 때마다 SMTP에 로그인하지 않도록 `prod`에서 끕니다.
+  - 본문: 제목과 짧은 한국어 안내, 유효 시간(인증 30분·재설정 15분), 링크 한 줄의 평문입니다. 링크는 frontend의 기존 화면 계약(query 방식)을 따라 `<기준 주소>/email-verification?token=<토큰>`, `<기준 주소>/password-reset?token=<토큰>`입니다(재설정 화면은 frontend `AuthEntry`, 인증 화면은 frontend #203). 기준 주소는 요청의 Host 헤더가 아니라 설정값입니다(N2 권장안). **결정 필요(결정 28·N2 후속):** 토큰을 URL 조각(`#token=`)에 두면 서버·프록시 로그와 Referer에 실리지 않지만 frontend와 함께 바꿔야 합니다. 그 전까지 query 토큰은 공개 nginx 접근 로그에 남을 수 있으므로 LP-6 문서(`docs/deployment/public-proxy.md`)의 로그 형식에서 query를 빼는 것(`$request_uri` 대신 `$uri`)을 권장합니다.
+  - 실패: 발송 예외를 밖으로 던지지 않고 다시 보내지 않습니다. 메일은 토큰 커밋 뒤에 보내므로 응답은 기존 계약대로 같은 202이고 202는 도착을 보장하지 않습니다. 실패 로그는 목적, 마스킹한 수신자(`m***@example.com`), 예외 클래스 이름만 남기고 토큰·링크·예외 문구·앱 비밀번호는 남기지 않습니다. 발송은 요청 스레드에서 커밋 뒤 동기로 하므로 SMTP가 느리면 응답이 최대 시간 제한만큼 늦어질 수 있습니다.
 - 요청 본문은 [`MemberEmail`](../../backend/src/main/java/com/beone/api/auth/web/MemberEmail.java)(정규화 뒤 형식·254자)과 [`NewPassword`](../../backend/src/main/java/com/beone/api/auth/web/NewPassword.java)(11~32자, 영문·숫자·ASCII 특수기호 각 1개 이상, 그 밖의 문자 불가)로 검사하고, 정의하지 않은 필드는 [`UnknownFieldRejecting`](../../backend/src/main/java/com/beone/api/auth/web/UnknownFieldRejecting.java)이 400으로 만듭니다. 오류 응답과 `toString`에 비밀번호·토큰 값을 담지 않습니다.
 - 인증 부품은 `X-BeONE-Demo-User` 헤더와 `CurrentUserResolver`를 쓰지 않습니다. `user` 패키지와 의존 관계가 없습니다.
 
@@ -159,7 +165,7 @@ POST /api/v1/auth/sign-up {email, password}
       → 없음: members 행(usr-…, 미인증) → 인증 토큰 발급
       → 미인증: 비밀번호 그대로 → 이전 토큰 삭제 → 새 토큰 발급
       → 인증됨: 아무것도 하지 않음
-   → 커밋 뒤 가짜 발송기에 메일(받는 사람·목적·원문 토큰)
+   → 커밋 뒤 메일 발송기(local·demo·member는 가짜 발송기 메모리, prod는 SMTP)
 → 202 {"data":{"message":"처리 가능한 요청이면 이메일로 안내합니다."}}
 
 POST /api/v1/auth/email-verification-requests {email}
@@ -248,7 +254,7 @@ curl -i -X POST http://localhost:8080/api/v1/auth/password-resets \
 - 로그인 실패 제한은 이메일 기준이며 IP 기준은 없습니다. 없는 이메일의 잠금 상태 행(이메일 해시)도 남고, 정리 기한은 메일 제한 기록과 함께 미정입니다. 15분보다 오래된 실패 기록은 같은 이메일의 다음 실패 때 지웁니다.
 - 세션 조회는 서버 미사용 만료를 늘리지만 쿠키를 다시 심지 않습니다(사본 응답 헤더대로). 쿠키 `Max-Age`는 로그인 30일이나 마지막 POST·CSRF 조회의 값을 따릅니다.
 - 미인증 계정·만료 토큰·메일 제한 기록의 정리 기한은 미정이라 지우지 않습니다. 쓴 토큰과 재발급으로 무효가 된 토큰은 바로 지웁니다.
-- 가짜 발송기는 서버 메모리에만 메일을 두므로 로컬에서 실제로 인증을 끝까지 해 보려면 테스트를 써야 합니다. 링크 주소 형식은 미정입니다.
+- 가짜 발송기는 서버 메모리에만 메일을 두므로 로컬에서 실제로 인증을 끝까지 해 보려면 테스트를 써야 합니다. `prod` SMTP 발송기의 링크는 frontend의 query 방식 경로를 따릅니다(조각 방식 전환은 결정 필요).
 - 재설정 요청 쿠키가 그 회원의 세션이면 그 세션도 지워집니다. 응답에는 다른 인증 POST처럼 갱신 쿠키가 붙지만 서버 세션은 없으므로 다음 요청 전에 `GET /api/v1/auth/csrf`로 새 세션을 받아야 합니다.
 - `V11`·`V13`은 임시 번호입니다. `develop`에 CODEF C3의 `V12__codef_syncs.sql`(#129)이 먼저 병합돼 지금 순서는 V9 → V10 → V11 → V12 → V13입니다. 최종 번호는 관리자가 병합 직전에 확인합니다.
 - 테스트: `SessionTokensTest`·`AnonymousSessionPropertiesTest`·`AuthSessionServiceTest`·`SessionCookieTest`(단위), `AuthCsrfApiWebTest`·`AuthCsrfProfileOffWebTest`(웹 슬라이스, 테스트 전용 POST 경로로 CSRF 검사), `AuthSessionIntegrationTest`(실제 HTTP·MySQL, V9 적용·해시 저장·만료). U2: `PasswordHasherTest`(Argon2 참조 구현 시험 벡터)·`EmailAddressesTest`·`MemberIdsTest`·`MailRequestThrottleTest`·`NewPasswordTest`(단위), `MemberRegistrationApiWebTest`(웹 슬라이스), `MemberRegistrationIntegrationTest`(실제 HTTP·MySQL, V11 적용·해시만 저장·계정 존재 비공개·토큰 30분·1회용·재발급 무효·60초 합산·동시 가입·인증과 재발급 경합·악센트 주소 구분·로그에 원문 없음). U3: `MemberLoginServiceTest`·`LoginAttemptThrottleTest`와 `AuthSessionServiceTest`·`SessionCookieTest` 추가분(단위), `MemberSessionApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `MemberSessionIntegrationTest`(실제 HTTP·MySQL, V13 적용·로그인 때 세션 ID·CSRF 교체와 이전 세션 폐기(병합 조건 ④)·7일·30일·동시 5개·로그아웃은 현재 세션만·계정 존재 비공개·15분 5회 잠금과 경계·동시 실패·서로 다른 회원 동시 로그인·계정 전환 동시 로그인·로그에 원문 없음). U4: `PasswordResetApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `PasswordResetIntegrationTest`(실제 HTTP·MySQL, 해시만 저장·계정 존재 비공개(미인증 계정에도 발송)·완료 시 그 회원의 모든 세션 종료와 다른 회원 세션 유지·미인증 유지·토큰 15분·1회용(같은 토큰 동시 사용 포함)·재발급 무효·다른 목적 토큰 상호 거부(U2 이월)·60초 합산·로그인 잠금 유지·이전 비밀번호 로그인과의 동시 경합·로그에 원문 없음). G2(#157): `AuthSessionServiceTest` 추가분(업무 요청 검사: 7일 연장·30일 상한·CSRF 실패 시 갱신 없음·401이 403보다 먼저), `MemberRegistrationIntegrationTest` 추가분(인증 완료 때 장부 생성), `MemberApiNoStoreWebTest`(`member` 프로필 웹 슬라이스: 업무 경로 401·403·쿠키 재발급 200·미등록 404의 no-store), `MemberProfileIntegrationTest`(`member` 프로필 실제 HTTP·MySQL: 가입→인증→로그인→`/me`, 회원 A·B 카드 격리와 남의 카드 404, 시연 헤더 무시·시연 포트폴리오 접근 불가, 미인증·익명·만료·로그아웃 401, 업무 요청의 7일 연장·30일 상한·쿠키 재발급, CSRF 403·미저장과 401→403→400→404 순서, 동시 6번째 로그인, 미등록 업무 경로 404, 업무 응답 no-store, 남의 카드와 없는 카드의 404 본문 동일).
