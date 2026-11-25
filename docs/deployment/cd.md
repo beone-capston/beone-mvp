@@ -7,6 +7,7 @@
 - 웹 이미지 정의: [`deploy/web/Dockerfile`](../../deploy/web/Dockerfile)
 - 서버 배포 스크립트: `deploy/scripts/deploy.sh`(별도 PR, 서버에는 `/opt/beone/deploy/deploy.sh`로 설치)
 - PR CI는 별도 워크플로 `ci.yml`이다. 비밀값 없이 PR마다 돈다.
+- 켜는 순서(사전 점검 → 스테이징 → 운영 첫 승인 배포)와 단계별 확인값·되돌리기: [배포 자동화 활성화 런북](cd-activation.md)
 
 ## 용어
 
