@@ -7,6 +7,7 @@
 - **N15(보존 기간):** 정제 데이터(비밀번호·카드번호·승인번호 원문 제외)는 검증 DB에 **MVP 시연이 끝날 때까지** 보관하고, **MVP 수락 뒤 폐기**합니다(결정 39-4)
 - **실행 주체:** 서버 명령은 운영 담당(SSM), 키 입력은 사용자입니다. 에이전트는 키 값을 보지 않습니다.
 - **상태:** 문서만 있습니다. 서버 배치와 실호출은 하지 않았습니다. 서버 배치는 `beone-verify`를 정리한 뒤에만 합니다.
+- **선행 PR:** 이 런북이 참조하는 [검증 런북](../../deploy/verify/RUNBOOK.md)과 `deploy/verify/compose.yaml`은 **#206이 추가하며 아직 develop에 없습니다**(대조 기준 head `60096a0`). 참조하는 절은 0절(`V`·`APP`·`PUB` 정의, 중단 조건), 5·6절(배치·이미지 적재), 7절(T-a), 8절(터널·감시 기준), 9절(정리)입니다. #206이 병합되기 전에는 이 런북의 서버 블록을 실행하지 않습니다. #206의 절 번호나 경로가 바뀌면 이 런북도 함께 고칩니다.
 
 ## 0. 서버 명령 블록의 공통 규칙
 
@@ -130,7 +131,24 @@ echo READY_OK
 
 ### 2-2. 키와 호출 상한 입력 (K2, 승인 ⑨)
 
-1. 운영 담당이 빈 파일을 만듭니다: `sudo install -d -m 750 /opt/beone/codef && sudo install -m 600 /dev/null /opt/beone/codef/.env`
+1. 운영 담당이 아래 `env-file`로 파일을 준비합니다. **`.env`가 이미 있으면 그대로 두고**(4-1 재기동 때 창 값을 보존), 없을 때만 빈 파일(600)을 만듭니다. 기존 파일을 빈 파일로 덮어쓰지 않습니다.
+
+```bash
+# block: env-file   (있으면 보존, 없을 때만 빈 파일)
+( set -euo pipefail
+fail() { echo "중단: $*" >&2; exit 1; }
+sudo install -d -m 750 /opt/beone/codef || fail "폴더 준비 실패"
+if sudo test -e /opt/beone/codef/.env; then
+	echo "기존 .env 보존(덮어쓰지 않음)"
+else
+	sudo install -m 600 /dev/null /opt/beone/codef/.env || fail ".env 생성 실패"
+fi
+mode=$(sudo stat -c '%a %U' /opt/beone/codef/.env) || fail ".env 권한 조회 실패"
+[ "$mode" = '600 root' ] || fail ".env 권한·소유자가 600 root가 아님: $mode"
+echo ENV_FILE_OK
+)
+```
+
 2. **사용자가 직접** `sudoedit /opt/beone/codef/.env`로 다음을 입력합니다. 로컬 검증 때와 같은 키를 씁니다.
    - 검증 DB 값(`MYSQL_DATABASE`·`MYSQL_USER`·`MYSQL_PASSWORD`·`MYSQL_ROOT_PASSWORD`), 이미지 태그(`BEONE_VERIFY_API_IMAGE`·`BEONE_VERIFY_NGINX_IMAGE`)
    - 1절의 키 5개, 상품 호스트(`BEONE_CODEF_PRODUCT_HOST`, N19)
@@ -368,7 +386,7 @@ echo LOGS_OK
 
 - MVP 시연이 끝날 때까지는 검증 DB 볼륨(`beone-codef_verify-mysql-data`)에 정제 데이터만 보관합니다. 컨테이너는 멈춰 둘 수 있습니다(아래 `stop`, 볼륨 보존).
 - 보관하는 동안 CODEF 키는 `.env`에서 지울 수 있습니다. 순서는 **먼저 아래 `stop`으로 `STOP_OK`를 확인하고, 그 뒤에 키를 지웁니다.** `stop`·4-2 `destroy`는 compose 구성과 `.env`를 읽지 않는 라벨 경로라(0절), 키를 지운 뒤나 `.env`가 없어진 뒤에도 그대로 동작합니다. 정지·폐기를 위해 키를 다시 넣거나 더미 값을 넣지 않습니다.
-- 키가 없는 동안 `C`를 쓰는 블록(`up`·`ready`·`ta`·`budget`·`ledger-*`·`logs`)은 구성 로딩에서 실패합니다. 이것은 의도한 닫힘입니다(키 없이 기동하지 않음). 다시 띄울 때는 사용자가 2-2로 키를 다시 입력하고 `names` → `up` 순서로 하며, **호출 상한 세 값(특히 창)은 그대로 둡니다**(2-2의 3번). 다시 띄운 뒤 3-0 `budget`으로 창이 하나인지 확인합니다. 볼륨(카운터 포함)은 `stop`이 지우지 않습니다.
+- 키가 없는 동안 `C`를 쓰는 블록(`up`·`ready`·`ta`·`budget`·`ledger-*`·`logs`)은 구성 로딩에서 실패합니다. 이것은 의도한 닫힘입니다(키 없이 기동하지 않음). 다시 띄울 때는 2-2 `env-file`(기존 `.env` 보존)로 시작해 사용자가 키만 다시 입력하고 `names` → `up` 순서로 하며, **호출 상한 세 값(특히 창)은 그대로 둡니다**(2-2의 3번). 다시 띄운 뒤 3-0 `budget`으로 창이 하나인지 확인합니다. 볼륨(카운터 포함)은 `stop`이 지우지 않습니다.
 
 ```bash
 # block: stop   (compose 구성·.env를 읽지 않음. 키가 없어도 동작)
@@ -397,18 +415,19 @@ echo STOP_OK
 기본 방법은 **검증 DB를 통째로 지우는 것**입니다. 대상 식별이 어긋나거나 조회·삭제가 실패하면 그 자리에서 멈추고 다음 단계로 가지 않습니다.
 
 1. 연결 해제: CODEF 쪽 connectedId 정리를 요청합니다(키가 있고 backend가 떠 있어야 정리됨). 사용자 Mac 터널에서 `DELETE /api/v1/me/codef/connection`(CSRF) → 204. 4-1에서 이미 키를 지웠다면 이 단계를 위해 키를 다시 넣을지는 사용자가 정합니다(다시 넣는다면 2-2·`names`·`up`). 다시 넣지 않으면 connectedId 정리는 하지 못한 것으로 기록합니다.
-2. 아래 블록으로 검증 환경·DB·키 파일을 지우고 확인합니다. 이 블록은 compose 구성·`.env`를 읽지 않는 라벨 경로라(0절) 키가 없거나 `.env`가 없어도 동작합니다. `down -v`와 같은 범위(이 프로젝트의 컨테이너·볼륨·네트워크)를 지웁니다.
+2. 아래 블록으로 검증 환경·DB·키 파일을 지우고 확인합니다. 이 블록은 compose 구성·`.env`를 읽지 않는 라벨 경로라(0절) 키가 없거나 `.env`가 없어도 동작합니다. `down -v`와 같은 범위(이 프로젝트의 컨테이너·볼륨·네트워크)를 지웁니다. 중간 단계(볼륨·네트워크 삭제 등)에서 멈췄으면 원인을 고친 뒤 **같은 블록을 다시 실행**합니다. 컨테이너가 이미 없으면 남은 볼륨·네트워크·키 파일만 정리하고, 이미 없는 키 파일은 실패로 보지 않습니다. 운영·공개·검증 대상이 섞이거나 라벨이 맞지 않는 `beone-codef_` 볼륨이 있으면 아무것도 지우지 않고 멈춥니다.
 
 ```bash
-# block: destroy   (compose 구성·.env를 읽지 않음. 키가 없어도 동작)
+# block: destroy   (compose 구성·.env를 읽지 않음. 키가 없어도 동작. 중간에 멈췄으면 다시 실행해 남은 것만 정리)
 ( set -euo pipefail
 L='label=com.docker.compose.project=beone-codef'
 fail() { echo "중단: $*" >&2; exit 1; }
-# 1) 대상 식별: 라벨 값 정확 일치 + 이름 접두어. 운영 beone-app·공개 beone·검증 beone-verify가 하나라도 섞이면 아무것도 지우지 않는다
-rows=$(sudo docker ps -a --filter "$L" --format '{{.ID}}|{{.Names}}|{{.Label "com.docker.compose.project"}}') || fail "대상 조회 실패"
-[ -n "$rows" ] || fail "beone-codef 컨테이너가 없음(이미 정리했거나 대상 오식별). 수동 확인"
+# 1) 대상 식별: 라벨 값 정확 일치 + 이름 접두어. 운영 beone-app·공개 beone·검증 beone-verify가 하나라도 섞이면 아무것도 지우지 않는다.
+#    컨테이너가 없어도(이전 실행이 컨테이너까지 지우고 멈춘 경우) 남은 볼륨·네트워크·키 파일 정리를 계속한다
+rows=$(sudo docker ps -a --filter "$L" --format '{{.ID}}|{{.Names}}|{{.Label "com.docker.compose.project"}}') || fail "컨테이너 조회 실패(0개와 다름)"
 ids=()
 while IFS='|' read -r id name proj; do
+	[ -n "$id" ] || continue
 	[ "$proj" = beone-codef ] || fail "프로젝트 라벨이 beone-codef가 아님: $name"
 	case "$name" in beone-codef-*) ;; *) fail "beone-codef가 아닌 이름: $name" ;; esac
 	ids+=("$id")
@@ -421,6 +440,11 @@ while IFS='|' read -r name proj; do
 	case "$name" in beone-codef_*) ;; *) fail "beone-codef가 아닌 볼륨: $name" ;; esac
 	vols+=("$name")
 done <<< "$vrows"
+# 이름은 beone-codef_인데 라벨이 다르거나 없는 볼륨이 있으면 지우지 않고 멈춘다(라벨로 못 찾는 데이터를 남긴 채 키를 지우지 않기 위해)
+allv=$(sudo docker volume ls --format '{{.Name}}') || fail "볼륨 조회 실패(0개와 다름)"
+while IFS= read -r name; do
+	case "$name" in beone-codef_*) printf '%s\n' "${vols[@]:-}" | grep -qx "$name" || fail "라벨이 맞지 않는 beone-codef 볼륨: $name. 수동 확인" ;; esac
+done <<< "$allv"
 nrows=$(sudo docker network ls --filter "$L" --format '{{.Name}}|{{.Label "com.docker.compose.project"}}') || fail "네트워크 조회 실패(0개와 다름)"
 nets=()
 while IFS='|' read -r name proj; do
@@ -429,14 +453,17 @@ while IFS='|' read -r name proj; do
 	case "$name" in beone-codef_*) ;; *) fail "beone-codef가 아닌 네트워크: $name" ;; esac
 	nets+=("$name")
 done <<< "$nrows"
+echo "대상: 컨테이너 ${#ids[@]}, 볼륨 ${#vols[@]}, 네트워크 ${#nets[@]}"
 # 2) 검증 환경과 DB 통째 삭제(down -v와 같은 범위). 하나라도 실패하면 키 파일 삭제·확인으로 넘어가지 않는다
-sudo docker stop "${ids[@]}" > /dev/null || fail "stop 실패. 키 파일과 볼륨을 그대로 두고 보고한다"
-sudo docker rm "${ids[@]}" > /dev/null || fail "컨테이너 삭제 실패. 키 파일과 볼륨을 그대로 두고 보고한다"
-[ "${#vols[@]}" = 0 ] || sudo docker volume rm "${vols[@]}" > /dev/null || fail "볼륨 삭제 실패. 키 파일을 그대로 두고 보고한다"
-[ "${#nets[@]}" = 0 ] || sudo docker network rm "${nets[@]}" > /dev/null || fail "네트워크 삭제 실패. 키 파일을 그대로 두고 보고한다"
-# 3) 키 파일 삭제
-sudo rm /opt/beone/codef/.env /opt/beone/codef/compose.codef.yaml || fail "키 파일 삭제 실패"
-sudo rmdir /opt/beone/codef || fail "폴더 삭제 실패"
+if [ "${#ids[@]}" -gt 0 ]; then
+	sudo docker stop "${ids[@]}" > /dev/null || fail "stop 실패. 키 파일과 볼륨을 그대로 두고 보고한다"
+	sudo docker rm "${ids[@]}" > /dev/null || fail "컨테이너 삭제 실패. 키 파일과 볼륨을 그대로 두고 보고한다"
+fi
+if [ "${#vols[@]}" -gt 0 ]; then sudo docker volume rm "${vols[@]}" > /dev/null || fail "볼륨 삭제 실패. 키 파일을 그대로 두고 보고한다(다시 실행하면 남은 것만 정리)"; fi
+if [ "${#nets[@]}" -gt 0 ]; then sudo docker network rm "${nets[@]}" > /dev/null || fail "네트워크 삭제 실패. 키 파일을 그대로 두고 보고한다(다시 실행하면 남은 것만 정리)"; fi
+# 3) 키 파일 삭제. 이미 없는 파일은 허용하고(rm -f), 그 밖의 삭제 오류만 실패로 본다
+sudo rm -f /opt/beone/codef/.env /opt/beone/codef/compose.codef.yaml || fail "키 파일 삭제 실패"
+if sudo test -d /opt/beone/codef; then sudo rmdir /opt/beone/codef || fail "폴더 삭제 실패(다른 파일이 남았는지 확인)"; fi
 # 4) 확인. 조회 실패는 0개로 읽지 않는다
 left=$(sudo docker ps -a -q --filter "$L") || fail "컨테이너 조회 실패(0개와 다름)"
 [ -z "$left" ] || fail "beone-codef 컨테이너가 남음"

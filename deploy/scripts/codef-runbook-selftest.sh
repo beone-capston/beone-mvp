@@ -12,8 +12,12 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DOC="$ROOT/docs/deployment/codef-private-verification.md"
 # 가짜 명령과 기록만 담는 임시 폴더. 자동으로 지우지 않고 끝에 경로를 출력한다(수십 KB)
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/codef-runbook-selftest.XXXXXX")"
-mkdir -p "$WORK/bin" "$WORK/home"
+# mktemp가 실패하거나 빈 값을 주면 WORK가 비어 스텁이 /bin 아래로 써질 수 있으므로, 블록 실행 전에 멈춘다
+die() { echo "self-test 준비 실패: $*" >&2; exit 1; }
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/codef-runbook-selftest.XXXXXX")" || die "임시 폴더를 만들지 못함"
+[ -n "$WORK" ] && [ -d "$WORK" ] || die "임시 폴더 경로가 비었거나 폴더가 아님"
+case "$WORK" in /*) ;; *) die "임시 폴더 경로가 절대 경로가 아님: $WORK" ;; esac
+mkdir -p "$WORK/bin" "$WORK/home" || die "하위 폴더를 만들지 못함"
 
 # 런북에서 블록 하나를 꺼낸다
 block() {
@@ -28,7 +32,7 @@ block() {
 # compose.codef.yaml을 -f로 받으면 ${CODEF_*:?} 필수 보간을 흉내 낸다. FAKE_KEYS가 present가 아니면(empty·deleted·nofile)
 # 실제 Compose처럼 하위 명령(ps·stop·down·config 포함)에 닿기 전에 구성 로딩 실패(종료 1)로 끝난다.
 # 라벨 경로(docker ps/stop/rm/volume/network --filter label=…)는 compose 구성을 읽지 않으므로 FAKE_KEYS와 무관하다
-cat > "$WORK/bin/docker" << 'EOF'
+cat > "$WORK/bin/docker" << 'EOF' || die "docker 스텁을 쓰지 못함"
 #!/usr/bin/env bash
 log() { echo "$*" >> "$FAKE_LOG"; }
 # 프로젝트(-p)별 주입값 이름: beone-codef → codef, beone-app → app, beone → pub, beone-verify → verify
@@ -135,14 +139,23 @@ exit 0
 EOF
 
 # 가짜 sudo: docker는 가짜 docker로 넘기고, 파일 작업은 기록과 주입값만 따른다
-cat > "$WORK/bin/sudo" << 'EOF'
+cat > "$WORK/bin/sudo" << 'EOF' || die "sudo 스텁을 쓰지 못함"
 #!/usr/bin/env bash
 log() { echo "$*" >> "$FAKE_LOG"; }
 case "$1" in
 	docker) shift; exec docker "$@" ;;
-	rm) log RM; exit "${FAKE_RM_RC:-0}" ;;
+	# .env가 없을 때(FAKE_KEYS=nofile) -f 없는 rm은 실제처럼 실패한다
+	rm) log RM; case " $* " in *" -f "*) ;; *) [ "${FAKE_KEYS:-present}" = nofile ] && exit 1 ;; esac; exit "${FAKE_RM_RC:-0}" ;;
 	rmdir) log RMDIR; exit 0 ;;
-	test) case "$*" in *compose.yaml*) exit "${FAKE_COMPOSE_RC:-0}" ;; *) exit "${FAKE_DIR_LEFT_RC:-1}" ;; esac ;;
+	install) case "$*" in *codef/.env*) log INSTALL_ENV; exit "${FAKE_INSTALL_RC:-0}" ;; *) exit "${FAKE_INSTALL_DIR_RC:-0}" ;; esac ;;
+	stat) [ "${FAKE_STAT_RC:-0}" = 0 ] || exit "$FAKE_STAT_RC"; echo "${FAKE_STAT-600 root}"; exit 0 ;;
+	test)
+		case "$*" in
+			*compose.yaml*) exit "${FAKE_COMPOSE_RC:-0}" ;;
+			*codef/.env*) exit "${FAKE_ENVFILE_RC:-1}" ;;          # 기본: .env 없음
+			"test -d /opt/beone/codef") exit "${FAKE_DIR_RC:-0}" ;;  # 삭제 전 폴더 있음
+			*) exit "${FAKE_DIR_LEFT_RC:-1}" ;;                     # 삭제 뒤 남았는지
+		esac ;;
 	awk)
 		[ "${FAKE_ENV_RC:-0}" = 0 ] || exit "$FAKE_ENV_RC"
 		case "$*" in
@@ -156,24 +169,24 @@ exit 0
 EOF
 
 # 가짜 free·df·sleep. sleep은 FAKE_SLEEP_MAX(기본 1)번까지만 성공해 감시 루프를 끝낸다
-cat > "$WORK/bin/free" << 'EOF'
+cat > "$WORK/bin/free" << 'EOF' || die "free 스텁을 쓰지 못함"
 #!/usr/bin/env bash
 [ "${FAKE_FREE_RC:-0}" = 0 ] || exit "$FAKE_FREE_RC"
 echo "              total        used        free      shared  buff/cache   available"
 echo "Mem:           3800        1500         300          10        2000        ${FAKE_MEM-2000}"
 EOF
-cat > "$WORK/bin/df" << 'EOF'
+cat > "$WORK/bin/df" << 'EOF' || die "df 스텁을 쓰지 못함"
 #!/usr/bin/env bash
 echo "Filesystem 1024-blocks Used Available Capacity Mounted"
 echo "/dev/root 100 40 60 ${FAKE_DISK:-40}% /"
 EOF
-cat > "$WORK/bin/sleep" << 'EOF'
+cat > "$WORK/bin/sleep" << 'EOF' || die "sleep 스텁을 쓰지 못함"
 #!/usr/bin/env bash
 n=$(( $(cat "$FAKE_SLEEP_COUNT" 2> /dev/null || echo 0) + 1 ))
 echo "$n" > "$FAKE_SLEEP_COUNT"
 [ "$n" -le "${FAKE_SLEEP_MAX:-1}" ]
 EOF
-chmod +x "$WORK/bin/docker" "$WORK/bin/sudo" "$WORK/bin/free" "$WORK/bin/df" "$WORK/bin/sleep"
+chmod +x "$WORK/bin/docker" "$WORK/bin/sudo" "$WORK/bin/free" "$WORK/bin/df" "$WORK/bin/sleep" || die "스텁 실행 권한을 주지 못함"
 
 ALL_NAMES='MYSQL_DATABASE\nMYSQL_USER\nMYSQL_PASSWORD\nMYSQL_ROOT_PASSWORD\nBEONE_VERIFY_API_IMAGE\nBEONE_VERIFY_NGINX_IMAGE\nCODEF_CLIENT_ID\nCODEF_CLIENT_SECRET\nCODEF_PUBLIC_KEY\nBEONE_CODEF_CONNECTED_ID_KEY\nBEONE_CODEF_APPROVAL_HMAC_KEY\nBEONE_CODEF_PRODUCT_HOST\nBEONE_CODEF_BUDGET_PER_API\nBEONE_CODEF_BUDGET_WINDOW_START\nBEONE_CODEF_BUDGET_WINDOW_END\n'
 NO_BUDGET_NAMES='MYSQL_DATABASE\nMYSQL_USER\nMYSQL_PASSWORD\nMYSQL_ROOT_PASSWORD\nBEONE_VERIFY_API_IMAGE\nBEONE_VERIFY_NGINX_IMAGE\nCODEF_CLIENT_ID\nCODEF_CLIENT_SECRET\nCODEF_PUBLIC_KEY\nBEONE_CODEF_CONNECTED_ID_KEY\nBEONE_CODEF_APPROVAL_HMAC_KEY\nBEONE_CODEF_PRODUCT_HOST\n'
@@ -232,6 +245,12 @@ run ready "inspect 결과 일부 빠짐" 1 - FAKE_ST_ID=a1 FAKE_ST=
 run ready "가용 메모리 부족" 1 - FAKE_MEM=500
 run ready "메모리 조회 실패" 1 - FAKE_FREE_RC=1
 run ready "키 삭제(구성 로딩 실패)" 1 - FAKE_KEYS=deleted
+REQUIRE=INSTALL_ENV run env-file ".env 없음 → 빈 파일 생성" 0 -
+run env-file ".env 있음 → 보존(덮어쓰지 않음)" 0 INSTALL_ENV FAKE_ENVFILE_RC=0
+run env-file "권한 다름" 1 - FAKE_ENVFILE_RC=0 FAKE_STAT='644 root'
+run env-file "권한 조회 실패" 1 - FAKE_STAT_RC=1
+run env-file ".env 생성 실패" 1 - FAKE_INSTALL_RC=1
+run env-file "폴더 준비 실패" 1 INSTALL_ENV FAKE_INSTALL_DIR_RC=1
 run names "이름·값 모두 있음" 0 -
 run names "호출 상한 키 3개 없음" 1 - FAKE_ENV_NAMES="$NO_BUDGET_NAMES"
 run names "빈 값 있음" 1 - FAKE_ENV_EMPTY='CODEF_PUBLIC_KEY\n'
@@ -288,11 +307,15 @@ run stop "정지 확인 조회 실패" 1 - FAKE_LRUN_RC=1
 REQUIRE=DVRM run destroy "정상(키 있음)" 0 DOWN,COMPOSE_LOAD_FAIL
 REQUIRE=DVRM run destroy "키 빈 값" 0 DOWN,COMPOSE_LOAD_FAIL FAKE_KEYS=empty
 REQUIRE=DVRM run destroy "키 삭제" 0 DOWN,COMPOSE_LOAD_FAIL FAKE_KEYS=deleted
-REQUIRE=DVRM run destroy ".env 없음" 0 DOWN,COMPOSE_LOAD_FAIL FAKE_KEYS=nofile
+REQUIRE=RM run destroy ".env 없음(키 파일 없음 허용, DESTROY_OK)" 0 DOWN,COMPOSE_LOAD_FAIL FAKE_KEYS=nofile
 run destroy "운영 라벨 행 섞임(오식별)" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LPS='c1|beone-codef-verify-mysql-1|beone-codef\na1|beone-app-backend-1|beone-app\n'
 run destroy "검증 이름 섞임(오식별)" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LPS='v1|beone-verify-verify-backend-1|beone-codef\n'
 run destroy "대상 조회 실패" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LPS_RC=1
-run destroy "대상 없음" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LPS=''
+REQUIRE=DVRM run destroy "부분 폐기 뒤 재실행(컨테이너 없음, 볼륨·네트워크 남음)" 0 DSTOP,DRM FAKE_LPS=''
+REQUIRE=DNRM run destroy "부분 폐기 뒤 재실행(볼륨까지 지움, 네트워크 남음)" 0 DSTOP,DRM,DVRM FAKE_LPS='' FAKE_LVOLS=''
+REQUIRE=RM run destroy "모두 정리된 뒤 재실행(키 파일·폴더도 없음)" 0 DSTOP,DRM,DVRM,DNRM,RMDIR FAKE_LPS='' FAKE_LVOLS='' FAKE_LNETS='' FAKE_KEYS=nofile FAKE_DIR_RC=1
+run destroy "컨테이너 없음 + 운영 볼륨 섞임" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LPS='' FAKE_LVOLS='beone-app_mysql-data|beone-app\n'
+run destroy "라벨 없는 beone-codef 볼륨(지우지 않고 멈춤)" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_VOLS='beone-codef_orphan\nbeone-app_mysql-data\n'
 run destroy "운영 볼륨 섞임" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LVOLS='beone-codef_verify-mysql-data|beone-codef\nbeone-app_mysql-data|beone-app\n'
 run destroy "볼륨 라벨 조회 실패" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LVOL_RC=1
 run destroy "공개 네트워크 섞임" 1 DSTOP,DRM,DVRM,DNRM,RM FAKE_LNETS='beone_default|beone\n'
@@ -306,6 +329,21 @@ run destroy "삭제 뒤 컨테이너 남음" 1 - FAKE_LPS_AFTER='c1\n'
 run destroy "확인 볼륨 조회 실패" 1 - FAKE_VOL_RC=1
 run destroy "볼륨 남음" 1 - FAKE_VOLS='beone-codef_verify-mysql-data\n'
 run destroy "폴더 남음" 1 - FAKE_DIR_LEFT_RC=0
+
+# 준비 단계 실패: 가짜 mktemp가 실패하거나 빈 값을 주면 스텁을 쓰기 전에 종료 1로 멈춰야 한다
+mkdir -p "$WORK/mk-fail" "$WORK/mk-empty" || die "mktemp 사례 폴더를 만들지 못함"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$WORK/mk-fail/mktemp" && printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK/mk-empty/mktemp" \
+	&& chmod +x "$WORK/mk-fail/mktemp" "$WORK/mk-empty/mktemp" || die "가짜 mktemp를 쓰지 못함"
+for mk in mk-fail mk-empty; do
+	PATH="$WORK/$mk:$PATH" bash "$0" > "$WORK/$mk/out" 2>&1
+	rc=$?
+	# 스텁 쓰기 가드(뒤 단계)로 멈춘 것이 아니라 임시 폴더 가드에서 멈췄는지 문구로 확인한다
+	if [ "$rc" = 1 ] && grep -q 'self-test 준비 실패: 임시 폴더' "$WORK/$mk/out" && ! grep -q '^| ' "$WORK/$mk/out"; then
+		echo "| (준비) | mktemp ${mk#mk-}: 블록 실행 전 종료 | 1 | $rc | 스텁 쓰기·블록 실행 | PASS |"
+	else
+		echo "| (준비) | mktemp ${mk#mk-}: 블록 실행 전 종료 | 1 | $rc | 스텁 쓰기·블록 실행 | FAIL |"; failures=$((failures + 1))
+	fi
+done
 
 echo
 echo "임시 폴더: $WORK"
