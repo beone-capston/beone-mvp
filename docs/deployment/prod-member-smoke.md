@@ -91,6 +91,10 @@ B도 "토큰을 출력·로그·문서에 남기지 않는다"는 조건은 지�
 
 ## 4. 단계 (사용자 Mac)
 
+> **실행 검증 상태:** 4-0, M0~M8, 4-2, 4-3, "끝" 블록은 **운영에서 실행 검증되지 않았습니다.** 실행 전에 합성 로컬 검증이 필요합니다(운영 서버와 실제 메일은 쓰지 않음).
+> - 작성자가 한 합성 시험: 로컬 가짜 HTTP 서버로 성공·CSRF 실패·네트워크 오류 경로를 돌렸습니다(8절). 시험 출처와 HEAD는 8절에 적었습니다.
+> - 8절의 미검증 범위는 실행 전에 Aside나 사용자가 같은 방식으로 다시 확인합니다.
+
 ### 4-0. 준비
 
 zsh의 `read` 옵션은 bash와 다릅니다. 그래서 새 bash를 열고 그 안에서 아래 블록들을 차례로 붙여 넣습니다. 블록끼리 변수를 공유하므로 **같은 bash 창**을 끝까지 씁니다.
@@ -108,16 +112,20 @@ req() {   # req <메서드> <경로> [-] : '-'이면 표준 입력을 JSON 본�
 	local a=(-s -o "$W/body" -D "$W/head" -w '%{http_code}' -X "$1" --max-time 30 -c "$W/jar" -b "$W/jar")
 	[ "${3:-}" = - ] && a+=(-H 'Content-Type: application/json' --data-binary @-)
 	[ -s "$W/csrf" ] && a+=(-H @"$W/csrf")
-	curl "${a[@]}" "$B$2" || echo 000
+	rm -f "$W/body" "$W/head"   # 이전 응답이 남아 다음 판정에 섞이지 않게 한다
+	local c; c=$(curl "${a[@]}" "$B$2") || c=000   # 연결 실패면 000 하나만 출력한다
+	echo "${c:-000}"
 }
 csrf() {  # 현재 쿠키의 CSRF 토큰을 헤더 파일로 만든다. 토큰은 출력하지 않는다
 	rm -f "$W/csrf"
-	[ "$(req GET /api/v1/auth/csrf)" = 200 ] || { echo "CSRF 발급 실패"; return 1; }
-	local t; t=$(jq -r '.data.token // empty' "$W/body")
-	[ -n "$t" ] && printf 'X-CSRF-TOKEN: %s\n' "$t" > "$W/csrf"
+	local st; st=$(req GET /api/v1/auth/csrf)
+	[ "$st" = 200 ] || { echo "CSRF 발급 실패(상태 $st)" >&2; return 1; }
+	local t; t=$(jq -r '.data.token // empty' "$W/body" 2> /dev/null)
+	[ -n "$t" ] || { echo "CSRF 토큰 없음" >&2; return 1; }
+	printf 'X-CSRF-TOKEN: %s\n' "$t" > "$W/csrf"
 }
 code() { jq -r '.code // empty' "$W/body" 2> /dev/null; }
-cookies() { grep -i '^set-cookie:' "$W/head" | tr -d '\r' | sed -E 's/^[^:]*: *//; s/^([^=;]*)=[^;]*/\1=<값>/'; }
+cookies() { grep -i '^set-cookie:' "$W/head" 2> /dev/null | tr -d '\r' | sed -E 's/^[^:]*: *//; s/^([^=;]*)=[^;]*/\1=<값>/'; }
 cred() { EM="$EM" PW="$PW" jq -n '{email: env.EM, password: env.PW}'; }   # 값은 jq 환경 변수로만 넘긴다
 read -r -p '테스트 메일 주소(소문자, 표시됨·기록 안 함): ' EM
 read -rs -p '비밀번호(표시 안 됨): ' PW; echo
@@ -132,16 +140,19 @@ read -rs -p '비밀번호(표시 안 됨): ' PW; echo
 
 표 안의 `\|`는 Markdown 표 때문에 넣은 것입니다. 원문 파일에서 복사할 때는 `|`로 바꿔 입력합니다(GitHub 화면에서 복사하면 이미 `|`입니다).
 
+- 상태 칸이 `000`이면 네트워크 오류입니다(연결 실패·시간 초과). 해당 단계의 "실패 시" 대신 중단 기준을 따릅니다.
+- 상태 칸이 `중단`이고 그 앞에 `CSRF 발급 실패(상태 …)`나 `CSRF 토큰 없음`이 나오면, 요청은 보내지 않은 것입니다. CSRF 발급 단계에서 멈춘 것이므로 같은 명령을 1회만 다시 하고, 다시 실패하면 중단합니다.
+
 | # | 명령(같은 bash 창) | 확인값 | 실패 시 |
 |---|---|---|---|
 | M0 | `rm -f "$W/csrf"; s=$(req GET /api/v1/me); echo "$s $(code)"` | `401 UNAUTHENTICATED` | 공개 스모크(B7) 상태부터 다시 봄. 중단 |
-| M1 | `csrf && s=$(cred \| req POST /api/v1/auth/sign-up -); echo "$s $(code)"` | `202`(코드 없음). 메일 1통 발송 | `429 RATE_LIMITED`: 같은 주소의 60초 안 재요청. `grep -i retry-after "$W/head"`의 초만큼 기다린 뒤 1회만 다시. `400 INVALID_REQUEST`: 주소 형식이나 비밀번호 규칙. 4-0부터 다시. `403 CSRF_INVALID`: 같은 명령 1회 다시. 5xx·`000`: 중단 |
-| M2 | `csrf && s=$(cred \| req POST /api/v1/auth/login -); echo "$s $(code)"` | `403 EMAIL_NOT_VERIFIED`(실패 횟수에 세지 않음, [`MemberLoginService`](../../backend/src/main/java/com/beone/api/auth/application/MemberLoginService.java)) | `200`: 이미 인증된 계정이 있었음. 메일이 가지 않으니 M7로 로그아웃하고 중단. 6절로 정리할지 정함. `401 INVALID_CREDENTIALS`: 이미 있던 미인증 계정의 비밀번호가 다름. 가입 요청은 기존 비밀번호를 바꾸지 않음. 중단하고 6절 |
+| M1 | `s=; csrf && s=$(cred \| req POST /api/v1/auth/sign-up -); echo "${s:-중단} $(code)"` | `202`(코드 없음). 메일 1통 발송 | `429 RATE_LIMITED`: 같은 주소의 60초 안 재요청. `grep -i retry-after "$W/head"`의 초만큼 기다린 뒤 1회만 다시. `400 INVALID_REQUEST`: 주소 형식이나 비밀번호 규칙. 4-0부터 다시. `403 CSRF_INVALID`: 같은 명령 1회 다시. 5xx·`000`: 중단 |
+| M2 | `s=; csrf && s=$(cred \| req POST /api/v1/auth/login -); echo "${s:-중단} $(code)"` | `403 EMAIL_NOT_VERIFIED`(실패 횟수에 세지 않음, [`MemberLoginService`](../../backend/src/main/java/com/beone/api/auth/application/MemberLoginService.java)) | `200`: 이미 인증된 계정이 있었음. 메일이 가지 않으니 M7로 로그아웃하고 중단. 6절로 정리할지 정함. `401 INVALID_CREDENTIALS`: 이미 있던 미인증 계정의 비밀번호가 다름. 가입 요청은 기존 비밀번호를 바꾸지 않음. 중단하고 6절 |
 | M3 | 메일함 확인(아래 4-2) | 30분 안에 제목 `[BeONE] 이메일 인증을 완료해 주세요` 메일 수신 | 4-2 |
 | M4 | 1-3절에서 정한 방식으로 인증(아래 4-3) | `204` | `400 AUTH_TOKEN_INVALID`: 만료(30분), 이미 사용, 또는 재요청으로 바뀐 이전 토큰. 재요청은 4-2의 1회 한도 안에서만. 그 뒤에도 실패하면 중단하고 6절 |
-| M5 | `csrf && s=$(cred \| req POST /api/v1/auth/login -); echo "$s $(code) userId=$(jq -r '.data.userId // empty \| startswith("usr-")' "$W/body")"; cookies` | `200  userId=true`. 쿠키 줄은 `__Host-BEONE_SESSION=<값>; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax` 하나이고 `Domain` 없음 | `401`: 비밀번호를 잘못 입력함. `read -rs -p '비밀번호: ' PW; echo`로 다시 입력한 뒤 다시. 15분 동안 실패 5번이면 15분 잠금이므로 2번까지만. `429`: 잠김. 중단하고 6절. `403 EMAIL_NOT_VERIFIED`: M4가 끝나지 않음 |
-| M6 | `s=$(req GET /api/v1/me); echo "$s"; jq -c '.data' "$W/body"` | `200`과 `{"demoUser":null,"displayName":"내 카드","portfolioType":"REAL","readOnly":false,"cardCount":0,"codefConnected":false}`. 회원 장부는 인증할 때 만들어짐([`MemberUserService`](../../backend/src/main/java/com/beone/api/user/application/MemberUserService.java)) | `401`: M5 쿠키가 저장되지 않음. M5부터 1회 다시. 값이 다르거나 5xx: M7로 로그아웃하고 중단, Aside가 backend 로그 확인 |
-| M7 | `csrf && s=$(req POST /api/v1/auth/logout); echo "$s"; cookies` | `204`, 쿠키 줄에 `Max-Age=0` | 1회 다시. 그래도 실패하면 세션 행이 남으므로 6절에서 함께 지움 |
+| M5 | `s=; csrf && s=$(cred \| req POST /api/v1/auth/login -); echo "${s:-중단} $(code) userId=$(jq -r '.data.userId // empty \| startswith("usr-")' "$W/body" 2> /dev/null)"; cookies` | `200  userId=true`. 쿠키 줄은 `__Host-BEONE_SESSION=<값>; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax` 하나이고 `Domain` 없음 | `401`: 비밀번호를 잘못 입력함. `read -rs -p '비밀번호: ' PW; echo`로 다시 입력한 뒤 다시. 15분 동안 실패 5번이면 15분 잠금이므로 2번까지만. `429`: 잠김. 중단하고 6절. `403 EMAIL_NOT_VERIFIED`: M4가 끝나지 않음 |
+| M6 | `s=$(req GET /api/v1/me); echo "$s"; jq -c '.data' "$W/body" 2> /dev/null` | `200`과 `{"demoUser":null,"displayName":"내 카드","portfolioType":"REAL","readOnly":false,"cardCount":0,"codefConnected":false}`. 회원 장부는 인증할 때 만들어짐([`MemberUserService`](../../backend/src/main/java/com/beone/api/user/application/MemberUserService.java)) | `401`: M5 쿠키가 저장되지 않음. M5부터 1회 다시. 값이 다르거나 5xx: M7로 로그아웃하고 중단, Aside가 backend 로그 확인 |
+| M7 | `s=; csrf && s=$(req POST /api/v1/auth/logout); echo "${s:-중단}"; cookies` | `204`, 쿠키 줄에 `Max-Age=0` | 1회 다시. 그래도 실패하면 세션 행이 남으므로 6절에서 함께 지움 |
 | M8 | `rm -f "$W/csrf"; s=$(req GET /api/v1/me); echo "$s $(code)"` | `401 UNAUTHENTICATED` | `200`: 로그아웃이 세션을 지우지 못함. 기록하고 Aside에게 알림 |
 | 끝 | `unset PW EM; exit` | bash가 닫히고 `$W`(쿠키 파일)가 지워짐 | 창을 닫아도 됨. 임시 폴더가 남았으면 그 안의 파일 4개와 폴더를 지움 |
 
@@ -150,18 +161,28 @@ read -rs -p '비밀번호(표시 안 됨): ' PW; echo
 - 받은편지함과 스팸함을 봅니다. 보낸 사람은 운영 `BEONE_MAIL_FROM` 주소이고, 본문의 링크는 `https://beonepay.site/email-verification?token=…` 형식입니다.
 - 링크를 **클릭하지 않습니다.** 방식 A는 화면이 생긴 뒤에만 엽니다. 방식 B는 메일 앱의 "링크 복사"만 씁니다.
 - **10분이 지나도 안 오면**
-  - Aside가 서버에서 발송 실패 건수만 확인합니다. 로그에는 가린 주소만 있으며, 줄 내용은 옮기지 않습니다.
+  - Aside가 서버에서 발송 실패 건수만 확인합니다. 로그에는 가린 주소만 있습니다. 로그 원문은 출력하거나 남기지 않고, 건수만 출력합니다.
+    - 로그는 권한 600의 임시 파일에 받습니다. 같은 블록이 끝날 때 지웁니다.
+    - 로그 조회가 실패하면 건수를 내지 않고 `조회 실패: 중단`을 출력합니다. 그래서 조회 실패가 "0건"으로 보이지 않습니다.
 
     ```bash
-    sudo docker compose -f /opt/beone/app/compose.yaml -p beone-app --env-file /opt/beone/app/.env logs --since 30m backend | grep -c 'auth mail send failed'
+    ( set -uo pipefail; umask 077
+      APP() { sudo docker compose -f /opt/beone/app/compose.yaml -p beone-app --env-file /opt/beone/app/.env "$@"; }
+      L=$(mktemp) && [ -f "$L" ] || { echo "MAIL_LOG 임시 파일 실패: 중단"; exit 1; }
+      trap 'rm -f "$L"' EXIT
+      APP logs --since 30m --no-color backend > "$L" || { echo "MAIL_LOG 조회 실패: 중단"; exit 1; }
+      n=$(awk '/auth mail send failed/ {c++} END {print c + 0}' "$L") || { echo "MAIL_LOG 집계 실패: 중단"; exit 1; }
+      echo "MAIL_LOG 발송 실패 건수: $n"
+    ); echo "종료 $?"
     ```
 
-  - `0`이면 전송은 됐을 수 있습니다. 메일함을 5분 더 봅니다.
-  - 1 이상이면 SMTP 문제입니다(결정 39-6 설정). 재요청하지 않고 중단합니다.
+  - `MAIL_LOG 발송 실패 건수: 0`과 `종료 0`이면 전송은 됐을 수 있습니다. 메일함을 5분 더 봅니다.
+  - 건수가 1 이상이면 SMTP 문제입니다(결정 39-6 설정). 재요청하지 않고 중단합니다.
+  - `조회 실패`·`임시 파일 실패`·`집계 실패`와 `종료 1`이 나오면 발송 여부를 판단할 수 없습니다. 재요청하지 않고 중단합니다. 표준 오류에는 compose의 오류 메시지만 나오고 로그 원문은 나오지 않습니다.
 - **재요청은 1회만** 합니다. 가입 뒤 60초가 지나야 합니다.
 
   ```bash
-  csrf && s=$(EM="$EM" jq -n '{email: env.EM}' | req POST /api/v1/auth/email-verification-requests -); echo "$s $(code)"
+  s=; csrf && s=$(EM="$EM" jq -n '{email: env.EM}' | req POST /api/v1/auth/email-verification-requests -); echo "${s:-중단} $(code)"
   ```
 
   확인값은 `202`입니다. 이전 토큰은 무효가 되므로 새 메일의 링크만 씁니다. 그래도 안 오면 중단하고 6절로 갑니다.
@@ -180,7 +201,7 @@ read -rs -p '인증 링크 전체를 붙여 넣기(표시 안 됨): ' LK; echo
 TK=${LK##*token=}; TK=${TK%%[&#]*}; unset LK
 pbcopy < /dev/null   # 클립보드를 비운다
 case "$TK" in *[!A-Za-z0-9_-]*|'') ok=0 ;; *) [ ${#TK} -eq 43 ] && ok=1 || ok=0 ;; esac
-if [ "$ok" = 1 ]; then csrf && s=$(TK="$TK" jq -n '{token: env.TK}' | req POST /api/v1/auth/email-verifications -); echo "$s $(code)"
+if [ "$ok" = 1 ]; then s=; csrf && s=$(TK="$TK" jq -n '{token: env.TK}' | req POST /api/v1/auth/email-verifications -); echo "${s:-중단} $(code)"
 else echo "토큰 형식이 아님(43자 Base64URL). 링크 복사부터 다시"; fi
 unset TK ok
 ```
