@@ -68,6 +68,17 @@ public interface UserCardRepository extends JpaRepository<UserCardEntity, Long> 
 			String cardProductId, MappingStatus mappingStatus, Long userCardId);
 
 	/**
+	 * 이 사용자에게 이 상품을 후보로 가진 해제하지 않은 {@code CANDIDATE} 카드가 있는지. CODEF 후보를 상품당 1장으로 제한하는 데
+	 * 쓴다(#268).
+	 * @param userId 사용자 ID
+	 * @param candidateCardProductId 후보 상품 ID
+	 * @param mappingStatus 매핑 상태({@code CANDIDATE})
+	 * @return 있으면 {@code true}
+	 */
+	boolean existsByUserIdAndCandidateCardProductIdAndMappingStatusAndReleasedAtIsNull(Long userId,
+			String candidateCardProductId, MappingStatus mappingStatus);
+
+	/**
 	 * 이 사용자의 해제하지 않은 카드 수.
 	 * @param userId 사용자 ID
 	 * @return 해제하지 않은 카드 수

@@ -232,7 +232,7 @@ X-BeONE-Demo-User: MY_CARDS
   - 다른 서비스를 선택했거나 `serviceSelectionStatus=NONE`: `NOT_APPLICABLE_SELECTION`
   - 그 밖의 경우(`UNKNOWN`, 업종 미확정, 적용일 없음, 선택 서비스가 그 거래에 적용됨): `NEEDS_CONFIRMATION`
 - `excludedCards[].reason` · 카드 사유 우선순위(D-18 K3): `RULE_UNAVAILABLE` > `MAPPING_UNCONFIRMED` > `NEEDS_CONFIRMATION` > `UNSUPPORTED`. 사용자가 4종이 아니라고 지정한 카드는 `NO_SUPPORTED_RULE`, 사용자가 추천에서 뺀 카드는 `USER_EXCLUDED`. 이 값은 K3 순서에 넣지 않고 "사용자 제외"로 따로 표시한다(D-19)
-- `excludedCards[].candidateCardProductId` · `MAPPING_UNCONFIRMED`일 때 확인할 수 있는 후보(D-15)
+- `excludedCards[].candidateCardProductId` · **현재 항상 `null`.** 보유 카드가 CODEF 후보(`CANDIDATE`)여도 추천 응답에는 후보를 표시하지 않는다(2026-11-26 사용자 결정, #268). 추천은 `USER_CONFIRMED` 매핑(과 가상 포트폴리오 카드)만 계산에 쓰고, 후보 확인은 보유 카드 화면(`GET /api/v1/me/cards`의 `mapping.candidateCardProductId`)에서 한다. 필드는 그대로 둔다
 - `excludedCards[].applicationStatus` · String|null · 계산한 카드의 상태. `RULE_UNAVAILABLE`이면 `RULE_EXPIRED` / `NO_VERIFIED_RULE`, `NEEDS_CONFIRMATION`·`UNSUPPORTED`이면 `NEEDS_CONFIRMATION`, 계산하지 않은 카드(`USER_EXCLUDED`·`MAPPING_UNCONFIRMED`·`NO_SUPPORTED_RULE`)는 `null`
 - `excludedCards[].appliedRule` · Object|null · 규칙으로 계산했지만 금액이 미확정인 카드(`NEEDS_CONFIRMATION`·`UNSUPPORTED`)의 규칙. 형식은 `comparedCards[].appliedRule`과 같고 그 밖에는 `null`
 - `excludedCards[].pendingReasons[]` · 금액을 확정하지 못한 사유. 형식은 `comparedCards[].pendingReasons[]`와 같다

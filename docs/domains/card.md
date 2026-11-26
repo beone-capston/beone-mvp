@@ -163,7 +163,7 @@ POST /api/v1/me/cards {"displayName":"청춘대로 톡톡","cardProductId":"0917
 | 같은 카드 재확인 | 자기 자신은 중복이 아님. 200이고 확인 시각만 바뀜 | A2-8 |
 | 표시 이름 | 앞뒤 공백을 뗀 뒤 1~30자(유니코드 문자 기준). 공백만이면 400 | A2-9, 계약 |
 | 알 수 없는 필드 | 400 `INVALID_REQUEST`, `errors: []`(역직렬화 실패와 같은 모양). 공유 Jackson 설정을 바꾸지 않고 요청 DTO에만 적용 | A2-9, D-14 ⑨ |
-| CODEF 후보 열 | `candidate_card_product_id`(Flyway V16). `candidateCardProductId`는 `CANDIDATE`일 때만 값이 있고, 사용자가 매핑을 바꾸면 지움. `candidateBasis`는 저장하지 않아 항상 `null` | A2-10, #268 |
+| CODEF 후보 열 | `candidate_card_product_id`(Flyway V16). `candidateCardProductId`는 `CANDIDATE`일 때만 값이 있고, 사용자가 매핑을 바꾸면 지움. `candidateBasis`는 현재 미사용(저장하지 않음, 항상 `null`) | A2-10, #268, 2026-11-26 사용자 결정 |
 | 사용자 매핑 변경 표시 | `mapping_changed_by_user`(V16, 응답에 없음). 매핑 변경 API를 한 번이라도 부르면 `true`. 재동기화는 이 카드에 후보를 다시 두지 않음. V16 전 변경 이력은 알 수 없어 기존 행은 `false` | #268 |
 | `codefConnected` | CODEF 연결 행이 있으면 `true`(`RECONNECT_REQUIRED` 포함), 없으면·가상 포트폴리오는 `false`. card는 codef를 직접 참조하지 않고 조회 포트 [`CodefConnectionLookup`](../../backend/src/main/java/com/beone/api/card/application/CodefConnectionLookup.java)을 부르며 구현은 codef의 `CodefConnectionStatusLookup`이다(구현 빈이 없으면 `false`) | 계약, #136 |
 
@@ -182,8 +182,8 @@ POST /api/v1/me/cards {"displayName":"청춘대로 톡톡","cardProductId":"0917
 ### 아직 하지 않는 것(한계)
 
 - **추천 무효화 목록(#120)**: 무효화 자체는 추천 조회 때의 지연 판정이 합니다. 보유 카드 응답의 목록은 recommendation이 card를 읽으므로 순환을 피하려고 조회 포트 [`RecommendationInvalidationLookup`](../../backend/src/main/java/com/beone/api/card/application/RecommendationInvalidationLookup.java)을 card에 두고 구현은 recommendation의 `RecommendationLinks`가 합니다. `UserCardService`는 변경 저장 전에 `validUsing`(이 카드를 근거로 쓰고 지금 유효한 추천)을, 저장 뒤 `invalidatedByMapping`(그중 이제 `MAPPING_CHANGED`인 추천)을 같은 트랜잭션에서 부릅니다. 이미 무효였던 추천(승인된 주문, 다른 카드·월간 상태 변경)은 담지 않으므로, 제외했다가 되돌리면 되돌린 응답은 `[]`입니다. 포트는 부를 때 찾고 구현 빈이 없으면 `[]`입니다. 카드 해제(`DELETE`)는 응답 본문이 없어 목록을 돌려주지 않습니다.
-- **CODEF(2차)**: `CODEF` 출처 카드는 [CODEF 동기화](codef.md#codef-조회동기화-api-129)(#129)가 `UserCardService.registerCodefCard`(`UserCardEntity.codef`, 후보가 있으면 `CANDIDATE`·없으면 `UNMAPPED`, 확정 상품 없음, 호출자 트랜잭션 필수)로만 만듭니다. 이 사용자에게 그 상품의 `USER_CONFIRMED` 카드가 있으면 후보를 두지 않습니다(확인 시 409 회피). 재동기화로 다시 대조된 기존 카드는 `proposeCodefCandidate`가 `UNMAPPED`·후보 없음·사용자 변경 없음일 때만 후보를 둡니다. 사용자는 `CODEF_CANDIDATE`로 후보를 확인하거나 수동 카드와 같은 매핑 변경으로 다른 상품을 고릅니다. 동기화 저장 전 잠금은 `lockHeldCardsForCodefSync`(모의 승인과 같은 ID 오름차순 잠금, CODEF 카드 ID 반환)입니다.
-- **추천의 후보 표시**: 추천 입력(`EngineInputAssembler`)은 아직 후보 상품을 넘기지 않아, 추천 응답 `excludedCards[].candidateCardProductId`는 `null`입니다(#268 범위 밖).
+- **CODEF(2차)**: `CODEF` 출처 카드는 [CODEF 동기화](codef.md#codef-조회동기화-api-129)(#129)가 `UserCardService.registerCodefCard`(`UserCardEntity.codef`, 후보가 있으면 `CANDIDATE`·없으면 `UNMAPPED`, 확정 상품 없음, 호출자 트랜잭션 필수)로만 만듭니다. 후보는 상품당 1장입니다. 이 사용자에게 그 상품의 해제하지 않은 `USER_CONFIRMED` 카드나 그 상품이 후보인 `CANDIDATE` 카드가 있으면 후보를 두지 않습니다(확인 시 409 회피). 한 동기화 안에서는 앞 카드의 후보가 `saveAndFlush`로 같은 트랜잭션에 기록된 뒤 다음 카드의 존재 조회가 그것을 보므로, 응답 순서로 먼저 처리한 카드만 후보가 됩니다. 재동기화로 다시 대조된 기존 카드는 `proposeCodefCandidate`가 `UNMAPPED`·후보 없음·사용자 변경 없음·같은 상품 보유 카드 없음일 때만 후보를 둡니다. 사용자는 `CODEF_CANDIDATE`로 후보를 확인하거나 수동 카드와 같은 매핑 변경으로 다른 상품을 고릅니다. 동기화 저장 전 잠금은 `lockHeldCardsForCodefSync`(모의 승인과 같은 ID 오름차순 잠금, CODEF 카드 ID 반환)입니다.
+- **추천의 후보 표시**: 추천 응답에는 후보를 표시하지 않습니다(2026-11-26 사용자 결정). 추천 입력(`EngineInputAssembler`)은 후보 상품을 넘기지 않으므로 `excludedCards[].candidateCardProductId`는 `null`이고, 추천은 `USER_CONFIRMED`만 계산에 씁니다.
 - `USER_CARD_MAPPING_REQUIRED`(409)는 이 작업의 API가 쓰지 않습니다.
 - `V4`는 임시 번호입니다. 병합 직전 관리자가 다른 작업선과 순서를 정하면 번호를 올릴 수 있습니다(D-23 12항).
 

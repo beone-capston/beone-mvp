@@ -61,7 +61,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>보유카드는 {@link CodefHeldCardMatcher}로 맞춰 새 카드만 보유 카드로 만든다. 카드명이 {@link CodefCardNameDictionary}와 정확히
  * 일치하면 {@code CANDIDATE}와 후보 상품을, 아니면 {@code UNMAPPED}를 둔다. 다시 대조된 기존 카드도 후보 없는 {@code UNMAPPED}면
- * 같은 사전으로 후보를 둔다. {@code USER_CONFIRMED}로는 확정하지 않는다(D-15 2026-11-26 변경, #268). 승인내역은
+ * 같은 사전으로 후보를 둔다. 후보는 상품당 1장이라 응답 순서로 먼저 처리한 카드만 받는다(판정은 보유 카드 서비스). {@code USER_CONFIRMED}로는
+ * 확정하지 않는다(D-15 2026-11-26 변경, #268). 승인내역은
  * {@link CodefLedgerCandidateBuilder}로 판정해 받아들인 행만 codef 전용 테이블에 넣고 원장({@code ledger_transactions})은 바꾸지 않는다(R8).
  * 불완전 행은 저장하지 않으며 다음 동기화에서 다시 판정한다. 승인번호 HMAC 키가 없으면 승인내역을 조회·저장하지 않고 부분 실패로 알린다(P6).
  * 실적은 참고값으로만 저장하고 계산·월간 상태에 넣지 않는다(D-16). 원장이 완전하다고 선언하지 않는다(R7).

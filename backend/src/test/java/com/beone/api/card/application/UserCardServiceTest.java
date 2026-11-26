@@ -357,6 +357,45 @@ class UserCardServiceTest {
 	}
 
 	@Test
+	void registerCodefCardSkipsTheCandidateWhenAnotherCardAlreadyHoldsItAsCandidate() {
+		// 후보는 상품당 1장(2026-11-26 사용자 결정)
+		given(this.repository.existsByUserIdAndCandidateCardProductIdAndMappingStatusAndReleasedAtIsNull(1L, "01664",
+				MappingStatus.CANDIDATE))
+			.willReturn(true);
+
+		RegisteredCodefCard registered = this.service.registerCodefCard(MY_CARDS, "노리 체크카드", "01664");
+
+		assertThat(registered.candidateCardProductId()).isNull();
+		assertThat(saved().getMappingStatus()).isEqualTo(MappingStatus.UNMAPPED);
+	}
+
+	@Test
+	void onlyTheFirstOfTwoCardsForTheSameProductBecomesACandidate() {
+		// 같은 동기화에서 앞 카드의 후보가 저장된 뒤에는 조회가 그 후보를 본다
+		given(this.repository.existsByUserIdAndCandidateCardProductIdAndMappingStatusAndReleasedAtIsNull(1L, "01664",
+				MappingStatus.CANDIDATE))
+			.willReturn(false, true);
+
+		RegisteredCodefCard first = this.service.registerCodefCard(MY_CARDS, "nori 체크카드(RF)", "01664");
+		RegisteredCodefCard second = this.service.registerCodefCard(MY_CARDS, "노리 체크카드", "01664");
+
+		assertThat(first.mappingStatus()).isEqualTo(MappingStatus.CANDIDATE);
+		assertThat(second.mappingStatus()).isEqualTo(MappingStatus.UNMAPPED);
+		assertThat(second.candidateCardProductId()).isNull();
+	}
+
+	@Test
+	void proposeCodefCandidateSkipsWhenAnotherCardAlreadyHoldsItAsCandidate() {
+		givenCard(codefCard(1001L));
+		given(this.repository.existsByUserIdAndCandidateCardProductIdAndMappingStatusAndReleasedAtIsNull(1L, "01914",
+				MappingStatus.CANDIDATE))
+			.willReturn(true);
+
+		assertThat(this.service.proposeCodefCandidate(MY_CARDS, 1001L, "01914")).isFalse();
+		verify(this.repository, never()).saveAndFlush(any());
+	}
+
+	@Test
 	void proposeCodefCandidateFillsAnUntouchedUnmappedCodefCard() {
 		givenCard(codefCard(1001L));
 

@@ -258,6 +258,10 @@ D-18은 D-13이 남긴 미결 항목 일부를 정한 결정이며 PRD FR-05 범
   - 사전 근거: 표기마다 `OBSERVED`(2026-11-26 비공개 실연동 동기화 응답의 카드명 표기) 또는 `ASSUMED`(KB 상품 페이지로부터의 추정)를 적는다([`CodefCardNameDictionary`](../backend/src/main/java/com/beone/api/codef/application/CodefCardNameDictionary.java)).
   - 적용 범위: 새 CODEF 카드와, 재동기화 때 다시 대조된 기존 CODEF 카드 중 `UNMAPPED`·후보 없음·사용자가 매핑을 바꾼 적 없는 카드. `USER_CONFIRMED`·`NOT_SUPPORTED`·사용자가 바꾼 매핑은 건드리지 않는다. 같은 사용자에게 그 상품이 이미 `USER_CONFIRMED`면 후보를 두지 않는다(확인 시 409 회피).
   - D-01(공식 SKU·약관 버전 일치)은 여전히 미결이다. 후보는 계산에 쓰지 않는다.
+  - 2026-11-26 사용자 결정(보충 3건):
+    - 후보 근거 `candidateBasis`는 저장하지 않고 응답에서 항상 `null`이다(필드·형식 유지, 현재 미사용).
+    - 추천 응답에는 후보를 표시하지 않는다(`excludedCards[].candidateCardProductId`는 `null`). 추천은 `USER_CONFIRMED`만 쓴다.
+    - 후보는 상품당 1장이다. 같은 사용자에게 그 상품으로 이미 `CANDIDATE` 또는 `USER_CONFIRMED`인 해제하지 않은 카드가 있으면 새 카드·재대조 카드는 `UNMAPPED`·후보 없음이다. 한 번의 동기화 안에서는 CODEF 응답 순서로 처리해 먼저 처리한 카드만 후보다.
 - 기록: 매핑마다 확인한 방법(수동 선택 / CODEF 후보 확인), 확인 시각, 후보를 낸 근거(카드명 등)를 남긴다.
 - 표시: 사용자 확인 매핑으로 계산한 결과에는 "사용자 확인 매핑, 공식 SKU·약관 버전 미검증"을 표시한다. 이 표시 때문에 규칙의 검증 상태가 올라가지 않는다.
 - 매핑을 바꾸거나 취소하면 그 카드의 기존 계산 결과는 다시 계산하거나 `확인 필요`로 되돌린다.

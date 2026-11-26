@@ -246,9 +246,10 @@ public class UserCardService {
 	}
 
 	/**
-	 * CODEF 보유카드로 새 보유 카드를 만든다(#129). 후보 상품이 주어지고 이 사용자에게 그 상품의 {@code USER_CONFIRMED} 카드가
-	 * 없으면 {@code CANDIDATE}로, 그 밖에는 {@code UNMAPPED}로 만든다(#268). 이미 확인한 상품을 후보로 두면 사용자가 확인할 때
-	 * 409가 되므로 두지 않는다. 서버가 {@code USER_CONFIRMED}로 확정하지 않는다(D-15). 가상 포트폴리오 검사와 표시 이름 검사(1~30자)는
+	 * CODEF 보유카드로 새 보유 카드를 만든다(#129). 후보 상품이 주어지고 이 사용자에게 그 상품을 이미 가진 카드(해제하지 않은
+	 * {@code USER_CONFIRMED}, 또는 그 상품이 후보인 {@code CANDIDATE})가 없으면 {@code CANDIDATE}로, 그 밖에는 {@code UNMAPPED}로
+	 * 만든다. 후보는 상품당 1장이다(#268, 2026-11-26 사용자 결정). 이미 확인한 상품을 후보로 두면 사용자가 확인할 때 409가 되고,
+	 * 후보가 여럿이면 하나를 확인한 뒤 나머지가 409가 되기 때문이다. 서버가 {@code USER_CONFIRMED}로 확정하지 않는다(D-15). 가상 포트폴리오 검사와 표시 이름 검사(1~30자)는
 	 * 호출자가 마친 뒤 부른다. 호출자의 트랜잭션 안에서만 부른다.
 	 * @param user 현재 사용자
 	 * @param displayName 앞뒤 공백을 뗀 1~30자 표시 이름
@@ -257,7 +258,7 @@ public class UserCardService {
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public RegisteredCodefCard registerCodefCard(CurrentUser user, String displayName, String candidateCardProductId) {
-		String candidate = (candidateCardProductId != null && !isConfirmedProduct(user, candidateCardProductId))
+		String candidate = (candidateCardProductId != null && !isProductTaken(user, candidateCardProductId))
 				? candidateCardProductId : null;
 		UserCardEntity entity = UserCardEntity.codef(user.userId(), displayName, candidate, now());
 		return new RegisteredCodefCard(this.userCardRepository.saveAndFlush(entity).getUserCardId(), candidate);
@@ -265,7 +266,8 @@ public class UserCardService {
 
 	/**
 	 * 재동기화에서 다시 대조된 기존 CODEF 카드에 후보 상품을 둔다(#268). 해제하지 않은 이 사용자의 CODEF 카드이고, {@code UNMAPPED}이며
-	 * 후보가 없고, 사용자가 매핑을 바꾼 적이 없고, 이 사용자에게 그 상품의 {@code USER_CONFIRMED} 카드가 없을 때만 둔다.
+	 * 후보가 없고, 사용자가 매핑을 바꾼 적이 없고, 이 사용자에게 그 상품을 이미 가진 카드({@code USER_CONFIRMED} 또는 같은 상품
+	 * 후보의 {@code CANDIDATE})가 없을 때만 둔다(상품당 후보 1장).
 	 * {@code USER_CONFIRMED}·{@code NOT_SUPPORTED}·이미 후보가 있는 카드는 그대로 둔다. 호출자의 트랜잭션 안에서만 부른다.
 	 * @param user 현재 사용자
 	 * @param userCardId 기존 CODEF 카드 저장소 번호
@@ -279,7 +281,7 @@ public class UserCardService {
 			.orElse(null);
 		if (entity == null || entity.getHoldingSource() != HoldingSource.CODEF
 				|| entity.getMappingStatus() != MappingStatus.UNMAPPED || entity.getCandidateCardProductId() != null
-				|| entity.isMappingChangedByUser() || isConfirmedProduct(user, candidateCardProductId)) {
+				|| entity.isMappingChangedByUser() || isProductTaken(user, candidateCardProductId)) {
 			return false;
 		}
 		entity.proposeCandidate(candidateCardProductId);
@@ -287,9 +289,14 @@ public class UserCardService {
 		return true;
 	}
 
-	private boolean isConfirmedProduct(CurrentUser user, String cardProductId) {
+	// 상품을 이미 가진 카드: 해제하지 않은 USER_CONFIRMED이거나 그 상품이 후보인 CANDIDATE. 한 동기화 안에서 앞 카드에 둔 후보도
+	// 보여야 다음 카드가 후보를 받지 않는다. 앞 카드는 saveAndFlush로 같은 트랜잭션에 이미 기록됐고, 이 조회는 같은 트랜잭션에서
+	// DB를 다시 읽으므로 그 후보가 보인다. 그래서 응답 순서(결정적)의 첫 카드만 후보가 된다.
+	private boolean isProductTaken(CurrentUser user, String cardProductId) {
 		return this.userCardRepository.existsByUserIdAndCardProductIdAndMappingStatusAndReleasedAtIsNull(user.userId(),
-				cardProductId, MappingStatus.USER_CONFIRMED);
+				cardProductId, MappingStatus.USER_CONFIRMED)
+				|| this.userCardRepository.existsByUserIdAndCandidateCardProductIdAndMappingStatusAndReleasedAtIsNull(
+						user.userId(), cardProductId, MappingStatus.CANDIDATE);
 	}
 
 	// CODEF 후보 확인: 현재 CANDIDATE이고, USER_CONFIRMED 요청의 상품이 저장된 후보와 같아야 한다.

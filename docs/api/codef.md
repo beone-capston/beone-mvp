@@ -295,7 +295,7 @@ to
 
 #### 응답 필드
 
-- `heldCards.newCandidates[]` · 이번에 새로 만든 CODEF 카드. 카드명이 이름 사전과 정확히 같으면 `mappingStatus`=`CANDIDATE`, `candidateCardProductId`=후보 상품 ID이고, 아니면 `UNMAPPED`·`null`이다. 같은 사용자에게 그 상품이 이미 `USER_CONFIRMED`면 `UNMAPPED`·`null`이다. 확정은 사용자가 매핑 변경 API(`CODEF_CANDIDATE`)로 한다([D-15 2026-11-26 변경](../decisions.md#d-15d-16d-17-확정-정책)). 이전 기준(결정 20 R3, 관리자 판단 K1)은 항상 `UNMAPPED`·`null`이었다.
+- `heldCards.newCandidates[]` · 이번에 새로 만든 CODEF 카드. 카드명이 이름 사전과 정확히 같으면 `mappingStatus`=`CANDIDATE`, `candidateCardProductId`=후보 상품 ID이고, 아니면 `UNMAPPED`·`null`이다. 후보는 상품당 1장이다. 같은 사용자에게 그 상품의 해제하지 않은 `USER_CONFIRMED` 카드나 그 상품이 후보인 `CANDIDATE` 카드가 이미 있으면 `UNMAPPED`·`null`이고, 한 번의 동기화에서 같은 상품에 일치하는 카드가 여럿이면 응답 순서로 먼저 처리한 카드만 후보다. 확정은 사용자가 매핑 변경 API(`CODEF_CANDIDATE`)로 한다([D-15 2026-11-26 변경](../decisions.md#d-15d-16d-17-확정-정책)). 이전 기준(결정 20 R3, 관리자 판단 K1)은 항상 `UNMAPPED`·`null`이었다.
 - 재동기화에서 다시 대조된 기존 카드에 후보를 둔 경우는 `newCandidates`에 담지 않는다. 보유 카드 목록(`GET /api/v1/me/cards`)의 `mapping`으로 확인한다.
 - `performances[].usedInCalculation` · 항상 `false`. 사용자가 확인해 수동 입력해야 계산에 쓴다(D-16)
 - `incompleteRows[]` · 원장에 넣지 않은 행과 이유. 카드번호·승인번호 원문은 담지 않는다

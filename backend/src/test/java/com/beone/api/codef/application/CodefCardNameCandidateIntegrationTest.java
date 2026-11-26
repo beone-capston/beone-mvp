@@ -66,6 +66,10 @@ class CodefCardNameCandidateIntegrationTest {
 
 	private static final String TOKTOK = "청춘대로 톡톡카드";
 
+	private static final String NORI_RF = "nori 체크카드(RF)";
+
+	private static final String NORI_KO = "노리 체크카드";
+
 	private static final String MANUAL_MARK = "후보시험 수동카드";
 
 	/** 다음 보유카드 조회가 돌려줄 카드명. */
@@ -207,6 +211,99 @@ class CodefCardNameCandidateIntegrationTest {
 		// 재동기화에서도 다시 두지 않는다
 		send("POST", SYNCS, null);
 		assertThat(mappingsByName().get(TITANIUM)).containsEntry("status", "UNMAPPED");
+	}
+
+	// 상품당 후보 1장(2026-11-26 사용자 결정)
+
+	@Test
+	void onlyTheFirstCardInResponseOrderBecomesTheCandidateForAProduct() {
+		connect();
+		HELD.addAll(List.of(NORI_RF, NORI_KO));
+
+		ResponseEntity<String> sync = send("POST", SYNCS, null);
+
+		List<Map<String, Object>> created = JsonPath.read(sync.getBody(), "$.data.heldCards.newCandidates");
+		assertThat(created).extracting(row -> row.get("cardName"), row -> row.get("candidateCardProductId"),
+				row -> row.get("mappingStatus"))
+			.containsExactly(tuple(NORI_RF, "01664", "CANDIDATE"), tuple(NORI_KO, null, "UNMAPPED"));
+
+		// 재동기화에서도 둘째 카드는 후보를 받지 않는다
+		send("POST", SYNCS, null);
+		Map<String, Map<String, Object>> mappings = mappingsByName();
+		assertThat(mappings.get(NORI_RF)).containsEntry("status", "CANDIDATE");
+		assertThat(mappings.get(NORI_KO)).containsEntry("status", "UNMAPPED").containsEntry("candidateCardProductId", null);
+		assertThat(count("SELECT COUNT(*) FROM user_cards WHERE released_at IS NULL AND mapping_status = 'CANDIDATE'"
+				+ " AND candidate_card_product_id = '01664'")).isEqualTo(1);
+	}
+
+	@Test
+	void existingCandidateKeepsANewCardOfTheSameProductUnmapped() {
+		connect();
+		HELD.add(NORI_RF);
+		send("POST", SYNCS, null);
+		HELD.add(NORI_KO);
+
+		ResponseEntity<String> sync = send("POST", SYNCS, null);
+
+		assertThat(JsonPath.<List<Map<String, Object>>>read(sync.getBody(), "$.data.heldCards.newCandidates"))
+			.extracting(row -> row.get("cardName"), row -> row.get("mappingStatus"))
+			.containsExactly(tuple(NORI_KO, "UNMAPPED"));
+		assertThat(mappingsByName().get(NORI_RF)).containsEntry("status", "CANDIDATE");
+	}
+
+	@Test
+	void afterTheCandidateIsConfirmedTheRemainingCardStaysUnmapped() {
+		connect();
+		HELD.addAll(List.of(NORI_RF, NORI_KO));
+		send("POST", SYNCS, null);
+		assertThat(patch(userCardId(NORI_RF), "{\"status\":\"USER_CONFIRMED\",\"cardProductId\":\"01664\","
+				+ "\"confirmationMethod\":\"CODEF_CANDIDATE\"}").getStatusCode().value()).isEqualTo(200);
+
+		send("POST", SYNCS, null);
+
+		Map<String, Map<String, Object>> mappings = mappingsByName();
+		assertThat(mappings.get(NORI_RF)).containsEntry("status", "USER_CONFIRMED");
+		assertThat(mappings.get(NORI_KO)).containsEntry("status", "UNMAPPED").containsEntry("candidateCardProductId", null);
+	}
+
+	@Test
+	void afterTheCandidateIsReleasedTheFirstCardInResponseOrderTakesTheCandidate() {
+		// 현재 규칙의 결과를 고정한다: 해제한 카드는 대조 대상이 아니어서 같은 이름이 새 카드로 다시 생기고, 응답 순서상 그 새 카드가
+		// 남아 있던 UNMAPPED 카드보다 먼저 처리되어 후보를 받는다
+		connect();
+		HELD.addAll(List.of(NORI_RF, NORI_KO));
+		send("POST", SYNCS, null);
+		assertThat(send("DELETE", CARDS + "/" + userCardId(NORI_RF), null).getStatusCode().value()).isEqualTo(204);
+
+		ResponseEntity<String> sync = send("POST", SYNCS, null);
+
+		assertThat(JsonPath.<List<Map<String, Object>>>read(sync.getBody(), "$.data.heldCards.newCandidates"))
+			.extracting(row -> row.get("cardName"), row -> row.get("candidateCardProductId"),
+					row -> row.get("mappingStatus"))
+			.containsExactly(tuple(NORI_RF, "01664", "CANDIDATE"));
+		Map<String, Map<String, Object>> mappings = mappingsByName();
+		assertThat(mappings.get(NORI_RF)).containsEntry("status", "CANDIDATE");
+		assertThat(mappings.get(NORI_KO)).containsEntry("status", "UNMAPPED");
+	}
+
+	@Test
+	void afterTheCandidateIsReleasedAnEarlierRemainingCardTakesTheCandidate() {
+		// 남은 카드가 응답에서 먼저 오면 재대조로 그 카드가 후보를 받고, 다시 생긴 카드는 UNMAPPED다
+		connect();
+		HELD.addAll(List.of(NORI_RF, NORI_KO));
+		send("POST", SYNCS, null);
+		assertThat(send("DELETE", CARDS + "/" + userCardId(NORI_RF), null).getStatusCode().value()).isEqualTo(204);
+		HELD.clear();
+		HELD.addAll(List.of(NORI_KO, NORI_RF));
+
+		ResponseEntity<String> sync = send("POST", SYNCS, null);
+
+		assertThat(JsonPath.<List<Map<String, Object>>>read(sync.getBody(), "$.data.heldCards.newCandidates"))
+			.extracting(row -> row.get("cardName"), row -> row.get("mappingStatus"))
+			.containsExactly(tuple(NORI_RF, "UNMAPPED"));
+		Map<String, Map<String, Object>> mappings = mappingsByName();
+		assertThat(mappings.get(NORI_KO)).containsEntry("status", "CANDIDATE").containsEntry("candidateCardProductId", "01664");
+		assertThat(mappings.get(NORI_RF)).containsEntry("status", "UNMAPPED");
 	}
 
 	private void connect() {
