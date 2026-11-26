@@ -15,10 +15,11 @@ import java.util.Set;
  * 사용자가 매핑 변경 API로 확인해야 {@code USER_CONFIRMED}가 된다. 동일 계열·변형 카드(예: "펭수 노리", "위글위글 첵첵")는 다른
  * 상품이라 넣지 않는다.
  *
- * <p>근거 표기: {@link Basis#OBSERVED}는 비공개 실연동 동기화 응답(2026-11-26 보유카드, 2026-11-27 재동기화 실적)의 카드명 표기,
+ * <p>근거 표기: {@link Basis#OBSERVED}는 비공개 실연동 동기화 응답(2026-11-26 보유카드, 2026-11-27 재동기화 실적·승인)의 카드명 표기,
  * {@link Basis#ASSUMED}는 KB 상품 페이지(교통카드 기능 옵션 등)로부터의 추정이다. 항목마다 그 표기를 본 출처({@link Source})를 적는다.
- * KB는 API마다 같은 카드의 카드명을 다르게 준다(예: 보유카드 "nori 체크카드(RF)", 실적 "KB국민 노리체크카드"). 그래서 승인·실적 행을
- * 보유카드에 연결할 때도 이 사전으로 상품 단위 연결을 한다(#270). 지원 상품 4종이 아닌 카드(예: "KB Youth Club 체크카드")는 넣지 않는다.
+ * KB는 API마다 같은 카드의 카드명을 다르게 준다(예: 보유카드 "nori 체크카드(RF)", 실적 "KB국민 노리체크카드", 승인 "KB국민 nori 체크카드(RF)"). 그래서 승인·실적 행을
+ * 보유카드에 연결할 때도 이 사전으로 상품 단위 연결을 한다(#270). 지원 상품 4종이 아닌 카드(예: "KB Youth Club 체크카드",
+ * "KB국민 나라사랑체크카드(일반형 RF)")는 넣지 않는다.
  * 사용자 식별 정보·카드번호·금액은 담지 않는다.
  */
 public final class CodefCardNameDictionary {
@@ -90,10 +91,14 @@ public final class CodefCardNameDictionary {
 	static final List<Entry> ENTRIES = List.of(
 			// 보유카드(2026-11-26)·실적(2026-11-27) 응답에서 같은 표기
 			Entry.observed("09271", "올라운드 티타늄카드", Source.HELD_CARDS, Source.PERFORMANCES),
+			// 승인 응답(2026-11-27 재동기화, #272)
+			Entry.observed("09271", "KB국민 올라운드 티타늄카드", Source.APPROVALS),
 			// 보유카드 응답(2026-11-26)
 			Entry.observed("01664", "nori 체크카드(RF)", Source.HELD_CARDS),
 			// 실적 응답(2026-11-27 재동기화, #270)
 			Entry.observed("01664", "KB국민 노리체크카드", Source.PERFORMANCES),
+			// 승인 응답(2026-11-27 재동기화, #272)
+			Entry.observed("01664", "KB국민 nori 체크카드(RF)", Source.APPROVALS),
 			Entry.assumed("01664", "nori 체크카드"),
 			Entry.assumed("01664", "노리 체크카드"),
 			Entry.assumed("01664", "노리 체크카드(RF)"),

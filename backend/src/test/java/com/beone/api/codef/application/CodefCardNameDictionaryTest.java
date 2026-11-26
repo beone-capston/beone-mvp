@@ -124,6 +124,8 @@ class CodefCardNameDictionaryTest {
 		assertThat(sources).containsEntry("올라운드 티타늄카드", Set.of(Source.HELD_CARDS, Source.PERFORMANCES))
 			.containsEntry("nori 체크카드(RF)", Set.of(Source.HELD_CARDS))
 			.containsEntry("KB국민 노리체크카드", Set.of(Source.PERFORMANCES))
+			.containsEntry("KB국민 올라운드 티타늄카드", Set.of(Source.APPROVALS))
+			.containsEntry("KB국민 nori 체크카드(RF)", Set.of(Source.APPROVALS))
 			.containsEntry("노리 체크카드", PAGE);
 	}
 
@@ -135,6 +137,18 @@ class CodefCardNameDictionaryTest {
 		assertThat(CodefCardNameDictionary.candidateFor("KB Youth Club 체크카드(RF)")).isEmpty();
 		assertThat(CodefCardNameDictionary.candidateFor("KB Youth Club 체크카드")).isEmpty();
 		assertThat(CodefCardNameDictionary.candidateFor("KB국민 노리 체크카드")).isEmpty();
+	}
+
+	@Test
+	void approvalApiNamesMatchTheirProductsAndNarasarangStaysOut() {
+		// 2026-11-27 재동기화의 승인 API 표기(#272)
+		assertThat(CodefCardNameDictionary.candidateFor("KB국민 올라운드 티타늄카드")).hasValue("09271");
+		assertThat(CodefCardNameDictionary.candidateFor("KB국민 nori 체크카드(RF)")).hasValue("01664");
+		// 보유카드에 없고 지원 상품 4종도 아닌 카드는 넣지 않는다
+		assertThat(CodefCardNameDictionary.candidateFor("KB국민 나라사랑체크카드(일반형 RF)")).isEmpty();
+		// 정확 일치만: 대소문자·공백 차이는 일치하지 않는다
+		assertThat(CodefCardNameDictionary.candidateFor("KB국민 NORI 체크카드(RF)")).isEmpty();
+		assertThat(CodefCardNameDictionary.candidateFor("KB국민올라운드 티타늄카드")).isEmpty();
 	}
 
 	@Test
@@ -151,10 +165,13 @@ class CodefCardNameDictionaryTest {
 			.stream()
 			.collect(Collectors.toMap(Entry::cardName, Entry::basis));
 
-		assertThat(basis).containsExactlyInAnyOrderEntriesOf(Map.of("올라운드 티타늄카드", Basis.OBSERVED,
-				"nori 체크카드(RF)", Basis.OBSERVED, "KB국민 노리체크카드", Basis.OBSERVED, "nori 체크카드", Basis.ASSUMED, "노리 체크카드", Basis.ASSUMED,
-				"노리 체크카드(RF)", Basis.ASSUMED, "청춘대로 톡톡카드", Basis.ASSUMED, "청춘대로 톡톡카드(RF)", Basis.ASSUMED,
-				"첵첵 체크카드", Basis.ASSUMED, "첵첵 체크카드(RF)", Basis.ASSUMED));
+		assertThat(basis).containsExactlyInAnyOrderEntriesOf(Map.ofEntries(Map.entry("올라운드 티타늄카드", Basis.OBSERVED),
+				Map.entry("KB국민 올라운드 티타늄카드", Basis.OBSERVED), Map.entry("nori 체크카드(RF)", Basis.OBSERVED),
+				Map.entry("KB국민 노리체크카드", Basis.OBSERVED), Map.entry("KB국민 nori 체크카드(RF)", Basis.OBSERVED),
+				Map.entry("nori 체크카드", Basis.ASSUMED), Map.entry("노리 체크카드", Basis.ASSUMED),
+				Map.entry("노리 체크카드(RF)", Basis.ASSUMED), Map.entry("청춘대로 톡톡카드", Basis.ASSUMED),
+				Map.entry("청춘대로 톡톡카드(RF)", Basis.ASSUMED), Map.entry("첵첵 체크카드", Basis.ASSUMED),
+				Map.entry("첵첵 체크카드(RF)", Basis.ASSUMED)));
 	}
 
 }

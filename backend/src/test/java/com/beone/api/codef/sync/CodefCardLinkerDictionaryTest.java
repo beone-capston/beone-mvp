@@ -153,6 +153,18 @@ class CodefCardLinkerDictionaryTest {
 	}
 
 	@Test
+	void approvalApiNamesLinkToTheHeldCardsByTheDictionary() {
+		// 2026-11-27 재동기화의 승인 API 표기(#272). 보유카드 이름과 다르지만 사전으로 같은 상품 1장에 연결된다
+		CodefCardLinker linker = linker();
+
+		assertThat(linker.link(Optional.of("KB국민 올라운드 티타늄카드"))).isEqualTo(new CodefCardLink.Linked(TITANIUM));
+		assertThat(linker.link(Optional.of("KB국민 nori 체크카드(RF)"))).isEqualTo(new CodefCardLink.Linked(NORI));
+		// 보유카드에 없고 지원 상품도 아닌 카드는 미연결로 남는다
+		assertThat(linker.link(Optional.of("KB국민 나라사랑체크카드(일반형 RF)")))
+			.isEqualTo(notLinked(Reason.ROW_NAME_NOT_IN_DICTIONARY));
+	}
+
+	@Test
 	void linkerWithoutTheDictionaryKeepsTheExactOnlyRule() {
 		CodefCardLinker exactOnly = CodefCardLinker.of(heldCards());
 
