@@ -6,8 +6,13 @@
 - **N14(호출 상한):** API별 최대 **3회**(결정 39-4). 서버 재기동과 관계없이 DB 카운터(LP-2, #205)로 셉니다.
 - **N15(보존 기간):** 정제 데이터(비밀번호·카드번호·승인번호 원문 제외)는 검증 DB에 **MVP 시연이 끝날 때까지** 보관하고, **MVP 수락 뒤 폐기**합니다(결정 39-4)
 - **실행 주체:** 서버 명령은 운영 담당(SSM), 키 입력은 사용자입니다. 에이전트는 키 값을 보지 않습니다.
-- **상태:** 문서만 있습니다. 서버 배치와 실호출은 하지 않았습니다. 서버 배치는 `beone-verify`를 정리한 뒤에만 합니다.
-- **선행 PR:** 이 런북이 참조하는 [검증 런북](../../deploy/verify/RUNBOOK.md)과 `deploy/verify/compose.yaml`은 **#206이 추가하며 아직 develop에 없습니다**(대조 기준 head `60096a0`). 참조하는 절은 0절(`V`·`APP`·`PUB` 정의, 중단 조건), 5·6절(배치·이미지 적재), 7절(T-a), 8절(터널·감시 기준), 9절(정리)입니다. #206이 병합되기 전에는 이 런북의 서버 블록을 실행하지 않습니다. #206의 절 번호나 경로가 바뀌면 이 런북도 함께 고칩니다.
+- **상태:** 운영 담당이 1차 연결 시도를 했습니다. `POST /api/v1/me/codef/connection`은 502 `CODEF_UNAVAILABLE`이었습니다. 로그는 `TOKEN http=200`, `ACCOUNT_CREATE http=200 resultCode=CF-04000`이었고, 이 값만으로는 로그인 실패인지 기관 오류인지 알 수 없었습니다. 그래서 실패 관측 로그를 더했습니다([codef 문서](../domains/codef.md#비공개-실연동-프로필-codef-live-lp-1-193)의 "계정 등록 실패 관측"). 다음 시도 전에 3-0 `budget`으로 남은 횟수를 확인합니다. KB 계정 잠김 위험이 있으니 같은 입력으로 바로 다시 시도하지 않습니다.
+- **선행 PR:** 이 런북이 참조하는 [검증 런북](../../deploy/verify/RUNBOOK.md)과 `deploy/verify/compose.yaml`은 #206으로 develop에 병합됐습니다. 참조하는 절은 0절(`V`·`APP`·`PUB` 정의, 중단 조건), 5·6절(배치·이미지 적재), 7절(T-a), 8절(터널·감시 기준), 9절(정리)입니다. 검증 런북의 절 번호나 경로가 바뀌면 이 런북도 함께 고칩니다.
+- **검증 이미지(`BEONE_VERIFY_API_IMAGE`):** 검증 런북이 기록한 C2 후보 `ef01309`는 #195(`codef-live` 프로필)와 #205(호출 상한 카운터)보다 **앞선 커밋**이라 이 런북에 쓸 수 없습니다. 그 이미지에는 실 게이트웨이와 카운터가 없습니다.
+  - 기본으로 **현재 운영 배포 기준 이미지**를 씁니다. 운영 backend는 이미지 revision `6974880`, ApiDigest `sha256:9a887bd8a67b1577eedfea11d5158fc11d3e1545922d3e2992c919eed495cacd`입니다(`ghcr.io/beone-capston/beone-api@<ApiDigest>`, [운영 회원 스모크](prod-member-smoke.md) 기준 표기와 같음). `6974880`에는 #195·#205가 들어 있습니다.
+  - 서버에 이미 있는 운영 이미지를 그대로 씁니다. `.env`에는 digest 참조나 그 이미지의 로컬 태그를 넣습니다. 새 이미지를 받거나 만드는 것은 별도 승인입니다.
+  - 기록표에 이미지 revision과 digest를 남깁니다. 이 둘은 공개 GHCR 값이라 비밀이 아닙니다.
+  - 단, 위 1차 시도 뒤에 더한 실패 관측 로그(`codef call detail …`)는 `6974880` 이미지에 **없습니다.** 이 줄로 원인을 보려면 해당 변경이 들어간 이미지가 필요합니다. 그 이미지를 언제 만들지는 관리자 결정입니다.
 
 ## 0. 서버 명령 블록의 공통 규칙
 
@@ -37,20 +42,25 @@
 
 ### 2-1. 환경 (K1, 승인 ⑨)
 
-- `beone-verify`를 **먼저 내립니다**(사용자가 "검증 환경 유지 안 함"을 정한 뒤). 서버 메모리 때문에 두 검증 환경을 동시에 띄우지 않습니다.
-- 이때 [검증 런북](../../deploy/verify/RUNBOOK.md) 9절 블록 **전체를 실행하지 않습니다.** 9절은 `down -v` 뒤 검증 이미지(`beone-api:<sha12>`)와 `/opt/beone/verify`(이 런북이 쓰는 `compose.yaml` 포함)까지 지우기 때문입니다. 아래 `verify-down`은 9절의 첫 단계(`$V down -v`)만 하고, 이미지·`/opt/beone/verify`는 `beone-codef`가 다시 쓰도록 남깁니다. 9절의 나머지(이미지·디렉터리 삭제, 영향 없음 확인)는 4-2 폐기 뒤에 합니다.
+- `beone-verify`를 **먼저 멈춥니다**. 서버 메모리 때문에 두 검증 환경을 동시에 띄우지 않습니다.
+- **`down -v`가 아니라 `stop`입니다(볼륨 보존).** 판단 기준은 다음과 같습니다.
+  - 검증 DB(원장 포함)를 남겨 두어야 실패 뒤 재시도와 원인 분석에서 이전 상태를 다시 볼 수 있습니다. `down -v`는 이 상태를 되돌릴 수 없게 지웁니다.
+  - 멈춘 컨테이너는 메모리를 쓰지 않으므로, 메모리 때문에 볼륨까지 지울 필요는 없습니다.
+  - `beone-verify` 볼륨 삭제는 **사용자가 정합니다.** 운영 담당·에이전트가 판단해 지우지 않습니다. 지우기로 정하면 4-2 뒤 검증 런북 9절로 지웁니다.
+- 이때 [검증 런북](../../deploy/verify/RUNBOOK.md) 9절 블록은 **실행하지 않습니다.** 9절은 `down -v` 뒤 검증 이미지(`beone-api:<sha12>`)와 `/opt/beone/verify`(이 런북이 쓰는 `compose.yaml` 포함)까지 지우기 때문입니다. 이미지·`/opt/beone/verify`는 `beone-codef`가 다시 씁니다.
+- 다시 쓸 때는 `beone-codef`를 4-1 `stop`으로 멈춘 뒤 `$V start`로 같은 볼륨 그대로 띄웁니다.
 
 ```bash
-# block: verify-down
+# block: verify-down   (down -v 아님. 컨테이너만 멈추고 볼륨은 남긴다)
 ( set -euo pipefail
 V='sudo docker compose -f /opt/beone/verify/compose.yaml -p beone-verify --env-file /opt/beone/verify/.env'
 fail() { echo "중단: $*" >&2; exit 1; }
-$V down -v || fail "beone-verify down -v 실패. beone-codef를 띄우지 않는다"
-left=$($V ps -q -a) || fail "beone-verify 조회 실패(0개와 다름)"
-[ -z "$left" ] || fail "beone-verify 컨테이너가 남음"
+$V stop || fail "beone-verify stop 실패. beone-codef를 띄우지 않는다"
+running=$($V ps -q) || fail "beone-verify 조회 실패(0개와 다름)"
+[ -z "$running" ] || fail "실행 중인 beone-verify 컨테이너가 남음"
 vols=$(sudo docker volume ls --format '{{.Name}}') || fail "볼륨 조회 실패(0개와 다름)"
 n=$(printf '%s\n' "$vols" | grep -c '^beone-verify_' || true)
-[ "$n" = 0 ] || fail "beone-verify 볼륨이 ${n}개 남음"
+echo "beone-verify 볼륨 보존: ${n}개(삭제는 사용자 결정)"
 sudo test -f /opt/beone/verify/compose.yaml || fail "/opt/beone/verify/compose.yaml 없음(9절로 지웠으면 검증 런북 5·6절 배치부터 다시)"
 echo VERIFY_DOWN_OK
 )
@@ -181,7 +191,7 @@ echo NAMES_OK
 
 - 호출 전에 3-1의 `ledger-before`와 3-0의 `budget`(행 0)을 실행해 기준을 남깁니다.
 - 2-4 `watch`를 별도 세션에서 켜고 첫 줄이 `codef=[ok] app=[ok] pub=[ok] codef_oom=[false]`인지 봅니다.
-- 사용자 Mac에서 SSH 터널(검증 런북 8절 첫 줄, 같은 `127.0.0.1:18080`)로 `http://localhost:18080`에 접속해 합성 회원 1명을 가입시킵니다.
+- 사용자 Mac에서 SSH 터널(검증 런북 8절 첫 줄, 같은 `127.0.0.1:18080`)로 `http://localhost:18080`에 접속해 합성 회원 1명을 가입시킵니다. SSH를 쓸 수 없으면 아래 2-3-1의 **SSM 세션 안 루프백 curl 경로**를 씁니다.
 - 인증 완료 상태는 검증 런북 7절과 같은 T-a 범위(검증 DB 한정, 합성 회원 `*@example.test`만, `members.email_verified_at` 갱신과 `users` 장부 행 1개)로 만듭니다. **검증 런북 7절의 T-a 블록은 `$V`(`-p beone-verify`)라 쓰지 않고** 아래 `ta`를 씁니다. 먼저 같은 셸에서 `EMAIL='<합성 주소>'`를 정한 뒤 실행합니다.
 
 ```bash
@@ -191,7 +201,7 @@ C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/com
 fail() { echo "중단: $*" >&2; exit 1; }
 : "${EMAIL:?EMAIL을 먼저 지정}"
 case "$EMAIL" in *@example.test) ;; *) fail "합성 주소 아님" ;; esac
-out=$("${C[@]}" exec -T -e EMAIL="$EMAIL" verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u"$MYSQL_USER" -N -B -e "START TRANSACTION; UPDATE members SET email_verified_at=NOW() WHERE email=\"$EMAIL\" AND email_verified_at IS NULL; SELECT ROW_COUNT(); INSERT INTO users (demo_user, member_id, display_name, portfolio_type, read_only) SELECT NULL, m.member_id, \"내 카드\", \"REAL\", FALSE FROM members m WHERE m.email=\"$EMAIL\" AND NOT EXISTS (SELECT 1 FROM users u WHERE u.member_id=m.member_id); SELECT ROW_COUNT(); COMMIT;" "$MYSQL_DATABASE"') || fail "T-a 실행 실패"
+out=$("${C[@]}" exec -T -e EMAIL="$EMAIL" verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" -N -B -e "START TRANSACTION; UPDATE members SET email_verified_at=NOW() WHERE email=\"$EMAIL\" AND email_verified_at IS NULL; SELECT ROW_COUNT(); INSERT INTO users (demo_user, member_id, display_name, portfolio_type, read_only) SELECT NULL, m.member_id, \"내 카드\", \"REAL\", FALSE FROM members m WHERE m.email=\"$EMAIL\" AND NOT EXISTS (SELECT 1 FROM users u WHERE u.member_id=m.member_id); SELECT ROW_COUNT(); COMMIT;" "$MYSQL_DATABASE"') || fail "T-a 실행 실패"
 [ "$(printf '%s\n' "$out" | tr '\n' ' ')" = '1 1 ' ] || fail "기대 1·1(인증 1행, 장부 1행)이 아님: $(echo $out)"
 echo TA_OK
 )
@@ -202,6 +212,92 @@ echo TA_OK
 - 기록은 HTTP 상태와 `CF-` 결과 코드만 남깁니다. 응답 전문은 저장하지 않습니다.
 - **상한(N14):** API별 최대 3회이며 DB 카운터가 막습니다. 실패해도 자동 재시도는 없습니다(게이트웨이는 재호출하지 않음). 다시 시도하면 횟수에 셉니다. 연결이 `502 CODEF_UNAVAILABLE`이고 `codef_call_budgets`에 행이 없으면 상한 설정 누락·창 밖(닫힘)을 먼저 의심합니다(2-2 `names`).
 - **중단:** 계정 잠김 경고나 인증 실패 계열 `CF-`, 상한 도달, 로그·DB에서 금지 값 발견, 원장 변경, 운영 영향 중 하나라도 해당하면 즉시 멈추고 4절로 갑니다.
+
+### 2-3-1. SSM 세션 안에서 루프백 curl로 호출 (SSH 대신)
+
+SSH 터널 없이 서버 안에서 `http://localhost:18080`(검증 nginx → `verify-backend`)으로 직접 부르는 경로입니다. 순서·횟수·중단 조건은 위 2-3과 같습니다.
+
+- **Session Manager 대화형 세션에서만 씁니다.** 비밀번호를 입력하는 단계(아래 B·D)는 Run Command로 보내지 않습니다. Run Command의 명령 문구는 SSM 실행 기록에 남기 때문입니다.
+  - Run Command로 해도 되는 것은 값이 없는 조회 블록뿐입니다(`ready`·`budget`·`ledger-*`·`logs`, 각 블록 그대로).
+- 비밀번호는 `read -rs`로만 받습니다. 화면·셸 기록·명령줄 인자에 남지 않고, JSON 본문은 `jq`의 환경 변수로만 만듭니다(운영 회원 스모크와 같은 방식).
+  - 세션 기록(Session Manager 로깅)이 켜져 있어도 `read -rs` 입력은 화면에 표시되지 않습니다. 출력에는 HTTP 상태와 오류 코드만 찍습니다.
+- `localhost`를 씁니다. 세션 쿠키 `__Host-BEONE_SESSION`은 `Secure`이고, curl은 `http://localhost`를 보안 문맥으로 보고 이 쿠키를 저장합니다. 검증 런북의 서버 스모크도 같은 주소로 실행했습니다.
+- 서버에 `jq`가 없으면 이 경로를 쓰지 않고 운영 담당에게 알립니다(설치는 별도 승인).
+
+**A. 준비** (`exec bash` 뒤, 같은 셸에서)
+
+```bash
+command -v jq > /dev/null && command -v curl > /dev/null && echo "도구 OK" || echo "jq·curl 없음: 중단"
+curl --version | head -1   # 7.79 이상이어야 localhost에서 Secure 쿠키를 저장한다. 낮으면 중단
+B=http://localhost:18080
+W=$(mktemp -d) && [ -d "$W" ] && chmod 700 "$W" && echo "준비 OK" || { W=; echo "준비 실패: 중단"; }
+trap '[ -n "$W" ] && rm -f "$W/body" "$W/head" "$W/jar" "$W/csrf" && rmdir "$W"' EXIT
+req() {   # req <메서드> <경로> [-] : '-'이면 표준 입력을 JSON 본문으로 보낸다. 상태 코드만 출력한다
+	[ -n "${W:-}" ] && [ -d "$W" ] || { echo "준비 안 됨(A부터 다시)" >&2; echo 000; return 1; }   # 빈 W로 /body 등에 쓰지 않는다
+	local a=(-s -o "$W/body" -D "$W/head" -w '%{http_code}' -X "$1" --max-time 330 -c "$W/jar" -b "$W/jar")
+	[ "${3:-}" = - ] && a+=(-H 'Content-Type: application/json' --data-binary @-)
+	[ -s "$W/csrf" ] && a+=(-H @"$W/csrf")
+	rm -f "$W/body" "$W/head"
+	local c; c=$(curl "${a[@]}" "$B$2") || c=000
+	echo "${c:-000}"
+}
+csrf() {  # CSRF 토큰을 헤더 파일로만 만든다. 토큰은 출력하지 않는다
+	rm -f "$W/csrf"
+	local st; st=$(req GET /api/v1/auth/csrf)
+	[ "$st" = 200 ] || { echo "CSRF 발급 실패(상태 $st)" >&2; return 1; }
+	local t; t=$(jq -r '.data.token // empty' "$W/body" 2> /dev/null)
+	[ -n "$t" ] || { echo "CSRF 토큰 없음" >&2; return 1; }
+	printf 'X-CSRF-TOKEN: %s\n' "$t" > "$W/csrf"
+}
+code() { jq -r '.code // empty' "$W/body" 2> /dev/null; }
+```
+
+- `--max-time 330`은 백엔드의 상품 응답 대기(기본 310초, 1절)보다 길게 잡은 값입니다. 중간에 끊으면 결과를 모른 채 다시 시도하게 되어 호출 횟수만 씁니다.
+
+**B. 합성 회원 가입과 인증** (합성 주소 `*@example.test`, 회원 비밀번호는 이번 검증용 새 값)
+
+```bash
+read -r -p '합성 회원 주소(*@example.test): ' EM
+read -rs -p '합성 회원 비밀번호(표시 안 됨): ' PW; echo
+mcred() { EM="$EM" PW="$PW" jq -n '{email: env.EM, password: env.PW}'; }
+# 합성 주소이고 비밀번호가 있을 때만 가입 요청을 보낸다(아니면 보내지 않고 멈춘다)
+case "$EM" in
+	?*@example.test) if [ -n "$PW" ]; then s=; csrf && s=$(mcred | req POST /api/v1/auth/sign-up -); echo "${s:-중단} $(code)"; else echo "비밀번호 없음: 보내지 않음"; fi ;;   # 기대 202
+	*) echo "합성 주소 아님: 보내지 않음" ;;
+esac
+```
+
+- 가입 뒤 같은 세션에서 `EMAIL="$EM"`으로 정하고 2-3의 `ta` 블록을 실행합니다(`TA_OK`).
+- 이어서 로그인합니다. 기대는 `200`입니다.
+
+```bash
+s=; csrf && s=$(mcred | req POST /api/v1/auth/login -); echo "${s:-중단} $(code)"   # 기대 200
+s=$(req GET /api/v1/me); echo "$s codefConnected=$(jq -r '.data.codefConnected // empty' "$W/body" 2> /dev/null)"   # 기대 200 false
+```
+
+**C. 호출 전 기준** — 다른 셸 또는 Run Command로 `ledger-before`, `budget`을 실행하고 2-4 `watch`가 `ok`인지 봅니다. `budget`의 `ACCOUNT_CREATE` 값으로 남은 횟수를 확인합니다(3 − 사용 수). 남은 횟수가 1이면 사용자에게 다시 확인합니다.
+
+**D. 연결 1회** (KB 아이디·비밀번호는 사용자가 직접 입력)
+
+```bash
+read -rs -p 'KB 아이디(표시 안 됨): ' KID; echo
+read -rs -p 'KB 비밀번호(표시 안 됨): ' KPW; echo
+s=; csrf && s=$(KID="$KID" KPW="$KPW" jq -n '{organization: "0301", loginType: "ID", loginId: env.KID, password: env.KPW}' | req POST /api/v1/me/codef/connection -); echo "${s:-중단} $(code)"
+unset KID KPW
+```
+
+- 기대는 `201`입니다. 다른 결과면 상태와 `code`만 기록하고 **다시 보내지 않습니다.**
+- 결과와 상관없이 `budget`과 `logs`를 실행합니다. 실패 관측 로그가 있는 이미지라면 `codef call detail api=ACCOUNT_CREATE …` 줄(코드·항목 수·`extraMessage` 유무만)을 기록합니다.
+- `400 CODEF_LOGIN_FAILED`·`502 CODEF_UNAVAILABLE` 뒤 재시도는 이 기록을 보고 사용자가 정합니다.
+
+**E. 동기화 1회** (연결 `201` 뒤에만)
+
+```bash
+s=; csrf && s=$(req POST /api/v1/me/codef/syncs); echo "${s:-중단} $(code)"
+jq -c '{held: .data.heldCards.fetched, imported: .data.approvals.imported, skipped: .data.approvals.skippedDuplicates, performances: (.data.performances | length?), partialFailures: [.data.partialFailures[]?.target]}' "$W/body" 2> /dev/null   # 건수·실패 대상만(카드 이름·금액 출력 안 함)
+```
+
+- 이어서 3절 확인으로 갑니다. 끝나면 `unset PW EM`을 실행하고 세션을 닫습니다. 닫을 때 `trap`이 쿠키·CSRF 파일을 지웁니다.
 
 ### 2-4. 진행 중 감시 (검증 런북 8절과 같은 기준)
 
@@ -283,7 +379,7 @@ done
 ( set -euo pipefail
 C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
 fail() { echo "중단: $*" >&2; exit 1; }
-Q() { "${C[@]}" exec -T verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u"$MYSQL_USER" -N -B -e "$1" "$MYSQL_DATABASE"' sh "$1"; }
+Q() { "${C[@]}" exec -T verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" -N -B -e "$1" "$MYSQL_DATABASE"' sh "$1"; }
 rows=$(Q 'SELECT api, window_start, used FROM codef_call_budgets ORDER BY window_start, api') || fail "조회 실패"
 stat=$(Q 'SELECT COUNT(DISTINCT window_start), COALESCE(MAX(used), 0) FROM codef_call_budgets') || fail "조회 실패"
 [ -n "$stat" ] || fail "조회 결과가 비어 있음(0건과 다름)"
@@ -312,7 +408,7 @@ echo BUDGET_OK
 ( set -euo pipefail
 C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
 fail() { echo "중단: $*" >&2; exit 1; }
-Q() { "${C[@]}" exec -T verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u"$MYSQL_USER" -N -B -e "$1" "$MYSQL_DATABASE"' sh "$1"; }
+Q() { "${C[@]}" exec -T verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" -N -B -e "$1" "$MYSQL_DATABASE"' sh "$1"; }
 SNAP="SET SESSION group_concat_max_len = 67108864; SELECT COUNT(*), COALESCE(SHA2(GROUP_CONCAT(CONCAT_WS('|', ledger_id, user_id, user_card_id, source, entry_type, amount_won, transaction_date, COALESCE(transaction_time, '-'), merchant_class, payment_method, COALESCE(transaction_nature, '-'), COALESCE(merchant_name, '-'), COALESCE(original_ledger_id, '-'), COALESCE(simulated_payment_id, '-'), attribution_month, attribution_status, recorded_at) ORDER BY ledger_id SEPARATOR '\n'), 256), 'EMPTY') FROM ledger_transactions"
 snap=$(Q "$SNAP") || fail "원장 조회 실패"
 [ -n "$snap" ] || fail "원장 조회 결과가 비어 있음"
@@ -327,7 +423,7 @@ echo LEDGER_BEFORE_OK
 ( set -euo pipefail
 C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/compose.codef.yaml -p beone-codef --env-file /opt/beone/codef/.env)
 fail() { echo "중단: $*" >&2; exit 1; }
-Q() { "${C[@]}" exec -T verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u"$MYSQL_USER" -N -B -e "$1" "$MYSQL_DATABASE"' sh "$1"; }
+Q() { "${C[@]}" exec -T verify-mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" -N -B -e "$1" "$MYSQL_DATABASE"' sh "$1"; }
 SNAP="SET SESSION group_concat_max_len = 67108864; SELECT COUNT(*), COALESCE(SHA2(GROUP_CONCAT(CONCAT_WS('|', ledger_id, user_id, user_card_id, source, entry_type, amount_won, transaction_date, COALESCE(transaction_time, '-'), merchant_class, payment_method, COALESCE(transaction_nature, '-'), COALESCE(merchant_name, '-'), COALESCE(original_ledger_id, '-'), COALESCE(simulated_payment_id, '-'), attribution_month, attribution_status, recorded_at) ORDER BY ledger_id SEPARATOR '\n'), 256), 'EMPTY') FROM ledger_transactions"
 before=$(cat ~/beone-codef-ledger-before.txt) || fail "호출 전 기준 파일 없음(ledger-before를 먼저 실행)"
 after=$(Q "$SNAP") || fail "원장 조회 실패"
@@ -476,7 +572,7 @@ echo DESTROY_OK
 )
 ```
 
-- `DESTROY_OK` 뒤에는 검증 런북 9절 블록을 **그대로 전체** 실행합니다. `beone-verify`는 2-1 `verify-down`으로 이미 내려가 있어 `$V down -v`는 할 일 없이 성공하고, 이어서 검증 이미지·`/opt/beone/verify`·업로드 폴더를 지운 뒤 "영향 없음 확인"(운영 `beone-app` healthy·이미지 동일, 복원 회차 그대로, `VOLUMES_SAME`, 포트 18080 0)까지 합니다. `VOLUMES_SAME`은 검증 런북 3절 기준 파일(`/tmp/beone-verify-v0-volumes.txt`)이 남아 있어야 나오며, 서버 재부팅 등으로 지워져 `VOLUMES_UNKNOWN`이면 통과가 아닙니다. `beone-verify`를 다시 쓸 계획이면 9절을 실행하지 않고 사용자에게 확인합니다.
+- `DESTROY_OK` 뒤 검증 런북 9절 블록 실행 여부는 **사용자에게 먼저 확인합니다.** 2-1 `verify-down`은 `stop`이라 `beone-verify` 볼륨(검증 DB·원장)이 남아 있고, 9절의 `$V down -v`가 그 볼륨을 지우기 때문입니다. 사용자가 삭제를 정하면 9절을 **그대로 전체** 실행합니다. 9절은 `beone-verify` 컨테이너·볼륨을 지우고, 이어서 검증 이미지·`/opt/beone/verify`·업로드 폴더를 지운 뒤 "영향 없음 확인"(운영 `beone-app` healthy·이미지 동일, 복원 회차 그대로, `VOLUMES_SAME`, 포트 18080 0)까지 합니다. `VOLUMES_SAME`은 검증 런북 3절 기준 파일(`/tmp/beone-verify-v0-volumes.txt`)이 남아 있어야 나오며, 서버 재부팅 등으로 지워져 `VOLUMES_UNKNOWN`이면 통과가 아닙니다. `beone-verify`를 다시 쓸 계획이면 9절을 실행하지 않고 사용자에게 확인합니다.
 
 ### 4-3. DB를 남기고 CODEF 데이터만 지울 때 (선택, N20 미결)
 
@@ -507,4 +603,6 @@ COMMIT;
 | 정식 과금 여부와 비용 상한 | N14의 비용 부분. 정식 과금이면 별도 승인 |
 | 서버 블록의 실제 실행 확인 | 오프라인 스텁 점검만 함(0절). 서버 실행은 운영 담당 |
 | 감시 중단 시 `stop`(검증 런북은 `down -v`) | 호출 상한 카운터 보존을 위한 차이(2-4). 다르게 정하려면 사용자 결정 |
+| `beone-verify` 정지 시 `stop`(볼륨 보존, 2-1) | 재시도·원인 분석용 원장 보존. 볼륨 삭제(검증 런북 9절)는 사용자 결정 |
+| 실패 관측 로그가 들어간 검증 이미지 | 운영 기준 `6974880`에는 없음(상단 "검증 이미지"). 이미지 준비 시점은 관리자 결정 |
 | 정지·폐기의 라벨 경로 | 키·`.env` 없이도 멈추고 지우기 위한 방식(0절). 실 Docker에서 라벨 필터의 실행은 서버 실행 때 확인(오프라인은 `docker compose config` 보간과 가짜 `docker`로만 확인) |

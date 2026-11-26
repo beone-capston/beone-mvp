@@ -15,6 +15,7 @@ import com.beone.api.codef.CodefAccount;
 import com.beone.api.codef.CodefApproval;
 import com.beone.api.codef.CodefCardPerformance;
 import com.beone.api.codef.CodefHeldCard;
+import com.beone.api.codef.CodefList;
 import com.beone.api.codef.CodefProductResponse;
 import com.beone.api.codef.CodefProductResponseReader;
 import com.beone.api.codef.transport.CodefCallResult.Reason;
@@ -39,6 +40,8 @@ public final class CodefObservation {
 	private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
 	private static final String TOKEN_EXPIRED_CODE = "CF-00401";
+
+	private static final String SUCCESS_CODE = "CF-00000";
 
 	/** 로그에 남겨도 되는 결과 코드 형식. 응답 값이 로그에 그대로 실리지 않게 한다. */
 	private static final Pattern RESULT_CODE = Pattern.compile("CF-\\d{5}");
@@ -169,10 +172,31 @@ public final class CodefObservation {
 		CodefProductResponse<T> response = reader.read(reply.status(), reply.body());
 		Optional<String> resultCode = resultCode(response);
 		log.info("codef call api={} http={} resultCode={}", api, reply.status(), loggableCode(resultCode));
+		logFailureDetail(api, response, resultCode);
 		if (response instanceof CodefProductResponse.Unauthorized<T> || resultCode.filter(TOKEN_EXPIRED_CODE::equals).isPresent()) {
 			tokens.orElseThrow().discard(token);
 		}
 		return new CodefCallResult.Answered<>(response);
+	}
+
+	/**
+	 * 결과 코드가 성공이 아닐 때 원인 판단에 쓸 값만 한 줄 더 남긴다. {@code extraMessage}는 유무만, 계정 API는 {@code errorList} 코드(형식 검사·치환
+	 * 뒤)와 항목 수만 남긴다. 메시지 원문·id·connectedId·응답 전문은 남기지 않는다.
+	 */
+	private static <T> void logFailureDetail(Enum<?> api, CodefProductResponse<T> response, Optional<String> resultCode) {
+		if (!(response instanceof CodefProductResponse.Interpreted<T> interpreted)
+				|| resultCode.filter(SUCCESS_CODE::equals).isPresent()) {
+			return;
+		}
+		boolean extraMessage = interpreted.response().result().extraMessagePresent();
+		if (!(api instanceof CodefAccountApi)) {
+			log.info("codef call detail api={} extraMessage={}", api, extraMessage);
+			return;
+		}
+		CodefAccount account = (interpreted.response().data() instanceof CodefList.Items<T> items && !items.items().isEmpty()
+				&& items.items().get(0) instanceof CodefAccount first) ? first : new CodefAccount(Optional.empty());
+		log.info("codef call detail api={} extraMessage={} errorCodes={} errorCount={}", api, extraMessage,
+				String.join(",", account.errorCodes()), account.errorCount());
 	}
 
 	private static <T> CodefCallResult<T> failed(Enum<?> api, Stage stage, Reason reason, OptionalInt status) {

@@ -8,6 +8,7 @@ import java.security.KeyPairGenerator;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 
 import javax.crypto.Cipher;
@@ -110,6 +111,20 @@ class LiveCodefGatewayTest {
 
 		// 성공 코드여도 connectedId가 없으면 쓸 수 없다
 		this.stub.respond(CREATE, 200, "{\"result\":{\"code\":\"CF-00000\"},\"data\":{}}");
+		assertThat(gateway().register("0301", "a", PASSWORD.toCharArray()))
+			.isInstanceOf(CodefRegistration.Unavailable.class);
+	}
+
+	@Test
+	void errorListCodesDoNotChangeTheRegistrationResult() {
+		// 관리자 판단 P1(#47) 유지: errorList 코드는 관측 로그에만 쓰고 로그인 실패(400)로 바꾸지 않는다
+		for (String errorList : List.of("[{\"code\":\"CF-12401\"}]", "[{\"code\":\"CF-12834\"}]",
+				"[{\"code\":\"CF-12999\"}]", "[{\"code\":\"OTHER-VALUE\"}]", "[]")) {
+			this.stub.respond(CREATE, 200, "{\"result\":{\"code\":\"CF-04000\"},\"data\":{\"errorList\":" + errorList + "}}");
+			assertThat(gateway().register("0301", "a", PASSWORD.toCharArray())).as(errorList)
+				.isInstanceOf(CodefRegistration.Unavailable.class);
+		}
+		this.stub.respond(CREATE, 200, "{\"result\":{\"code\":\"CF-04000\"},\"data\":{}}");
 		assertThat(gateway().register("0301", "a", PASSWORD.toCharArray()))
 			.isInstanceOf(CodefRegistration.Unavailable.class);
 	}

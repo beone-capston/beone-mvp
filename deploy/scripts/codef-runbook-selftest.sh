@@ -73,7 +73,7 @@ if [ "${1:-}" = compose ]; then
 			fi
 			[ "${FAKE_PS_RC:-0}" = 0 ] || exit "$FAKE_PS_RC"; printf '%b' "${FAKE_PS-beone-codef-verify-backend-1\nbeone-codef-verify-mysql-1\nbeone-codef-verify-web-1\n}"; exit 0 ;;
 		logs) [ "${FAKE_LOGS_RC:-0}" = 0 ] || exit "$FAKE_LOGS_RC"; printf '%b' "${FAKE_LOGS-started\nCODEF result CF-00000\n}"; exit 0 ;;
-		stop) log STOP; exit 0 ;;
+		stop) log STOP; exit "${FAKE_STOP_RC:-0}" ;;
 		down) log DOWN; exit "${FAKE_DOWN_RC:-0}" ;;
 		exec)
 			sql="${*: -1}"
@@ -219,13 +219,14 @@ run() {
 	echo "| $name | $desc | $want | $rc | ${forbid}${bad:+ (실행됨:$bad)}${miss} | $verdict |"
 }
 
-run verify-down "정상" 0 -
-run verify-down "down -v 실패" 1 - FAKE_DOWN_RC=1
-run verify-down "beone-verify 조회 실패" 1 - FAKE_PSQ_RC_verify=1
-run verify-down "beone-verify 컨테이너 남음" 1 - FAKE_PSQ_verify='v1\n'
-run verify-down "볼륨 조회 실패" 1 - FAKE_VOL_RC=1
-run verify-down "beone-verify 볼륨 남음" 1 - FAKE_VOLS='beone-verify_verify-mysql-data\n'
-run verify-down "compose.yaml 없음(9절로 지움)" 1 - FAKE_COMPOSE_RC=1
+# verify-down은 stop(볼륨 보존)이다. down(-v)은 어떤 경우에도 실행되면 안 된다
+REQUIRE=STOP run verify-down "정상(stop, down 안 함)" 0 DOWN
+run verify-down "stop 실패" 1 DOWN FAKE_STOP_RC=1
+run verify-down "beone-verify 조회 실패" 1 DOWN FAKE_PSQ_RC_verify=1
+run verify-down "실행 중 beone-verify 컨테이너 남음" 1 DOWN FAKE_PSQ_verify='v1\n'
+run verify-down "볼륨 조회 실패" 1 DOWN FAKE_VOL_RC=1
+REQUIRE=STOP run verify-down "beone-verify 볼륨 남음(보존, 통과)" 0 DOWN FAKE_VOLS='beone-verify_verify-mysql-data\n'
+run verify-down "compose.yaml 없음(9절로 지움)" 1 DOWN FAKE_COMPOSE_RC=1
 run up "정상" 0 -
 run up "config 실패" 1 UP FAKE_CONFIG_RC=1
 run up "키 빈 값(보간 실패, 닫힘)" 1 UP FAKE_KEYS=empty
