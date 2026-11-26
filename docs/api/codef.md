@@ -210,7 +210,7 @@ X-BeONE-Demo-User: MY_CARDS
 CODEF에서 KB국민카드 보유카드·승인내역·실적조회를 가져와 BeONE 데이터로 옮기는 API.
 
 ```text
-보유카드 → HeldCard(CODEF), UNMAPPED·candidateCardProductId=null로 생성, 상품은 사용자가 직접 선택(결정 20 R3)
+보유카드 → HeldCard(CODEF). 카드명이 이름 사전과 정확히 같으면 CANDIDATE·candidateCardProductId, 아니면 UNMAPPED·null로 생성. 확정은 사용자(D-15 2026-11-26 변경)
 승인내역 → CODEF 원장. 전액 취소로 확정된 형태만 반영, 부분취소 의심·짝 없음·짝 여럿·판단 불가 행은 넣지 않고 불완전 표시
 실적조회 → "카드사 조회 실적(참고)"로만 저장, 전월 실적에 자동 반영하지 않음
 재조회 → 중복 판단 키로 같은 행을 두 번 넣지 않음
@@ -259,8 +259,8 @@ to
         {
           "userCardId": "uc-2001",
           "cardName": "청춘대로 톡톡카드",
-          "candidateCardProductId": null,
-          "mappingStatus": "UNMAPPED"
+          "candidateCardProductId": "09174",
+          "mappingStatus": "CANDIDATE"
         }
       ]
     },
@@ -295,7 +295,8 @@ to
 
 #### 응답 필드
 
-- `heldCards.newCandidates[]` · 새 CODEF 카드는 `mappingStatus`=`UNMAPPED`, `candidateCardProductId`=`null`이다. 카드명으로 상품 후보를 정하지 않고 사용자가 직접 고른다(결정 20 R3, 2026-11-18 관리자 판단 K1).
+- `heldCards.newCandidates[]` · 이번에 새로 만든 CODEF 카드. 카드명이 이름 사전과 정확히 같으면 `mappingStatus`=`CANDIDATE`, `candidateCardProductId`=후보 상품 ID이고, 아니면 `UNMAPPED`·`null`이다. 같은 사용자에게 그 상품이 이미 `USER_CONFIRMED`면 `UNMAPPED`·`null`이다. 확정은 사용자가 매핑 변경 API(`CODEF_CANDIDATE`)로 한다([D-15 2026-11-26 변경](../decisions.md#d-15d-16d-17-확정-정책)). 이전 기준(결정 20 R3, 관리자 판단 K1)은 항상 `UNMAPPED`·`null`이었다.
+- 재동기화에서 다시 대조된 기존 카드에 후보를 둔 경우는 `newCandidates`에 담지 않는다. 보유 카드 목록(`GET /api/v1/me/cards`)의 `mapping`으로 확인한다.
 - `performances[].usedInCalculation` · 항상 `false`. 사용자가 확인해 수동 입력해야 계산에 쓴다(D-16)
 - `incompleteRows[]` · 원장에 넣지 않은 행과 이유. 카드번호·승인번호 원문은 담지 않는다
 - 부분 동기화 실패와 전체 실패를 구분한다. 일부 항목만 실패하면 200과 `data.partialFailures[]`(항목: `target`=`HELD_CARDS`/`APPROVALS`/`PERFORMANCES`(제안, 샌드박스 확인 뒤 확정), 공개 `code`·`message`, 실패가 없으면 `[]`)를 담고, 전부 실패하면 502를 준다(제안). timeout을 504로 나눌지는 전송 계약과 함께 정한다

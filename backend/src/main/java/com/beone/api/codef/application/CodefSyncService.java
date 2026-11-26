@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.beone.api.card.application.RegisteredCodefCard;
 import com.beone.api.card.application.UserCardService;
 import com.beone.api.codef.CodefApproval;
 import com.beone.api.codef.CodefCardPerformance;
@@ -58,7 +59,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 동기) → 세 대상 모두 실패면 502 → 짧은 저장 트랜잭션. 저장 트랜잭션은 보유 카드 행(ID 오름차순) → 사용자 행 → 연결 행 순으로 잠그고,
  * 조회 중 연결이 해제·교체됐으면 아무것도 저장하지 않고 409 {@code CODEF_NOT_CONNECTED}다.
  *
- * <p>보유카드는 {@link CodefHeldCardMatcher}로 맞춰 새 카드만 {@code UNMAPPED} 보유 카드로 만든다(상품 후보 없음, R3). 승인내역은
+ * <p>보유카드는 {@link CodefHeldCardMatcher}로 맞춰 새 카드만 보유 카드로 만든다. 카드명이 {@link CodefCardNameDictionary}와 정확히
+ * 일치하면 {@code CANDIDATE}와 후보 상품을, 아니면 {@code UNMAPPED}를 둔다. 다시 대조된 기존 카드도 후보 없는 {@code UNMAPPED}면
+ * 같은 사전으로 후보를 둔다. {@code USER_CONFIRMED}로는 확정하지 않는다(D-15 2026-11-26 변경, #268). 승인내역은
  * {@link CodefLedgerCandidateBuilder}로 판정해 받아들인 행만 codef 전용 테이블에 넣고 원장({@code ledger_transactions})은 바꾸지 않는다(R8).
  * 불완전 행은 저장하지 않으며 다음 동기화에서 다시 판정한다. 승인번호 HMAC 키가 없으면 승인내역을 조회·저장하지 않고 부분 실패로 알린다(P6).
  * 실적은 참고값으로만 저장하고 계산·월간 상태에 넣지 않는다(D-16). 원장이 완전하다고 선언하지 않는다(R7).
@@ -267,13 +270,22 @@ public class CodefSyncService {
 		for (int index = 0; index < cards.size(); index++) {
 			Long userCardId = switch (resolutions.get(index)) {
 				case CodefHeldCardMatcher.Resolution.Create create -> {
-					long id = this.userCardService.registerCodefCard(user, create.displayName());
+					RegisteredCodefCard registered = this.userCardService.registerCodefCard(user,
+							create.displayName(), CodefCardNameDictionary.candidateFor(create.cardName()).orElse(null));
+					long id = registered.userCardId();
 					this.heldCards.save(new CodefHeldCardEntity(id, user.userId(), create.cardName(),
 							create.issueDate(), syncId));
-					created.add(new CodefSyncResult.NewCandidate(id, create.cardName()));
+					created.add(new CodefSyncResult.NewCandidate(id, create.cardName(),
+							registered.candidateCardProductId()));
 					yield id;
 				}
-				case CodefHeldCardMatcher.Resolution.Existing same -> same.userCardId();
+				case CodefHeldCardMatcher.Resolution.Existing same -> {
+					// 재동기화: 후보 없는 UNMAPPED 카드만 다시 대조한다. 적용 조건은 보유 카드 서비스가 확인한다(#268)
+					CodefCardNameDictionary.candidateFor(cards.get(index).cardName().orElseThrow())
+						.ifPresent(product -> this.userCardService.proposeCodefCandidate(user, same.userCardId(),
+								product));
+					yield same.userCardId();
+				}
 				case CodefHeldCardMatcher.Resolution.Skipped skipped -> null;
 			};
 			// 카드 연결기(R1)는 응답에 이름이 하나뿐인 카드만 연결하므로 이름으로 찾아도 하나로 정해진다

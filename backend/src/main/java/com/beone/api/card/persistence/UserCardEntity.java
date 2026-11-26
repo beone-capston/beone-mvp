@@ -63,6 +63,12 @@ public class UserCardEntity {
 	@Column(name = "confirmed_at")
 	private LocalDateTime confirmedAt;
 
+	@Column(name = "candidate_card_product_id", length = 16)
+	private String candidateCardProductId;
+
+	@Column(name = "mapping_changed_by_user", nullable = false)
+	private boolean mappingChangedByUser;
+
 	@Column(name = "excluded_from_recommendation", nullable = false)
 	private boolean excludedFromRecommendation;
 
@@ -103,26 +109,43 @@ public class UserCardEntity {
 	}
 
 	/**
-	 * CODEF 보유카드 조회로 얻은 카드를 만든다(D-15, #129). 상품 후보를 정하지 않으므로 항상 {@code UNMAPPED}이고 상품 ID가 없다
-	 * (결정 20 R3).
+	 * CODEF 보유카드 조회로 얻은 카드를 만든다(D-15, #129). 후보 상품이 있으면 {@code CANDIDATE}, 없으면 {@code UNMAPPED}이고
+	 * 확정 상품 ID는 어느 쪽이든 없다(D-15 2026-11-26 변경, #268).
 	 * @param userId 소유 사용자 ID
 	 * @param displayName 조회된 카드 이름
+	 * @param candidateCardProductId 이름 사전으로 찾은 후보 상품 ID. 없으면 {@code null}
 	 * @param registeredAt 등록 시각
-	 * @return 저장 전 {@code UNMAPPED} 카드
+	 * @return 저장 전 {@code CANDIDATE} 또는 {@code UNMAPPED} 카드
 	 */
-	public static UserCardEntity codef(long userId, String displayName, LocalDateTime registeredAt) {
+	public static UserCardEntity codef(long userId, String displayName, String candidateCardProductId,
+			LocalDateTime registeredAt) {
 		UserCardEntity entity = new UserCardEntity();
 		entity.userId = userId;
 		entity.displayName = displayName;
 		entity.holdingSource = HoldingSource.CODEF;
-		entity.mappingStatus = MappingStatus.UNMAPPED;
+		entity.mappingStatus = (candidateCardProductId == null) ? MappingStatus.UNMAPPED : MappingStatus.CANDIDATE;
+		entity.candidateCardProductId = candidateCardProductId;
 		entity.excludedFromRecommendation = false;
 		entity.registeredAt = registeredAt;
 		return entity;
 	}
 
 	/**
-	 * 매핑을 바꾼다. 상품 ID는 {@code USER_CONFIRMED}일 때만 둔다.
+	 * 기존 {@code UNMAPPED} 카드에 CODEF 후보 상품을 둔다(#268). 적용 조건(CODEF 출처, 후보 없음, 사용자 변경 없음)은 호출자가
+	 * 확인한다. 확인 방법·확인 시각은 비워 둔다.
+	 * @param candidateCardProductId 후보 상품 ID
+	 */
+	public void proposeCandidate(String candidateCardProductId) {
+		this.mappingStatus = MappingStatus.CANDIDATE;
+		this.candidateCardProductId = candidateCardProductId;
+		this.cardProductId = null;
+		this.confirmationMethod = null;
+		this.confirmedAt = null;
+	}
+
+	/**
+	 * 사용자 요청으로 매핑을 바꾼다. 상품 ID는 {@code USER_CONFIRMED}일 때만 둔다. CODEF 후보는 지우고, 사용자가 매핑을 바꿨다고
+	 * 표시해 재동기화가 다시 후보를 두지 않게 한다(#268).
 	 * @param mappingStatus 새 매핑 상태
 	 * @param cardProductId 카드 상품 ID. {@code USER_CONFIRMED}가 아니면 호출자가 {@code null}을 넘긴다(이 메서드는 검사하지 않고 그대로 저장한다)
 	 * @param confirmationMethod 확인 방법. {@code UNMAPPED}이면 호출자가 {@code null}을 넘긴다
@@ -134,6 +157,8 @@ public class UserCardEntity {
 		this.cardProductId = cardProductId;
 		this.confirmationMethod = confirmationMethod;
 		this.confirmedAt = confirmedAt;
+		this.candidateCardProductId = null;
+		this.mappingChangedByUser = true;
 	}
 
 	public void rename(String displayName) {
@@ -178,6 +203,14 @@ public class UserCardEntity {
 
 	public LocalDateTime getConfirmedAt() {
 		return this.confirmedAt;
+	}
+
+	public String getCandidateCardProductId() {
+		return this.candidateCardProductId;
+	}
+
+	public boolean isMappingChangedByUser() {
+		return this.mappingChangedByUser;
 	}
 
 	public boolean isExcludedFromRecommendation() {

@@ -152,8 +152,8 @@ public class UserCardService {
 	public UserCardChangeResult changeMapping(CurrentUser user, String userCardId, MappingChange change) {
 		requireWritable(user);
 		UserCardEntity entity = find(user, userCardId);
-		if (change.confirmationMethod() == ConfirmationMethod.CODEF_CANDIDATE) {
-			// CANDIDATE는 2차 CODEF만 만든다. 1차 카드에는 후보가 없으므로 항상 일치하지 않는다(결정 27 A2-7).
+		if (change.confirmationMethod() == ConfirmationMethod.CODEF_CANDIDATE && !confirmsCandidate(entity, change)) {
+			// CODEF 후보 확인은 현재 CANDIDATE이고 그 후보 상품을 USER_CONFIRMED로 확인할 때만 쓴다(docs/api/cards.md, 결정 27 A2-7)
 			throw new CandidateMismatchException();
 		}
 		if (change.status() == MappingStatus.USER_CONFIRMED) {
@@ -246,16 +246,56 @@ public class UserCardService {
 	}
 
 	/**
-	 * CODEF 보유카드로 새 보유 카드를 만든다(#129). 매핑은 {@code UNMAPPED}, 상품 후보는 없다(결정 20 R3). 가상 포트폴리오 검사와
-	 * 표시 이름 검사(1~30자)는 호출자가 마친 뒤 부른다. 호출자의 트랜잭션 안에서만 부른다.
+	 * CODEF 보유카드로 새 보유 카드를 만든다(#129). 후보 상품이 주어지고 이 사용자에게 그 상품의 {@code USER_CONFIRMED} 카드가
+	 * 없으면 {@code CANDIDATE}로, 그 밖에는 {@code UNMAPPED}로 만든다(#268). 이미 확인한 상품을 후보로 두면 사용자가 확인할 때
+	 * 409가 되므로 두지 않는다. 서버가 {@code USER_CONFIRMED}로 확정하지 않는다(D-15). 가상 포트폴리오 검사와 표시 이름 검사(1~30자)는
+	 * 호출자가 마친 뒤 부른다. 호출자의 트랜잭션 안에서만 부른다.
 	 * @param user 현재 사용자
 	 * @param displayName 앞뒤 공백을 뗀 1~30자 표시 이름
-	 * @return 만든 보유 카드의 저장소 번호
+	 * @param candidateCardProductId 이름 사전으로 찾은 후보 상품 ID. 없으면 {@code null}
+	 * @return 만든 보유 카드의 저장소 번호와 실제로 둔 후보
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
-	public long registerCodefCard(CurrentUser user, String displayName) {
-		UserCardEntity entity = UserCardEntity.codef(user.userId(), displayName, now());
-		return this.userCardRepository.saveAndFlush(entity).getUserCardId();
+	public RegisteredCodefCard registerCodefCard(CurrentUser user, String displayName, String candidateCardProductId) {
+		String candidate = (candidateCardProductId != null && !isConfirmedProduct(user, candidateCardProductId))
+				? candidateCardProductId : null;
+		UserCardEntity entity = UserCardEntity.codef(user.userId(), displayName, candidate, now());
+		return new RegisteredCodefCard(this.userCardRepository.saveAndFlush(entity).getUserCardId(), candidate);
+	}
+
+	/**
+	 * 재동기화에서 다시 대조된 기존 CODEF 카드에 후보 상품을 둔다(#268). 해제하지 않은 이 사용자의 CODEF 카드이고, {@code UNMAPPED}이며
+	 * 후보가 없고, 사용자가 매핑을 바꾼 적이 없고, 이 사용자에게 그 상품의 {@code USER_CONFIRMED} 카드가 없을 때만 둔다.
+	 * {@code USER_CONFIRMED}·{@code NOT_SUPPORTED}·이미 후보가 있는 카드는 그대로 둔다. 호출자의 트랜잭션 안에서만 부른다.
+	 * @param user 현재 사용자
+	 * @param userCardId 기존 CODEF 카드 저장소 번호
+	 * @param candidateCardProductId 이름 사전으로 찾은 후보 상품 ID
+	 * @return 후보를 두었으면 {@code true}
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public boolean proposeCodefCandidate(CurrentUser user, long userCardId, String candidateCardProductId) {
+		UserCardEntity entity = this.userCardRepository
+			.findByUserCardIdAndUserIdAndReleasedAtIsNull(userCardId, user.userId())
+			.orElse(null);
+		if (entity == null || entity.getHoldingSource() != HoldingSource.CODEF
+				|| entity.getMappingStatus() != MappingStatus.UNMAPPED || entity.getCandidateCardProductId() != null
+				|| entity.isMappingChangedByUser() || isConfirmedProduct(user, candidateCardProductId)) {
+			return false;
+		}
+		entity.proposeCandidate(candidateCardProductId);
+		this.userCardRepository.saveAndFlush(entity);
+		return true;
+	}
+
+	private boolean isConfirmedProduct(CurrentUser user, String cardProductId) {
+		return this.userCardRepository.existsByUserIdAndCardProductIdAndMappingStatusAndReleasedAtIsNull(user.userId(),
+				cardProductId, MappingStatus.USER_CONFIRMED);
+	}
+
+	// CODEF 후보 확인: 현재 CANDIDATE이고, USER_CONFIRMED 요청의 상품이 저장된 후보와 같아야 한다.
+	private static boolean confirmsCandidate(UserCardEntity entity, MappingChange change) {
+		return entity.getMappingStatus() == MappingStatus.CANDIDATE && change.status() == MappingStatus.USER_CONFIRMED
+				&& Objects.equals(entity.getCandidateCardProductId(), change.cardProductId());
 	}
 
 	// 쓰기 가능 여부는 현재 사용자의 readOnly로 판단한다(시연 사용자 구분이 없는 회원 장부 포함, 결정 37)
@@ -297,7 +337,8 @@ public class UserCardService {
 	private static UserCardView toView(UserCardEntity entity) {
 		boolean synthetic = entity.getHoldingSource() == HoldingSource.SYNTHETIC;
 		UserCardMapping mapping = synthetic ? null : new UserCardMapping(entity.getMappingStatus(),
-				entity.getCardProductId(), entity.getConfirmationMethod(), entity.getConfirmedAt());
+				entity.getCardProductId(), entity.getConfirmationMethod(), entity.getConfirmedAt(),
+				entity.getCandidateCardProductId());
 		return new UserCardView(UserCardId.format(entity.getUserCardId()), entity.getDisplayName(),
 				entity.getHoldingSource(), synthetic ? entity.getCardProductId() : null, mapping,
 				entity.isExcludedFromRecommendation(),

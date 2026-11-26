@@ -24,8 +24,11 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 public record CodefSyncResponse(String syncId, String syncedAt, HeldCards heldCards, Approvals approvals,
 		List<Performance> performances, List<PartialFailure> partialFailures) {
 
-	/** 새 CODEF 카드의 매핑 상태. 상품 후보를 정하지 않는다(결정 20 R3, 관리자 판단 K1). */
+	/** 이름 사전 후보가 없는 새 CODEF 카드의 매핑 상태. */
 	static final String UNMAPPED = "UNMAPPED";
+
+	/** 이름 사전 후보가 있는 새 카드의 매핑 상태(#268). */
+	static final String CANDIDATE = "CANDIDATE";
 
 	/** 실적 참고값 표시 이름(D-16). */
 	static final String PERFORMANCE_LABEL = "카드사 조회 실적(참고)";
@@ -42,8 +45,9 @@ public record CodefSyncResponse(String syncId, String syncedAt, HeldCards heldCa
 				new HeldCards(held.fetched(),
 						held.newCandidates()
 							.stream()
-							.map(card -> new NewCandidate(userCardId(card.userCardId()), card.cardName(), null,
-									UNMAPPED))
+							.map(card -> new NewCandidate(userCardId(card.userCardId()), card.cardName(),
+									card.candidateCardProductId(),
+									(card.candidateCardProductId() == null) ? UNMAPPED : CANDIDATE))
 							.toList()),
 				new Approvals(approvals.imported(), approvals.skippedDuplicates(),
 						approvals.incompleteRows()
@@ -89,8 +93,8 @@ public record CodefSyncResponse(String syncId, String syncedAt, HeldCards heldCa
 	 * 새로 만든 보유 카드.
 	 * @param userCardId 보유 카드 ID
 	 * @param cardName CODEF 카드명
-	 * @param candidateCardProductId 상품 후보. 항상 {@code null}(R3)
-	 * @param mappingStatus 항상 {@code UNMAPPED}
+	 * @param candidateCardProductId 상품 후보. 카드명이 이름 사전과 정확히 일치할 때만 값이 있다(#268)
+	 * @param mappingStatus 후보가 있으면 {@code CANDIDATE}, 없으면 {@code UNMAPPED}
 	 */
 	@JsonInclude(JsonInclude.Include.ALWAYS)
 	public record NewCandidate(String userCardId, String cardName, String candidateCardProductId,

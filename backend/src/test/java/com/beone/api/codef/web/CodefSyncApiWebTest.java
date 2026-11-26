@@ -82,7 +82,7 @@ class CodefSyncApiWebTest {
 	void successReturnsTheContractBodyWithUnmappedCandidates() throws Exception {
 		given(this.codefSyncService.sync(MY_CARDS, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 11, 3)))
 			.willReturn(new CodefSyncResult(1, SYNCED_AT,
-					new CodefSyncResult.HeldCards(3, List.of(new CodefSyncResult.NewCandidate(2001, "가짜 카드 A"))),
+					new CodefSyncResult.HeldCards(3, List.of(new CodefSyncResult.NewCandidate(2001, "가짜 카드 A", null))),
 					new CodefSyncResult.Approvals(41, 12,
 							List.of(new CodefSyncResult.IncompleteRow(2001L, true,
 									CodefIncompleteReason.PARTIAL_CANCELLATION_SUSPECTED))),
@@ -100,6 +100,26 @@ class CodefSyncApiWebTest {
 				  "period":{"from":"2026-10-01","to":"2026-10-31"},"currentUseWon":518000,
 				  "fetchedAt":"2026-11-04T09:01:00+09:00","usedInCalculation":false}],
 				 "partialFailures":[]}}
+				""", 200);
+	}
+
+	@Test
+	void dictionaryCandidatesAreReportedAsCandidateWithTheProduct() throws Exception {
+		given(this.codefSyncService.sync(MY_CARDS, null, null)).willReturn(new CodefSyncResult(9, SYNCED_AT,
+				new CodefSyncResult.HeldCards(2,
+						List.of(new CodefSyncResult.NewCandidate(2001, "올라운드 티타늄카드", "09271"),
+								new CodefSyncResult.NewCandidate(2002, "가짜 카드 B", null))),
+				new CodefSyncResult.Approvals(0, 0, List.of()), List.of(), List.of()));
+
+		assertJson(perform(json("{}").header(HEADER, "MY_CARDS")), """
+				{"data":{"syncId":"sync-9","syncedAt":"2026-11-04T09:01:00+09:00",
+				 "heldCards":{"fetched":2,"newCandidates":[
+				  {"userCardId":"uc-2001","cardName":"올라운드 티타늄카드","candidateCardProductId":"09271",
+				   "mappingStatus":"CANDIDATE"},
+				  {"userCardId":"uc-2002","cardName":"가짜 카드 B","candidateCardProductId":null,
+				   "mappingStatus":"UNMAPPED"}]},
+				 "approvals":{"imported":0,"skippedDuplicates":0,"incompleteRows":[]},
+				 "performances":[],"partialFailures":[]}}
 				""", 200);
 	}
 

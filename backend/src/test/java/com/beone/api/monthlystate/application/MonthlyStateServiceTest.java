@@ -465,7 +465,10 @@ class MonthlyStateServiceTest {
 
 	private static UserCardView withStatus(String id, MappingStatus status) {
 		return new UserCardView(id, "카드", HoldingSource.MANUAL, null,
-				new UserCardMapping(status, null, ConfirmationMethod.MANUAL_SELECTION, NOW), false,
+				// CANDIDATE는 후보 상품을 함께 가져야 한다(#268)
+				new UserCardMapping(status, null, ConfirmationMethod.MANUAL_SELECTION, NOW,
+						(status == MappingStatus.CANDIDATE) ? "09174" : null),
+				false,
 				RecommendationEligibility.of(HoldingSource.MANUAL, status, false), NOW);
 	}
 
