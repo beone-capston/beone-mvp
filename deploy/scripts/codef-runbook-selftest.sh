@@ -197,7 +197,7 @@ failures=0
 echo "| 블록 | 주입 사례 | 기대 종료 코드 | 실제 | 실행되면 안 되는 동작 | 판정 |"
 echo "|---|---|---|---|---|---|"
 # run <블록> <설명> <기대 종료 코드> <금지 동작(쉼표, 없으면 ->)> [환경 변수=값...]
-# 앞에 SEED_BEFORE=(원장 기준 파일 내용), REQUIRE=(반드시 실행돼야 하는 동작)를 붙일 수 있다
+# 앞에 SEED_BEFORE=(원장 기준 파일 내용), REQUIRE=(반드시 실행돼야 하는 동작), EXPECT_OUT=(출력에 있어야 하는 줄의 일부)를 붙일 수 있다
 run() {
 	local name="$1" desc="$2" want="$3" forbid="$4" code rc bad="" f
 	shift 4
@@ -216,6 +216,7 @@ run() {
 	fi
 	local miss=""
 	if [ -n "${REQUIRE:-}" ]; then grep -qx "$REQUIRE" "$WORK/log" || miss=" (필수 동작 $REQUIRE 없음)"; fi
+	if [ -n "${EXPECT_OUT:-}" ]; then grep -qF -- "$EXPECT_OUT" "$WORK/out" || miss="$miss (출력 '$EXPECT_OUT' 없음)"; fi
 	local verdict=PASS
 	{ [ "$rc" = "$want" ] && [ -z "$bad" ] && [ -z "$miss" ]; } || { verdict=FAIL; failures=$((failures + 1)); }
 	echo "| $name | $desc | $want | $rc | ${forbid}${bad:+ (실행됨:$bad)}${miss} | $verdict |"
@@ -286,6 +287,10 @@ run budget "상한 설정 조회 실패" 1 - FAKE_LIMIT_RC=1
 run budget "상한 설정 빈 값" 1 - FAKE_LIMIT=''
 run budget "상한 설정 숫자 아님" 1 - FAKE_LIMIT='abc\n'
 run budget "상한 설정 0" 1 - FAKE_LIMIT='0\n'
+run budget "상한 설정 000(정규화 뒤 0)" 1 - FAKE_LIMIT='000\n'
+EXPECT_OUT='limit=10 remaining=9' run budget "상한 010(십진 10), 사용 1" 0 - FAKE_BUDGET_STAT='1\t1\n' FAKE_LIMIT='010\n'
+EXPECT_OUT='limit=8 remaining=8' run budget "상한 008(8진수로 읽으면 오류), 사용 0" 0 - FAKE_BUDGET_STAT='0\t0\n' FAKE_LIMIT='008\n'
+EXPECT_OUT='limit=3 remaining=2' run budget "기본 상한 3, 사용 1의 남은 횟수" 0 -
 run budget "DB 조회 실패" 1 - FAKE_Q_RC=1
 run budget "조회 결과 비어 있음" 1 - FAKE_BUDGET_STAT=''
 run ledger-before "정상" 0 -

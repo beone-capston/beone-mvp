@@ -392,7 +392,9 @@ printf '%s\n' "$rows"
 # 상한은 실행 중인 백엔드에 실제로 들어간 설정값(BEONE_CODEF_BUDGET_PER_API)을 쓴다. 비밀 아님
 limit=$("${C[@]}" exec -T verify-backend printenv BEONE_CODEF_BUDGET_PER_API) || fail "상한 설정 조회 실패(백엔드 미기동 또는 값 없음)"
 limit=$(printf '%s' "$limit" | tr -d '\r\n')
-case "$limit" in ''|*[!0-9]*|0) fail "상한 설정이 양의 정수가 아님: ${limit:-빈 값}" ;; esac
+case "$limit" in ''|*[!0-9]*) fail "상한 설정이 양의 정수가 아님: ${limit:-빈 값}" ;; esac
+limit=$((10#$limit))   # 앞자리 0(010·008)을 8진수로 읽지 않게 십진 정규화. 비교와 remaining 계산에 이 값만 쓴다
+[ "$limit" -gt 0 ] || fail "상한 설정이 양의 정수가 아님: 0"
 [ "$maxused" -le "$limit" ] || fail "API별 상한 ${limit}회 초과(${maxused})"
 echo "windows=$windows maxUsed=$maxused limit=$limit remaining=$((limit - maxused))"
 echo BUDGET_OK
