@@ -272,8 +272,11 @@ esac
 
 ```bash
 s=; csrf && s=$(mcred | req POST /api/v1/auth/login -); echo "${s:-중단} $(code)"   # 기대 200
-s=$(req GET /api/v1/me); echo "$s codefConnected=$(jq -r '.data.codefConnected // empty' "$W/body" 2> /dev/null)"   # 기대 200 false
+cc() { jq -r 'if (.data | type) == "object" and (.data | has("codefConnected")) then .data.codefConnected | tostring else empty end' "$W/body" 2> /dev/null; }   # false도 그대로 출력, 필드가 없을 때만 빈 값
+s=$(req GET /api/v1/me); echo "$s codefConnected=$(cc)"   # 기대 200 codefConnected=false
 ```
+
+- `codefConnected=` 뒤가 비어 있으면 응답에 그 필드가 없다는 뜻입니다(로그인 실패 등). `false`와 구분합니다. `jq`의 `// empty`는 `false`도 버리므로 불리언 값에는 쓰지 않습니다.
 
 **C. 호출 전 기준** — 다른 셸 또는 Run Command로 `ledger-before`, `budget`을 실행하고 2-4 `watch`가 `ok`인지 봅니다. `budget`의 `limit`과 `ACCOUNT_CREATE` 값으로 남은 횟수를 확인합니다(`limit` − 사용 수). 남은 횟수가 1이면 사용자에게 다시 확인합니다.
 
@@ -389,7 +392,9 @@ printf '%s\n' "$rows"
 # 상한은 실행 중인 백엔드에 실제로 들어간 설정값(BEONE_CODEF_BUDGET_PER_API)을 쓴다. 비밀 아님
 limit=$("${C[@]}" exec -T verify-backend printenv BEONE_CODEF_BUDGET_PER_API) || fail "상한 설정 조회 실패(백엔드 미기동 또는 값 없음)"
 limit=$(printf '%s' "$limit" | tr -d '\r\n')
-case "$limit" in ''|*[!0-9]*|0) fail "상한 설정이 양의 정수가 아님: ${limit:-빈 값}" ;; esac
+case "$limit" in ''|*[!0-9]*) fail "상한 설정이 양의 정수가 아님: ${limit:-빈 값}" ;; esac
+limit=$((10#$limit))   # 앞자리 0(010·008)을 8진수로 읽지 않게 십진 정규화. 비교와 remaining 계산에 이 값만 쓴다
+[ "$limit" -gt 0 ] || fail "상한 설정이 양의 정수가 아님: 0"
 [ "$maxused" -le "$limit" ] || fail "API별 상한 ${limit}회 초과(${maxused})"
 echo "windows=$windows maxUsed=$maxused limit=$limit remaining=$((limit - maxused))"
 echo BUDGET_OK
@@ -514,7 +519,17 @@ echo STOP_OK
 
 기본 방법은 **검증 DB를 통째로 지우는 것**입니다. 대상 식별이 어긋나거나 조회·삭제가 실패하면 그 자리에서 멈추고 다음 단계로 가지 않습니다.
 
-1. 연결 해제: CODEF 쪽 connectedId 정리를 요청합니다(키가 있고 backend가 떠 있어야 정리됨). 사용자 Mac 터널에서 `DELETE /api/v1/me/codef/connection`(CSRF) → 204. 4-1에서 이미 키를 지웠다면 이 단계를 위해 키를 다시 넣을지는 사용자가 정합니다(다시 넣는다면 2-2·`names`·`up`). 다시 넣지 않으면 connectedId 정리는 하지 못한 것으로 기록합니다.
+1. 연결 해제: CODEF 쪽 connectedId 정리를 요청합니다(키가 있고 backend가 떠 있어야 정리됨). 사용자 Mac 터널에서 `DELETE /api/v1/me/codef/connection`(CSRF) → 204.
+   - **SSM 경로(2-3-1)로 연결했다면** 연결 때와 같은 셸에서 2-3-1 A의 `req`·`csrf` 헬퍼와 B의 `cc`로 아래를 실행합니다. 기대는 `204`, 이어서 `200 codefConnected=false`입니다.
+
+   ```bash
+   s=; csrf && s=$(req DELETE /api/v1/me/codef/connection); echo "${s:-중단} $(code)"   # 기대 204
+   s=$(req GET /api/v1/me); echo "$s codefConnected=$(cc)"                               # 기대 200 codefConnected=false
+   ```
+
+   - 세션이 끊겨 셸이 새로 열렸거나 쿠키가 없으면(`req`가 `준비 안 됨`, `401 UNAUTHENTICATED`, CSRF 발급 실패) 2-3-1 A를 다시 실행하고, B에서 주소·비밀번호 입력과 `mcred` 정의 뒤 **로그인 블록부터** 다시 합니다(이미 가입한 회원이므로 가입 요청과 `ta`는 다시 하지 않음). 그다음 위 두 줄을 실행합니다.
+   - `409 CODEF_NOT_CONNECTED`는 이미 해제된 상태입니다. 다시 보내지 않고 그대로 기록합니다. 그 밖의 결과도 상태와 `code`만 기록합니다.
+   - 4-1에서 이미 키를 지웠다면 이 단계를 위해 키를 다시 넣을지는 사용자가 정합니다(다시 넣는다면 2-2·`names`·`up`). 다시 넣지 않으면 connectedId 정리는 하지 못한 것으로 기록합니다.
 2. 아래 블록으로 검증 환경·DB·키 파일을 지우고 확인합니다. 이 블록은 compose 구성·`.env`를 읽지 않는 라벨 경로라(0절) 키가 없거나 `.env`가 없어도 동작합니다. `down -v`와 같은 범위(이 프로젝트의 컨테이너·볼륨·네트워크)를 지웁니다. 중간 단계(볼륨·네트워크 삭제 등)에서 멈췄으면 원인을 고친 뒤 **같은 블록을 다시 실행**합니다. 컨테이너가 이미 없으면 남은 볼륨·네트워크·키 파일만 정리하고, 이미 없는 키 파일은 실패로 보지 않습니다. 운영·공개·검증 대상이 섞이거나 라벨이 맞지 않는 `beone-codef_` 볼륨이 있으면 아무것도 지우지 않고 멈춥니다.
 
 ```bash
