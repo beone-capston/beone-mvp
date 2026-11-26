@@ -185,6 +185,7 @@ type Result = {
 }
 
 export function CardServicesPage({ card, onClose }: { card: WalletCard; onClose: () => void }) {
+  const catalogOnly = offlineCatalog || card.source === 'MOCK_IMPORTED'
   const [asOf] = useState(seoulToday)
   const month = asOf.slice(0, 7)
   const [result, setResult] = useState<Result>({})
@@ -194,7 +195,7 @@ export function CardServicesPage({ card, onClose }: { card: WalletCard; onClose:
   const extra = product && otherServices[product.cardId as ProductId]
 
   useEffect(() => {
-    if (!product || offlineCatalog) return
+    if (!product || catalogOnly) return
     const controller = new AbortController()
     const { signal } = controller
     readProduct(product.cardId, asOf, signal).then(
@@ -206,7 +207,7 @@ export function CardServicesPage({ card, onClose }: { card: WalletCard; onClose:
       error => { if (!signal.aborted) setResult(current => ({ ...current, monthError: requestMessage(error) })) },
     )
     return () => controller.abort()
-  }, [asOf, attempt, month, product])
+  }, [asOf, attempt, catalogOnly, month, product])
 
   function retry() {
     setResult({})
@@ -214,7 +215,7 @@ export function CardServicesPage({ card, onClose }: { card: WalletCard; onClose:
   }
 
   const message = !product ? '이 카드의 부가서비스 안내는 준비 중이에요.' :
-    result.productError ?? (offlineCatalog ? !staticRuleApplies(product, asOf) && '기준일에 유효한 규칙이 없어요.' :
+    result.productError ?? (catalogOnly ? !staticRuleApplies(product, asOf) && '기준일에 유효한 규칙이 없어요.' :
       !result.product ? '상품 정보를 불러오는 중이에요.' :
       result.product.ruleStatus !== 'VERIFIED' ? '기준일에 유효한 규칙이 없어요.' :
       !matchesCatalog(product, result.product) && '현재 서버 규칙과 상세 안내 버전이 달라 혜택 조건을 표시할 수 없어요.')
@@ -257,7 +258,7 @@ export function CardServicesPage({ card, onClose }: { card: WalletCard; onClose:
       </section>
       <div className="services-month-status">
         <p>사용액 조회 기준 · {month.replace('-', '년 ')}월</p>
-        <p>{result.monthError ?? (offlineCatalog ? '상품설명서 기준 · 월 사용액은 API 연결 후 조회할 수 있어요.' :
+        <p>{result.monthError ?? (catalogOnly ? '상품설명서 기준 · 월 사용액은 API 연결 후 조회할 수 있어요.' :
           !demoMode ? '보유 카드의 월 사용액은 로컬·데모 API에서 조회할 수 있어요.' :
           !result.monthly ? '월 사용액을 불러오는 중이에요.' :
           '가상 포트폴리오 조회값이에요. 스냅샷 이후 승인·취소가 있으면 현재 잔액은 확인이 필요해요.')}</p>
