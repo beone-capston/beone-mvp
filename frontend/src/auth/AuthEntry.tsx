@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AuthApiError, authApi } from './api'
+import { MemberIdentity } from './memberIdentity'
 import { AuthForm } from './AuthForm'
 import { EmailVerification, emailVerificationPath } from './EmailVerification'
 import type { MailDeadlines } from './mailRequests'
@@ -15,10 +16,11 @@ export function AuthEntry({ children }: { children: ReactNode }) {
   const [resetToken] = useState(() => window.location.pathname === '/password-reset'
     ? new URLSearchParams(window.location.search).get('token') ?? ''
     : null)
-  const mockLogin = import.meta.env.DEV && !enteredVerification && resetToken === null &&
+  const mockLogin = import.meta.env.DEV && import.meta.env.VITE_WORKSPACE_CONTEXT !== 'member' && !enteredVerification && resetToken === null &&
     ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname) &&
     window.location.port === '5173'
   const [state, setState] = useState<EntryState>(!enteredVerification && resetToken === null && !mockLogin ? 'checking' : 'signed-out')
+  const [memberId, setMemberId] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
@@ -33,7 +35,12 @@ export function AuthEntry({ children }: { children: ReactNode }) {
     queueMicrotask(() => {
       if (controller.signal.aborted) return
       authApi.session(controller.signal).then(
-        () => { if (!controller.signal.aborted) setState('signed-in') },
+        member => {
+          if (!controller.signal.aborted) {
+            setMemberId(member.userId)
+            setState('signed-in')
+          }
+        },
         (error: unknown) => {
           if (controller.signal.aborted) return
           const signedOut = error instanceof AuthApiError &&
@@ -54,7 +61,7 @@ export function AuthEntry({ children }: { children: ReactNode }) {
     </main>
   )
 
-  if (state === 'signed-in') return children
+  if (state === 'signed-in') return <MemberIdentity.Provider value={memberId}>{children}</MemberIdentity.Provider>
 
   return (
     <main className="auth-shell">
@@ -63,7 +70,7 @@ export function AuthEntry({ children }: { children: ReactNode }) {
         mailDeadlines={deadlines}
         resetToken={resetToken}
         sessionChecking={state === 'checking'}
-        onLogin={() => setState('signed-in')}
+        onLogin={userId => { setMemberId(userId ?? null); setState('signed-in') }}
         onRetrySession={state === 'unavailable' ? () => {
           setState('checking')
           setAttempt(value => value + 1)

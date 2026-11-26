@@ -9,13 +9,15 @@ import { Icon } from './components/Icon'
 import { PaymentPreferenceMenu } from './components/PaymentPreferenceMenu'
 import { PortfolioModeTabs } from './components/PortfolioModeTabs'
 import { Sheet } from './components/Sheet'
-import { defaultPreference, mockCardSource } from './data/portfolio'
-import type { CardSource, PaymentPreference, PortfolioMode, WalletCard } from './data/portfolio'
+import { mockCardSource } from './data/portfolio'
+import type { CardSource, PortfolioMode, WalletCard } from './data/portfolio'
 import { OrderWorkspace } from './orders/OrderWorkspace'
 import { orderApi } from './orders/orderApi'
 import type { OrderApi } from './orders/orderApi'
 import { formatWon, orderName } from './orders/order'
 import type { CreatedOrder } from './orders/order'
+import type { PreferenceApi } from './preferences/preferenceApi'
+import { usePaymentPreference } from './preferences/usePaymentPreference'
 import { PaymentFlow } from './payment/PaymentFlow'
 import { apiPaymentGateway } from './payment/paymentApi'
 import { createMockPaymentGateway } from './payment/mockPayment'
@@ -26,27 +28,26 @@ const menus = ['혜택', '빠른결제', '모의결제'] as const
 type Menu = (typeof menus)[number]
 interface ModeState {
   activeIndex: number
-  preference: PaymentPreference
 }
 
 const mockDevice = import.meta.env.DEV && import.meta.env.VITE_DEVICE_AUTH_MODE === 'mock'
 const mockPayments = import.meta.env.DEV && import.meta.env.VITE_PAYMENT_API_MODE === 'mock'
 
-function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, mockAuth = mockDevice, benefits = benefitsApi }: {
-  cardSource?: CardSource; orders?: OrderApi; paymentGateway?: PaymentGateway; mockAuth?: boolean; benefits?: BenefitsApi
+function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, mockAuth = mockDevice, benefits = benefitsApi, preferenceApi, mockOrders = false }: {
+  cardSource?: CardSource; orders?: OrderApi; paymentGateway?: PaymentGateway; mockAuth?: boolean; benefits?: BenefitsApi; preferenceApi?: PreferenceApi; mockOrders?: boolean
 }) {
   const [menu, setMenu] = useState<Menu>('빠른결제')
   const [mode, setMode] = useState<PortfolioMode>('MY_CARDS')
   const [modes, setModes] = useState<Record<PortfolioMode, ModeState>>({
-    MY_CARDS: { activeIndex: 0, preference: defaultPreference() },
-    VIRTUAL_PORTFOLIO: { activeIndex: 0, preference: defaultPreference() },
+    MY_CARDS: { activeIndex: 0 },
+    VIRTUAL_PORTFOLIO: { activeIndex: 0 },
   })
   const [gateway] = useState(() => paymentGateway ?? (mockPayments
     ? createMockPaymentGateway(Number(import.meta.env.VITE_PAYMENT_MOCK_DELAY_MS || 800) || 0)
     : apiPaymentGateway))
   const [selectedOrders, setSelectedOrders] = useState<Partial<Record<PortfolioMode, OrderSelection>>>({})
   const [sampleOrders, setSampleOrders] = useState<Partial<Record<PortfolioMode, CreatedOrder>>>(
-    () => gateway.kind === 'mock' ? { MY_CARDS: sampleOrder } : {},
+    () => gateway.kind === 'mock' ? { MY_CARDS: sampleOrder, ...(mockOrders ? { VIRTUAL_PORTFOLIO: { ...sampleOrder, orderId: 'mock-virtual-order' } } : {}) } : {},
   )
   const [paidIds, setPaidIds] = useState<Partial<Record<PortfolioMode, string[]>>>({})
   const selectedOrder = selectedOrders[mode]?.order
@@ -55,6 +56,13 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
   const [authOpen, setAuthOpen] = useState(false)
   const cards = useMemo(() => cardSource.getCards(mode), [cardSource, mode])
   const activeIndex = Math.max(0, Math.min(modes[mode].activeIndex, cards.length - 1))
+  const ownPreference = usePaymentPreference(preferenceApi, 'MY_CARDS')
+  const virtualPreference = usePaymentPreference(preferenceApi, 'VIRTUAL_PORTFOLIO')
+  const settings = mode === 'MY_CARDS' ? ownPreference : virtualPreference
+  const preference = settings.value
+  const preferenceCards = settings.cards ?? cards
+  const missingFixedCard = preference?.selectionMode === 'FIXED_REPRESENTATIVE' &&
+    !preferenceCards.some(card => card.id === preference.representativeCardId && card.canBeRepresentative)
   const myMode = mode === 'MY_CARDS'
   const servicePage = services?.source === 'VIRTUAL' ? services : null
   const serviceTrigger = useRef<HTMLElement | null>(null)
@@ -91,12 +99,16 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
   }
 
   function openSelectedOrder(orderMode: PortfolioMode, order: CreatedOrder, source: OrderSelection['source'] = 'server') {
-    setSelectedOrders(current => ({ ...current, [orderMode]: { order, source } }))
+    setSelectedOrders(current => ({ ...current, [orderMode]: { order, source: mockOrders ? 'mock' : source } }))
     selectMenu('빠른결제')
     window.scrollTo(0, 0)
   }
 
   function openPayment() {
+    if (!preference || settings.saving || settings.needsReload || missingFixedCard) {
+      setNotice(missingFixedCard ? '대표 카드를 다시 선택해 주세요.' : '결제 선택 방식을 먼저 확인해 주세요.')
+      return
+    }
     setAuthOpen(true)
     setNotice('')
     window.scrollTo(0, 0)
@@ -107,16 +119,12 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
       const { selection, mode: orderMode } = attempt
       const order = { ...selection.order, status: 'PAID' as const }
       setSelectedOrders(current => ({ ...current, [orderMode]: { ...selection, order } }))
-      if (selection.source === 'mock') setSampleOrders(current => ({ ...current, [orderMode]: order }))
+      if (selection.source === 'mock' && sampleOrders[orderMode]?.orderId === order.orderId) setSampleOrders(current => ({ ...current, [orderMode]: order }))
       else setPaidIds(current => ({ ...current, [orderMode]: [...(current[orderMode] ?? []), order.orderId] }))
     }
     setAuthOpen(false)
     selectMenu('모의결제')
     window.scrollTo(0, 0)
-  }
-
-  function updatePreference(preference: PaymentPreference) {
-    setModes((current) => ({ ...current, [mode]: { ...current[mode], preference } }))
   }
 
   return (
@@ -187,12 +195,19 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
                 <h2>
                   나의 카드 <span>{cards.length}</span>
                 </h2>
-                <PaymentPreferenceMenu
+                {preference ? <PaymentPreferenceMenu
                   key={mode}
-                  cards={cards}
-                  preference={modes[mode].preference}
-                  onChange={updatePreference}
-                />
+                  cards={preferenceCards}
+                  preference={preference}
+                  onChange={settings.save}
+                  saving={settings.saving}
+                  error={settings.error}
+                  refresh={settings.reload}
+                /> : <div className="preference-status" role="status">
+                  {!settings.supported ? '이 포트폴리오의 결제 설정은 지원하지 않아요.'
+                    : settings.error ?? '결제 설정 확인 중…'}
+                  {settings.error && <button type="button" className="preference-retry" onClick={settings.reload}>다시 조회</button>}
+                </div>}
               </div>
               {cards.length > 0 ? (
                 <CardCarousel
@@ -229,11 +244,12 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
         <BenefitsPage mode={mode} api={benefits} active={!authOpen && menu === '혜택'} />
         {(['MY_CARDS', 'VIRTUAL_PORTFOLIO'] as const).map(orderMode => (
           <OrderWorkspace key={orderMode} mode={orderMode} api={orders}
-            active={!authOpen && menu === '모의결제' && mode === orderMode} onSelect={openSelectedOrder}
+            active={!authOpen && menu === '모의결제' && mode === orderMode && settings.supported} onSelect={openSelectedOrder}
             paidIds={paidIds[orderMode]} sampleOrder={sampleOrders[orderMode]} mockApproval={gateway.kind === 'mock'} />
         ))}
-        {authOpen && <PaymentFlow mode={mode} preference={modes[mode].preference} selection={selectedOrders[mode]}
-          cards={cards} gateway={gateway} mockAuth={mockAuth}
+        {menu === '모의결제' && !settings.supported && <p className="preference-status">이 포트폴리오의 모의결제는 지원하지 않아요.</p>}
+        {authOpen && preference && <PaymentFlow mode={mode} preference={preference} selection={selectedOrders[mode]}
+          cards={preferenceCards} gateway={gateway} mockAuth={mockAuth}
           onBack={() => { setAuthOpen(false); window.scrollTo(0, 0) }} onReturn={returnToOrders} />}
       </main>
 

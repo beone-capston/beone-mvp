@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 탈퇴 회원의 업무 장부와 그 장부의 모든 업무 행을 지운다(결정 D10). 업무 표는 {@code users}를 외래 키로 참조하고 대부분 연쇄 삭제가 없으므로
  * 자식 표부터 차례로 지운다. 연쇄 삭제(ON DELETE CASCADE)가 걸린 손자 표(월간 상태의 버킷 사용·서비스 선택, 추천 카드 기준, 결제 취소,
  * 원장 사용 효과)는 부모와 함께 지워진다.
+ * 월간 상태의 CODEF 실적 참고값 ID(V17)는 {@code ON DELETE SET NULL}이라 참고값을 먼저 지워도 막히지 않고, 월간 상태는 뒤에서 지운다.
  *
  * <p>회원 장부({@code member_id IS NOT NULL})만 지운다. 시연 사용자·가상 포트폴리오 장부는 대상이 아니다. 새 업무 표를 추가하면 이 목록에도
  * 넣어야 한다. 빠뜨리면 {@code users} 삭제가 외래 키로 실패해 탈퇴 전체가 롤백된다(조용히 남지 않는다).

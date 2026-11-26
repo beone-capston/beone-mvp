@@ -184,7 +184,7 @@ p {
   height: 3px;
   border-radius: 3px;
   background: var(--brand-primary);
-  transform: translateX(calc(var(--mode-index) * 80px));
+  transform: translateX(calc(var(--mode-index) * 84px));
   transition: transform 200ms, width 200ms;
 }
 
@@ -806,4 +806,18 @@ p {
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+.preference-status {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.preference-status { max-inline-size: 180px; margin-inline: auto; }
+.preference-retry {
+  display: block;
+  padding: 4px 0;
+  background: transparent;
+  color: var(--brand-secondary);
+  text-decoration: underline;
 }

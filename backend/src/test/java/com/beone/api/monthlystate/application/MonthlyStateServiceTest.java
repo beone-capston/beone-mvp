@@ -30,6 +30,7 @@ import com.beone.api.card.application.RecommendationEligibility;
 import com.beone.api.card.application.UserCardMapping;
 import com.beone.api.card.application.UserCardService;
 import com.beone.api.card.application.UserCardView;
+import com.beone.api.codef.application.CodefPerformanceReferenceQuery;
 import com.beone.api.ledger.application.LedgerActivity;
 import com.beone.api.ledger.application.LedgerEntryType;
 import com.beone.api.ledger.application.LedgerQueryService;
@@ -75,6 +76,9 @@ class MonthlyStateServiceTest {
 
 	private final LedgerQueryService ledger = mock(LedgerQueryService.class);
 
+	// 기본은 참고값 없음(Mockito 기본 응답이 빈 Optional)
+	private final CodefPerformanceReferenceQuery codef = mock(CodefPerformanceReferenceQuery.class);
+
 	private final List<BucketUsageEntity> savedUsages = new ArrayList<>();
 
 	private final List<ServiceSelectionEntity> savedSelections = new ArrayList<>();
@@ -87,7 +91,7 @@ class MonthlyStateServiceTest {
 		CardProductService products = new CardProductService(RuleCatalogLoader.load(),
 				new StaticListableBeanFactory().getBeanProvider(Clock.class));
 		this.service = new MonthlyStateService(this.states, this.usages, this.selections, this.userCards, products,
-				this.ledger, clock);
+				this.ledger, this.codef, clock);
 		given(this.states.saveAndFlush(any())).willAnswer(invocation -> {
 			MonthlyStateEntity entity = invocation.getArgument(0);
 			if (entity.getMonthlyStateId() == null) {
@@ -228,7 +232,7 @@ class MonthlyStateServiceTest {
 		MonthlyStateService service = new MonthlyStateService(this.states, this.usages, this.selections,
 				this.userCards, new CardProductService(RuleCatalogLoader.load(),
 						new StaticListableBeanFactory().getBeanProvider(Clock.class)),
-				this.ledger, ticking);
+				this.ledger, this.codef, ticking);
 		holds(confirmed("uc-11", "09271"));
 		AtomicInteger readsWhenLocking = new AtomicInteger(-1);
 		given(this.states.findForUpdateByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11")).willAnswer(invocation -> {
@@ -442,6 +446,178 @@ class MonthlyStateServiceTest {
 		assertThatThrownBy(() -> this.service.selectSource(ME, "uc-12", NOVEMBER,
 				new SourceSelection("registeredOn", OCTOBER, StateSource.MANUAL, "cf-v1")))
 			.isInstanceOf(MonthlyStateCardNotFoundException.class);
+	}
+
+	// D-16 CODEF 실적 참고값(사용자 결정 2026-11-27, #281). 참고값 금액은 합성 값이다.
+
+	private static final LocalDateTime FETCHED = LocalDateTime.of(2026, 11, 4, 9, 1, 0);
+
+	private static CodefPerformanceReferenceQuery.Reference reference(long id, long cardId, DatePeriod period,
+			Long won) {
+		return new CodefPerformanceReferenceQuery.Reference(id, 40L + id, cardId, period.from(), period.to(), won,
+				FETCHED.plusHours(id));
+	}
+
+	private void latestReference(DatePeriod period, CodefPerformanceReferenceQuery.Reference reference) {
+		given(this.codef.latest(1L, 11L, period.from(), period.to())).willReturn(Optional.ofNullable(reference));
+	}
+
+	private void storedPrevious(long value, CodefPerformanceReferenceQuery.Reference referenced) {
+		MonthlyStateEntity entity = new MonthlyStateEntity(1L, 11L, "2026-11");
+		entity.replace("09271", NOW, value, OCTOBER.from(), OCTOBER.to(), null, null, null, null, false, null);
+		if (referenced != null) {
+			entity.referPreviousMonthToCodef(referenced.referenceId(), referenced.syncId(), referenced.currentUseWon(),
+					referenced.periodFrom(), referenced.periodTo(), referenced.fetchedAt());
+		}
+		ReflectionTestUtils.setField(entity, "monthlyStateId", 77L);
+		given(this.states.findByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11")).willReturn(Optional.of(entity));
+	}
+
+	@Test
+	void previousMonthReferenceIsShownForPrefillButNotUsed() {
+		holds(confirmed("uc-11", "09271"));
+		given(this.states.findByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11")).willReturn(Optional.empty());
+		latestReference(OCTOBER, reference(5, 11, OCTOBER, 518_000L));
+
+		MonthlyStateView view = this.service.get(ME, "uc-11", NOVEMBER);
+
+		// 참고값은 미리 채우기용으로만 나오고, 전월 실적은 여전히 미입력이다
+		assertThat(view.codefReference()).isEqualTo(new MonthlyStateView.CodefReference(5, OCTOBER, 518_000L,
+				FETCHED.plusHours(5)));
+		assertThat(view.previousMonthPerformanceWon()).isEqualTo(StateValue.unknown());
+		assertThat(view.previousMonthPerformanceWon().reason()).isEqualTo(StateReason.NOT_ENTERED);
+		assertThat(view.conflicts()).isEmpty();
+	}
+
+	@Test
+	void referenceWithUnknownAmountStaysNullAndDoesNotConflict() {
+		holds(confirmed("uc-11", "09271"));
+		storedPrevious(500_000, null);
+		latestReference(OCTOBER, reference(5, 11, OCTOBER, null));
+
+		MonthlyStateView view = this.service.get(ME, "uc-11", NOVEMBER);
+
+		assertThat(view.codefReference().currentUseWon()).isNull();
+		assertThat(view.previousMonthPerformanceWon().usable()).isTrue();
+		assertThat(view.conflicts()).isEmpty();
+	}
+
+	@Test
+	void manualValueWithoutReferenceConflictsWithADifferentReference() {
+		// Q1: 참고 없이 입력한 값도 같은 기준 기간의 다른 참고값과 다르면 충돌이고, Q2: 계산에서 빠진다
+		holds(confirmed("uc-11", "09271"));
+		storedPrevious(500_000, null);
+		latestReference(OCTOBER, reference(5, 11, OCTOBER, 518_000L));
+
+		MonthlyStateView view = this.service.get(ME, "uc-11", NOVEMBER);
+
+		StateValue<Long> previous = view.previousMonthPerformanceWon();
+		assertThat(previous.value()).isEqualTo(500_000L);
+		assertThat(previous.source()).isEqualTo(StateSource.MANUAL);
+		assertThat(previous.usable()).isFalse();
+		assertThat(previous.reason()).isEqualTo(StateReason.SOURCE_CONFLICT);
+		assertThat(view.conflicts()).containsExactly(new MonthlyStateView.Conflict("previousMonthPerformanceWon",
+				OCTOBER, "cf-5-20261117103000",
+				List.of(new MonthlyStateView.Candidate(StateSource.MANUAL, 500_000L, OCTOBER, NOW),
+						new MonthlyStateView.Candidate(StateSource.CODEF, 518_000L, OCTOBER, FETCHED.plusHours(5)))));
+	}
+
+	@Test
+	void sameValueOrDifferentPeriodIsNotAConflict() {
+		holds(confirmed("uc-11", "09271"));
+		storedPrevious(518_000, null);
+		latestReference(OCTOBER, reference(5, 11, OCTOBER, 518_000L));
+
+		assertThat(this.service.get(ME, "uc-11", NOVEMBER).conflicts()).isEmpty();
+
+		// 기준 기간이 다른 값: 그 기간의 참고값이 없으므로 충돌이 아니다
+		MonthlyStateEntity entity = new MonthlyStateEntity(1L, 11L, "2026-11");
+		entity.replace("09271", NOW, 1L, LocalDate.of(2026, 9, 15), LocalDate.of(2026, 10, 14), null, null, null, null,
+				false, null);
+		given(this.states.findByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11")).willReturn(Optional.of(entity));
+
+		MonthlyStateView shifted = this.service.get(ME, "uc-11", NOVEMBER);
+		assertThat(shifted.conflicts()).isEmpty();
+		assertThat(shifted.previousMonthPerformanceWon().usable()).isTrue();
+	}
+
+	@Test
+	void valueSavedFromThatReferenceIsNotAConflictUntilANewerReferenceDiffers() {
+		holds(confirmed("uc-11", "09271"));
+		CodefPerformanceReferenceQuery.Reference seen = reference(5, 11, OCTOBER, 518_000L);
+		// 사용자는 518,000원을 보고 510,000원으로 확인했다
+		storedPrevious(510_000, seen);
+		latestReference(OCTOBER, seen);
+
+		MonthlyStateView same = this.service.get(ME, "uc-11", NOVEMBER);
+		assertThat(same.conflicts()).isEmpty();
+		assertThat(same.previousMonthPerformanceWon().usable()).isTrue();
+		assertThat(same.referencedCodef()).isEqualTo(new MonthlyStateView.ReferencedCodef(5L, 45L, OCTOBER, 518_000L,
+				FETCHED.plusHours(5)));
+
+		// 재조회로 다른 값이 오면 이전 확인을 그대로 쓰지 않고 다시 충돌로 드러낸다
+		latestReference(OCTOBER, reference(6, 11, OCTOBER, 530_000L));
+		MonthlyStateView changed = this.service.get(ME, "uc-11", NOVEMBER);
+		assertThat(changed.previousMonthPerformanceWon().reason()).isEqualTo(StateReason.SOURCE_CONFLICT);
+		assertThat(changed.conflicts()).hasSize(1);
+		assertThat(changed.referencedCodef().referenceId()).isEqualTo(5L);
+
+		// 새 참고값이 사용자 값과 같으면 충돌이 아니다
+		latestReference(OCTOBER, reference(7, 11, OCTOBER, 510_000L));
+		assertThat(this.service.get(ME, "uc-11", NOVEMBER).conflicts()).isEmpty();
+	}
+
+	@Test
+	void replaceWithReferenceStoresManualValueAndTheReferenceSnapshot() {
+		holds(confirmed("uc-11", "09271"));
+		CodefPerformanceReferenceQuery.Reference seen = reference(5, 11, OCTOBER, 518_000L);
+		given(this.codef.find(1L, 5L)).willReturn(Optional.of(seen));
+		latestReference(OCTOBER, seen);
+
+		MonthlyStateView view = this.service.replace(ME, "uc-11", NOVEMBER, new MonthlyStateInput(
+				new MonthlyStateInput.Amount(510_000, OCTOBER, 5L), null, null, null, null, null));
+
+		// Q3: 값은 사용자가 정한 MANUAL이고, 참고한 값이 같이 남으며 충돌이 아니다
+		assertThat(view.previousMonthPerformanceWon()).isEqualTo(StateValue.manual(510_000L, OCTOBER, NOW));
+		assertThat(view.referencedCodef()).isEqualTo(new MonthlyStateView.ReferencedCodef(5L, 45L, OCTOBER, 518_000L,
+				FETCHED.plusHours(5)));
+		assertThat(view.codefReference().referenceId()).isEqualTo(5L);
+		assertThat(view.conflicts()).isEmpty();
+	}
+
+	@Test
+	void replaceWithoutReferenceClearsAPreviousReferenceSnapshot() {
+		holds(confirmed("uc-11", "09271"));
+		MonthlyStateEntity locked = new MonthlyStateEntity(1L, 11L, "2026-11");
+		locked.replace("09271", NOW, 1L, OCTOBER.from(), OCTOBER.to(), null, null, null, null, false, null);
+		locked.referPreviousMonthToCodef(5, 45, 518_000L, OCTOBER.from(), OCTOBER.to(), FETCHED);
+		given(this.states.findForUpdateByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11"))
+			.willReturn(Optional.of(locked));
+
+		MonthlyStateView view = this.service.replace(ME, "uc-11", NOVEMBER, previousOnly(2000));
+
+		assertThat(view.referencedCodef()).isNull();
+		assertThat(locked.getPreviousMonthCodefFetchedAt()).isNull();
+		assertThat(locked.getPreviousMonthCodefReferenceId()).isNull();
+	}
+
+	@Test
+	void referenceOfAnotherCardOrPeriodOrUserIsRejectedBeforeSaving() {
+		holds(confirmed("uc-11", "09271"));
+		given(this.codef.find(1L, 5L)).willReturn(Optional.of(reference(5, 12, OCTOBER, 518_000L)));
+		given(this.codef.find(1L, 6L)).willReturn(Optional.of(reference(6, 11, NOVEMBER_PERIOD, 518_000L)));
+		// 7은 다른 사용자의 참고값이라 이 사용자로는 찾지 못한다(기본 빈 값)
+
+		for (long id : new long[] { 5L, 6L, 7L }) {
+			assertThatThrownBy(() -> this.service.replace(ME, "uc-11", NOVEMBER, new MonthlyStateInput(
+					new MonthlyStateInput.Amount(510_000, OCTOBER, id), null, null, null, null, null)))
+				.as("reference %d", id)
+				.isInstanceOfSatisfying(RuleMismatchException.class, ex -> assertThat(ex.violations())
+					.extracting(RuleMismatchException.Violation::field)
+					.containsExactly("previousMonthPerformanceWon.referencedCodefId"));
+		}
+		verify(this.states, never()).insertIfAbsent(any(), any(), any(), any());
+		verify(this.states, never()).saveAndFlush(any());
 	}
 
 	private void holds(UserCardView... cards) {

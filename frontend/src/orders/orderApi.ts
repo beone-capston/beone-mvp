@@ -1,3 +1,5 @@
+import { workspaceRequest } from '../data/workspaceRequest'
+import type { WorkspaceContext } from '../data/workspaceRequest'
 import type { PortfolioMode } from '../data/portfolio'
 import { isOrderDate, paymentMethods } from './order'
 import type { CreatedOrder, OrderDetail, OrderInput } from './order'
@@ -15,9 +17,6 @@ export class OrderRequestError extends Error {
   }
 }
 
-const baseUrl = (import.meta.env.VITE_API_BASE_URL ??
-  (import.meta.env.DEV ? 'http://localhost:8080' : '')).replace(/\/+$/, '')
-
 function isOrder(value: CreatedOrder | null | undefined): value is CreatedOrder {
   return Boolean(value && typeof value.orderId === 'string' && value.orderId &&
     ['CREATED', 'PAID', 'CANCELLED'].includes(value.status) &&
@@ -28,17 +27,14 @@ function isOrder(value: CreatedOrder | null | undefined): value is CreatedOrder 
     typeof value.merchantClass === 'string' && Object.hasOwn(paymentMethods, value.paymentMethod))
 }
 
-async function request(mode: PortfolioMode, orderId?: string, input?: OrderInput) {
-  const headers: Record<string, string> = { 'X-BeONE-Demo-User': mode }
+async function request(context: WorkspaceContext, mode: PortfolioMode, orderId?: string, input?: OrderInput) {
+  const headers: Record<string, string> = {}
   if (input) headers['Content-Type'] = 'application/json'
-  const path = '/api/v1/me/orders' + (orderId === undefined ? '' : '/' + encodeURIComponent(orderId))
-  const response = await fetch(baseUrl + path, {
+  const path = 'orders' + (orderId === undefined ? '' : '/' + encodeURIComponent(orderId))
+  const response = await workspaceRequest(context, mode, path, {
     method: input ? 'POST' : 'GET',
     headers,
-    credentials: 'omit',
-    cache: 'no-store',
     body: input ? JSON.stringify(input) : undefined,
-    signal: AbortSignal.timeout(15000),
   }).catch(() => { throw new OrderRequestError('network') })
 
   const body = await response.json().catch(() => null)
@@ -62,18 +58,22 @@ export interface OrderApi {
   detail(mode: PortfolioMode, orderId: string): Promise<OrderDetail>
 }
 
-export const orderApi: OrderApi = {
-  async create(mode, input) {
-    const result = await request(mode, undefined, input)
-    if (result.status !== 'CREATED') throw new OrderRequestError('unexpected')
-    return result
-  },
-  async detail(mode, orderId) {
-    const result = await request(mode, orderId) as OrderDetail
-    if (result.orderId !== orderId ||
-      ![result.simulatedPaymentId, result.latestRecommendationId].every(value => value === null || typeof value === 'string')) {
-      throw new OrderRequestError('unexpected')
-    }
-    return result
-  },
+export function createOrderApi(context: WorkspaceContext): OrderApi {
+  return {
+    async create(mode, input) {
+      const result = await request(context, mode, undefined, input)
+      if (result.status !== 'CREATED') throw new OrderRequestError('unexpected')
+      return result
+    },
+    async detail(mode, orderId) {
+      const result = await request(context, mode, orderId) as OrderDetail
+      if (result.orderId !== orderId ||
+        ![result.simulatedPaymentId, result.latestRecommendationId].every(value => value === null || typeof value === 'string')) {
+        throw new OrderRequestError('unexpected')
+      }
+      return result
+    },
+  }
 }
+
+export const orderApi = createOrderApi('demo')

@@ -104,7 +104,11 @@ class MemberWithdrawalIntegrationTest {
 
 	@AfterEach
 	void clearTables() {
-		this.jdbcTemplate.update("DELETE FROM codef_connections");
+		for (String table : new String[] { "monthly_states", "codef_performance_references", "codef_syncs",
+				"codef_connections" }) {
+			this.jdbcTemplate.update("DELETE t FROM " + table + " t JOIN users u ON u.user_id = t.user_id"
+					+ " WHERE u.member_id IS NOT NULL");
+		}
 		this.members.clearMemberData();
 		this.mailSender.clear();
 		RELEASED.clear();
@@ -231,6 +235,45 @@ class MemberWithdrawalIntegrationTest {
 
 		assertThat(RELEASED).containsExactly(CONNECTED_ID);
 		assertThat(count("SELECT COUNT(*) FROM codef_connections", null)).isZero();
+		assertThat(count("SELECT COUNT(*) FROM members WHERE member_id = ?", MEMBER_A)).isZero();
+	}
+
+	/**
+	 * V17: 월간 상태가 CODEF 실적 참고값을 가리켜도(참고 스냅샷, ON DELETE SET NULL) 삭제 순서가 맞아 탈퇴된다. 참고값·동기화·월간 상태가
+	 * 모두 지워진다.
+	 */
+	@Test
+	void monthlyStateReferencingACodefPerformanceIsErasedToo() {
+		Session a = this.members.loginNew(MEMBER_A, EMAIL_A);
+		ResponseEntity<String> card = this.members.send(HttpMethod.POST, "/api/v1/me/cards", a, CARD);
+		assertThat(card.getStatusCode().value()).isEqualTo(201);
+		long userCardId = Long.parseLong(MemberApiTestClient.userCardId(card.getBody()).substring("uc-".length()));
+		Long userId = this.jdbcTemplate.queryForObject("SELECT user_id FROM users WHERE member_id = ?", Long.class,
+				MEMBER_A);
+		this.jdbcTemplate.update("INSERT INTO codef_syncs (user_id, period_from, period_to, synced_at)"
+				+ " VALUES (?, '2026-10-01', '2026-11-17', '2026-11-17 09:00:00')", userId);
+		Long syncId = this.jdbcTemplate.queryForObject("SELECT MAX(sync_id) FROM codef_syncs WHERE user_id = ?",
+				Long.class, userId);
+		this.jdbcTemplate.update("INSERT INTO codef_performance_references (user_id, user_card_id, sync_id, card_name,"
+				+ " period_from, period_to, current_use_won, fetched_at) VALUES (?, ?, ?, '청춘대로 톡톡카드',"
+				+ " '2026-10-01', '2026-10-31', 312000, '2026-11-17 09:00:00')", userId, userCardId, syncId);
+		Long referenceId = this.jdbcTemplate.queryForObject(
+				"SELECT MAX(codef_performance_reference_id) FROM codef_performance_references WHERE user_id = ?",
+				Long.class, userId);
+		this.jdbcTemplate.update("INSERT INTO monthly_states (user_id, user_card_id, state_month, snapshot_at,"
+				+ " previous_month_won, previous_month_from, previous_month_to, no_service_selection,"
+				+ " previous_month_codef_reference_id, previous_month_codef_sync_id, previous_month_codef_won,"
+				+ " previous_month_codef_from, previous_month_codef_to, previous_month_codef_fetched_at)"
+				+ " VALUES (?, ?, '2026-11', '2026-11-18 10:00:00', 310000, '2026-10-01', '2026-10-31', FALSE,"
+				+ " ?, ?, 312000, '2026-10-01', '2026-10-31', '2026-11-17 09:00:00')", userId, userCardId,
+				referenceId, syncId);
+
+		assertThat(this.members.deleteWithBody(ME, a, CORRECT).getStatusCode().value()).isEqualTo(204);
+
+		for (String table : new String[] { "monthly_states", "codef_performance_references", "codef_syncs",
+				"user_cards" }) {
+			assertThat(count("SELECT COUNT(*) FROM " + table + " WHERE user_id = " + userId, null)).as(table).isZero();
+		}
 		assertThat(count("SELECT COUNT(*) FROM members WHERE member_id = ?", MEMBER_A)).isZero();
 	}
 

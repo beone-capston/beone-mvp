@@ -24,6 +24,7 @@ import com.beone.api.monthlystate.application.MonthlyStateService;
 import com.beone.api.monthlystate.application.MonthlyStateView;
 import com.beone.api.monthlystate.application.RuleMismatchException;
 import com.beone.api.monthlystate.application.ServiceSelectionStatus;
+import com.beone.api.monthlystate.application.StateSource;
 import com.beone.api.monthlystate.application.StateValue;
 import com.beone.api.support.WebSliceTest;
 import com.beone.api.user.application.CurrentUser;
@@ -81,7 +82,8 @@ class MonthlyStateApiWebTest {
 			"snapshotAt": "2026-11-03T10:20:00+09:00",
 			"previousMonthPerformanceWon": {
 			  "value": 523000, "source": "MANUAL", "period": {"from": "2026-10-01", "to": "2026-10-31"},
-			  "updatedAt": "2026-11-03T10:20:00+09:00", "usable": true, "reason": null, "referencedCodef": null
+			  "updatedAt": "2026-11-03T10:20:00+09:00", "usable": true, "reason": null, "referencedCodef": null,
+			  "codefReference": null
 			},
 			"limitBucketUsages": [
 			  {"limitBucketId": "LB-GREAT", "value": 4000, "source": "MANUAL",
@@ -135,7 +137,7 @@ class MonthlyStateApiWebTest {
 		assertJson(perform(get(PATH).header(HEADER, "MY_CARDS")), """
 				{"data":{"userCardId":"uc-1001","month":"2026-11","snapshotAt":null,
 				 "previousMonthPerformanceWon":{"value":null,"source":"UNKNOWN","period":null,"updatedAt":null,
-				   "usable":false,"reason":"NOT_ENTERED","referencedCodef":null},
+				   "usable":false,"reason":"NOT_ENTERED","referencedCodef":null,"codefReference":null},
 				 "limitBucketUsages":[],"otherBucketsUsedWon":%s,"selectedServices":[],
 				 "serviceSelectionStatus":"UNKNOWN","noServiceSelection":null,"registeredOn":%s,
 				 "conflicts":[],"afterSnapshot":null}}
@@ -156,7 +158,7 @@ class MonthlyStateApiWebTest {
 				{"data":{"userCardId":"uc-1001","month":"2026-11","snapshotAt":"2026-11-03T10:20:00+09:00",
 				 "previousMonthPerformanceWon":{"value":-12000,"source":"MANUAL",
 				   "period":{"from":"2026-10-01","to":"2026-10-31"},"updatedAt":"2026-11-03T10:20:00+09:00",
-				   "usable":true,"reason":null,"referencedCodef":null},
+				   "usable":true,"reason":null,"referencedCodef":null,"codefReference":null},
 				 "limitBucketUsages":[],
 				 "otherBucketsUsedWon":{"value":0,"source":"MANUAL","period":{"from":"2026-11-01","to":"2026-11-30"},
 				   "updatedAt":"2026-11-03T10:20:00+09:00","usable":true,"reason":null},
@@ -253,6 +255,98 @@ class MonthlyStateApiWebTest {
 				new MonthlyStateInput.NoSelection(null), null));
 		assertThat(captor.getAllValues().get(2).selectedServices())
 			.containsExactly(new MonthlyStateInput.Selection("S", null));
+	}
+
+	@Test
+	void getShowsCodefReferenceTheReferencedValueAndAConflict() throws Exception {
+		// D-16(사용자 결정 2026-11-27, #281): 참고값은 계산 미사용으로 보여 주고, 충돌한 전월 실적은 값을 둔 채 usable=false다
+		LocalDateTime seen = LocalDateTime.of(2026, 11, 4, 9, 1, 0);
+		LocalDateTime newer = LocalDateTime.of(2026, 11, 20, 8, 0, 0);
+		given(this.monthlyStateService.get(MY_CARDS, "uc-1001", NOVEMBER)).willReturn(new MonthlyStateView("uc-1001",
+				NOVEMBER, SNAPSHOT, StateValue.manual(510000L, OCTOBER, SNAPSHOT).conflicted(), List.of(),
+				StateValue.unknown(), List.of(), ServiceSelectionStatus.UNKNOWN, null, StateValue.unknown(),
+				MonthlyStateView.AfterSnapshot.NO_SIMULATED_PAYMENTS,
+				new MonthlyStateView.CodefReference(6, OCTOBER, 530000L, newer),
+				new MonthlyStateView.ReferencedCodef(5L, 41, OCTOBER, 518000L, seen),
+				List.of(new MonthlyStateView.Conflict("previousMonthPerformanceWon", OCTOBER, "cf-6-20261103102000",
+						List.of(new MonthlyStateView.Candidate(StateSource.MANUAL, 510000L, OCTOBER, SNAPSHOT),
+								new MonthlyStateView.Candidate(StateSource.CODEF, 530000L, OCTOBER, newer))))));
+
+		assertJson(perform(get(PATH).header(HEADER, "MY_CARDS")), """
+				{"data":{"userCardId":"uc-1001","month":"2026-11","snapshotAt":"2026-11-03T10:20:00+09:00",
+				 "previousMonthPerformanceWon":{"value":510000,"source":"MANUAL",
+				   "period":{"from":"2026-10-01","to":"2026-10-31"},"updatedAt":"2026-11-03T10:20:00+09:00",
+				   "usable":false,"reason":"SOURCE_CONFLICT",
+				   "referencedCodef":{"referenceId":"cpr-5","syncId":"sync-41","inquiryMonth":"2026-10",
+				     "period":{"from":"2026-10-01","to":"2026-10-31"},"currentUseWon":518000,
+				     "fetchedAt":"2026-11-04T09:01:00+09:00"},
+				   "codefReference":{"referenceId":"cpr-6","label":"카드사 조회 실적(참고)","inquiryMonth":"2026-10",
+				     "period":{"from":"2026-10-01","to":"2026-10-31"},"currentUseWon":530000,
+				     "fetchedAt":"2026-11-20T08:00:00+09:00","usedInCalculation":false}},
+				 "limitBucketUsages":[],"otherBucketsUsedWon":%s,"selectedServices":[],
+				 "serviceSelectionStatus":"UNKNOWN","noServiceSelection":null,"registeredOn":%s,
+				 "conflicts":[{"item":"previousMonthPerformanceWon","period":{"from":"2026-10-01","to":"2026-10-31"},
+				   "conflictVersion":"cf-6-20261103102000",
+				   "candidates":[
+				     {"source":"MANUAL","value":510000,"period":{"from":"2026-10-01","to":"2026-10-31"},
+				      "updatedAt":"2026-11-03T10:20:00+09:00"},
+				     {"source":"CODEF","value":530000,"period":{"from":"2026-10-01","to":"2026-10-31"},
+				      "updatedAt":"2026-11-20T08:00:00+09:00"}],
+				   "selection":null}],
+				 "afterSnapshot":{"approvalCount":0,"approvedAmountWon":0,"cancellationCount":0}}}
+				""".formatted(UNKNOWN_STATE, UNKNOWN_STATE), 200);
+	}
+
+	@Test
+	void unknownReferenceAmountAndDeletedReferenceStayNull() throws Exception {
+		LocalDateTime seen = LocalDateTime.of(2026, 11, 4, 9, 1, 0);
+		given(this.monthlyStateService.get(MY_CARDS, "uc-1001", NOVEMBER)).willReturn(new MonthlyStateView("uc-1001",
+				NOVEMBER, SNAPSHOT, StateValue.manual(1L, OCTOBER, SNAPSHOT), List.of(), StateValue.unknown(),
+				List.of(), ServiceSelectionStatus.UNKNOWN, null, StateValue.unknown(), null,
+				new MonthlyStateView.CodefReference(6, OCTOBER, null, seen),
+				new MonthlyStateView.ReferencedCodef(null, 41, OCTOBER, null, seen), List.of()));
+
+		String body = perform(get(PATH).header(HEADER, "MY_CARDS")).getResponse()
+			.getContentAsString(StandardCharsets.UTF_8);
+
+		// 미확인 금액은 0이 아니라 null이고, 지워진 참고값의 ID는 null이다
+		assertThat(body).contains("\"codefReference\":{\"referenceId\":\"cpr-6\"")
+			.contains("\"referencedCodef\":{\"referenceId\":null,\"syncId\":\"sync-41\"")
+			.contains("\"currentUseWon\":null")
+			.doesNotContain("\"currentUseWon\":0");
+	}
+
+	@Test
+	void putPassesTheReferencedCodefId() throws Exception {
+		given(this.monthlyStateService.replace(eq(MY_CARDS), eq("uc-1001"), eq(NOVEMBER), any()))
+			.willReturn(contractView(null));
+
+		assertThat(perform(json(put(PATH), """
+				{"previousMonthPerformanceWon":{"value":510000,"period":{"from":"2026-10-01","to":"2026-10-31"},
+				 "referencedCodefId":"cpr-5"}}
+				""").header(HEADER, "MY_CARDS")).getResponse().getStatus()).isEqualTo(200);
+
+		ArgumentCaptor<MonthlyStateInput> captor = ArgumentCaptor.forClass(MonthlyStateInput.class);
+		verify(this.monthlyStateService).replace(eq(MY_CARDS), eq("uc-1001"), eq(NOVEMBER), captor.capture());
+		assertThat(captor.getValue().previousMonthPerformanceWon())
+			.isEqualTo(new MonthlyStateInput.Amount(510000, OCTOBER, 5L));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "5", "cpr-0", "cpr-05", "uc-5", "", "cpr-5 " })
+	void malformedReferencedCodefIdIsAFieldError(String id) throws Exception {
+		assertFieldError("{\"previousMonthPerformanceWon\":{\"value\":1,\"period\":{\"from\":\"2026-10-01\",\"to\":\"2026-10-31\"},"
+				+ "\"referencedCodefId\":\"" + id + "\"}}", "previousMonthPerformanceWon.referencedCodefId",
+				"형식이 올바르지 않습니다.");
+		verifyNoInteractions(this.monthlyStateService);
+	}
+
+	@Test
+	void referencedCodefIdOnOtherAmountsIsAnUnknownField() throws Exception {
+		assertJson(perform(json(put(PATH), "{\"otherBucketsUsedWon\":{\"value\":1,\"period\":{\"from\":\"2026-11-01\","
+				+ "\"to\":\"2026-11-30\"},\"referencedCodefId\":\"cpr-5\"}}").header(HEADER, "MY_CARDS")),
+				INVALID_REQUEST_EMPTY, 400);
+		verifyNoInteractions(this.monthlyStateService);
 	}
 
 	@ParameterizedTest

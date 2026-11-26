@@ -17,7 +17,7 @@ const meetsPasswordRules = (value: string) =>
 const invalidCredentials = '이메일 또는 비밀번호를 확인해 주세요.'
 
 export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessionChecking = false, mailDeadlines }: {
-  onLogin: () => void
+  onLogin: (userId?: string) => void
   onRetrySession?: () => void
   resetToken: string | null
   mockLogin: boolean
@@ -182,9 +182,9 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
         changeScreen('login')
         setResetComplete(true)
       } else {
-        await authApi.login(credentials)
+        const member = await authApi.login(credentials)
         setPassword('')
-        onLogin()
+        onLogin(member.userId)
       }
     } catch (error) {
       if (signUp || screen === 'reset-request') applyMailRetry(deadlines, normalizedEmail, error)

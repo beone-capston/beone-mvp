@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -19,6 +20,7 @@ import com.beone.api.card.application.MappingStatus;
 import com.beone.api.card.application.UserCardId;
 import com.beone.api.card.application.UserCardService;
 import com.beone.api.card.application.UserCardView;
+import com.beone.api.codef.application.CodefPerformanceReferenceQuery;
 import com.beone.api.ledger.application.LedgerActivity;
 import com.beone.api.ledger.application.LedgerEntryType;
 import com.beone.api.ledger.application.LedgerQueryService;
@@ -40,6 +42,12 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>보유 카드 존재·소유·매핑은 {@code card} 패키지의 {@link UserCardService}로, 한도 묶음·서비스 ID는 {@link CardProductService}로
  * 확인한다(읽기만). 기준 기간이 카드의 실적·한도 기간과 맞는지는 판단하지 않고 받은 값을 저장한다(D-22). 스냅샷 뒤 모의 승인 합산은
  * 모의 결제(B3)가 생긴 뒤 연결한다.
+ *
+ * <p>CODEF 실적 참고값(D-16, 사용자 결정 2026-11-27, #281)은 {@code codef} 패키지의 {@link CodefPerformanceReferenceQuery}로 읽기만
+ * 한다. 전월 실적 칸에 미리 채워 보여 줄 참고값({@code codefReference})을 주되 계산에는 쓰지 않는다. 사용자가 참고값 ID를 함께 보내면 값은
+ * 사용자가 정한 {@code MANUAL}로 저장하고 참고한 CODEF 값을 스냅샷으로 남긴다. 같은 기준 기간의 최신 참고값 금액이 전월 실적 값과 다르고
+ * 그 값이 바로 그 참고값을 참고해 저장된 것이 아니면 출처 충돌이며, 전월 실적은 {@code usable=false}({@code SOURCE_CONFLICT})로 계산에서
+ * 빠진다. 해소는 최신 참고값 ID로 다시 저장하는 것이다. 자동 우선순위는 없다.
  */
 @Service
 public class MonthlyStateService {
@@ -47,6 +55,15 @@ public class MonthlyStateService {
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
 	private static final String UNKNOWN_IN_RULE = "카드 규칙에 없는 값입니다.";
+
+	private static final String REFERENCED_CODEF_FIELD = "previousMonthPerformanceWon.referencedCodefId";
+
+	private static final String REFERENCED_CODEF_INVALID = "참고할 수 없는 카드사 조회 실적입니다.";
+
+	/** 충돌 항목 이름. 응답 필드 이름과 같다. */
+	static final String PREVIOUS_MONTH_ITEM = "previousMonthPerformanceWon";
+
+	private static final DateTimeFormatter VERSION_TIME = DateTimeFormatter.ofPattern("uuuuMMddHHmmss");
 
 	private final MonthlyStateRepository monthlyStateRepository;
 
@@ -60,6 +77,8 @@ public class MonthlyStateService {
 
 	private final LedgerQueryService ledgerQueryService;
 
+	private final CodefPerformanceReferenceQuery codefReferences;
+
 	private final Clock clock;
 
 	/**
@@ -70,20 +89,23 @@ public class MonthlyStateService {
 	 * @param userCardService 보유 카드 조회(소유·매핑)
 	 * @param cardProductService 카드 규칙 요약(한도 묶음·서비스 ID)
 	 * @param ledgerQueryService 스냅샷 뒤 모의 승인·취소 요약(#120)
+	 * @param codefReferences CODEF 실적 참고값 조회(읽기만, #281)
 	 * @param clock 입력 시각을 정할 시계
 	 */
 	@Autowired
 	public MonthlyStateService(MonthlyStateRepository monthlyStateRepository,
 			BucketUsageRepository bucketUsageRepository, ServiceSelectionRepository serviceSelectionRepository,
 			UserCardService userCardService, CardProductService cardProductService,
-			LedgerQueryService ledgerQueryService, ObjectProvider<Clock> clock) {
+			LedgerQueryService ledgerQueryService, CodefPerformanceReferenceQuery codefReferences,
+			ObjectProvider<Clock> clock) {
 		this(monthlyStateRepository, bucketUsageRepository, serviceSelectionRepository, userCardService,
-				cardProductService, ledgerQueryService, clock.getIfUnique(Clock::systemUTC));
+				cardProductService, ledgerQueryService, codefReferences, clock.getIfUnique(Clock::systemUTC));
 	}
 
 	MonthlyStateService(MonthlyStateRepository monthlyStateRepository, BucketUsageRepository bucketUsageRepository,
 			ServiceSelectionRepository serviceSelectionRepository, UserCardService userCardService,
-			CardProductService cardProductService, LedgerQueryService ledgerQueryService, Clock clock) {
+			CardProductService cardProductService, LedgerQueryService ledgerQueryService,
+			CodefPerformanceReferenceQuery codefReferences, Clock clock) {
 		this.monthlyStateRepository = Objects.requireNonNull(monthlyStateRepository, "monthlyStateRepository");
 		this.bucketUsageRepository = Objects.requireNonNull(bucketUsageRepository, "bucketUsageRepository");
 		this.serviceSelectionRepository = Objects.requireNonNull(serviceSelectionRepository,
@@ -91,6 +113,7 @@ public class MonthlyStateService {
 		this.userCardService = Objects.requireNonNull(userCardService, "userCardService");
 		this.cardProductService = Objects.requireNonNull(cardProductService, "cardProductService");
 		this.ledgerQueryService = Objects.requireNonNull(ledgerQueryService, "ledgerQueryService");
+		this.codefReferences = Objects.requireNonNull(codefReferences, "codefReferences");
 		this.clock = Objects.requireNonNull(clock, "clock").withZone(SEOUL);
 	}
 
@@ -109,7 +132,7 @@ public class MonthlyStateService {
 		return this.monthlyStateRepository
 			.findByUserIdAndUserCardIdAndStateMonth(user.userId(), cardId, month.toString())
 			.map(state -> toView(user, card, month, state, ruleProductOf(card), true))
-			.orElseGet(() -> emptyView(card.userCardId(), month));
+			.orElseGet(() -> emptyView(card.userCardId(), month, codefReference(user, cardId, month)));
 	}
 
 	/**
@@ -122,7 +145,7 @@ public class MonthlyStateService {
 	 * @return 저장한 상태
 	 * @throws MonthlyStateCardNotFoundException 없거나 해제했거나 다른 사용자의 카드
 	 * @throws MappingRequiredException 매핑이 확인되지 않은 카드에 한도 묶음·택1을 보냄
-	 * @throws RuleMismatchException 카드 규칙에 없는 ID, 선택형 서비스가 없는 카드의 선택 없음
+	 * @throws RuleMismatchException 카드 규칙에 없는 ID, 선택형 서비스가 없는 카드의 선택 없음, 참고할 수 없는 CODEF 참고값 ID
 	 */
 	@Transactional
 	public MonthlyStateView replace(CurrentUser user, String userCardId, YearMonth month, MonthlyStateInput input) {
@@ -135,6 +158,8 @@ public class MonthlyStateService {
 			checkAgainstRule(productId, month, input);
 		}
 		long cardId = UserCardId.parse(card.userCardId()).orElseThrow();
+		CodefPerformanceReferenceQuery.Reference referenced = referencedCodef(user, cardId,
+				input.previousMonthPerformanceWon());
 		// 행을 먼저 확보한 뒤 잠가 같은 카드·같은 달의 교체를 첫 저장부터 차례로 처리한다.
 		this.monthlyStateRepository.insertIfAbsent(user.userId(), cardId, month.toString(), now());
 		MonthlyStateEntity state = this.monthlyStateRepository
@@ -149,6 +174,10 @@ public class MonthlyStateService {
 				(other == null) ? null : other.valueWon(), (other == null) ? null : other.period().from(),
 				(other == null) ? null : other.period().to(), input.registeredOn(), input.noServiceSelection() != null,
 				(input.noServiceSelection() == null) ? null : input.noServiceSelection().effectiveFrom());
+		if (referenced != null) {
+			state.referPreviousMonthToCodef(referenced.referenceId(), referenced.syncId(), referenced.currentUseWon(),
+					referenced.periodFrom(), referenced.periodTo(), referenced.fetchedAt());
+		}
 		MonthlyStateEntity saved = this.monthlyStateRepository.saveAndFlush(state);
 		replaceChildren(saved.getMonthlyStateId(), input);
 		return toView(user, card, month, saved, productId, false);
@@ -158,9 +187,9 @@ public class MonthlyStateService {
 	 * 출처 충돌의 계산 기준을 고른다(관리자 판단 P10, D-16). 카드를 확인한 뒤, 충돌이 없으면 항상
 	 * {@link SourceConflictNotFoundException}이다. 가상 포트폴리오도 다른 사용자와 같다(월간 상태는 가상 포트폴리오에서도 동작, D-19).
 	 *
-	 * <p>지금은 충돌이 생기는 경로가 없어 이 메서드는 항상 예외로 끝나고 아무것도 저장하지 않는다. 월간 상태 값은 {@code MANUAL}만 저장되고,
-	 * CODEF 실적은 참고값이라 월간 상태에 들어오지 않으며(D-16, codef 동기화 #129의 {@code usedInCalculation=false}),
-	 * {@code INFERRED}는 원장 기반 산출이 보류돼 만들지 않는다. 사용자가 참고해 입력한 {@code MANUAL} 값과 그 CODEF 값도 충돌이 아니다.
+	 * <p>이 메서드는 항상 예외로 끝나고 아무것도 저장하지 않는다. 전월 실적과 CODEF 참고값의 충돌(#281)은 조회 {@code conflicts[]}에
+	 * 나오지만, CODEF 값을 계산 기준으로 고르면 D-16의 "자동 반영 안 함"과 맞지 않아 여기서 고르지 않고 최신 참고값으로 다시 저장해
+	 * 해소한다(사용자 결정 2026-11-27 Q3). {@code INFERRED}는 원장 기반 산출이 보류돼 만들지 않는다.
 	 *
 	 * <p>확장 지점: 월간 상태에 두 번째 출처(CODEF 값 반영 또는 {@code INFERRED} 산출)가 결정으로 열리면, 이 카드·항목·기준 기간의
 	 * 출처별 후보를 모아 값이 다를 때만 충돌로 보고, {@code conflictVersion} 대조(바뀌었으면 409 {@code SOURCE_CONFLICT_CHANGED}),
@@ -170,7 +199,7 @@ public class MonthlyStateService {
 	 * @param month 대상 달
 	 * @param selection 고른 계산 기준
 	 * @throws MonthlyStateCardNotFoundException 없거나 해제했거나 다른 사용자의 카드
-	 * @throws SourceConflictNotFoundException 충돌이 없는 항목(지금은 항상)
+	 * @throws SourceConflictNotFoundException 항상(계산 기준 선택을 저장하지 않음)
 	 */
 	@Transactional(readOnly = true)
 	public void selectSource(CurrentUser user, String userCardId, YearMonth month, SourceSelection selection) {
@@ -178,6 +207,34 @@ public class MonthlyStateService {
 		Objects.requireNonNull(selection, "selection");
 		findCard(user, userCardId);
 		throw new SourceConflictNotFoundException();
+	}
+
+	// 사용자가 보낸 참고값 ID를 확인한다: 본인의 참고값이고, 이 카드에 연결됐고, 반영기간이 입력한 기준 기간과 정확히 같아야 한다(D-16 #281)
+	private CodefPerformanceReferenceQuery.Reference referencedCodef(CurrentUser user, long cardId,
+			MonthlyStateInput.Amount previous) {
+		if (previous == null || previous.referencedCodefId() == null) {
+			return null;
+		}
+		return this.codefReferences.find(user.userId(), previous.referencedCodefId())
+			.filter(reference -> reference.userCardId() == cardId)
+			.filter(reference -> reference.periodFrom().equals(previous.period().from())
+					&& reference.periodTo().equals(previous.period().to()))
+			.orElseThrow(() -> new RuleMismatchException(
+					List.of(new RuleMismatchException.Violation(REFERENCED_CODEF_FIELD, REFERENCED_CODEF_INVALID))));
+	}
+
+	// 전월 실적 칸에 미리 채워 보여 줄 참고값: 이 카드에 연결된 참고값 중 반영기간이 대상 월의 전월 1일~말일인 최신 값
+	private MonthlyStateView.CodefReference codefReference(CurrentUser user, long cardId, YearMonth month) {
+		YearMonth previous = month.minusMonths(1);
+		return this.codefReferences.latest(user.userId(), cardId, previous.atDay(1), previous.atEndOfMonth())
+			.map(MonthlyStateService::toCodefReference)
+			.orElse(null);
+	}
+
+	private static MonthlyStateView.CodefReference toCodefReference(CodefPerformanceReferenceQuery.Reference reference) {
+		return new MonthlyStateView.CodefReference(reference.referenceId(),
+				new DatePeriod(reference.periodFrom(), reference.periodTo()), reference.currentUseWon(),
+				reference.fetchedAt());
 	}
 
 	private LocalDateTime now() {
@@ -278,14 +335,56 @@ public class MonthlyStateService {
 				? new MonthlyStateView.NoSelection(state.getNoSelectionEffectiveFrom(), at) : null;
 		ServiceSelectionStatus status = !selections.isEmpty() ? ServiceSelectionStatus.SELECTED
 				: (noSelection != null) ? ServiceSelectionStatus.NONE : ServiceSelectionStatus.UNKNOWN;
-		return new MonthlyStateView(card.userCardId(), month, at,
-				amount(state.getPreviousMonthWon(), state.getPreviousMonthFrom(), state.getPreviousMonthTo(), at), usages,
+		long cardId = state.getUserCardId();
+		StateValue<Long> previous = amount(state.getPreviousMonthWon(), state.getPreviousMonthFrom(),
+				state.getPreviousMonthTo(), at);
+		MonthlyStateView.ReferencedCodef referenced = referencedCodef(state);
+		MonthlyStateView.Conflict conflict = previousMonthConflict(user, cardId, previous, referenced);
+		return new MonthlyStateView(card.userCardId(), month, at, (conflict == null) ? previous : previous.conflicted(),
+				usages,
 				amount(state.getOtherBucketsUsedWon(), state.getOtherBucketsFrom(), state.getOtherBucketsTo(), at),
 				selections, status, noSelection,
 				(state.getRegisteredOn() == null) ? StateValue.unknown()
 						: StateValue.manual(state.getRegisteredOn(),
 								new DatePeriod(state.getRegisteredOn(), state.getRegisteredOn()), at),
-				withAfterSnapshot ? afterSnapshot(user, card.userCardId(), month, at) : null);
+				withAfterSnapshot ? afterSnapshot(user, card.userCardId(), month, at) : null,
+				codefReference(user, cardId, month), referenced, (conflict == null) ? List.of() : List.of(conflict));
+	}
+
+	private static MonthlyStateView.ReferencedCodef referencedCodef(MonthlyStateEntity state) {
+		if (state.getPreviousMonthCodefFetchedAt() == null) {
+			return null;
+		}
+		return new MonthlyStateView.ReferencedCodef(state.getPreviousMonthCodefReferenceId(),
+				state.getPreviousMonthCodefSyncId(),
+				new DatePeriod(state.getPreviousMonthCodefFrom(), state.getPreviousMonthCodefTo()),
+				state.getPreviousMonthCodefWon(), state.getPreviousMonthCodefFetchedAt());
+	}
+
+	/**
+	 * 전월 실적의 출처 충돌(D-16, 사용자 결정 2026-11-27 Q1). 같은 기준 기간의 최신 연결 참고값 금액이 있고 전월 실적 값과 다르며, 그 값이
+	 * 바로 그 참고값을 참고해 저장된 것이 아니면 충돌이다. 참고 없이 입력한 값도 마찬가지다. 값이 같거나, 참고값 금액을 모르거나(미확인은 충돌이
+	 * 아님), 기준 기간이 다르면 충돌이 아니다.
+	 */
+	private MonthlyStateView.Conflict previousMonthConflict(CurrentUser user, long cardId, StateValue<Long> previous,
+			MonthlyStateView.ReferencedCodef referenced) {
+		if (previous.source() != StateSource.MANUAL) {
+			return null;
+		}
+		return this.codefReferences
+			.latest(user.userId(), cardId, previous.period().from(), previous.period().to())
+			.filter(reference -> reference.currentUseWon() != null)
+			.filter(reference -> !reference.currentUseWon().equals(previous.value()))
+			.filter(reference -> referenced == null || referenced.referenceId() == null
+					|| referenced.referenceId() != reference.referenceId())
+			.map(reference -> new MonthlyStateView.Conflict(PREVIOUS_MONTH_ITEM, previous.period(),
+					"cf-" + reference.referenceId() + "-" + VERSION_TIME.format(previous.updatedAt()),
+					List.of(new MonthlyStateView.Candidate(StateSource.MANUAL, previous.value(), previous.period(),
+							previous.updatedAt()),
+							new MonthlyStateView.Candidate(StateSource.CODEF, reference.currentUseWon(),
+									new DatePeriod(reference.periodFrom(), reference.periodTo()),
+									reference.fetchedAt()))))
+			.orElse(null);
 	}
 
 	// 스냅샷 뒤 모의 승인·취소 요약(docs/api/monthly-states.md afterSnapshot, #120). 화면 표시용이며 상태값을 덮어쓰지 않는다.
@@ -312,9 +411,11 @@ public class MonthlyStateService {
 		return (value == null) ? StateValue.unknown() : StateValue.manual(value, new DatePeriod(from, to), at);
 	}
 
-	private static MonthlyStateView emptyView(String userCardId, YearMonth month) {
+	private static MonthlyStateView emptyView(String userCardId, YearMonth month,
+			MonthlyStateView.CodefReference codefReference) {
 		return new MonthlyStateView(userCardId, month, null, StateValue.unknown(), List.of(), StateValue.unknown(),
-				List.of(), ServiceSelectionStatus.UNKNOWN, null, StateValue.unknown(), null);
+				List.of(), ServiceSelectionStatus.UNKNOWN, null, StateValue.unknown(), null, codefReference, null,
+				List.of());
 	}
 
 }

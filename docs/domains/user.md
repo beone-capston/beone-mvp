@@ -94,7 +94,7 @@ InvalidDemoUserHeaderException
 
 회원 장부 생성: `MemberRegistrationService.verifyEmail`이 같은 트랜잭션에서 `MemberEmailVerifiedEvent`를 발행하고, `MemberUserService.onEmailVerified`가 장부가 없을 때만 만듭니다. 장부를 만들지 못하면 인증도 함께 취소됩니다. `auth`는 `user`를 알지 않고 이벤트만 발행합니다(`user` → `auth` 한 방향 의존). 이미 인증된 회원은 `V14`가 백필했습니다. `MemberUserService`는 프로필 지정이 없고 이벤트를 발행하는 `MemberRegistrationService`는 `local`·`demo`·`member`에 있으므로, `local`·`demo`에서도 이메일 인증을 마치면 회원 장부가 생깁니다. 시연 2행과는 별개 행이고 `/api/v1/demo-users`(`findByDemoUserIsNotNull`)와 시연 헤더 해석(`findByDemoUser`)에는 닿지 않습니다. 같은 로컬 DB를 `member` 프로필로 다시 띄우면 그 회원의 장부로 쓰입니다.
 
-회원 장부 삭제(탈퇴, T5): `MemberWithdrawalService`가 탈퇴 트랜잭션 안에서 `MemberWithdrawnEvent`를 발행하면 `MemberUserService.onWithdrawn`이 장부를 찾아 `MemberLedgerErasingEvent`를 먼저 발행하고(장부 행이 남아 있을 때 codef가 connectedId 암호문을 읽음), [`MemberLedgerEraser`](../../backend/src/main/java/com/beone/api/user/persistence/MemberLedgerEraser.java)로 지웁니다. 지우는 순서는 CODEF 승인·실적 → CODEF 보유카드 → CODEF 동기화 → CODEF 연결 → 원장 → 모의 결제 → 추천 → 멱등 키 → 결제 전 설정 → 월간 상태 → 예정 지출 → 주문 → 보유 카드 → `users`입니다. 연쇄 삭제가 걸린 손자 표(버킷 사용·서비스 선택·추천 카드 기준·결제 취소·원장 사용 효과)는 부모와 함께 지워집니다. 회원 장부(`member_id`가 있는 행)가 아니면 예외로 막습니다. 새 업무 표를 추가하면 `MemberLedgerEraser.TABLES`에도 넣어야 합니다. 빠뜨리면 `users` 삭제가 외래 키로 실패해 탈퇴 전체가 롤백됩니다. 로그는 `member ledger erased ref=… rows=…`(ref는 회원 ID 해시 앞 12자)입니다.
+회원 장부 삭제(탈퇴, T5): `MemberWithdrawalService`가 탈퇴 트랜잭션 안에서 `MemberWithdrawnEvent`를 발행하면 `MemberUserService.onWithdrawn`이 장부를 찾아 `MemberLedgerErasingEvent`를 먼저 발행하고(장부 행이 남아 있을 때 codef가 connectedId 암호문을 읽음), [`MemberLedgerEraser`](../../backend/src/main/java/com/beone/api/user/persistence/MemberLedgerEraser.java)로 지웁니다. 지우는 순서는 CODEF 승인·실적 → CODEF 보유카드 → CODEF 동기화 → CODEF 연결 → 원장 → 모의 결제 → 추천 → 멱등 키 → 결제 전 설정 → 월간 상태 → 예정 지출 → 주문 → 보유 카드 → `users`입니다. 연쇄 삭제가 걸린 손자 표(버킷 사용·서비스 선택·추천 카드 기준·결제 취소·원장 사용 효과)는 부모와 함께 지워집니다. 월간 상태가 가리키는 CODEF 실적 참고값(V17, `ON DELETE SET NULL`)은 먼저 지워져도 월간 상태 행을 막지 않고, 월간 상태는 뒤에서 지웁니다. 회원 장부(`member_id`가 있는 행)가 아니면 예외로 막습니다. 새 업무 표를 추가하면 `MemberLedgerEraser.TABLES`에도 넣어야 합니다. 빠뜨리면 `users` 삭제가 외래 키로 실패해 탈퇴 전체가 롤백됩니다. 로그는 `member ledger erased ref=… rows=…`(ref는 회원 ID 해시 앞 12자)입니다.
 
 ## 사용법: 새 `/me/...` 컨트롤러
 
@@ -132,5 +132,5 @@ class UserCardController {
 ## 제약
 
 - 시드 값은 [명세](../api/cards.md)의 응답 예시에 있는 값만 씁니다. `user_id`는 자동 증가 값이며 다른 테이블의 시드는 `demo_user`로 찾아 참조합니다.
-- `users` 행은 `demo_user`와 `member_id` 중 정확히 하나만 가집니다(`ck_users_owner`). `member_id`는 UNIQUE이고 `members`를 RESTRICT로 참조하므로 장부가 있는 회원 행은 지울 수 없습니다. 탈퇴(T5)는 장부와 업무 행을 먼저 지운 뒤 회원 행을 지웁니다. 보존 기간은 두지 않습니다(D10 변경 이력, 관리자 T5 지시).
+- `users` 행은 `demo_user`와 `member_id` 중 정확히 하나만 가집니다(`ck_users_owner`). `member_id`는 UNIQUE이고 `members`를 RESTRICT로 참조하므로 장부가 있는 회원 행은 지울 수 없습니다. 탈퇴(T5)는 장부와 업무 행을 먼저 지운 뒤 회원 행을 지웁니다. 보존 기간은 두지 않습니다(D10 변경 이력, 사용자 결정 2026-11-27).
 - 업무 테이블 11개의 `users(user_id)` FK는 바꾸지 않았습니다. 회원 장부도 같은 `user_id`로 업무 데이터를 나눕니다.

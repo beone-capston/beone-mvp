@@ -112,6 +112,17 @@ VITE_DEVICE_AUTH_MODE=mock VITE_PAYMENT_API_MODE=mock npm run dev
 
 인증과 결제 전송 모드는 각각 `native`·`mock`, `api`·`mock`으로 선택합니다. 개발 플래그가 없거나 배포 빌드일 때는 네이티브 인증과 기존 백엔드 계약을 사용합니다. 서버 승인에는 시연 프로필과 실제로 생성한 주문이 필요하며, 서버의 결제 전 설정을 사용합니다. 구조는 [가상카드 및 모의 승인 안내](docs/domains/frontend-payment.md)를 참고합니다.
 
+결제 설정 저장·새로고침·주문 생성·모의 승인까지 백엔드 없이 확인하려면
+`frontend/`에서 `VITE_PAYMENT_PREFERENCE_MODE=mock npm run dev`를 실행합니다.
+로컬 5173의 개발용 로그인으로 진입한 뒤 **결제 선택 방식**에서 대표 카드를
+설정하고 새로고침해 확인합니다. 새 설정으로 테스트하려면
+`VITE_PAYMENT_MOCK_PROFILE`에 사용한 적 없는 합성 프로필 이름을 지정합니다. `VITE_PAYMENT_PREFERENCE_MOCK_FAILURE=read` 또는 `save`로 오류를 검수할 수 있습니다.
+
+실제 API 모드는 개발 기본 `demo`이며 `VITE_API_BASE_URL`로 업무 API 주소를 지정합니다.
+`VITE_WORKSPACE_CONTEXT=member`는 회원 로그인·세션 쿠키·CSRF를 사용하므로
+로컬에서는 인증과 업무 API를 동일 origin으로 전달하는 프록시가 필요합니다.
+배포 빌드의 기본은 `member`이며 목 설정은 개발 서버에서만 활성화됩니다.
+
 ## 빌드·테스트
 
 ### Backend

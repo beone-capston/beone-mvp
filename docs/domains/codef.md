@@ -4,9 +4,9 @@
 
 `codef`는 CODEF 카드 API 응답 본문을 BeONE이 쓸 수 있는 비민감 값으로 해석하는 **응답 해석 경계**입니다(#41). CODEF(금융기관 데이터를 대신 조회해 주는 외부 API)의 요청 전송, OAuth 토큰(접근 권한을 토큰으로 위임하는 인증 방식의 발급값), 암호화, 계정 연결(connectedId: CODEF가 연결된 금융기관 계정을 가리키는 식별값)과는 분리되어 있으며, 이 패키지는 응답 문자열을 받아 결과 코드 분류와 `data` 항목만 돌려줍니다. 그 앞단의 전송 단계 해석(#43)은 HTTP 상태 코드와 응답 본문을 받아 상태를 구분하고 본문을 URL 디코딩합니다. 실제 HTTP 호출은 하지 않습니다.
 
-[CODEF 연결 API](#codef-연결-api-126)(#126)는 연결 상태 조회·계정 연결·연결 해제를, [CODEF 조회·동기화 API](#codef-조회동기화-api-129)(#129)는 보유카드·승인내역·실적 조회와 codef 전용 저장을 local·demo에서 가짜 게이트웨이로만 처리합니다. 아래 "구현하지 않았습니다"는 해석·전송 계층 기준이며, 실 계정 연결·실 조회·RSA 암호화는 여전히 없습니다.
+[CODEF 연결 API](#codef-연결-api-126)(#126)는 연결 상태 조회·계정 연결·연결 해제를, [CODEF 조회·동기화 API](#codef-조회동기화-api-129)(#129)는 보유카드·승인내역·실적 조회와 codef 전용 저장을 처리합니다. local·demo는 가짜 게이트웨이(합성 데이터)를 쓰고, `member & codef-live & (!prod | staging)`에서는 [실 게이트웨이](#비공개-실연동-프로필-codef-live-lp-1-193)(계정 등록·삭제, 상품 3종, 카드사 비밀번호 RSA 암호화, #193)를 씁니다. 운영 `prod`에는 등록하지 않습니다([공개(prod) 범위](#공개prod-범위-결정-38-8-186)). 실호출은 승인된 비공개 검증 환경([런북](../deployment/codef-private-verification.md))과 스테이징 한정 예외([런북](../deployment/staging-codef.md))에서만 하며, 저장소의 시험은 루프백 스텁 HTTP만 씁니다. 아래 "구현하지 않았습니다"는 해석·전송 계층 기준입니다.
 
-구현된 범위는 승인내역·보유카드·실적조회 응답의 해석, 공통 결과 코드의 분류, 빈 값·금액·코드 값의 보수적 해석, 그리고 그 앞단의 [전송 계층](#전송-계층)(토큰 발급·캐시, 상품 요청, 시간 초과, 호출 상한)입니다. 계정 연결, RSA 암호화, 추가 인증 2차 요청, DB 저장, 엔드포인트, BeONE 상태값(`StateValue`: 값과 출처·기준 기간을 함께 담는 `benefit` 도메인 타입)으로의 변환은 구현하지 않았습니다. 이 패키지의 테스트는 합성 응답만 쓰며 실제 응답 검증이 아닙니다.
+구현된 범위는 승인내역·보유카드·실적조회 응답의 해석, 공통 결과 코드의 분류, 빈 값·금액·코드 값의 보수적 해석, 그리고 그 앞단의 [전송 계층](#전송-계층)(토큰 발급·캐시, 상품 요청, 시간 초과, 호출 상한)입니다. 이 해석 계층 자체는 계정 연결·RSA 암호화·DB 저장·엔드포인트를 갖지 않습니다. 그것들은 다른 하위 패키지에 있습니다(계정 등록·삭제와 RSA 암호화는 [실 게이트웨이](#비공개-실연동-프로필-codef-live-lp-1-193) #193, DB 저장·엔드포인트는 [연결 API](#codef-연결-api-126) #126·[조회·동기화 API](#codef-조회동기화-api-129) #129). 추가 인증 2차 요청과 BeONE 상태값(`StateValue`: 값과 출처·기준 기간을 함께 담는 `benefit` 도메인 타입)으로의 변환은 구현하지 않았습니다. 이 패키지의 테스트는 합성 응답만 쓰며 실제 응답 검증이 아닙니다.
 
 CODEF 결과를 쓸 수 없는 경우(오류 분류, 미분류, 형식 오류, 값 없음)에도 수동 입력 경로는 유지해야 합니다(CLAUDE.md 제품 경계). 이 패키지는 그 판단 재료만 제공하며 수동 입력 API는 없습니다.
 
@@ -266,7 +266,7 @@ candidates.acceptedKinds();   // 저장은 호출자가 한다
 
 ## CODEF 연결 API (#126)
 
-`/api/v1/me/codef/connection`의 GET(연결 상태)·POST(계정 연결)·DELETE(연결 해제)입니다([계약](../api/codef.md)). 결정 30에 따라 **fixture·가짜 구현·로컬 HTTP·테스트 영속까지**이며 실 CODEF·실키·실계정은 쓰지 않습니다. 해제 범위(P4)와 connectedId 암호화(P5)는 2026-11-18 사용자 직접 결정입니다.
+`/api/v1/me/codef/connection`의 GET(연결 상태)·POST(계정 연결)·DELETE(연결 해제)입니다([계약](../api/codef.md)). 처음 구현(#126)은 결정 30에 따라 fixture·가짜 구현·로컬 HTTP·테스트 영속까지였습니다. 지금은 local·demo에서 가짜 게이트웨이를, `member & codef-live & (!prod | staging)`에서 [실 게이트웨이](#비공개-실연동-프로필-codef-live-lp-1-193)(#193)를 같은 서비스·컨트롤러로 씁니다. 저장소의 시험은 가짜 게이트웨이와 루프백 스텁 HTTP만 쓰며 실키·실계정을 쓰지 않습니다. 해제 범위(P4)와 connectedId 암호화(P5)는 2026-11-18 사용자 직접 결정입니다.
 
 ```text
 codef/
@@ -288,7 +288,7 @@ codef/
 
 - **연결 상태**: 행이 없으면 `NOT_CONNECTED`(`connectedAt`·`lastSyncedAt` `null`). 행은 `CONNECTED` 또는 `RECONNECT_REQUIRED`이고 `reconnectRequired`는 후자일 때만 참입니다. 가상 포트폴리오 사용자는 연결할 수 없어 항상 `NOT_CONNECTED`입니다.
 - **최초 연결 201, 재연결 200**: 연결 행이 있으면(상태와 무관) 재연결입니다. 재연결 성공이면 connectedId를 새 값으로 바꾸고 `connectedAt`을 재연결 시각으로 바꾸며 `lastSyncedAt`은 그대로 둡니다. 이전 connectedId는 커밋 뒤 게이트웨이에 정리를 요청합니다. 재연결이 실패하면 기존 연결을 그대로 둡니다(관리자 판단 P3). 저장이 실패하면 방금 받은 connectedId를 정리합니다. 정리 실패는 BeONE 상태를 바꾸지 않고 예외 클래스 이름만 로그에 남깁니다.
-- **검사 순서**: 요청 형식 400(필수 4필드, `organization`은 `0301`, `loginType`은 `ID`만, 문자열이 아닌 값은 `errors: []`) → 가상 포트폴리오 409 `PORTFOLIO_READ_ONLY` → 암호화 키·게이트웨이가 없으면 게이트웨이를 부르지 않고 502 `CODEF_UNAVAILABLE` → 게이트웨이 결과. local·demo 밖에서는 컨트롤러가 등록되지 않아 404입니다.
+- **검사 순서**: 요청 형식 400(필수 4필드, `organization`은 `0301`, `loginType`은 `ID`만, 문자열이 아닌 값은 `errors: []`) → 가상 포트폴리오 409 `PORTFOLIO_READ_ONLY` → 암호화 키·게이트웨이가 없으면 게이트웨이를 부르지 않고 502 `CODEF_UNAVAILABLE` → 게이트웨이 결과. local·demo와 `member & codef-live & (!prod | staging)` 밖(운영 `prod`, `member`만 등)에서는 컨트롤러가 등록되지 않아 404입니다.
 - **연결 해제(DELETE, 2026-11-18 사용자 직접 결정 P4)**: 204, 본문 없음. 연결 행(암호화한 connectedId)을 지우고 추가 수집을 멈춥니다. 커밋 뒤 CODEF 쪽 connectedId 정리를 요청합니다(키가 없거나 복호화에 실패하면 정리만 건너뜀). **해제는 데이터 완전 삭제가 아닙니다.** CODEF로 들어온 보유 카드·codef 승인 행·사용자가 확인한 매핑은 보존하며 카드는 보유 카드 해제로 따로 지웁니다. 보존 기간은 미결입니다. 회원 탈퇴(T5, `member`)는 연결·동기화·보유카드·승인·실적 행을 모두 지우고, 삭제가 커밋된 뒤 CODEF 쪽 해제를 요청합니다(`CodefConnectionService.onMemberLedgerErasing`이 장부 삭제 직전 이벤트에서 암호문을 읽어 두고 커밋 뒤 `CodefGateway.release`). 해제 실패·게이트웨이 없음·키 없음이어도 탈퇴는 성공하고 결과(`RELEASED`·`FAILED`·`SKIPPED_NO_GATEWAY`·`SKIPPED_NO_KEY`)만 로그에 남깁니다. 테스트는 기록용 스텁 게이트웨이만 씁니다([auth API](../api/auth.md)). 연결이 없으면 409 `CODEF_NOT_CONNECTED`. 가상 포트폴리오는 409 `PORTFOLIO_READ_ONLY`입니다. [docs/api.md](../api.md#업무-오류-코드)의 "가상 포트폴리오의 CODEF 쓰기 요청" 규칙에 따른 것이며 계약 DELETE 실패 목록에도 반영했습니다.
 - **결과 → 오류 코드**(관리자 판단 P1·P2, [`CodefRegistrations`](../../backend/src/main/java/com/beone/api/codef/application/CodefRegistrations.java)):
 
@@ -321,7 +321,7 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/connection" \
 
 ## CODEF 조회·동기화 API (#129)
 
-`POST /api/v1/me/codef/syncs`입니다([계약](../api/codef.md#post-apiv1mecodefsyncs--codef-조회동기화)). 연결 API와 같이 **fixture·가짜 구현·로컬 HTTP·테스트 영속까지**이며 실 CODEF·실키·실계정은 쓰지 않습니다. 보유카드·승인내역·실적을 조회해 각각 매핑 전 보유 카드, codef 전용 승인 행, 카드사 조회 실적(참고)으로 옮깁니다. 조회는 요청 안에서 동기로 끝납니다(관리자 판단 P11). 이 절의 관리자 판단 K1·K2·P2·P6·P8·P9·Q1~Q8은 2026-11-18 C0·C3 확인에서 정한 것이고, P6은 사용자 직접 결정입니다.
+`POST /api/v1/me/codef/syncs`입니다([계약](../api/codef.md#post-apiv1mecodefsyncs--codef-조회동기화)). 연결 API와 같은 프로필 조건으로 등록하고 local·demo는 가짜 게이트웨이(합성 fixture), `codef-live`는 실 게이트웨이를 씁니다. 저장소의 시험은 합성 fixture와 루프백 스텁 HTTP만 씁니다. 보유카드·승인내역·실적을 조회해 각각 매핑 전 보유 카드, codef 전용 승인 행, 카드사 조회 실적(참고)으로 옮깁니다. 조회는 요청 안에서 동기로 끝납니다(관리자 판단 P11). 이 절의 관리자 판단 K1·K2·P2·P6·P8·P9·Q1~Q8은 2026-11-18 C0·C3 확인에서 정한 것이고, P6은 사용자 직접 결정입니다.
 
 ```text
 codef/
@@ -332,6 +332,7 @@ codef/
 │   ├── CodefHeldCardMatcher         CODEF 보유카드 ↔ 기존 CODEF 보유 카드 대조(P8·Q1·Q2, 순수 함수)
 │   ├── CodefCardNameDictionary      카드명 → 규칙 카드 상품 사전(정확 일치, 근거 OBSERVED/ASSUMED·출처, #268 후보·#270 행 연결)
 │   ├── CodefSyncDiagnostics         동기화 진단 집계와 INFO 로그 한 줄(#270)
+│   ├── CodefPerformanceReferenceQuery 저장된 실적 참고값의 읽기 전용 창구(월간 상태용, 연결된 참고값만, cpr- ID, #281)
 │   ├── ApprovalFingerprintKeySource 승인번호 HMAC 키 공급. 운영 구현 EnvironmentApprovalFingerprintKeySource(환경 변수)
 │   ├── HmacApprovalFingerprinter    승인번호 → HMAC-SHA256 소문자 16진수 64자(패키지 내부)
 │   ├── CodefSyncResult·CodefSyncTarget 결과와 부분 실패 대상
@@ -373,7 +374,7 @@ codef/
 - **승인내역(관리자 판단 K2·Q4, 결정 20 R1·R2, 결정 22 R7·R8·#93)**: [`CodefLedgerCandidateBuilder`](../../backend/src/main/java/com/beone/api/codef/sync/CodefLedgerCandidateBuilder.java)로 판정해 받아들인 행(정상, Type1 전액 취소, 짝지은 Type2 취소)만 `codef_approval_rows`에 넣습니다. `ledger_transactions`와 원장 조회는 바꾸지 않습니다. 원장 조회 coverage에는 새 카드가 나오지만 CODEF는 지금처럼 `complete=false`입니다. 이전 기록은 이 사용자의 저장된 승인 행이며, 같은 키·같은 종류는 `skippedDuplicates`, 정상으로 기록된 키가 Type1 전액 취소로 바뀌면 그 행의 종류만 바꾸고 `imported`에 셉니다.
 - **불완전 행은 저장하지 않습니다.** 응답 `incompleteRows`에만 담고, 다음 동기화에서 그때의 응답으로 다시 판정합니다(결정 22의 "기간이 바뀐 재조회의 Type2 재표시" 보완은 하지 않았습니다). 보유 카드에 붙지 않은 행(카드 미연결, 건너뛴 카드의 행)도 숨기지 않고 `userCardId=null`로 담습니다. 건너뛴 카드에 붙은 행은 판정이 받아들여도 붙일 보유 카드가 없어 `UNDETERMINED_ROW`로 둡니다.
 - **승인번호 HMAC 키(2026-11-18 사용자 직접 결정 P6, 결정 22 1안)**: 프로세스 환경 변수 `BEONE_CODEF_APPROVAL_HMAC_KEY`(Base64로 적은 32바이트)에서 읽고 `application*.yml`에는 두지 않습니다. local·demo에도 고정 기본값이 없습니다. 키가 없으면 승인내역을 조회하지 않고(과금 회피) 저장하지 않으며 `partialFailures`에 `APPROVALS`·`CODEF_UNAVAILABLE`로 알리고 `imported`·`skippedDuplicates`는 `null`입니다. 성공이나 완전 수집으로 보이게 하지 않습니다. 승인번호 원문은 저장·로그·응답에 남기지 않고 지문만 저장하며, DB CHECK가 64자 소문자 16진수만 받습니다. 키가 바뀌면 이전 지문과 비교가 끊깁니다. 키 회전(이전 키 병행 비교)과 운영 키 공급은 별도 승인이며 구현하지 않았습니다. 테스트는 합성 키를 주입합니다.
-- **실적(D-16, 관리자 판단 Q5)**: 실적현황 하나당 `performances[]` 항목 하나이고 `label`은 "카드사 조회 실적(참고)", `usedInCalculation`은 항상 `false`입니다. 확인하지 못한 금액·날짜는 `null`이며 혜택·실적현황 목록이 누락·형식 오류면 값을 모르는 항목 하나를 남겨 0건과 구분합니다. `codef_performance_references`에 동기화마다 이력으로 저장하고 `monthly_states`에는 넣지 않습니다.
+- **실적(D-16, 관리자 판단 Q5)**: 실적현황 하나당 `performances[]` 항목 하나이고 `label`은 "카드사 조회 실적(참고)", `usedInCalculation`은 항상 `false`입니다. 확인하지 못한 금액·날짜는 `null`이며 혜택·실적현황 목록이 누락·형식 오류면 값을 모르는 항목 하나를 남겨 0건과 구분합니다. `codef_performance_references`에 동기화마다 이력으로 저장하고 `monthly_states`에는 넣지 않습니다. 월간 상태는 읽기 전용 창구 [`CodefPerformanceReferenceQuery`](../../backend/src/main/java/com/beone/api/codef/application/CodefPerformanceReferenceQuery.java)로 카드에 연결되고 반영기간이 있는 참고값만 읽어 전월 실적 칸의 `codefReference`(계산 미사용)와 사용자 확인 기록·충돌 판정에 씁니다(#281, [monthlystate 안내](monthlystate.md#codef-실적-참고값-281)). 참고값 ID의 외부 표현은 `cpr-{번호}`입니다. 이 창구는 참고값을 계산 입력으로 바꾸지 않습니다.
 - **부분 실패**: 실패한 대상은 `partialFailures[]`(`target`, `code`=`CODEF_UNAVAILABLE`, 공개 문구)에 담고, 그 대상의 건수는 `null`로 두어 0건과 구분합니다. 추가 인증 필요 등 연결 API에서 502로 묶은 분류도 같은 코드입니다(관리자 판단 P1).
 - **기간(관리자 판단 P9)**: 생략하면 서울 기준 이번 달 1일~오늘, `to`만 없으면 오늘, `from`만 없으면 `to`가 속한 달 1일입니다. `to`가 오늘보다 늦으면 400(`field`=`to`), `from`이 `to`보다 늦으면 400, `from < to.minusMonths(12).plusDays(1)`이면 400(관계 오류는 `field`=`null`)입니다. 짝을 맞추려고 기간을 넓히지 않습니다.
 - **재연결 필요(관리자 판단 P2)**: 게이트웨이가 연결 무효를 알리면 연결 상태를 `RECONNECT_REQUIRED`로 바꾸고 409입니다. 지금은 가짜 게이트웨이만 이 결과를 내며 실 CODEF 결과 코드와의 대응은 없습니다. 다음 연결 성공이 `CONNECTED`로 돌립니다.
@@ -393,12 +394,17 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
 
 ## 공개(prod) 범위 (결정 38-8, #186)
 
-공개 프로필 `prod`(회원 프로필 `member`를 프로필 그룹으로 함께 켬, #183)에서는 **CODEF 연결·조회 API를 등록하지 않습니다.** 결정 38-8에 따라 비공개 실연동 검증을 마치기 전에는 미등록이며, 공개 전환은 별도 승인으로만 합니다.
+운영 공개 프로필 `prod`(회원 프로필 `member`를 프로필 그룹으로 함께 켬, #183)에서는 **CODEF 연결·조회 API를 등록하지 않습니다**(결정 38-8). 예외는 기본 인증 뒤 스테이징 한정(#275·#278, 결정 40 변경 이력 초안)뿐이며, 운영에서 CODEF를 여는 경로는 없습니다.
 
-- **지금 상태**: `CodefConnectionController`·`CodefSyncController`는 `@Profile({"local","demo","member & codef-live & (!prod | staging)"})`(#193, 스테이징 예외 #275), `FakeCodefGateway`는 `@Profile({"local","demo"})`입니다. `!prod` 조건과 별개로 `PublicProfileGuard`가 `prod`와 `codef-live` 조합의 기동을 멈춥니다. prod에서는 `GET`·`POST`·`DELETE /api/v1/me/codef/connection`, `POST /api/v1/me/codef/syncs` 네 경로가 세션 유무와 관계없이 404 `NOT_FOUND`이고, `CodefGateway`·`CodefSyncGateway` 구현 Bean이 없습니다. 이 동작을 바꾸는 제품 코드는 없으며 테스트로만 고정했습니다.
+- **지금 상태**: `CodefConnectionController`·`CodefSyncController`는 `@Profile({"local","demo","member & codef-live & (!prod | staging)"})`(#193, 스테이징 예외 #275), `FakeCodefGateway`는 `@Profile({"local","demo"})`입니다. `!prod` 조건과 별개로 `PublicProfileGuard`가 `prod`와 `codef-live` 조합의 기동을 멈춥니다. 운영 형태(`prod`, `staging` 없음)에서는 `GET`·`POST`·`DELETE /api/v1/me/codef/connection`, `POST /api/v1/me/codef/syncs` 네 경로가 세션 유무와 관계없이 404 `NOT_FOUND`이고, `CodefGateway`·`CodefSyncGateway` 구현 Bean이 없습니다. 운영에서 `codef-live`를 켜거나 CODEF 키를 두면 경로가 열리기 전에 기동이 멈춥니다.
 - **운영에는 기능 플래그 없음**: 설정 값 하나로 운영 prod에서 CODEF를 여는 경로는 만들지 않습니다. 스테이징 예외(#275)는 플래그 `BEONE_STAGING_CODEF_ENABLED=true`만으로 열리지 않고 스테이징 표지 프로필 `staging`이 함께 있어야 하며, 운영 배포는 `staging` 표지·플래그 이름을 거부합니다([스테이징 한정 CODEF](../deployment/staging-codef.md)). `PublicProfileGuard`는 프로필 조합과 함께, `prod`에 CODEF 키·토큰 환경 변수 이름이 있으면 기동을 멈춥니다(값은 읽지 않음, #191, 아래 제약 절).
-- **현재 사용자 응답**: 연결 행이 생길 길이 없으므로 `GET /api/v1/me`의 `codefConnected`는 `false`입니다. member 프로필 값은 `MemberProfileIntegrationTest`가, prod 프로필 값은 `PublicProfileIntegrationTest`(G5 L3, #189)가 확인합니다.
-- **공개 전환 방식(미구현)**: 비공개 실연동 검증(사용자 PC의 로컬 환경, 실키·실계정은 별도 승인)과 공개 전환 승인 뒤, **코드 PR**로 `@Profile` 표현식을 바꾸고 아래 테스트의 기대값을 새 계약에 맞춰 고칩니다. 비공개 검증 환경과 전환 표현식의 모양은 결정 전입니다.
+- **현재 사용자 응답**: `GET /api/v1/me`의 `codefConnected`는 그 회원의 연결 행(`codef_connections`)이 있는지로 정합니다. 연결 행이 없으면 `false`이고, 있으면 프로필과 관계없이 `true`입니다. 운영 `prod`에는 CODEF 경로가 없어 새 연결 행이 생길 길이 없으므로 운영 회원은 보통 `false`이지만, DB에 이미 있던 행이 남아 있으면 `true`일 수 있습니다. 스테이징에서 CODEF를 켜고 연결하면 스테이징 DB에 행이 생겨 `true`가 됩니다. member 프로필 값은 `MemberProfileIntegrationTest`가, prod 프로필 값은 `PublicProfileIntegrationTest`(G5 L3, #189)가 확인합니다.
+- **운영 미등록의 이중 방어(구현됨)**: 백엔드 `PublicProfileGuard`가 운영 `prod`에서 `codef-live`·CODEF 키 환경 변수(빈 값 포함)·`staging` 없는 스테이징 플래그를 기동 단계에서 거부합니다. 배포 단계에서는 `deploy.sh production`이 운영 env의 CODEF 키 이름·`codef-live`·스테이징 플래그 이름(값 무관)·프로필 지정의 `staging` 표지·운영 폴더의 CODEF 오버레이를 거부합니다([서버 배포 스크립트](../deployment/server-deploy.md#codef-가드), `deploy-selftest.sh`).
+- **스테이징 한정 예외(구현됨, 켜는 실행은 별도)**: 기본 인증 뒤 스테이징에서만 엽니다. 조건은 두 층입니다.
+  - **등록(백엔드):** 프로필 `prod,staging,codef-live`와 `BEONE_STAGING_CODEF_ENABLED=true`(정확히 소문자)만 봅니다. 이때 `PublicProfileGuard`가 기동을 허용하고 실 게이트웨이와 CODEF 경로 4개가 등록됩니다. 키 값이 있는지는 등록 조건이 아닙니다.
+  - **배포 전 검사(`deploy.sh staging`):** 플래그가 켜져 있으면 필수 키 9개(CODEF 3키·connectedId 키·승인 HMAC 키·상품 호스트·호출 상한 3변수)가 비지 않게 한 번씩 있어야 오버레이를 붙이고, 아니면 배포를 거부합니다. 이 검사를 거치지 않고 키가 빠진 채 기동되면 경로는 등록되지만 CODEF 호출은 보내기 전에 실패합니다(코드 기준): connectedId 키가 없으면 연결·동기화가 게이트웨이를 부르지 않고 502 `CODEF_UNAVAILABLE`, 클라이언트 ID·비밀이 없으면 호출마다 `CREDENTIALS_MISSING`, 호출 상한 설정이 없거나 창 밖이면 `BUDGET_EXHAUSTED`로 보내지 않아 연결은 502, 동기화는 대상별 `partialFailures`(모두 실패면 502)가 됩니다. 공개키가 없으면 연결이 `NO_PUBLIC_KEY`로 502, 승인 HMAC 키가 없으면 승인내역을 조회하지 않고 부분 실패로 알립니다.
+  - 호출 상한은 스테이징 DB의 `codef_call_budgets`로 따로 셉니다. 켜기·확인·끄기는 [스테이징 한정 CODEF 런북](../deployment/staging-codef.md)을 따르고, 결정 40-7·38-8의 최종 변경 문구는 결정 필요입니다.
+- **운영 공개 전환(계획 없음)**: 운영 `prod`에 CODEF를 여는 코드·설정은 없습니다. 하려면 별도 사용자 승인과 코드 PR(가드·프로필 조건·배포 가드·아래 테스트 기대값 변경)이 필요합니다.
 - **테스트**: 웹 `CodefPublicProfileWebTest`(`@ActiveProfiles("prod")`, 4경로 404·no-store, 컨트롤러 2개·가짜 게이트웨이 Bean 없음, prod가 member로 펼쳐지고 local·demo는 꺼짐). 가짜 게이트웨이는 웹 슬라이스 스캔 대상이 아니라 `@Import`로 직접 넣어 프로필 조건으로 빠지는지 봅니다.
 
 ## 비공개 실연동 프로필 codef-live (LP-1, #193)
@@ -465,7 +471,7 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
 - 실적 기간·충족 여부·현재이용금액을 BeONE 상태값(`StateValue`, `StateSource.CODEF`)으로 바꾸는 것은 후보 매핑일 뿐 확정하지 않습니다(D-04: [결정 기록](../decisions.md)의 상태 출처 결정). 기관마다 전월·당월 제공 범위가 다르다는 문서 설명이 있습니다(비씨: 시작일자 기준 전월, 신한: 당월, 현대·롯데: 전월·당월).
 - 카드명·발급사로 실제 상품(SKU)을 확정하지 않습니다(D-01: [결정 기록](../decisions.md)의 카드 상품 식별 결정, `CANDIDATE` 유지).
 - 조회 가능 기간(예: 승인내역 국민·삼성 최근 12개월, 신한·롯데 최근 6개월 등)과 기관별 필수 파라미터는 문서 참고일 뿐 코드화하지 않았습니다.
-- 공개 프로필 `prod`에 CODEF 키·토큰 환경 변수(`CODEF_CLIENT_ID`, `CODEF_CLIENT_SECRET`, `BEONE_CODEF_APPROVAL_HMAC_KEY`, `BEONE_CODEF_CONNECTED_ID_KEY`, `CODEF_PUBLIC_KEY`)가 있으면 `PublicProfileGuard`가 기동을 멈춥니다(결정 38-8, #191, 공개키는 #193에서 추가). 값은 읽지 않고 메시지에 이름만 넣으며, 빈 값으로 선언만 해도 멈춥니다. 키는 비공개 검증 서버에만 둡니다. **공개 전환이 승인되면 이 규칙을 걷어내야 합니다.**
+- 공개 프로필 `prod`에 CODEF 키·토큰 환경 변수(`CODEF_CLIENT_ID`, `CODEF_CLIENT_SECRET`, `BEONE_CODEF_APPROVAL_HMAC_KEY`, `BEONE_CODEF_CONNECTED_ID_KEY`, `CODEF_PUBLIC_KEY`)가 있으면 `PublicProfileGuard`가 기동을 멈춥니다(결정 38-8, #191, 공개키는 #193에서 추가). 값은 읽지 않고 메시지에 이름만 넣으며, 빈 값으로 선언만 해도 멈춥니다. 키는 비공개 검증 서버에만 둡니다. 스테이징 표지 프로필 `staging`과 `BEONE_STAGING_CODEF_ENABLED=true`가 함께 있을 때만 예외입니다(#275). 운영 공개 전환은 계획이 없으며, 승인되면 이 규칙을 다시 정해야 합니다.
 - 취소 표현은 KB의 형태 기술만 있습니다([KB 문서](codef-kb.md#취소-표현-구분)). 실승인금액·승인과 취소의 매칭·원장·실적·한도 반영 규칙과 추가 분류는 만들지 않습니다. 성공 분류가 있어도 `data`를 계산에 쓸 수 있는지는 별도 판단입니다.
 
 ## 관련 문서
