@@ -1,5 +1,6 @@
+import type { PreferenceCard } from '../preferences/preferenceApi'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PaymentPreference, PortfolioMode, WalletCard } from '../data/portfolio'
+import type { PaymentPreference, PortfolioMode } from '../data/portfolio'
 import { authMessages } from '../hooks/useNativeAuth'
 import { merchantLabel } from '../orders/merchantClasses'
 import { formatWon, orderName, paymentMethods } from '../orders/order'
@@ -35,7 +36,7 @@ export function PaymentFlow({ mode, preference, selection, cards, gateway, mockA
   mode: PortfolioMode
   preference: PaymentPreference
   selection: OrderSelection | undefined
-  cards: readonly WalletCard[]
+  cards: readonly PreferenceCard[]
   gateway: PaymentGateway
   mockAuth: boolean
   onBack: () => void
@@ -114,6 +115,7 @@ export function PaymentFlow({ mode, preference, selection, cards, gateway, mockA
     return () => clearTimeout(timer)
   }, [stage])
 
+  const representativeName = cards.find(card => card.id === preference.representativeCardId)?.name
   const order = stage.kind === 'ready' ? selection?.order : stage.attempt.selection.order
   const canSubmit = stage.kind === 'ready' && !stage.blocked && auth.active && !checking && !auth.checking &&
     selection?.order.status === 'CREATED' && Boolean(selection.order.orderId) &&
@@ -222,7 +224,9 @@ export function PaymentFlow({ mode, preference, selection, cards, gateway, mockA
           </div>
         )}
       </div>
-      <p className="payment-selection">카드 선택 <span>{selectionLabels[preference.selectionMode]}</span></p>
+      <p className="payment-selection">카드 선택 <span>{selectionLabels[preference.selectionMode]}
+        {preference.selectionMode === 'FIXED_REPRESENTATIVE' &&
+          representativeName && ` · ${representativeName}`}</span></p>
       <div className="payment-footer">
         {stage.notice && <p role="alert">{stage.notice}</p>}
         <button className="payment-primary" disabled={!canSubmit} onClick={begin}>

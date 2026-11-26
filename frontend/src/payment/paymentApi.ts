@@ -1,9 +1,9 @@
+import { AuthApiError } from '../auth/api'
+import { workspaceRequest } from '../data/workspaceRequest'
+import type { WorkspaceContext } from '../data/workspaceRequest'
 import type { PortfolioMode } from '../data/portfolio'
 import { PaymentError } from './contract'
 import type { Approval, PaymentDetail, PaymentGateway, Recommendation } from './contract'
-
-const base = (import.meta.env.VITE_API_BASE_URL ??
-  (import.meta.env.DEV ? 'http://localhost:8080' : '')).replace(/\/+$/, '')
 
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value)
@@ -49,19 +49,20 @@ function recommendation(v: unknown): v is Recommendation {
     list(v.notes, string)
 }
 
-async function read(mode: PortfolioMode, path: string, post?: { key: string; body: object }): Promise<unknown> {
-  const headers: Record<string, string> = { 'X-BeONE-Demo-User': mode }
+async function read(context: WorkspaceContext, mode: PortfolioMode, path: string, post?: { key: string; body: object }): Promise<unknown> {
+  const headers: Record<string, string> = {}
   if (post) {
     headers['Content-Type'] = 'application/json'
     headers['Idempotency-Key'] = post.key
   }
   let response: Response
   try {
-    response = await fetch(base + '/api/v1/me/' + path, {
-      method: post ? 'POST' : 'GET', headers, credentials: 'omit', cache: 'no-store',
-      body: post ? JSON.stringify(post.body) : undefined, signal: AbortSignal.timeout(15000),
+    response = await workspaceRequest(context, mode, path, {
+      method: post ? 'POST' : 'GET', headers,
+      body: post ? JSON.stringify(post.body) : undefined,
     })
-  } catch {
+  } catch (error) {
+    if (error instanceof AuthApiError) throw new PaymentError(error.code, error.status)
     throw new PaymentError('NETWORK', 0, Boolean(post))
   }
   const body: unknown = await response.json().catch(() => null)
@@ -75,33 +76,37 @@ async function read(mode: PortfolioMode, path: string, post?: { key: string; bod
   return body.data
 }
 
-export const apiPaymentGateway: PaymentGateway = {
-  kind: 'api',
-  async approve(attempt) {
-    const { selection, mode, key, body } = attempt
-    if (selection.source !== 'server') throw new PaymentError('MOCK_ORDER')
-    const id = selection.order.orderId
-    const data = await read(mode, 'orders/' + encodeURIComponent(id) + '/simulated-payments', { key, body })
-    const result = data as Approval
-    if (!approval(data, ['APPROVED', 'FAILED']) || result.orderId !== id ||
-      result.amountWon !== selection.order.amountWon || (result.status === 'FAILED' &&
-        (result.ledgerTransactionId !== null || result.currentOrderBenefit.amountWon !== null ||
-          result.cancellableAmountWon !== 0))) {
-      throw new PaymentError('UNEXPECTED', 201, true)
-    }
-    return result
-  },
-  async recommendation(mode, id, orderId) {
-    const data = await read(mode, 'recommendations/' + encodeURIComponent(id))
-    if (!recommendation(data) || data.recommendationId !== id || data.orderId !== orderId) {
-      throw new PaymentError('UNEXPECTED')
-    }
-    return data
-  },
-  async detail(mode, id) {
-    return parsePaymentDetail(await read(mode, 'simulated-payments/' + encodeURIComponent(id)), id)
-  },
+export function createPaymentGateway(context: WorkspaceContext): PaymentGateway {
+  return {
+    kind: 'api',
+    async approve(attempt) {
+      const { selection, mode, key, body } = attempt
+      if (selection.source !== 'server') throw new PaymentError('MOCK_ORDER')
+      const id = selection.order.orderId
+      const data = await read(context, mode, 'orders/' + encodeURIComponent(id) + '/simulated-payments', { key, body })
+      const result = data as Approval
+      if (!approval(data, ['APPROVED', 'FAILED']) || result.orderId !== id ||
+        result.amountWon !== selection.order.amountWon || (result.status === 'FAILED' &&
+          (result.ledgerTransactionId !== null || result.currentOrderBenefit.amountWon !== null ||
+            result.cancellableAmountWon !== 0))) {
+        throw new PaymentError('UNEXPECTED', 201, true)
+      }
+      return result
+    },
+    async recommendation(mode, id, orderId) {
+      const data = await read(context, mode, 'recommendations/' + encodeURIComponent(id))
+      if (!recommendation(data) || data.recommendationId !== id || data.orderId !== orderId) {
+        throw new PaymentError('UNEXPECTED')
+      }
+      return data
+    },
+    async detail(mode, id) {
+      return parsePaymentDetail(await read(context, mode, 'simulated-payments/' + encodeURIComponent(id)), id)
+    },
+  }
 }
+
+export const apiPaymentGateway = createPaymentGateway('demo')
 
 export function parsePaymentDetail(payload: unknown, id: string): PaymentDetail {
   const data = payload as PaymentDetail
