@@ -6,12 +6,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.beone.api.card.application.CardProductProfile;
 import com.beone.api.card.application.SupportedCardProducts;
 import com.beone.api.codef.application.CodefCardNameDictionary.Basis;
 import com.beone.api.codef.application.CodefCardNameDictionary.Entry;
+import com.beone.api.codef.application.CodefCardNameDictionary.Source;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,8 @@ import org.junit.jupiter.api.Test;
  * 카드명은 공개 상품명이며 실사용자 응답 원문이 아니다.
  */
 class CodefCardNameDictionaryTest {
+
+	private static final Set<Source> PAGE = Set.of(Source.PRODUCT_PAGE);
 
 	@Test
 	void everyListedNameMatchesItsProductExactly() {
@@ -84,17 +88,53 @@ class CodefCardNameDictionaryTest {
 
 	@Test
 	void indexRejectsANameMappedToTwoProducts() {
-		List<Entry> clash = List.of(new Entry("01664", "노리 체크카드", Basis.ASSUMED),
-				new Entry("01914", "노리 체크카드", Basis.ASSUMED));
+		List<Entry> clash = List.of(new Entry("01664", "노리 체크카드", Basis.ASSUMED, PAGE),
+				new Entry("01914", "노리 체크카드", Basis.ASSUMED, PAGE));
 
 		assertThatThrownBy(() -> CodefCardNameDictionary.index(clash)).isInstanceOf(IllegalStateException.class);
 	}
 
 	@Test
 	void entryNamesMustBeStripped() {
-		assertThatThrownBy(() -> new Entry("09271", " 올라운드 티타늄카드", Basis.ASSUMED))
+		assertThatThrownBy(() -> new Entry("09271", " 올라운드 티타늄카드", Basis.ASSUMED, PAGE))
 			.isInstanceOf(IllegalArgumentException.class);
-		assertThatThrownBy(() -> new Entry("09271", "", Basis.ASSUMED)).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new Entry("09271", "", Basis.ASSUMED, PAGE)).isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void sourcesMustMatchTheBasis() {
+		// 관측 표기는 CODEF 응답 출처만, 추정 표기는 상품 페이지만
+		assertThatThrownBy(() -> new Entry("09271", "올라운드 티타늄카드", Basis.OBSERVED, PAGE))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new Entry("09271", "올라운드 티타늄카드", Basis.OBSERVED,
+				Set.of(Source.HELD_CARDS, Source.PRODUCT_PAGE)))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new Entry("09271", "올라운드 티타늄카드", Basis.ASSUMED, Set.of(Source.HELD_CARDS)))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new Entry("09271", "올라운드 티타늄카드", Basis.OBSERVED, Set.of()))
+			.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void sourcesFollowTheRecordedObservations() {
+		Map<String, Set<Source>> sources = CodefCardNameDictionary.entries()
+			.stream()
+			.collect(Collectors.toMap(Entry::cardName, Entry::sources));
+
+		assertThat(sources).containsEntry("올라운드 티타늄카드", Set.of(Source.HELD_CARDS, Source.PERFORMANCES))
+			.containsEntry("nori 체크카드(RF)", Set.of(Source.HELD_CARDS))
+			.containsEntry("KB국민 노리체크카드", Set.of(Source.PERFORMANCES))
+			.containsEntry("노리 체크카드", PAGE);
+	}
+
+	@Test
+	void performanceApiNameMatchesNoriAndUnsupportedCardsStayOut() {
+		// 2026-11-27 재동기화의 실적 API 표기
+		assertThat(CodefCardNameDictionary.candidateFor("KB국민 노리체크카드")).hasValue("01664");
+		// 지원 상품 4종이 아닌 카드는 사전에 없다
+		assertThat(CodefCardNameDictionary.candidateFor("KB Youth Club 체크카드(RF)")).isEmpty();
+		assertThat(CodefCardNameDictionary.candidateFor("KB Youth Club 체크카드")).isEmpty();
+		assertThat(CodefCardNameDictionary.candidateFor("KB국민 노리 체크카드")).isEmpty();
 	}
 
 	@Test
@@ -112,7 +152,7 @@ class CodefCardNameDictionaryTest {
 			.collect(Collectors.toMap(Entry::cardName, Entry::basis));
 
 		assertThat(basis).containsExactlyInAnyOrderEntriesOf(Map.of("올라운드 티타늄카드", Basis.OBSERVED,
-				"nori 체크카드(RF)", Basis.OBSERVED, "nori 체크카드", Basis.ASSUMED, "노리 체크카드", Basis.ASSUMED,
+				"nori 체크카드(RF)", Basis.OBSERVED, "KB국민 노리체크카드", Basis.OBSERVED, "nori 체크카드", Basis.ASSUMED, "노리 체크카드", Basis.ASSUMED,
 				"노리 체크카드(RF)", Basis.ASSUMED, "청춘대로 톡톡카드", Basis.ASSUMED, "청춘대로 톡톡카드(RF)", Basis.ASSUMED,
 				"첵첵 체크카드", Basis.ASSUMED, "첵첵 체크카드(RF)", Basis.ASSUMED));
 	}

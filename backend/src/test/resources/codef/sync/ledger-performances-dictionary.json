@@ -1,0 +1,57 @@
+{
+  "_fixture": {
+    "synthetic": true,
+    "basis": "실적조회!H12(카드명 O). R1 이름 사전 실적 연결 시나리오(#270): 공개 상품명만 쓴 합성 응답",
+    "observed": false
+  },
+  "result": {
+    "code": "CF-00000",
+    "transactionId": "SYN-TX-DPERF-0001"
+  },
+  "data": [
+    {
+      "resCardName": "KB국민 노리체크카드",
+      "resCardBenefitList": {
+        "resCardPerformanceList": {
+          "resStandardUseAmt": "300000",
+          "resCurrentUseAmt": "120000",
+          "commStartDate": "20261101",
+          "commEndDate": "20261115"
+        }
+      }
+    },
+    {
+      "resCardName": "KB Youth Club 체크카드",
+      "resCardBenefitList": {
+        "resCardPerformanceList": {
+          "resStandardUseAmt": "300000",
+          "resCurrentUseAmt": "50000",
+          "commStartDate": "20261101",
+          "commEndDate": "20261115"
+        }
+      }
+    },
+    {
+      "resCardName": "올라운드 티타늄카드",
+      "resCardBenefitList": {
+        "resCardPerformanceList": {
+          "resStandardUseAmt": "300000",
+          "resCurrentUseAmt": "70000",
+          "commStartDate": "20261101",
+          "commEndDate": "20261115"
+        }
+      }
+    },
+    {
+      "resCardName": "청춘대로 톡톡카드(RF) ",
+      "resCardBenefitList": {
+        "resCardPerformanceList": {
+          "resStandardUseAmt": "300000",
+          "resCurrentUseAmt": "10000",
+          "commStartDate": "20261101",
+          "commEndDate": "20261115"
+        }
+      }
+    }
+  ]
+}

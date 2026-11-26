@@ -1,0 +1,11 @@
+{
+  "_fixture": {"synthetic": true, "basis": "보유카드!H10(카드명 O). R1 이름 사전 연결 시나리오(#270): 공개 상품명만 쓴 합성 응답. 01664·09271 한 장씩, 09174 두 장(표기 둘), 01914 없음, 지원 상품 밖 카드 한 장", "observed": false},
+  "result": {"code": "CF-00000", "transactionId": "SYN-TX-DHELD-0001"},
+  "data": [
+    {"resCardName": "nori 체크카드(RF)", "resSleepYN": "N"},
+    {"resCardName": "KB Youth Club 체크카드(RF)", "resSleepYN": "N"},
+    {"resCardName": "올라운드 티타늄카드", "resSleepYN": "N"},
+    {"resCardName": "청춘대로 톡톡카드", "resSleepYN": "N"},
+    {"resCardName": "청춘대로 톡톡카드(RF)", "resSleepYN": "N"}
+  ]
+}

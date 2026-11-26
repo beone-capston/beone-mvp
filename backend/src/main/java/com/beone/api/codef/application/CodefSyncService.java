@@ -45,6 +45,8 @@ import com.beone.api.codef.sync.CodefPerformanceReference;
 import com.beone.api.codef.sync.CodefTargetOutcome;
 import com.beone.api.codef.transport.CodefCallResult;
 import com.beone.api.user.application.CurrentUser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -66,11 +68,17 @@ import org.springframework.transaction.support.TransactionTemplate;
  * {@link CodefLedgerCandidateBuilder}로 판정해 받아들인 행만 codef 전용 테이블에 넣고 원장({@code ledger_transactions})은 바꾸지 않는다(R8).
  * 불완전 행은 저장하지 않으며 다음 동기화에서 다시 판정한다. 승인번호 HMAC 키가 없으면 승인내역을 조회·저장하지 않고 부분 실패로 알린다(P6).
  * 실적은 참고값으로만 저장하고 계산·월간 상태에 넣지 않는다(D-16). 원장이 완전하다고 선언하지 않는다(R7).
+ *
+ * <p>승인·실적 행은 {@link CodefCardLinker}로 보유카드에 붙인다. 카드명 정확 일치가 우선이고, 없으면 {@link CodefCardNameDictionary}로
+ * 같은 상품이 되는 보유카드가 정확히 한 장일 때만 붙인다(R1, 2026-11-27 사용자 결정, #270). 저장이 끝나면 진단 집계
+ * ({@link CodefSyncDiagnostics})를 INFO 로그 한 줄로 남긴다.
  */
 @Service
 public class CodefSyncService {
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+
+	private static final Logger log = LoggerFactory.getLogger(CodefSyncService.class);
 
 	private final CodefConnectionRepository connections;
 
@@ -180,8 +188,12 @@ public class CodefSyncService {
 			throw new CodefUnavailableException();
 		}
 		LocalDateTime syncedAt = LocalDateTime.ofInstant(checkedAt, SEOUL).truncatedTo(ChronoUnit.SECONDS);
-		return this.transactions.execute(status -> store(user, connection, period, syncedAt, heldOutcome,
-				approvalOutcome, performanceOutcome, fingerprinter, failures));
+		CodefSyncDiagnostics diagnostics = new CodefSyncDiagnostics();
+		CodefSyncResult result = this.transactions.execute(status -> store(user, connection, period, syncedAt,
+				heldOutcome, approvalOutcome, performanceOutcome, fingerprinter, failures, diagnostics));
+		// 저장 트랜잭션이 끝난 뒤에만 남긴다. 카드번호·승인번호·금액·가맹점·일시·connectedId는 담지 않는다
+		log.info("{}", diagnostics.line(result.syncId()));
+		return result;
 	}
 
 	private static String decrypt(byte[] key, long userId, String ciphertext) {
@@ -232,7 +244,8 @@ public class CodefSyncService {
 			LocalDateTime syncedAt, CodefTargetOutcome<CodefHeldCardCandidate> heldOutcome,
 			Optional<CodefTargetOutcome<CodefApproval>> approvalOutcome,
 			CodefTargetOutcome<CodefPerformanceReference> performanceOutcome,
-			Optional<CodefApprovalFingerprinter> fingerprinter, List<CodefSyncTarget> failures) {
+			Optional<CodefApprovalFingerprinter> fingerprinter, List<CodefSyncTarget> failures,
+			CodefSyncDiagnostics diagnostics) {
 		List<Long> activeCodefCards = this.userCardService.lockHeldCardsForCodefSync(user);
 		this.connections.lockUser(user.userId());
 		CodefConnectionEntity current = this.connections.lockByUserId(user.userId())
@@ -242,13 +255,14 @@ public class CodefSyncService {
 			.save(new CodefSyncEntity(user.userId(), period.from(), period.to(), syncedAt))
 			.getSyncId();
 		HeldCardStep held = storeHeldCards(user, syncId, heldOutcome, activeCodefCards);
+		CodefCardLinker linker = CodefCardLinker.of(heldOutcome, CodefCardNameDictionary::candidateFor);
 		CodefSyncResult.Approvals approvals = (approvalOutcome.isPresent()
 				&& approvalOutcome.get() instanceof CodefTargetOutcome.Usable<CodefApproval> usable)
-						? storeApprovals(user, syncId, syncedAt, usable.items(), CodefCardLinker.of(heldOutcome),
-								held.userCardIds(), fingerprinter.orElseThrow())
+						? storeApprovals(user, syncId, syncedAt, usable.items(), linker, held.userCardIds(),
+								fingerprinter.orElseThrow(), diagnostics)
 						: new CodefSyncResult.Approvals(null, null, List.of());
 		List<CodefSyncResult.PerformanceItem> performances = storePerformances(user, syncId, syncedAt,
-				performanceOutcome, CodefCardLinker.of(heldOutcome), held.userCardIds());
+				performanceOutcome, linker, held.userCardIds(), diagnostics);
 		current.markSynced(syncedAt);
 		return new CodefSyncResult(syncId, syncedAt, held.result(), approvals, performances, failures);
 	}
@@ -289,7 +303,8 @@ public class CodefSyncService {
 				}
 				case CodefHeldCardMatcher.Resolution.Skipped skipped -> null;
 			};
-			// 카드 연결기(R1)는 응답에 이름이 하나뿐인 카드만 연결하므로 이름으로 찾아도 하나로 정해진다
+			// 카드 연결기(R1)는 응답에 이름이 하나뿐인 카드만 연결하므로 이름으로 찾아도 하나로 정해진다.
+			// 이름 사전 연결도 같은 상품이 되는 보유카드가 한 장일 때만 그 카드의 이름을 돌려주므로 마찬가지다
 			if (userCardId != null) {
 				userCardIds.put(cards.get(index).cardName().orElseThrow(), userCardId);
 			}
@@ -299,7 +314,7 @@ public class CodefSyncService {
 
 	private CodefSyncResult.Approvals storeApprovals(CurrentUser user, long syncId, LocalDateTime syncedAt,
 			List<CodefApproval> approvals, CodefCardLinker linker, Map<String, Long> userCardIds,
-			CodefApprovalFingerprinter fingerprinter) {
+			CodefApprovalFingerprinter fingerprinter, CodefSyncDiagnostics diagnostics) {
 		Map<CodefApprovalKey, CodefApprovalRowEntity> recorded = new HashMap<>();
 		for (CodefApprovalRowEntity row : this.approvalRows.findByUserId(user.userId())) {
 			recorded.put(keyOf(row), row);
@@ -314,6 +329,8 @@ public class CodefSyncService {
 		for (CodefLedgerCandidateRow row : candidates.rows()) {
 			Long userCardId = userCardIdOf(row.card(), userCardIds);
 			boolean approvalNoPresent = approvals.get(row.position()).approvalNo().isPresent();
+			diagnostics.approval(approvals.get(row.position()).cardName(), row,
+					row.decision() instanceof CodefLedgerCandidateRow.Decision.Accepted && userCardId == null);
 			switch (row.decision()) {
 				case CodefLedgerCandidateRow.Decision.Incomplete incompleteRow ->
 					incomplete.add(new CodefSyncResult.IncompleteRow(userCardId, approvalNoPresent,
@@ -340,6 +357,7 @@ public class CodefSyncService {
 				}
 			}
 		}
+		diagnostics.approvalsJudged(imported);
 		return new CodefSyncResult.Approvals(imported, skipped, incomplete);
 	}
 
@@ -350,14 +368,16 @@ public class CodefSyncService {
 
 	private List<CodefSyncResult.PerformanceItem> storePerformances(CurrentUser user, long syncId,
 			LocalDateTime syncedAt, CodefTargetOutcome<CodefPerformanceReference> outcome, CodefCardLinker linker,
-			Map<String, Long> userCardIds) {
+			Map<String, Long> userCardIds, CodefSyncDiagnostics diagnostics) {
 		if (!(outcome instanceof CodefTargetOutcome.Usable<CodefPerformanceReference> usable)) {
 			return List.of();
 		}
+		diagnostics.performancesJudged();
 		List<CodefSyncResult.PerformanceItem> items = new ArrayList<>();
 		for (CodefPerformanceLink link : linker.linkPerformances(usable.items())) {
 			Long userCardId = userCardIdOf(link.card(), userCardIds);
 			String cardName = link.reference().cardName().orElse(null);
+			diagnostics.performance(link.reference().cardName(), link.card());
 			for (CodefSyncResult.PerformanceItem item : flatten(userCardId, link.reference(), syncedAt)) {
 				this.performanceReferences.save(new CodefPerformanceReferenceEntity(user.userId(), userCardId, syncId,
 						cardName, item.periodFrom(), item.periodTo(), item.currentUseWon(), syncedAt));

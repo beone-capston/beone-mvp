@@ -18,9 +18,10 @@ import com.beone.api.codef.CodefCancellationForm;
  * @param usedAt 사용일자·사용일시 해석 결과
  * @param form 기존 취소 표현 형태
  * @param decision 받아들임 또는 불완전
+ * @param incompleteDetail 불완전 행이 걸린 판정 분기(내부 진단용, #270). 불완전 행에만 있다
  */
 public record CodefLedgerCandidateRow(int position, CodefCardLink card, CodefUsedDateTime usedAt,
-		CodefCancellationForm form, Decision decision) {
+		CodefCancellationForm form, Decision decision, Optional<CodefIncompleteDetail> incompleteDetail) {
 
 	/**
 	 * 값을 확인한다.
@@ -33,6 +34,10 @@ public record CodefLedgerCandidateRow(int position, CodefCardLink card, CodefUse
 		Objects.requireNonNull(usedAt, "usedAt");
 		Objects.requireNonNull(form, "form");
 		Objects.requireNonNull(decision, "decision");
+		Objects.requireNonNull(incompleteDetail, "incompleteDetail");
+		if ((decision instanceof Decision.Incomplete) != incompleteDetail.isPresent()) {
+			throw new IllegalArgumentException("incompleteDetail is present exactly for an incomplete row");
+		}
 		if (position < 0) {
 			throw new IllegalArgumentException("position must not be negative");
 		}
