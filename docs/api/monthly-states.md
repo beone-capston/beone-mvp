@@ -49,7 +49,8 @@ X-BeONE-Demo-User: MY_CARDS
       "updatedAt": "2026-11-03T10:20:00+09:00",
       "usable": true,
       "reason": null,
-      "referencedCodef": null
+      "referencedCodef": null,
+      "codefReference": null
     },
     "limitBucketUsages": [
       {
@@ -106,8 +107,25 @@ X-BeONE-Demo-User: MY_CARDS
 - `noServiceSelection` · Object|null · `NONE`일 때 `effectiveFrom`, `source`, `updatedAt`, `usable`, `reason`
 - `registeredOn` · 카드 사용 등록일(코드 `HeldCard.registeredAt`). 카드 단위 값이라 달이 달라도 같은 값이다
 - `usable` / `reason` · 계산에 쓸 수 있는지와 이유: `NOT_ENTERED` / `SOURCE_CONFLICT` / `NEGATIVE_UNCONFIRMED_ATTRIBUTION`
-- `referencedCodef` · Object|null · 2차에서 사용자가 CODEF 참고값을 보고 입력했을 때 참고한 조회월·조회 시각
-- `conflicts` · Array · 같은 항목·같은 기준 기간에 출처가 다른 값이 서로 다를 때만 담는다(D-16). 1차 수동 입력만 있으면 항상 `[]`. 항목 형식: `item`, `period`, `conflictVersion`, `candidates[]`(`source`, `value`, `period`, `updatedAt`), `selection`(`selectedSource`, `selectedAt`, 없으면 `null`)
+- `referencedCodef` · Object|null · 사용자가 CODEF 참고값을 보고 전월 실적을 입력했을 때(`PUT`의 `referencedCodefId`) 참고한 값의 입력 당시 스냅샷. 참고 없이 입력했으면 `null`(#281)
+  - `referenceId` · String|null · 참고값 ID(`cpr-` 형식). 참고값 행이 지워졌으면 `null`이고 나머지는 그대로다
+  - `syncId` · String · 그 참고값을 저장한 동기화(`sync-` 형식, CODEF 동기화 응답의 `syncId`와 같음)
+  - `inquiryMonth` · String(YYYY-MM) · 조회월(반영기간 시작일의 달)
+  - `period` · Object · 반영기간
+  - `currentUseWon` · Integer|null · 그때의 카드사 조회 금액. 해석하지 못했으면 `null`(0이 아님)
+  - `fetchedAt` · DateTime · 그 참고값의 조회 시각
+- `codefReference` · Object|null · 전월 실적 칸에 미리 채워 보여 줄 "카드사 조회 실적(참고)"(D-16, #281). 이 카드에 연결된 CODEF 실적 참고값 중 반영기간이 대상 월의 전월 1일~말일과 정확히 같은 최신 1건이다. 없으면 `null`. **계산에 쓰지 않는다.** 상태를 입력한 적 없는 달에도 나온다. 당월 조회분(종료일이 조회일 전날)과 카드에 연결되지 않은 참고값은 나오지 않는다
+  - `referenceId` · String · 참고값 ID(`cpr-` 형식). `PUT`의 `referencedCodefId`로 보낸다
+  - `label` · String · 항상 `카드사 조회 실적(참고)`
+  - `inquiryMonth` · String(YYYY-MM) · 조회월
+  - `period` · Object · 반영기간
+  - `currentUseWon` · Integer|null · 카드사 조회 금액(현재이용금액). 해석하지 못했으면 `null`(0이 아님)
+  - `fetchedAt` · DateTime · 조회 시각
+  - `usedInCalculation` · Boolean · 항상 `false`
+- `conflicts` · Array · 같은 항목·같은 기준 기간에 출처가 다른 값이 서로 다를 때만 담는다(D-16). 항목 형식: `item`, `period`, `conflictVersion`, `candidates[]`(`source`, `value`, `period`, `updatedAt`), `selection`(`selectedSource`, `selectedAt`, 없으면 `null`)
+  - 지금 충돌이 생기는 항목은 `previousMonthPerformanceWon`뿐이다(#281, 사용자 결정 2026-11-27 Q1). 저장된 전월 실적과 같은 기준 기간의 최신 연결 CODEF 참고값 금액이 있고(미확인은 충돌 아님) 값이 다르며, 그 값이 바로 그 참고값을 참고해 저장된 것이 아니면 충돌이다. 참고 없이 입력한 값도 포함한다. 재조회로 새 참고값이 다른 금액이면 다시 충돌이다
+  - 충돌 동안 그 값은 `usable=false`, `reason=SOURCE_CONFLICT`이고 계산에 쓰지 않는다(Q2). `candidates`는 `MANUAL`(저장 값·입력 시각)과 `CODEF`(참고값 금액·조회 시각) 두 개다. `selection`은 항상 `null`이다(계산 기준 선택을 저장하지 않음)
+  - 해소는 최신 참고값의 `referenceId`를 `referencedCodefId`로 보내 `PUT`으로 다시 저장하는 것이다(Q3). 값은 사용자가 정한다
 - `afterSnapshot` · Object · 스냅샷 뒤 모의 승인·취소 요약. 화면 표시용이며 상태값을 덮어쓰지 않는다
 
 ### 실패 응답
@@ -206,6 +224,7 @@ registeredOn
 
 - 금액 항목의 `value`는 정수이며 소수·문자열은 400이다. `previousMonthPerformanceWon.value`는 **음수를 받는다**(D-17). 0으로 바꾸지 않는다.
 - `source`·`updatedAt`은 서버가 정한다. 요청으로 받지 않는다. 이 입력은 CODEF 조회값을 덮어쓰지 않는다.
+- `previousMonthPerformanceWon.referencedCodefId` · String · 선택 · 사용자가 보고 확인한 카드사 조회 실적(참고)의 `referenceId`(조회 응답 `codefReference.referenceId`, `cpr-` 형식, #281). 보내면 값은 그대로 `MANUAL`로 저장하고 참고한 CODEF 값을 응답 `referencedCodef`로 남긴다. 참고값과 다른 값을 보내도 된다(사용자가 정한 값). 본인의 참고값이고 이 카드에 연결됐고 반영기간이 `period`와 같아야 한다. 생략하면 참고 기록 없이 저장하고 이전 참고 기록은 지운다. 다른 금액 항목에는 이 필드가 없다(알 수 없는 필드 400).
 - `limitBucketUsages[].value`는 0 이상 정수다. `0`은 "사용한 혜택 없음"을 직접 입력한 값이다.
 - 한도가 체인으로 묶인 서비스는 체인 안 버킷마다 사용액을 입력한다. 하나라도 `UNKNOWN`이면 그 서비스는 `확인 필요`다(D-16, D-18 K1).
 - 입력 사용액이 한도보다 커도 저장은 한다. 한도는 실적 구간에 따라 달라 추천 때 판정한다. 제외 업종(`NOT_APPLICABLE_EXCLUDED`)·대상 업종·결제 방식·최소 금액·실적 미충족이 확인되거나, 택1 선택형 서비스에서 다른 서비스를 골랐거나 선택 없음이면(`NOT_APPLICABLE_SELECTION`) 사용액과 무관하게 확정 0원이다. 그렇지 않으면 추천에서 그 서비스는 `확인 필요`(사유 `USAGE_EXCEEDS_LIMIT`)이고, 사용액이 한도와 같으면 남은 한도 0이다(D-18 K1).
@@ -239,7 +258,8 @@ registeredOn
       "updatedAt": "2026-11-03T10:20:00+09:00",
       "usable": true,
       "reason": null,
-      "referencedCodef": null
+      "referencedCodef": null,
+      "codefReference": null
     },
     "limitBucketUsages": [
       {
@@ -300,6 +320,7 @@ registeredOn
   - `limitBucketUsages[].value` 음수(`previousMonthPerformanceWon.value`는 음수를 받는다)
   - `selectedServices` 항목과 `noServiceSelection`을 함께 보냄(제안)
   - 선택형 서비스가 없는 카드에 `noServiceSelection`을 보냄(제안)
+  - `referencedCodefId` 형식 오류(`형식이 올바르지 않습니다.`), 또는 본인 참고값이 아니거나 이 카드에 연결되지 않았거나 반영기간이 `period`와 다름(`참고할 수 없는 카드사 조회 실적입니다.`). 필드는 `previousMonthPerformanceWon.referencedCodefId`
 
 - **404 `USER_CARD_NOT_FOUND`**: 없거나 다른 사용자의 카드
 
@@ -331,9 +352,9 @@ registeredOn
 
 월간 상태 값의 출처 충돌을 사용자가 해소하는 API. 선택은 그 값 하나에만 적용한다.
 
-충돌은 같은 카드·같은 항목·같은 기준 기간에 출처가 다른 값이 서로 다를 때만 생깁니다. 값이 같거나, 기준 기간이 다르거나, `UNKNOWN`이거나, 사용자가 참고해 입력한 MANUAL 값과 그 CODEF 값이면 충돌이 아닙니다. 1차(수동 입력만)에서는 충돌이 생기지 않습니다.
+충돌은 같은 카드·같은 항목·같은 기준 기간에 출처가 다른 값이 서로 다를 때만 생깁니다. 값이 같거나, 기준 기간이 다르거나, `UNKNOWN`이거나, 사용자가 참고해 입력한 MANUAL 값과 그 CODEF 값이면 충돌이 아닙니다. #281부터 전월 실적과 CODEF 실적 참고값의 충돌이 「월간 상태 조회」 `conflicts[]`에 나옵니다.
 
-> 현재 구현은 제한 구현입니다. 충돌이 생기는 경로가 생기기 전까지 요청 검증 400·카드 404 뒤 항상 409 `SOURCE_CONFLICT_NOT_FOUND`로 끝나고, 선택을 저장하지 않습니다. 아래 200 응답은 그 뒤에 구현할 형식입니다(#135, 사용자 확인 결정 32 Q1, 2026-11-18).
+> 현재 구현은 제한 구현입니다. 요청 검증 400·카드 404 뒤 항상 409 `SOURCE_CONFLICT_NOT_FOUND`로 끝나고, 선택을 저장하지 않습니다. 아래 200 응답은 그 뒤에 구현할 형식입니다(#135, 사용자 확인 결정 32 Q1, 2026-11-18). 전월 실적과 CODEF 참고값의 충돌(#281)도 이 API로 고르지 않고, 최신 참고값을 보고 월간 상태를 `PUT`으로 다시 저장해 해소합니다(사용자 결정 2026-11-27 Q3). CODEF 값을 계산 기준으로 고르면 D-16의 "자동 반영 안 함"과 맞지 않기 때문입니다.
 
 ### Request Header
 

@@ -76,7 +76,7 @@ com.beone.api
 ├── auth            # 회원 인증 [U1 세션·CSRF #124, U2 가입·이메일 인증 #128, U3 로그인·세션 #132, U4 비밀번호 재설정 #138, auth 안내: domains/auth.md]
 ├── card            # 상품 조회 [구현, #105, 테이블 없음], 보유 카드·매핑·GET /me [구현, #108]
 ├── preference      # 결제 전 설정, 대표 카드 보호(card 확장 지점 구현) [구현, #111, preference 안내: domains/preference.md]
-├── monthlystate    # 월간 상태 조회·수동 입력·출처 충돌 선택 [구현, #110·#134, monthlystate 안내: domains/monthlystate.md]
+├── monthlystate    # 월간 상태 조회·수동 입력·출처 충돌 선택, CODEF 실적 참고값 표시·확인 기록(codef 읽기 전용 창구로만 읽음) [구현, #110·#134·#281, monthlystate 안내: domains/monthlystate.md]
 ├── order           # 주문, 예정 소비 [구현, #104, order 안내: domains/order.md]
 ├── recommendation  # 추천 계산·저장·조회, 엔진 입구 호출, 지연 무효화 [구현, #114, recommendation 안내: domains/recommendation.md]
 ├── payment         # 모의 승인·취소, 멱등 키 [구현, #116, payment 안내: domains/payment.md]

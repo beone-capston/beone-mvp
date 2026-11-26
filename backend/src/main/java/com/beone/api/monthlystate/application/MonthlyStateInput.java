@@ -39,11 +39,21 @@ public record MonthlyStateInput(Amount previousMonthPerformanceWon, List<BucketU
 	 *
 	 * @param valueWon 원 단위 정수
 	 * @param period 기준 기간
+	 * @param referencedCodefId 사용자가 보고 확인한 CODEF 실적 참고값 ID(전월 실적만, D-16). 없으면 {@code null}
 	 */
-	public record Amount(long valueWon, DatePeriod period) {
+	public record Amount(long valueWon, DatePeriod period, Long referencedCodefId) {
 
 		public Amount {
 			Objects.requireNonNull(period, "period");
+		}
+
+		/**
+		 * 참고값 없이 입력한 금액.
+		 * @param valueWon 원 단위 정수
+		 * @param period 기준 기간
+		 */
+		public Amount(long valueWon, DatePeriod period) {
+			this(valueWon, period, null);
 		}
 
 	}

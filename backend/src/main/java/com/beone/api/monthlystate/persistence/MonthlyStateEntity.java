@@ -2,6 +2,7 @@ package com.beone.api.monthlystate.persistence;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -48,6 +49,25 @@ public class MonthlyStateEntity {
 
 	@Column(name = "previous_month_to")
 	private LocalDate previousMonthTo;
+
+	// 전월 실적을 입력할 때 참고한 CODEF 실적 참고값의 스냅샷(V17, D-16). previousMonthCodefFetchedAt이 있으면 참고 입력이다.
+	@Column(name = "previous_month_codef_reference_id")
+	private Long previousMonthCodefReferenceId;
+
+	@Column(name = "previous_month_codef_sync_id")
+	private Long previousMonthCodefSyncId;
+
+	@Column(name = "previous_month_codef_won")
+	private Long previousMonthCodefWon;
+
+	@Column(name = "previous_month_codef_from")
+	private LocalDate previousMonthCodefFrom;
+
+	@Column(name = "previous_month_codef_to")
+	private LocalDate previousMonthCodefTo;
+
+	@Column(name = "previous_month_codef_fetched_at")
+	private LocalDateTime previousMonthCodefFetchedAt;
 
 	@Column(name = "other_buckets_used_won")
 	private Long otherBucketsUsedWon;
@@ -105,6 +125,59 @@ public class MonthlyStateEntity {
 		this.registeredOn = registeredOn;
 		this.noServiceSelection = noServiceSelection;
 		this.noSelectionEffectiveFrom = noSelectionEffectiveFrom;
+		// 교체는 참고 기록도 지운다. 이번 입력이 참고 입력이면 호출자가 이어서 referPreviousMonthToCodef를 부른다
+		this.previousMonthCodefReferenceId = null;
+		this.previousMonthCodefSyncId = null;
+		this.previousMonthCodefWon = null;
+		this.previousMonthCodefFrom = null;
+		this.previousMonthCodefTo = null;
+		this.previousMonthCodefFetchedAt = null;
+	}
+
+	/**
+	 * 이번 전월 실적 입력이 참고한 CODEF 값을 기록한다. 전월 실적 값이 있을 때만 부른다.
+	 * @param referenceId 참고값 ID
+	 * @param syncId 그 참고값을 저장한 동기화 ID
+	 * @param won 그때의 현재이용금액. 해석하지 못했으면 {@code null}
+	 * @param from 반영기간 시작일
+	 * @param to 반영기간 종료일
+	 * @param fetchedAt 그 참고값의 조회 시각
+	 */
+	public void referPreviousMonthToCodef(long referenceId, long syncId, Long won, LocalDate from, LocalDate to,
+			LocalDateTime fetchedAt) {
+		if (this.previousMonthWon == null) {
+			throw new IllegalStateException("a CODEF reference needs a previous month value");
+		}
+		this.previousMonthCodefReferenceId = referenceId;
+		this.previousMonthCodefSyncId = syncId;
+		this.previousMonthCodefWon = won;
+		this.previousMonthCodefFrom = Objects.requireNonNull(from, "from");
+		this.previousMonthCodefTo = Objects.requireNonNull(to, "to");
+		this.previousMonthCodefFetchedAt = Objects.requireNonNull(fetchedAt, "fetchedAt");
+	}
+
+	public Long getPreviousMonthCodefReferenceId() {
+		return this.previousMonthCodefReferenceId;
+	}
+
+	public Long getPreviousMonthCodefSyncId() {
+		return this.previousMonthCodefSyncId;
+	}
+
+	public Long getPreviousMonthCodefWon() {
+		return this.previousMonthCodefWon;
+	}
+
+	public LocalDate getPreviousMonthCodefFrom() {
+		return this.previousMonthCodefFrom;
+	}
+
+	public LocalDate getPreviousMonthCodefTo() {
+		return this.previousMonthCodefTo;
+	}
+
+	public LocalDateTime getPreviousMonthCodefFetchedAt() {
+		return this.previousMonthCodefFetchedAt;
 	}
 
 	public Long getMonthlyStateId() {

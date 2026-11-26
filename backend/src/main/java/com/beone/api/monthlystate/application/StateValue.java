@@ -14,14 +14,39 @@ import java.util.Objects;
  * @param source 출처
  * @param period 기준 기간. 미입력이면 {@code null}
  * @param updatedAt 입력 시각(서울). 미입력이면 {@code null}
+ * @param blockedReason 값은 있지만 계산에 쓰지 않는 이유. 지금은 출처 충돌({@link StateReason#SOURCE_CONFLICT}, D-16 사용자 결정
+ * 2026-11-27 Q2)만 있다. 없으면 {@code null}
  */
-public record StateValue<T>(T value, StateSource source, DatePeriod period, LocalDateTime updatedAt) {
+public record StateValue<T>(T value, StateSource source, DatePeriod period, LocalDateTime updatedAt,
+		StateReason blockedReason) {
 
 	public StateValue {
 		Objects.requireNonNull(source, "source");
 		if ((source == StateSource.UNKNOWN) != (value == null)) {
 			throw new IllegalArgumentException("value must be null exactly when source is UNKNOWN");
 		}
+		if (blockedReason != null && (source == StateSource.UNKNOWN || blockedReason != StateReason.SOURCE_CONFLICT)) {
+			throw new IllegalArgumentException("only a known value can be blocked, and only by a source conflict");
+		}
+	}
+
+	/**
+	 * 계산을 막는 이유가 없는 값.
+	 * @param value 값
+	 * @param source 출처
+	 * @param period 기준 기간
+	 * @param updatedAt 입력 시각
+	 */
+	public StateValue(T value, StateSource source, DatePeriod period, LocalDateTime updatedAt) {
+		this(value, source, period, updatedAt, null);
+	}
+
+	/**
+	 * 같은 값을 출처 충돌로 계산에서 뺀다. 값·출처·기간·시각은 그대로 보여 준다.
+	 * @return {@code usable=false}, 이유 {@code SOURCE_CONFLICT}인 값
+	 */
+	public StateValue<T> conflicted() {
+		return new StateValue<>(this.value, this.source, this.period, this.updatedAt, StateReason.SOURCE_CONFLICT);
 	}
 
 	/**
@@ -51,7 +76,7 @@ public record StateValue<T>(T value, StateSource source, DatePeriod period, Loca
 	 * @return 계산에 쓸 수 있으면 {@code true}
 	 */
 	public boolean usable() {
-		return this.source != StateSource.UNKNOWN;
+		return this.source != StateSource.UNKNOWN && this.blockedReason == null;
 	}
 
 	/**
@@ -59,7 +84,10 @@ public record StateValue<T>(T value, StateSource source, DatePeriod period, Loca
 	 * @return 쓸 수 없는 이유, 쓸 수 있으면 {@code null}
 	 */
 	public StateReason reason() {
-		return usable() ? null : StateReason.NOT_ENTERED;
+		if (usable()) {
+			return null;
+		}
+		return (this.source == StateSource.UNKNOWN) ? StateReason.NOT_ENTERED : this.blockedReason;
 	}
 
 }
