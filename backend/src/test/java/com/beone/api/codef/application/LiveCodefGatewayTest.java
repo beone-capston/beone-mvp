@@ -188,7 +188,11 @@ class LiveCodefGatewayTest {
 			.isEqualTo(MAPPER.readTree("{\"organization\":\"0301\",\"connectedId\":\"" + CONNECTED_ID + "\"}"));
 		assertThat(MAPPER.readTree(this.stub.requestsTo(APPROVALS).getFirst().body()))
 			.isEqualTo(MAPPER.readTree("{\"organization\":\"0301\",\"connectedId\":\"" + CONNECTED_ID
-					+ "\",\"startDate\":\"20261001\",\"endDate\":\"20261031\",\"orderBy\":\"0\"}"));
+					+ "\",\"startDate\":\"20261001\",\"endDate\":\"20261031\",\"orderBy\":\"0\",\"inquiryType\":\"1\","
+					+ "\"memberStoreInfoType\":\"0\"}"));
+		// 카드 식별값·생년월일은 보내지 않는다(전체 조회, 수집하지 않는 입력)
+		assertThat(MAPPER.readTree(this.stub.requestsTo(APPROVALS).getFirst().body()).propertyNames())
+			.doesNotContain("cardNo", "cardName", "duplicateCardSelect", "duplicateCardIdx", "birthDate");
 		assertThat(MAPPER.readTree(this.stub.requestsTo(PERFORMANCES).getFirst().body()))
 			.isEqualTo(MAPPER.readTree("{\"organization\":\"0301\",\"connectedId\":\"" + CONNECTED_ID + "\"}"));
 		// 토큰은 한 번 발급해 세 호출이 같이 쓴다

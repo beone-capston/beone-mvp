@@ -3,7 +3,7 @@
 공개 서비스와 분리된 루프백 검증 환경에서 실제 CODEF에 **연결 1회와 동기화 1회**를 하고, 정제된 결과만 검증 DB에 남는지 확인한 뒤 폐기하는 절차입니다.
 
 - **근거:** 결정 38-8(CODEF는 공개 환경에 등록하지 않음), 결정 39-4(비공개 실연동 승인. 로컬 검증 때와 같은 키·KB 계정으로 연결 1회·동기화 1회), ROADMAP-next-20261125 6절(K0~K7)·7절 승인 ⑨~⑪
-- **N14(호출 상한):** API별 최대 **3회**(결정 39-4). 서버 재기동과 관계없이 DB 카운터(LP-2, #205)로 셉니다.
+- **N14(호출 상한):** API별 최대 **3회**(결정 39-4). 서버 재기동과 관계없이 DB 카운터(LP-2, #205)로 셉니다. 실제 상한은 `BEONE_CODEF_BUDGET_PER_API` 설정값이며, 사용자 승인으로 바꾼 경우 3-0 `budget`이 그 값을 기준으로 판정합니다.
 - **N15(보존 기간):** 정제 데이터(비밀번호·카드번호·승인번호 원문 제외)는 검증 DB에 **MVP 시연이 끝날 때까지** 보관하고, **MVP 수락 뒤 폐기**합니다(결정 39-4)
 - **실행 주체:** 서버 명령은 운영 담당(SSM), 키 입력은 사용자입니다. 에이전트는 키 값을 보지 않습니다.
 - **상태:** 운영 담당이 1차 연결 시도를 했습니다. `POST /api/v1/me/codef/connection`은 502 `CODEF_UNAVAILABLE`이었습니다. 로그는 `TOKEN http=200`, `ACCOUNT_CREATE http=200 resultCode=CF-04000`이었고, 이 값만으로는 로그인 실패인지 기관 오류인지 알 수 없었습니다. 그래서 실패 관측 로그를 더했습니다([codef 문서](../domains/codef.md#비공개-실연동-프로필-codef-live-lp-1-193)의 "계정 등록 실패 관측"). 다음 시도 전에 3-0 `budget`으로 남은 횟수를 확인합니다. KB 계정 잠김 위험이 있으니 같은 입력으로 바로 다시 시도하지 않습니다.
@@ -278,7 +278,7 @@ s=$(req GET /api/v1/me); echo "$s codefConnected=$(cc)"   # 기대 200 codefConn
 
 - `codefConnected=` 뒤가 비어 있으면 응답에 그 필드가 없다는 뜻입니다(로그인 실패 등). `false`와 구분합니다. `jq`의 `// empty`는 `false`도 버리므로 불리언 값에는 쓰지 않습니다.
 
-**C. 호출 전 기준** — 다른 셸 또는 Run Command로 `ledger-before`, `budget`을 실행하고 2-4 `watch`가 `ok`인지 봅니다. `budget`의 `ACCOUNT_CREATE` 값으로 남은 횟수를 확인합니다(3 − 사용 수). 남은 횟수가 1이면 사용자에게 다시 확인합니다.
+**C. 호출 전 기준** — 다른 셸 또는 Run Command로 `ledger-before`, `budget`을 실행하고 2-4 `watch`가 `ok`인지 봅니다. `budget`의 `limit`과 `ACCOUNT_CREATE` 값으로 남은 횟수를 확인합니다(`limit` − 사용 수). 남은 횟수가 1이면 사용자에게 다시 확인합니다.
 
 **D. 연결 1회** (KB 아이디·비밀번호는 사용자가 직접 입력)
 
@@ -375,7 +375,7 @@ done
 
 ### 3-0. 호출 상한 누적 (LP-2)
 
-호출 전, 연결 뒤, 동기화 뒤, 재기동 뒤마다 실행합니다. 창 시작 시각이 하나뿐이고 어느 API도 3을 넘지 않아야 합니다.
+호출 전, 연결 뒤, 동기화 뒤, 재기동 뒤마다 실행합니다. 창 시작 시각이 하나뿐이고 어느 API도 상한(실행 중인 백엔드의 `BEONE_CODEF_BUDGET_PER_API` 값, `limit=`으로 출력)을 넘지 않아야 합니다.
 
 ```bash
 # block: budget
@@ -389,8 +389,12 @@ stat=$(Q 'SELECT COUNT(DISTINCT window_start), COALESCE(MAX(used), 0) FROM codef
 read -r windows maxused <<< "$stat"
 printf '%s\n' "$rows"
 [ "$windows" -le 1 ] || fail "창 시작 시각이 ${windows}개(재기동 때 창을 바꿈). 호출을 멈춘다"
-[ "$maxused" -le 3 ] || fail "API별 3회 초과(${maxused})"
-echo "windows=$windows maxUsed=$maxused"
+# 상한은 실행 중인 백엔드에 실제로 들어간 설정값(BEONE_CODEF_BUDGET_PER_API)을 쓴다. 비밀 아님
+limit=$("${C[@]}" exec -T verify-backend printenv BEONE_CODEF_BUDGET_PER_API) || fail "상한 설정 조회 실패(백엔드 미기동 또는 값 없음)"
+limit=$(printf '%s' "$limit" | tr -d '\r\n')
+case "$limit" in ''|*[!0-9]*|0) fail "상한 설정이 양의 정수가 아님: ${limit:-빈 값}" ;; esac
+[ "$maxused" -le "$limit" ] || fail "API별 상한 ${limit}회 초과(${maxused})"
+echo "windows=$windows maxUsed=$maxused limit=$limit remaining=$((limit - maxused))"
 echo BUDGET_OK
 )
 ```
@@ -398,7 +402,7 @@ echo BUDGET_OK
 | 시점 | 기대 |
 |---|---|
 | 호출 전 | 행 0(`windows=0 maxUsed=0`) |
-| 연결 뒤 | `ACCOUNT_CREATE` 1, `TOKEN` 1 이상 3 이하, 창 시작 시각 1개이며 2-2에서 기록한 시작 시각(UTC로 저장)과 같음 |
+| 연결 뒤 | `ACCOUNT_CREATE` 1, `TOKEN` 1 이상 `limit` 이하, 창 시작 시각 1개이며 2-2에서 기록한 시작 시각(UTC로 저장)과 같음 |
 | 동기화 뒤 | 위에 더해 `HELD_CARDS`·`APPROVALS`·`CARD_PERFORMANCES` 각 1 |
 | 재기동 뒤 | 이전과 같은 행·값(창이 새로 생기지 않음) |
 
