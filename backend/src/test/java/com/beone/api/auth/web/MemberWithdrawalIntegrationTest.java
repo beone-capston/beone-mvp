@@ -104,8 +104,8 @@ class MemberWithdrawalIntegrationTest {
 
 	@AfterEach
 	void clearTables() {
-		for (String table : new String[] { "monthly_states", "codef_performance_references", "codef_syncs",
-				"codef_connections" }) {
+		for (String table : new String[] { "monthly_states", "codef_performance_references",
+				"codef_sync_incomplete_marks", "codef_syncs", "codef_connections" }) {
 			this.jdbcTemplate.update("DELETE t FROM " + table + " t JOIN users u ON u.user_id = t.user_id"
 					+ " WHERE u.member_id IS NOT NULL");
 		}
@@ -268,10 +268,19 @@ class MemberWithdrawalIntegrationTest {
 				+ " ?, ?, 312000, '2026-10-01', '2026-10-31', '2026-11-17 09:00:00')", userId, userCardId,
 				referenceId, syncId);
 
+		// 동기화별 불완전 행 건수(V18, #289)와 승인 합계 추정값 참고 기록도 함께 지워진다
+		this.jdbcTemplate.update("UPDATE codef_syncs SET approvals_judged = TRUE WHERE sync_id = ?", syncId);
+		this.jdbcTemplate.update("INSERT INTO codef_sync_incomplete_marks (sync_id, user_id, user_card_id, used_month,"
+				+ " reason, row_count) VALUES (?, ?, ?, '2026-10', 'UNDETERMINED_ROW', 2), (?, ?, NULL, NULL,"
+				+ " 'DUPLICATE_KEY_AMBIGUOUS', 1)", syncId, userId, userCardId, syncId, userId);
+		this.jdbcTemplate.update("UPDATE monthly_states SET previous_month_inferred_won = 310000,"
+				+ " previous_month_inferred_sync_id = ?, previous_month_inferred_computed_at = '2026-11-18 10:00:00'"
+				+ " WHERE user_id = ?", syncId, userId);
+
 		assertThat(this.members.deleteWithBody(ME, a, CORRECT).getStatusCode().value()).isEqualTo(204);
 
-		for (String table : new String[] { "monthly_states", "codef_performance_references", "codef_syncs",
-				"user_cards" }) {
+		for (String table : new String[] { "monthly_states", "codef_performance_references",
+				"codef_sync_incomplete_marks", "codef_syncs", "user_cards" }) {
 			assertThat(count("SELECT COUNT(*) FROM " + table + " WHERE user_id = " + userId, null)).as(table).isZero();
 		}
 		assertThat(count("SELECT COUNT(*) FROM members WHERE member_id = ?", MEMBER_A)).isZero();

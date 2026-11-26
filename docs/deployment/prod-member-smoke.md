@@ -62,7 +62,7 @@ B도 "토큰을 출력·로그·문서에 남기지 않는다"는 조건은 지�
 |---|---|
 | 승인 창 | Aside와 사용자가 실행 시각과 끝 시각을 정함. 배포(수동·자동)가 진행 중이 아님. 4-1의 B7까지 끝나 `production.state`가 있음 |
 | 운영 이미지와 조사 기준 대조 | 실행 시점에 승인된 실제 운영 이미지의 revision(GitSha)과 ApiDigest를 확인함. 확인 방법은 승인 창의 배포 기록이나 운영 상태 파일입니다. 지금 값은 머리말의 `6974880`과 `sha256:9a887bd8…`입니다. 이어서 저장소에서 `git diff --stat <운영 revision> 23bca21 -- backend/`의 출력이 비어 있는지 봄(지금 `6974880`이면 비어 있음). 비어 있지 않으면 바뀐 backend 파일을 이 문서의 1·4·6절과 다시 대조하기 전에는 실행하지 않음. 새 배포나 다른 운영 실행은 요구하지 않음 |
-| Flyway 최신 버전 | 운영 DB의 Flyway 최신 성공 버전이 17 이하임(6-3절 C0과 같은 확인). V17(#281)·V16(#269)이 운영에 배포되기 전이면 16·15다. 17보다 크면 6-2절의 외래키를 새 마이그레이션과 다시 대조하기 전에는 6절 정리를 하지 않음 |
+| Flyway 최신 버전 | 운영 DB의 Flyway 최신 성공 버전이 18 이하임(6-3절 C0과 같은 확인). V18(#289)·V17(#281)·V16(#269)이 운영에 배포되기 전이면 17·16·15다. 18보다 크면 6-2절의 외래키를 새 마이그레이션과 다시 대조하기 전에는 6절 정리를 하지 않음 |
 | 메일 발송 | 결정 39-6의 Gmail SMTP 설정이 운영 `.env`에 있음(backend가 떠 있으면 충족. 없으면 기동하지 않음). 이 절차는 최대 2통(가입 1, 재요청 1)을 보냄 |
 | 발송 한도·비용 | 사용자가 프로젝트 Gmail 계정의 일일 발송 한도와 남은 양, 추가 비용 여부를 확인함. 값은 계정 종류마다 다르므로 이 문서에 정하지 않음. 실행 기록에 "확인함"만 적음 |
 | 대상 메일 주소 | 1개. **사용자가 소유한 전용 테스트 주소**(3절) |
@@ -234,9 +234,9 @@ unset TK ok
 | 1. 남겨 두기 | 이 계정을 운영 스모크 전용으로 남김. 다음에는 M5~M8만 함(메일 발송 없음) | 운영 DB에 회원 1행·장부 1행이 남음. 비밀번호는 사용자가 관리 |
 | 2. DB에서 삭제 | Aside가 서버에서 6-2절 SQL 실행 | 이메일로 1행만 잡히는지 먼저 확인하고, 한 트랜잭션 안에서 영향 행 수를 확인 |
 
-### 6-2. 관련 테이블과 삭제 순서 (V17 기준)
+### 6-2. 관련 테이블과 삭제 순서 (V18 기준)
 
-Flyway 마이그레이션 [`backend/src/main/resources/db/migration`](../../backend/src/main/resources/db/migration)에서 확인한 관계입니다. 처음에는 V15 기준으로 썼습니다. V16([`V16__user_card_candidates.sql`](../../backend/src/main/resources/db/migration/V16__user_card_candidates.sql), #269)은 `user_cards`에 열 2개(`candidate_card_product_id`, `mapping_changed_by_user`)와 CHECK 제약만 더하고 외래키·테이블을 추가하지 않으므로, 아래 관계와 삭제 순서는 그대로입니다. V17([`V17__monthly_state_codef_reference.sql`](../../backend/src/main/resources/db/migration/V17__monthly_state_codef_reference.sql), #281)은 `monthly_states`에 참고 스냅샷 열 6개와 CHECK 제약, 외래키 `monthly_states.previous_month_codef_reference_id` → `codef_performance_references`(`ON DELETE SET NULL`)를 더합니다. 두 표 모두 아래 업무 테이블이고 이 스모크는 업무 행을 만들지 않으므로(0이어야 진행) 삭제 순서는 그대로입니다.
+Flyway 마이그레이션 [`backend/src/main/resources/db/migration`](../../backend/src/main/resources/db/migration)에서 확인한 관계입니다. 처음에는 V15 기준으로 썼습니다. V16([`V16__user_card_candidates.sql`](../../backend/src/main/resources/db/migration/V16__user_card_candidates.sql), #269)은 `user_cards`에 열 2개(`candidate_card_product_id`, `mapping_changed_by_user`)와 CHECK 제약만 더하고 외래키·테이블을 추가하지 않으므로, 아래 관계와 삭제 순서는 그대로입니다. V17([`V17__monthly_state_codef_reference.sql`](../../backend/src/main/resources/db/migration/V17__monthly_state_codef_reference.sql), #281)은 `monthly_states`에 참고 스냅샷 열 6개와 CHECK 제약, 외래키 `monthly_states.previous_month_codef_reference_id` → `codef_performance_references`(`ON DELETE SET NULL`)를 더합니다. 두 표 모두 아래 업무 테이블이고 이 스모크는 업무 행을 만들지 않으므로(0이어야 진행) 삭제 순서는 그대로입니다. V18([`V18__codef_approval_coverage.sql`](../../backend/src/main/resources/db/migration/V18__codef_approval_coverage.sql), #289)은 `codef_syncs`에 열 1개, `monthly_states`에 추정값 참고 열 3개와 CHECK 제약, 새 업무 테이블 `codef_sync_incomplete_marks`(외래키 `user_id` → `users`, `sync_id` → `codef_syncs`, `user_card_id` → `user_cards`, 모두 삭제 동작 지정 없음)를 더합니다. 새 표도 업무 테이블이라 아래 업무 행 0 확인에 넣었고, 이 스모크는 업무 행을 만들지 않으므로 삭제 순서는 그대로입니다.
 
 | 테이블 | 회원과의 연결 | 삭제 때 동작 | 이 스모크가 만드는 행 |
 |---|---|---|---|
@@ -244,7 +244,7 @@ Flyway 마이그레이션 [`backend/src/main/resources/db/migration`](../../back
 | `auth_tokens`(V11) | `member_id` → `members` | `ON DELETE CASCADE` | 인증하면 지워짐. 인증 전에 멈췄으면 1 |
 | `auth_sessions`(V9·V13) | `member_id` → `members`(익명 세션은 NULL) | `ON DELETE CASCADE` | 로그아웃하면 지워짐. 못 했으면 1 |
 | `users`(V2·V14) | `member_id` → `members` | `ON DELETE RESTRICT`(먼저 지워야 함) | 인증하면 1(회원 장부 '내 카드') |
-| 업무 테이블 | `user_id` → `users`: `user_cards`, `orders`, `planned_spends`, `monthly_states`, `payment_preferences`, `recommendations`, `simulated_payments`, `ledger_transactions`, `idempotency_keys`, `codef_connections`, `codef_syncs`, `codef_held_cards`, `codef_approval_rows`, `codef_performance_references` | 삭제 동작 지정 없음(RESTRICT). 하위 표(`monthly_state_*`, `recommendation_card_bases`, `payment_cancellations`, `ledger_usage_effects`)는 이 표들을 거쳐 연결됨 | 0(업무 API를 부르지 않음) |
+| 업무 테이블 | `user_id` → `users`: `user_cards`, `orders`, `planned_spends`, `monthly_states`, `payment_preferences`, `recommendations`, `simulated_payments`, `ledger_transactions`, `idempotency_keys`, `codef_connections`, `codef_syncs`, `codef_held_cards`, `codef_approval_rows`, `codef_performance_references`, `codef_sync_incomplete_marks`(V18) | 삭제 동작 지정 없음(RESTRICT). 하위 표(`monthly_state_*`, `recommendation_card_bases`, `payment_cancellations`, `ledger_usage_effects`)는 이 표들을 거쳐 연결됨 | 0(업무 API를 부르지 않음) |
 | `auth_mail_throttles`, `auth_login_throttles`, `auth_login_failures`(V11·V13) | 외래키 없음. 정규화 이메일의 SHA-256(소문자 16진수)이 키 | — | 메일 요청 기록 1. 실패가 있었으면 실패 기록 |
 
 **순서**는 다음과 같습니다. 업무 행은 0이어야 하고, 0이 아니면 멈춥니다.
@@ -261,7 +261,7 @@ auth_sessions(회원 세션) → auth_tokens → users(회원 장부) → member
 서버에서 새 셸을 열고 실행합니다. 이메일은 `read`로 입력하므로 셸 이력과 명령줄 인자에 남지 않습니다. SQL은 표준 입력으로 MySQL에 넘깁니다. 출력에는 이메일을 넣지 않습니다.
 
 ```bash
-# C0. 준비와 Flyway 이력(최신이 17 이하인지)
+# C0. 준비와 Flyway 이력(최신이 18 이하인지)
 APP() { sudo docker compose -f /opt/beone/app/compose.yaml -p beone-app --env-file /opt/beone/app/.env "$@"; }
 DB() { APP exec -T mysql bash -c 'mysql --defaults-extra-file=<(printf "[client]\nuser=%s\npassword=%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD") -N -B "$MYSQL_DATABASE"'; }
 echo "SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success = 1;" | DB
@@ -269,8 +269,8 @@ read -r -p '대상 이메일(소문자): ' EM
 [[ "$EM" =~ ^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$ ]] && echo "형식 OK" || { echo "형식 아님: 중단"; unset EM; }
 ```
 
-- **확인값:** `17`(V17 배포 전이면 `16`, V16 배포 전이면 `15`), `형식 OK`
-- **실패 시:** 17보다 크면 새 마이그레이션의 외래키를 6-2절 표와 다시 대조하기 전에는 진행하지 않습니다. 형식이 틀리면 다시 입력합니다. 형식 검사는 따옴표 같은 SQL 특수문자를 막기 위한 것입니다.
+- **확인값:** `18`(V18 배포 전이면 `17`, V17 배포 전이면 `16`, V16 배포 전이면 `15`), `형식 OK`
+- **실패 시:** 18보다 크면 새 마이그레이션의 외래키를 6-2절 표와 다시 대조하기 전에는 진행하지 않습니다. 형식이 틀리면 다시 입력합니다. 형식 검사는 따옴표 같은 SQL 특수문자를 막기 위한 것입니다.
 
 ```bash
 # C1. 조회만(변경 없음). 기대: members 1, users 0 또는 1, business 0
@@ -288,7 +288,8 @@ SELECT 'business', (SELECT COUNT(*) FROM user_cards WHERE user_id = @uid) + (SEL
   + (SELECT COUNT(*) FROM simulated_payments WHERE user_id = @uid) + (SELECT COUNT(*) FROM ledger_transactions WHERE user_id = @uid)
   + (SELECT COUNT(*) FROM idempotency_keys WHERE user_id = @uid) + (SELECT COUNT(*) FROM codef_connections WHERE user_id = @uid)
   + (SELECT COUNT(*) FROM codef_syncs WHERE user_id = @uid) + (SELECT COUNT(*) FROM codef_held_cards WHERE user_id = @uid)
-  + (SELECT COUNT(*) FROM codef_approval_rows WHERE user_id = @uid) + (SELECT COUNT(*) FROM codef_performance_references WHERE user_id = @uid);
+  + (SELECT COUNT(*) FROM codef_approval_rows WHERE user_id = @uid) + (SELECT COUNT(*) FROM codef_performance_references WHERE user_id = @uid)
+  + (SELECT COUNT(*) FROM codef_sync_incomplete_marks WHERE user_id = @uid);
 SELECT 'email_hash_rows', (SELECT COUNT(*) FROM auth_mail_throttles WHERE email_hash = SHA2(@em, 256))
   + (SELECT COUNT(*) FROM auth_login_throttles WHERE email_hash = SHA2(@em, 256))
   + (SELECT COUNT(*) FROM auth_login_failures WHERE email_hash = SHA2(@em, 256));
@@ -352,7 +353,7 @@ unset EM
 ```
 
 - **확인값:** `members 0`, `email_hash_rows 0`
-- **확인 방법:** 이 SQL은 테스트용 합성 스키마(V1~V15를 적용한 로컬 MySQL 8.4.11)에서만 확인했습니다. 운영 DB에서는 실행하지 않았습니다(PR 본문의 검증 결과). V16을 적용한 스키마에서는 다시 시험하지 않았습니다. V16은 외래키를 더하지 않아 삭제 순서에 영향이 없다고 마이그레이션 파일로 대조했습니다. V17을 적용한 스키마에서도 다시 시험하지 않았습니다. V17의 외래키는 업무 테이블 사이(`monthly_states` → `codef_performance_references`)라 업무 행 0인 이 정리 순서에 영향이 없다고 마이그레이션 파일로 대조했습니다.
+- **확인 방법:** 이 SQL은 테스트용 합성 스키마(V1~V15를 적용한 로컬 MySQL 8.4.11)에서만 확인했습니다. 운영 DB에서는 실행하지 않았습니다(PR 본문의 검증 결과). V16을 적용한 스키마에서는 다시 시험하지 않았습니다. V16은 외래키를 더하지 않아 삭제 순서에 영향이 없다고 마이그레이션 파일로 대조했습니다. V17을 적용한 스키마에서도 다시 시험하지 않았습니다. V17의 외래키는 업무 테이블 사이(`monthly_states` → `codef_performance_references`)라 업무 행 0인 이 정리 순서에 영향이 없다고 마이그레이션 파일로 대조했습니다. V18을 적용한 스키마에서도 다시 시험하지 않았습니다. 새 업무 테이블 `codef_sync_incomplete_marks`를 업무 행 0 확인 SQL에 더했고, 업무 행 0이면 지울 행이 없어 정리 순서에 영향이 없다고 마이그레이션 파일로 대조했습니다.
 
 ## 7. 기록할 것과 기록하지 않을 것
 

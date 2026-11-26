@@ -7,13 +7,13 @@
 구현된 범위:
 
 - 쓰기(#116): 모의 승인 행(양수)과 모의 취소 행(음수, 원 승인 행 연결) 기록, 승인 행마다 엔진이 계산한 한도 버킷 차감액 저장(`ledger_usage_effects`, 모르는 차감액은 0이 아닌 `NULL`, D-18 K1).
-- 조회(#118): `GET /api/v1/me/ledger-transactions?month=YYYY-MM[&userCardId][&source]`. `local`·`demo`와 로컬 회원 프로필 `member`(#165)에서 등록합니다. `member`에서는 회원 세션의 장부가 현재 사용자이고, 세션 401·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 처리합니다(결정 37). `member`의 원장 행은 G3c(#161, 결정 38)에서 등록한 모의 결제 API가 만들고, CODEF 원장은 연결하지 않았습니다(R8). 페이지 나눔은 계약의 "명세 단계 미정"대로 없습니다.
+- 조회(#118): `GET /api/v1/me/ledger-transactions?month=YYYY-MM[&userCardId][&source]`. `local`·`demo`와 로컬 회원 프로필 `member`(#165)에서 등록합니다. `member`에서는 회원 세션의 장부가 현재 사용자이고, 세션 401·`Cache-Control: no-store`는 `/api/v1/me/**` 공통 인터셉터·필터가 처리합니다(결정 37). `member`의 원장 행은 G3c(#161, 결정 38)에서 등록한 모의 결제 API가 만들고, `member`에는 CODEF 경로가 없어 CODEF 행이 생기지 않습니다. 저장된 CODEF 승인 행은 출처 `CODEF`로 함께 보여 줍니다(#289). 페이지 나눔은 계약의 "명세 단계 미정"대로 없습니다.
 - 스냅샷 뒤 활동 읽기(#120): `LedgerQueryService.activityAfter(user, userCardId, month, snapshotAt)`는 같은 카드에서 기록 시각(`recorded_at`)이 `snapshotAt`보다 뒤인 행 중 승인은 자기 거래일이, 취소는 원 승인 행의 거래일이 그 달인 행을 행 ID 오름차순으로 돌려줍니다. 취소는 원 승인 행의 거래일 월에 귀속합니다. 11월 승인을 12월에 취소하면 11월 활동이고(그 달 버킷은 확인 필요), 10월 승인을 11월에 취소한 행은 11월 활동이 아닙니다([monthly-states.md](../api/monthly-states.md) 218행, [D-17](../decisions.md#d-15d-16d-17-확정-정책), 관리자 승인 규칙). 조회 API(`GET /ledger-transactions`)의 달 조건은 그대로 거래일입니다. 승인 행에는 그 행의 버킷 차감액, 취소 행에는 원 승인 행의 버킷 차감액을 붙입니다(모르는 차감액은 `null` 그대로). monthlystate의 `afterSnapshot`과 recommendation의 사용액 반영이 씁니다. 카드 소유 확인은 호출자가 합니다.
 - Flyway `V8__simulated_payments_ledger.sql`의 `ledger_transactions`·`ledger_usage_effects` 테이블. 조회는 새 마이그레이션이 없습니다.
 
 구현하지 않은 범위(후속):
 
-- CODEF 실제 조회 거래 행과 그 불완전 사유(`PARTIAL_CANCELLATION_SUSPECTED` 등 5종). 도메인 원장 연결은 하지 않기로 했고(2026-11-16 사용자 결정 R8), 행을 넣고 사유를 채울지는 원장 연결을 다시 정할 때 함께 정합니다(아래 「완전성 값」). 실제 조회 거래와 자체 모의 원장은 `source`로 구분합니다(CLAUDE.md 보안).
+- CODEF 승인 행을 `ledger_transactions`에 옮기는 도메인 원장 연결. 조회 응답에만 codef 표의 행을 출처 `CODEF`로 함께 보여 줍니다(#289, 아래 「CODEF 행」). 실제 조회 거래와 자체 모의 원장은 `source`로 구분합니다(CLAUDE.md 보안).
 - 원장에서 전월 실적·버킷 사용액을 자동으로 산출하는 기능(D-16에 따라 하지 않음).
 
 실패 응답:
@@ -29,7 +29,7 @@
 
 ## 핵심 용어
 
-- **원장 행(`LedgerTransaction`)**: 거래 한 건. 승인(`APPROVAL`)은 양수, 취소(`CANCELLATION`)는 음수이고 행 종류는 `entryType`으로 판단합니다. ID는 `lt-`+번호입니다.
+- **원장 행(`LedgerTransaction`)**: 거래 한 건. 승인(`APPROVAL`)은 양수, 취소(`CANCELLATION`)는 음수이고 행 종류는 `entryType`으로 판단합니다. ID는 `lt-`+번호입니다. CODEF 행은 codef 표의 행이며 ID는 `car-`+번호입니다(#289).
 - **귀속월(`attributionMonth`)**: 이 행이 실적에 잡히는 달과 확정 여부. 모의 행은 승인 행이 주문 월, 취소 행이 취소한 달이며 상태는 `CONFIRMED`입니다. 실적 영향의 확정 여부는 카드 규칙에 따라 `payment`의 취소 영향이 따로 판단합니다.
 - **완전성(`coverage`)**: 카드·출처별로 그 달 원장을 빠짐없이 확보했는지. 출처를 합쳐 계산하지 않습니다.
 - **버킷 차감액(`LedgerUsageEffect`)**: 승인 한 건이 한도 버킷에 더한 사용액. 엔진 `BucketUsageEffect`를 그대로 옮깁니다.
@@ -64,6 +64,7 @@ ledger
 
 - `payment` → `ledger`: 모의 승인·취소 때 `LedgerWriter`로 행을 남깁니다.
 - `ledger` → `card`: 조회 대상 카드와 `userCardId` 404 판단에 `UserCardService.list`(해제 카드 제외)와 `UserCardId`를 읽기만 합니다. card 코드는 바꾸지 않았습니다.
+- `ledger` → `codef`(#289): CODEF 승인 행과 그 달 완전성을 codef의 읽기 전용 창구 [`CodefApprovalLedgerQuery`](../../backend/src/main/java/com/beone/api/codef/application/CodefApprovalLedgerQuery.java)로만 읽습니다. codef는 ledger를 참조하지 않습니다.
 - `ledger`는 `payment`를 참조하지 않습니다. 그래서 응답의 `simulatedPaymentId`는 `pay-` 접두사를 `LedgerQueryService` 안에 따로 두고 붙입니다(payment `PaymentIds`와 같은 값).
 
 ## 조회 규칙
@@ -71,9 +72,10 @@ ledger
 관리자 승인(결정 28 보충, #118)으로 정했습니다. 계약 문서는 바꾸지 않았습니다.
 
 - **달 조건은 거래일 기준**: `transactionDate`가 그 달인 행입니다. 2차 CODEF 취소 행은 귀속월이 `NEEDS_CONFIRMATION`이라 귀속월 기준으로는 행을 둘 곳이 없고, 완전성 기간도 같은 달력 월이기 때문입니다.
-- **정렬**: 거래일 → 행 ID 오름차순. 완전성은 카드 ID 오름차순, 같은 카드 안에서는 `SIMULATION` → `CODEF`.
+- **정렬**: 거래일 → 행 ID 오름차순. CODEF 행이 함께 나오면 같은 날 안에서 모의 행 뒤에 사용일시·행 ID 순으로 둡니다(#289). 완전성은 카드 순서대로, 같은 카드 안에서는 `SIMULATION` → `CODEF`이고, 카드 미연결 CODEF 불완전 행이 있으면 끝에 `userCardId=null` 항목이 하나 붙습니다(카드를 거르지 않은 조회만).
 - **대상 카드**: 해제하지 않은 이 사용자의 보유 카드 전부, `userCardId`를 주면 그 카드만. 해제한 카드의 행은 보이지 않습니다.
-- **완전성 값**: `SIMULATION`은 모의 승인·취소를 모두 기록하므로 `complete=true`입니다. CODEF 조회·동기화(#131)는 승인 행과 실적 참고값을 codef 전용 테이블에만 저장하고 이 원장에 행을 넣지 않습니다(도메인 원장 미연결 유지, 2026-11-16 사용자 결정 R8). 새로 조회된 보유 카드만 card 도메인에 `UNMAPPED` 사용자 카드로 등록하고, 대조 정보는 codef 전용 테이블에 둡니다. 그래서 `CODEF`는 행이 없고 완전하다고 선언하지 않으며 `complete=false`, `incompleteReasons=[]`입니다. 사유 코드는 새로 만들지 않았습니다. 완전 선언과 사유 채우기는 원장 연결을 다시 정할 때 함께 정합니다. `source`를 생략하면 출처마다 한 항목씩, 지정하면 그 출처만 담습니다.
+- **완전성 값**: `SIMULATION`은 모의 승인·취소를 모두 기록하므로 `complete=true`입니다. `source`를 생략하면 출처마다 한 항목씩, 지정하면 그 출처만 담습니다.
+- **CODEF 행(#289, [D-16 변경 이력 2026-11-27 T4](../decisions.md#d-15d-16d-17-확정-정책))**: CODEF 승인 행은 `ledger_transactions`에 옮기지 않고 codef의 `codef_approval_rows`를 읽어 출처 `CODEF` 항목으로 보여 줍니다. ID는 `car-{번호}`, `syncId`는 그 행을 처음 저장한 동기화, `fullyCanceled`는 전액 취소(Type1, 한 행)인지입니다. 가맹점·결제방식·승인번호는 저장하지 않아 `null`이거나 내보내지 않습니다. 승인은 사용월 `CONFIRMED`, 짝지은 취소는 귀속월 `null`·`NEEDS_CONFIRMATION`(D-17)입니다. CODEF 완전성은 승인 판정을 마친 동기화가 그 달 전체를 조회일 전날까지 덮고 그 카드·그 달의 불완전 행이 없을 때만 `complete=true`이며, 아니면 사유(`PERIOD_NOT_COVERED`와 동기화 판정 사유)를 채웁니다. CODEF로 만든 카드가 아니면 판단하지 않아 `complete=false`·사유 없음입니다. `SIMULATION`만 고르면 codef를 읽지 않습니다. 이전(2026-11-16~11-26)에는 CODEF 행이 없고 `complete=false`·사유 빈 배열 고정이었습니다(R8, 결정 32 Q5).
 - `transactionTime`은 `HH:mm:ss` 또는 `null`(00:00을 만들지 않음), `transactionNature`는 1차 모의 행에서 `null`입니다.
 
 ## 사용 예
@@ -96,6 +98,7 @@ curl "http://localhost:8080/api/v1/me/ledger-transactions?month=2026-11&source=S
 
 - 원장 행은 보유 카드·모의 결제를 참조하며, 그 행을 지우면(테스트 정리) 함께 지워집니다.
 - 조회는 한 달 단위로 사용자 행을 모두 읽은 뒤 카드·출처를 거릅니다. 1차는 건수가 작아 페이지 나눔이 없습니다.
-- 단위: `LedgerWriterTest`(출처·부호·차감액 `null` 보존·ID 형식), `LedgerQueryServiceTest`(계약 예시 변환, 출처별 완전성, CODEF 빈 목록, 해제 카드 숨김, 시각 형식, 404), `LedgerQueryParametersTest`.
-- 웹(`controllers=` 한정): `LedgerTransactionApiWebTest`(계약 예시 JSON, 400·404, 헤더 400), `LedgerTransactionProfileOffWebTest`(`local`·`demo`·`member` 밖 404).
+- 단위: `LedgerWriterTest`(출처·부호·차감액 `null` 보존·ID 형식), `LedgerQueryServiceTest`(계약 예시 변환, 출처별 완전성, 수동 카드의 CODEF 빈 목록, CODEF 행 병합·순서·귀속월·완전성·카드 미연결 항목, `SIMULATION`만이면 codef 미조회, 해제 카드 숨김, 시각 형식, 404), `LedgerQueryParametersTest`.
+- 통합: `CodefApprovalLedgerIntegrationTest`(#289, V18 MySQL에서 CODEF 행 표시·완전성·카드 미연결 항목·V18 전 동기화 불완전).
+- 웹(`controllers=` 한정): `LedgerTransactionApiWebTest`(계약 예시 JSON, CODEF 행·완전성 JSON, 400·404, 헤더 400), `LedgerTransactionProfileOffWebTest`(`local`·`demo`·`member` 밖 404).
 - 통합: `LedgerTransactionIntegrationTest`(모의 승인·부분취소가 남긴 행 조회, 출처별 완전성, 다른 달, 사용자별 분리, 해제 카드 404). `payment`의 `SimulatedPaymentIntegrationTest`도 쓰기 행을 확인합니다. `member` 프로필은 `MemberLedgerIntegrationTest`(#165)가 확인합니다. 결제 API가 없으므로 원장 저장소에 행을 직접 넣는 테스트 픽스처를 쓰고, 회원 A·B 분리, 시연 원장 미노출·시연 헤더 무시, 401·no-store, 남의·없는·형식 오류 카드 404 본문 동일, `CODEF` `complete=false`(R8)를 봅니다.

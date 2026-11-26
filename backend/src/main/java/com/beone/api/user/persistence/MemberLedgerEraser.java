@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 자식 표부터 차례로 지운다. 연쇄 삭제(ON DELETE CASCADE)가 걸린 손자 표(월간 상태의 버킷 사용·서비스 선택, 추천 카드 기준, 결제 취소,
  * 원장 사용 효과)는 부모와 함께 지워진다.
  * 월간 상태의 CODEF 실적 참고값 ID(V17)는 {@code ON DELETE SET NULL}이라 참고값을 먼저 지워도 막히지 않고, 월간 상태는 뒤에서 지운다.
+ * 동기화별 불완전 행 건수(V18, #289)는 동기화·보유 카드를 참조하므로 그 둘보다 먼저 지운다. 월간 상태의 승인 합계 추정값 근거 동기화 ID는
+ * 외래 키가 아니다.
  *
  * <p>회원 장부({@code member_id IS NOT NULL})만 지운다. 시연 사용자·가상 포트폴리오 장부는 대상이 아니다. 새 업무 표를 추가하면 이 목록에도
  * 넣어야 한다. 빠뜨리면 {@code users} 삭제가 외래 키로 실패해 탈퇴 전체가 롤백된다(조용히 남지 않는다).
@@ -22,7 +24,7 @@ public class MemberLedgerEraser {
 
 	/** 지우는 순서. 앞 표가 뒤 표를 참조한다. */
 	static final List<String> TABLES = List.of("codef_approval_rows", "codef_performance_references",
-			"codef_held_cards", "codef_syncs", "codef_connections", "ledger_transactions", "simulated_payments",
+			"codef_sync_incomplete_marks", "codef_held_cards", "codef_syncs", "codef_connections", "ledger_transactions", "simulated_payments",
 			"recommendations", "idempotency_keys", "payment_preferences", "monthly_states", "planned_spends", "orders",
 			"user_cards");
 

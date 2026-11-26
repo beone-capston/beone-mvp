@@ -603,6 +603,7 @@ echo DESTROY_OK
 START TRANSACTION;
 DELETE FROM codef_approval_rows;            -- codef_syncs 참조
 DELETE FROM codef_performance_references;   -- codef_syncs 참조
+DELETE FROM codef_sync_incomplete_marks;    -- codef_syncs·user_cards 참조(V18, #289)
 DELETE FROM codef_held_cards;               -- codef_syncs·user_cards 참조
 DELETE FROM codef_syncs;
 DELETE FROM codef_connections;
