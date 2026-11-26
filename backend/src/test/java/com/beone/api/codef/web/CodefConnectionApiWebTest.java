@@ -32,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -167,6 +168,57 @@ class CodefConnectionApiWebTest {
 		assertFieldError("{\"organization\":\"0301\",\"loginType\":\"id\",\"loginId\":\"kbuser01\",\"password\":\"p@ss-word-9\"}",
 				"loginType", "허용되지 않는 값입니다.");
 		verifyNoInteractions(this.codefConnectionService);
+	}
+
+	// JSON 이스케이프로 넣은 아이디. 제어·서식·대체 문자, 줄·문단 구분자, 앞뒤 공백(전각·NBSP 포함)
+	@ParameterizedTest
+	@ValueSource(strings = { "kb\\u0000user01", "kb\\tuser01", "kbuser01\\n", "kb\\u001Fuser01", "kb\\u007Fuser01",
+			"kb\\u200Buser01", "\\uFEFFkbuser01", "kb\\uFFFDuser01", "kb\\u2028user01", " kbuser01", "kbuser01 ",
+			"\\u00A0kbuser01", "kbuser01\\u3000", "kb\\uD800user01" })
+	void loginIdWithControlFormatOrEdgeSpaceIsRejectedBeforeCodef(String loginId) throws Exception {
+		MvcResult result = perform(json(post(PATH),
+				"{\"organization\":\"0301\",\"loginType\":\"ID\",\"loginId\":\"" + loginId + "\",\"password\":\"p@ss-word-9\"}")
+			.header(HEADER, "MY_CARDS"));
+
+		assertJson(result, """
+				{"code":"INVALID_REQUEST","message":"요청 값을 확인해 주세요.",
+				 "errors":[{"field":"loginId","message":"사용할 수 없는 문자가 있습니다."}]}
+				""", 400);
+		assertThat(body(result)).doesNotContain("kbuser01").doesNotContain("user01").doesNotContain("p@ss-word-9");
+		// 서비스(게이트웨이·호출 총량)까지 가지 않는다
+		verifyNoInteractions(this.codefConnectionService);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "zqx\\u0000vkj", "zqx\\nvkj", "zqx\\tvkj", "zqx\\u007Fvkj", "\\u0085zqxvkj" })
+	void passwordWithControlCharacterIsRejectedWithoutHints(String password) throws Exception {
+		MvcResult result = perform(json(post(PATH),
+				"{\"organization\":\"0301\",\"loginType\":\"ID\",\"loginId\":\"kbuser01\",\"password\":\"" + password + "\"}")
+			.header(HEADER, "MY_CARDS"));
+
+		// 필드 이름과 고정 문구만. 값·길이·위치는 없다
+		assertJson(result, """
+				{"code":"INVALID_REQUEST","message":"요청 값을 확인해 주세요.",
+				 "errors":[{"field":"password","message":"사용할 수 없는 문자가 있습니다."}]}
+				""", 400);
+		assertThat(body(result)).doesNotContain("zqx").doesNotContain("vkj").doesNotContain("kbuser01");
+		verifyNoInteractions(this.codefConnectionService);
+	}
+
+	@Test
+	void interiorSpaceInLoginIdAndEdgeSpacesInPasswordAreAccepted() throws Exception {
+		given(this.codefConnectionService.connect(eq(MY_CARDS), eq("kb user01"), any()))
+			.willReturn(new CodefConnectResult(CONNECTED, true));
+
+		MvcResult result = perform(json(post(PATH),
+				"{\"organization\":\"0301\",\"loginType\":\"ID\",\"loginId\":\"kb user01\",\"password\":\" p@ss word \"}")
+			.header(HEADER, "MY_CARDS"));
+
+		assertThat(result.getResponse().getStatus()).isEqualTo(201);
+		ArgumentCaptor<char[]> password = ArgumentCaptor.forClass(char[].class);
+		verify(this.codefConnectionService).connect(eq(MY_CARDS), eq("kb user01"), password.capture());
+		// 비밀번호 앞뒤 공백은 그대로 넘긴다
+		assertThat(new String(password.getValue())).isEqualTo(" p@ss word ");
 	}
 
 	@ParameterizedTest

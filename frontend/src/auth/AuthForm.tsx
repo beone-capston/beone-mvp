@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { AuthApiError, authApi } from './api'
+import { applyMailRetry, isValidEmail, normalizeEmail, rememberMailRequest, useMailResend } from './mailRequests'
+import type { MailDeadlines } from './mailRequests'
 
 type Screen = 'login' | 'signup' | 'reset-request' | 'reset-complete'
 type Field = 'email' | 'password' | 'confirmation'
@@ -8,21 +10,31 @@ type FieldErrors = Partial<Record<Field, string>>
 type FormProblem = { text: string; code?: string }
 
 const passwordHint = '11~32자, 영문, 숫자, 특수문자 포함, 공백 제외'
+const meetsPasswordRules = (value: string) =>
+  /^[!-~]{11,32}$/.test(value) && /[A-Za-z]/.test(value) &&
+  /[0-9]/.test(value) && /[^A-Za-z0-9]/.test(value)
+
 const invalidCredentials = '이메일 또는 비밀번호를 확인해 주세요.'
 
-export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessionChecking = false }: {
+export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessionChecking = false, mailDeadlines }: {
   onLogin: () => void
   onRetrySession?: () => void
   resetToken: string | null
   mockLogin: boolean
   sessionChecking?: boolean
+  mailDeadlines?: MailDeadlines
 }) {
+  const [ownDeadlines] = useState<MailDeadlines>(() => new Map())
+  const deadlines = mailDeadlines ?? ownDeadlines
   const [screen, setScreen] = useState<Screen>(resetToken === null ? 'login' : 'reset-complete')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [problem, setProblem] = useState<FormProblem>()
+  const [signupEmail, setSignupEmail] = useState('')
+  const sent = screen === 'signup' && Boolean(signupEmail)
+  const resend = useMailResend(deadlines, sent ? signupEmail : '')
   const [accepted, setAccepted] = useState('')
   const [resetComplete, setResetComplete] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -31,6 +43,8 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
   const focusHeading = useRef(false)
   const login = screen === 'login'
   const signUp = screen === 'signup'
+  const previewSignUp = import.meta.env.DEV && mockLogin && !import.meta.env.VITE_AUTH_API_BASE_URL
+  const passwordValid = sent || meetsPasswordRules(password)
   const completing = screen === 'reset-complete'
   const validToken = resetToken !== null && /^[A-Za-z0-9_-]{43}$/.test(resetToken)
   const title = login ? '로그인' : signUp ? '회원가입' : '비밀번호 재설정'
@@ -46,6 +60,8 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
   function changeScreen(next: Screen) {
     focusHeading.current = true
     setScreen(next)
+    setSignupEmail('')
+    resend.clearFeedback()
     setPassword('')
     setConfirmation('')
     setFieldErrors({})
@@ -104,21 +120,18 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (sessionChecking || submitting.current || (completing && !validToken)) return
+    if (sent || sessionChecking || submitting.current || (completing && !validToken)) return
 
-    const normalizedEmail = email.trim().toLowerCase()
+    const normalizedEmail = normalizeEmail(email)
     const previewLogin = import.meta.env.DEV && mockLogin && login
     const errors: FieldErrors = {}
     if (!completing && !normalizedEmail) errors.email = '이메일을 입력해 주세요.'
-    else if (!previewLogin && !completing && (normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@.]+$/.test(normalizedEmail))) {
+    else if (!previewLogin && !completing && !isValidEmail(normalizedEmail)) {
       errors.email = '이메일 주소를 확인해 주세요.'
     }
 
     if (!password) errors.password = '비밀번호를 입력해 주세요.'
-    else if (!login && (
-      password.length < 11 || password.length > 32 || !/^[!-~]+$/.test(password) ||
-      !/[A-Za-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)
-    )) errors.password = passwordHint
+    else if (!login && !passwordValid) errors.password = passwordHint
     else if (!previewLogin && password.length > 32) errors.password = '비밀번호는 32자 이하여야 합니다.'
 
     if (!login && !confirmation) errors.confirmation = '비밀번호를 한 번 더 입력해 주세요.'
@@ -139,17 +152,28 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
       return
     }
 
+    if (signUp && previewSignUp) {
+      setSignupEmail(normalizedEmail)
+      setEmail(normalizedEmail)
+      setPassword('')
+      setConfirmation('')
+      return
+    }
+
     submitting.current = true
     setLoading(true)
     try {
       const credentials = { email: normalizedEmail, password }
       if (signUp) {
-        const result = await authApi.signUp(credentials)
-        setAccepted(result.message)
+        await authApi.signUp(credentials)
+        rememberMailRequest(deadlines, normalizedEmail)
+        setSignupEmail(normalizedEmail)
+        setEmail(normalizedEmail)
         setPassword('')
         setConfirmation('')
       } else if (screen === 'reset-request') {
         const result = await authApi.requestPasswordReset(normalizedEmail)
+        rememberMailRequest(deadlines, normalizedEmail)
         setAccepted(result.message)
         setPassword('')
         setConfirmation('')
@@ -163,6 +187,7 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
         onLogin()
       }
     } catch (error) {
+      if (signUp || screen === 'reset-request') applyMailRetry(deadlines, normalizedEmail, error)
       handleFailure(error)
     } finally {
       submitting.current = false
@@ -192,7 +217,7 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
           autoCapitalize="none"
           spellCheck={false}
           required
-          placeholder={placeholder}
+          placeholder={sent && name !== 'email' ? '입력 완료' : placeholder}
           value={value}
           data-field-error={Boolean(fieldErrors[name]) || undefined}
           aria-invalid={Boolean(fieldErrors[name] || credentialError) || undefined}
@@ -202,17 +227,19 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
             clearError(name)
           }}
         />
-        {hint && <p id={`${id}-hint`} className="auth-hint"><span aria-hidden="true">✓ </span>{hint}</p>}
+        {hint && <p id={`${id}-hint`} className="auth-hint"
+          data-password-valid={signUp ? passwordValid : undefined}>
+          <span aria-hidden="true">{signUp && !passwordValid ? '✕ ' : '✓ '}</span>{hint}</p>}
         {fieldErrors[name] && <p id={`${id}-error`} className="auth-field-error" role="alert">{fieldErrors[name]}</p>}
       </div>
     )
   }
 
   return (
-    <div className={`auth-frame ${login ? 'auth-frame--login' : 'auth-frame--signup'}`}>
+    <div className={`auth-frame ${login ? 'auth-frame--login' : 'auth-frame--signup'}${signUp ? ' auth-frame--join' : ''}${sent ? ' auth-frame--join-sent' : ''}`}>
       {!login ? (
         <header className="auth-header">
-          <button type="button" className="auth-back" aria-label="로그인으로 돌아가기" disabled={loading}
+          <button type="button" className="auth-back" aria-label="로그인으로 돌아가기" disabled={loading || resend.busy}
             onClick={() => changeScreen('login')}>
             <span aria-hidden="true" />
           </button>
@@ -227,7 +254,7 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
 
       <form className="auth-form" onSubmit={submit} noValidate aria-busy={loading || sessionChecking}>
         <h1 ref={heading} tabIndex={-1}>{title}</h1>
-        <fieldset className="auth-fields" disabled={loading}>
+        <fieldset className="auth-fields" disabled={loading || sent}>
           {!completing && field('email', '이메일', '이메일 주소를 입력해 주세요', email, setEmail)}
           {(!completing || validToken) && field(
             'password', '비밀번호', login ? '비밀번호를 입력해 주세요'
@@ -247,33 +274,45 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
           {onRetrySession && (
             <div className="auth-session-notice">
               <p role="status">로그인 상태를 확인하지 못했어요.</p>
-              <button type="button" onClick={onRetrySession} disabled={loading}>다시 시도</button>
+              <button type="button" onClick={onRetrySession} disabled={loading || resend.busy}>다시 시도</button>
             </div>
           )}
           <div className="auth-feedback">
             {problem && <p id="auth-form-problem" role="alert" className="auth-problem">{problem.text}</p>}
             {accepted && (
               <p role="status">
-                {accepted} {signUp ? '이메일 인증 후 로그인해 주세요.' : '메일의 링크에서 새 비밀번호를 입력해 주세요.'}
+                {accepted} 메일의 링크에서 새 비밀번호를 입력해 주세요.
               </p>
             )}
             {resetComplete && <p role="status">비밀번호를 변경했어요. 새 비밀번호로 로그인해 주세요.</p>}
             {completing && !validToken && <p role="alert" className="auth-problem">재설정 링크를 확인하거나 다시 요청해 주세요.</p>}
           </div>
+          {sent && (
+            <div className="auth-mail-resend">
+              <button type="button" disabled={previewSignUp || resend.busy || resend.seconds > 0} onClick={resend.resend}>
+                {resend.busy ? '요청 중…' : '이메일 인증 재전송'}
+                {resend.seconds > 0 && ` · ${resend.seconds}초`}
+                <span aria-hidden="true"> ↻</span>
+              </button>
+              {resend.feedback && <p className="auth-mail-feedback" role={resend.feedback.error ? 'alert' : 'status'}>
+                {resend.feedback.text}
+              </p>}
+            </div>
+          )}
           {completing && (!validToken || problem?.code === 'AUTH_TOKEN_INVALID') ? (
             <button className="auth-primary" type="button" onClick={() => changeScreen('reset-request')}>
               재설정 메일 다시 요청
             </button>
           ) : (
-            <button className="auth-primary" type="submit" disabled={loading || sessionChecking}>
-              {loading ? '요청 중…' : submitLabel}
+            <button className="auth-primary" type="submit" disabled={loading || sessionChecking || sent}>
+              {sent ? '이메일 인증 대기 중' : loading ? '요청 중…' : submitLabel}
             </button>
           )}
           {(login || signUp) && (
             <p className="auth-switch">
-              {signUp ? '이미 계정이 있으신가요?' : 'B:ONE이 처음이신가요?'}
-              <button type="button" disabled={loading} onClick={() => changeScreen(signUp ? 'login' : 'signup')}>
-                {signUp ? '로그인' : '회원가입'}
+              {sent ? '메일에서 인증을 완료하셨나요?' : signUp ? '이미 계정이 있으신가요?' : 'B:ONE이 처음이신가요?'}
+              <button type="button" disabled={loading || resend.busy} onClick={() => changeScreen(signUp ? 'login' : 'signup')}>
+                {sent ? '로그인하기' : signUp ? '로그인' : '회원가입'}
               </button>
             </p>
           )}

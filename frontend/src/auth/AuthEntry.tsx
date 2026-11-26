@@ -2,21 +2,27 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AuthApiError, authApi } from './api'
 import { AuthForm } from './AuthForm'
+import { EmailVerification, emailVerificationPath } from './EmailVerification'
+import type { MailDeadlines } from './mailRequests'
 import './auth.css'
 
 type EntryState = 'checking' | 'unavailable' | 'signed-out' | 'signed-in'
 
 export function AuthEntry({ children }: { children: ReactNode }) {
+  const [enteredVerification] = useState(() => window.location.pathname === emailVerificationPath)
+  const [showVerification, setShowVerification] = useState(enteredVerification)
+  const [deadlines] = useState<MailDeadlines>(() => new Map())
   const [resetToken] = useState(() => window.location.pathname === '/password-reset'
     ? new URLSearchParams(window.location.search).get('token') ?? ''
     : null)
-  const mockLogin = import.meta.env.DEV && resetToken === null &&
+  const mockLogin = import.meta.env.DEV && !enteredVerification && resetToken === null &&
     ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname) &&
     window.location.port === '5173'
-  const [state, setState] = useState<EntryState>(resetToken === null && !mockLogin ? 'checking' : 'signed-out')
+  const [state, setState] = useState<EntryState>(!enteredVerification && resetToken === null && !mockLogin ? 'checking' : 'signed-out')
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
+    if (enteredVerification) return
     if (resetToken !== null) {
       window.history.replaceState(window.history.state, '', '/')
       return
@@ -37,7 +43,16 @@ export function AuthEntry({ children }: { children: ReactNode }) {
       )
     })
     return () => controller.abort()
-  }, [attempt, mockLogin, resetToken])
+  }, [attempt, enteredVerification, mockLogin, resetToken])
+
+  if (showVerification) return (
+    <main className="auth-shell">
+      <EmailVerification deadlines={deadlines} onReturn={() => {
+        window.history.replaceState(window.history.state, '', '/')
+        setShowVerification(false)
+      }} />
+    </main>
+  )
 
   if (state === 'signed-in') return children
 
@@ -45,6 +60,7 @@ export function AuthEntry({ children }: { children: ReactNode }) {
     <main className="auth-shell">
       <AuthForm
         mockLogin={mockLogin}
+        mailDeadlines={deadlines}
         resetToken={resetToken}
         sessionChecking={state === 'checking'}
         onLogin={() => setState('signed-in')}

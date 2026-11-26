@@ -123,7 +123,8 @@ class PublicProfileIntegrationTest {
 		assertThat(this.jdbcTemplate.queryForList(
 				"SELECT version FROM flyway_schema_history WHERE version IS NOT NULL ORDER BY installed_rank",
 				String.class))
-			.containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15");
+			.containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
+					"16");
 	}
 
 	/** 가입 → 이메일 인증(테스트 발송기의 토큰) → 로그인 → /me 200. 공개 회원의 장부는 '내 카드'다. */

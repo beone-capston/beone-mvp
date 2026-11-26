@@ -11,7 +11,6 @@ import java.util.OptionalInt;
 import com.beone.api.codef.CodefAmount;
 import com.beone.api.codef.CodefApproval;
 import com.beone.api.codef.CodefCancellationForm;
-import com.beone.api.codef.sync.CodefApprovalRowView.KrwAmountAvailability;
 import com.beone.api.codef.sync.CodefLedgerCandidateRow.Decision;
 import com.beone.api.codef.sync.CodefUsedDateTime.ParseState;
 
@@ -90,7 +89,10 @@ public final class CodefLedgerCandidateBuilder {
 		Optional<CodefApprovalFingerprint> fingerprint = card instanceof CodefCardLink.Linked
 				? approval.approvalNo().map(number -> fingerprint(fingerprinter, number)) : Optional.empty();
 		Draft draft = new Draft(position, card, usedAt, view.form(), fingerprint, usedAmount(approval));
-		draft.reason = rowReason(approval, card, view, usedAt);
+		CodefIncompleteDetail detail = rowDetail(approval, card, view, usedAt);
+		if (detail != null) {
+			draft.reject(reasonOf(detail), detail);
+		}
 		if (draft.reason == null) {
 			draft.kind = kindOf(view.form());
 			draft.key = new CodefApprovalKey(((CodefCardLink.Linked) card).cardName(), fingerprint.orElseThrow(),
@@ -108,37 +110,81 @@ public final class CodefLedgerCandidateBuilder {
 		return fingerprint;
 	}
 
-	private static CodefIncompleteReason rowReason(CodefApproval approval, CodefCardLink card,
+	// 행 하나만 보고 정하는 사유의 실제 분기. 공개 사유는 reasonOf로 묶는다(분기 순서·공개 사유는 이전과 같다).
+	private static CodefIncompleteDetail rowDetail(CodefApproval approval, CodefCardLink card,
 			CodefApprovalRowView view, CodefUsedDateTime usedAt) {
 		if (card instanceof CodefCardLink.NotLinked) {
-			return CodefIncompleteReason.UNDETERMINED_ROW;
+			return CodefIncompleteDetail.CARD_NOT_LINKED;
 		}
-		CodefIncompleteReason formReason = formReason(approval, view.form());
-		if (formReason != null) {
-			return formReason;
+		CodefIncompleteDetail formDetail = formDetail(approval, view.form());
+		if (formDetail != null) {
+			return formDetail;
 		}
-		if (view.krwAmount() != KrwAmountAvailability.AVAILABLE) {
-			return CodefIncompleteReason.UNDETERMINED_ROW;
+		switch (view.krwAmount()) {
+			case AVAILABLE -> {
+			}
+			case CURRENCY_ABSENT -> {
+				return CodefIncompleteDetail.KRW_CURRENCY_ABSENT;
+			}
+			case CURRENCY_NOT_KRW -> {
+				return CodefIncompleteDetail.KRW_CURRENCY_NOT_KRW;
+			}
+			case NOT_DOMESTIC -> {
+				return CodefIncompleteDetail.KRW_NOT_DOMESTIC;
+			}
+			case USED_AMOUNT_NOT_PARSED -> {
+				return CodefIncompleteDetail.KRW_USED_AMOUNT_NOT_PARSED;
+			}
 		}
-		if (approval.approvalNo().isEmpty() || usedAt.dateState() == ParseState.ABSENT) {
-			return CodefIncompleteReason.DUPLICATE_KEY_AMBIGUOUS;
+		if (approval.approvalNo().isEmpty()) {
+			return CodefIncompleteDetail.APPROVAL_NO_ABSENT;
+		}
+		if (usedAt.dateState() == ParseState.ABSENT) {
+			return CodefIncompleteDetail.USED_DATE_ABSENT;
 		}
 		if (!usedAt.complete()) {
-			return CodefIncompleteReason.UNDETERMINED_ROW;
+			return CodefIncompleteDetail.USED_DATE_TIME_NOT_PARSED;
 		}
 		return null;
 	}
 
-	private static CodefIncompleteReason formReason(CodefApproval approval, CodefCancellationForm form) {
+	private static CodefIncompleteDetail formDetail(CodefApproval approval, CodefCancellationForm form) {
 		return switch (form) {
 			case CodefCancellationForm.NormalRow normal -> null;
 			case CodefCancellationForm.Type1Canceled type1 -> null;
 			case CodefCancellationForm.Type2CancelRow type2 -> null;
-			case CodefCancellationForm.Undetermined undetermined ->
-				undetermined.reason() == CodefCancellationForm.Reason.PARTIAL_CANCEL_NOT_DISTINGUISHED
-						|| type1AmountMismatch(approval) ? CodefIncompleteReason.PARTIAL_CANCELLATION_SUSPECTED
-								: CodefIncompleteReason.UNDETERMINED_ROW;
+			case CodefCancellationForm.Undetermined undetermined -> {
+				if (undetermined.reason() == CodefCancellationForm.Reason.PARTIAL_CANCEL_NOT_DISTINGUISHED) {
+					yield CodefIncompleteDetail.PARTIAL_CANCEL_CODE;
+				}
+				if (type1AmountMismatch(approval)) {
+					yield CodefIncompleteDetail.TYPE1_CANCEL_AMOUNT_MISMATCH;
+				}
+				yield switch (undetermined.reason()) {
+					case CANCEL_STATUS_UNKNOWN -> CodefIncompleteDetail.CANCEL_STATUS_UNKNOWN;
+					case AMOUNT_NOT_PARSED -> CodefIncompleteDetail.FORM_AMOUNT_NOT_PARSED;
+					case STATUS_NOT_DESCRIBED -> CodefIncompleteDetail.CANCEL_STATUS_NOT_DESCRIBED;
+					case SHAPE_MISMATCH -> CodefIncompleteDetail.FORM_SHAPE_MISMATCH;
+					case PARTIAL_CANCEL_NOT_DISTINGUISHED -> CodefIncompleteDetail.PARTIAL_CANCEL_CODE;
+				};
+			}
 			case CodefCancellationForm.OrganizationNotDocumented notDocumented ->
+				CodefIncompleteDetail.ORGANIZATION_NOT_DOCUMENTED;
+		};
+	}
+
+	private static CodefIncompleteReason reasonOf(CodefIncompleteDetail detail) {
+		return switch (detail) {
+			case PARTIAL_CANCEL_CODE, TYPE1_CANCEL_AMOUNT_MISMATCH, CANCEL_SMALLER_THAN_APPROVAL ->
+				CodefIncompleteReason.PARTIAL_CANCELLATION_SUSPECTED;
+			case APPROVAL_NO_ABSENT, USED_DATE_ABSENT, DUPLICATE_KEY_IN_RESPONSE ->
+				CodefIncompleteReason.DUPLICATE_KEY_AMBIGUOUS;
+			case NO_MATCHING_APPROVAL -> CodefIncompleteReason.NO_MATCHING_APPROVAL;
+			case MULTIPLE_MATCHING_APPROVALS -> CodefIncompleteReason.MULTIPLE_MATCHING_APPROVALS;
+			case CARD_NOT_LINKED, CANCEL_STATUS_UNKNOWN, FORM_AMOUNT_NOT_PARSED, CANCEL_STATUS_NOT_DESCRIBED,
+					FORM_SHAPE_MISMATCH, ORGANIZATION_NOT_DOCUMENTED, KRW_CURRENCY_ABSENT, KRW_CURRENCY_NOT_KRW,
+					KRW_NOT_DOMESTIC, KRW_USED_AMOUNT_NOT_PARSED, USED_DATE_TIME_NOT_PARSED, RECHECK_CONTRADICTION,
+					CANCEL_LARGER_THAN_APPROVAL, PAIRED_APPROVAL_NOT_ACCEPTED, MULTIPLE_CANCELS_FOR_ONE_APPROVAL ->
 				CodefIncompleteReason.UNDETERMINED_ROW;
 		};
 	}
@@ -172,7 +218,7 @@ public final class CodefLedgerCandidateBuilder {
 		}
 		for (Draft draft : drafts) {
 			if (draft.accepted() && counts.get(draft.key) > 1) {
-				draft.reject(CodefIncompleteReason.DUPLICATE_KEY_AMBIGUOUS);
+				draft.reject(CodefIncompleteDetail.DUPLICATE_KEY_IN_RESPONSE);
 			}
 		}
 	}
@@ -190,7 +236,7 @@ public final class CodefLedgerCandidateBuilder {
 		}
 		else {
 			// 정상 → Type1 밖의 변화는 모순으로 보고 넣지 않는다.
-			draft.reject(CodefIncompleteReason.UNDETERMINED_ROW);
+			draft.reject(CodefIncompleteDetail.RECHECK_CONTRADICTION);
 		}
 	}
 
@@ -202,20 +248,23 @@ public final class CodefLedgerCandidateBuilder {
 			}
 			List<Draft> matches = drafts.stream().filter(normal -> sameApproval(cancel, normal)).toList();
 			if (matches.isEmpty()) {
-				cancel.reject(CodefIncompleteReason.NO_MATCHING_APPROVAL);
+				cancel.reject(CodefIncompleteDetail.NO_MATCHING_APPROVAL);
 				continue;
 			}
 			if (matches.size() > 1) {
-				cancel.reject(CodefIncompleteReason.MULTIPLE_MATCHING_APPROVALS);
+				cancel.reject(CodefIncompleteDetail.MULTIPLE_MATCHING_APPROVALS);
 				continue;
 			}
 			Draft normal = matches.getFirst();
 			int comparison = compareAbsolute(cancel.usedAmount, normal.usedAmount);
 			if (comparison < 0) {
-				cancel.reject(CodefIncompleteReason.PARTIAL_CANCELLATION_SUSPECTED);
+				cancel.reject(CodefIncompleteDetail.CANCEL_SMALLER_THAN_APPROVAL);
 			}
-			else if (comparison > 0 || !normal.accepted()) {
-				cancel.reject(CodefIncompleteReason.UNDETERMINED_ROW);
+			else if (comparison > 0) {
+				cancel.reject(CodefIncompleteDetail.CANCEL_LARGER_THAN_APPROVAL);
+			}
+			else if (!normal.accepted()) {
+				cancel.reject(CodefIncompleteDetail.PAIRED_APPROVAL_NOT_ACCEPTED);
 			}
 			else {
 				cancel.pairedPosition = OptionalInt.of(normal.position);
@@ -225,7 +274,7 @@ public final class CodefLedgerCandidateBuilder {
 		for (List<Draft> claimants : claims.values()) {
 			if (claimants.size() > 1) {
 				// 정상 행 하나에 전액 취소가 둘 이상이면 이중 차감이 되므로 넣지 않는다.
-				claimants.forEach(cancel -> cancel.reject(CodefIncompleteReason.UNDETERMINED_ROW));
+				claimants.forEach(cancel -> cancel.reject(CodefIncompleteDetail.MULTIPLE_CANCELS_FOR_ONE_APPROVAL));
 			}
 		}
 	}
@@ -261,6 +310,8 @@ public final class CodefLedgerCandidateBuilder {
 
 		private CodefIncompleteReason reason;
 
+		private CodefIncompleteDetail detail;
+
 		private CodefLedgerRowKind kind;
 
 		private CodefApprovalKey key;
@@ -283,16 +334,21 @@ public final class CodefLedgerCandidateBuilder {
 			return reason == null;
 		}
 
-		private void reject(CodefIncompleteReason incomplete) {
+		private void reject(CodefIncompleteDetail branch) {
+			reject(reasonOf(branch), branch);
+		}
+
+		private void reject(CodefIncompleteReason incomplete, CodefIncompleteDetail branch) {
 			if (reason == null) {
 				reason = incomplete;
+				detail = branch;
 			}
 		}
 
 		private CodefLedgerCandidateRow toRow() {
 			Decision decision = accepted() ? new Decision.Accepted(kind, key, recheck, pairedPosition)
 					: new Decision.Incomplete(reason);
-			return new CodefLedgerCandidateRow(position, card, usedAt, form, decision);
+			return new CodefLedgerCandidateRow(position, card, usedAt, form, decision, Optional.ofNullable(detail));
 		}
 
 	}

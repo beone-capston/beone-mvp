@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthEntry } from './AuthEntry'
 import { AuthForm } from './AuthForm'
@@ -128,7 +129,7 @@ describe('회원 인증 진입', () => {
     const password = 'a1!' + 'a'.repeat(length - 3)
     await enterSignUp(password)
     submit('이메일 인증하고 가입하기')
-    expect(await screen.findByText(/처리 가능한 요청이면 이메일로 안내합니다/)).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '이메일 인증 대기 중' })).toBeInTheDocument()
     expect(screen.queryByText('메인화면')).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/v1/auth/sign-up', expect.objectContaining({
       body: JSON.stringify({ email: member.email, password }),
@@ -289,4 +290,157 @@ describe('비밀번호 재설정과 빈 로그인 입력', () => {
     submit('재설정 메일 다시 요청')
     expect(screen.getByLabelText('이메일')).toBeInTheDocument()
   })
+})
+
+describe('회원가입 인증 메일과 이메일 인증 결과', () => {
+  const token = 'm'.repeat(43)
+
+  function link(query = `?token=${token}`) {
+    history.replaceState(null, '', '/email-verification' + query)
+    fetchMock.mockReset()
+  }
+
+  afterEach(() => {
+    history.replaceState(null, '', '/')
+    vi.useRealTimers()
+  })
+
+  it('가입 중 중복 제출을 막고 접수 후 비밀번호를 비우며 서버 대기시간으로 재발송을 제한한다', async () => {
+    await enterSignUp('a1!abcdefgh')
+    vi.useFakeTimers()
+    let resolveSignup: (response: Response) => void = () => {}
+    fetchMock.mockResolvedValueOnce(csrf()).mockReturnValueOnce(new Promise(resolve => { resolveSignup = resolve }))
+    await act(async () => {
+      submit('이메일 인증하고 가입하기')
+      fireEvent.submit(screen.getByRole('heading', { name: '회원가입' }).closest('form')!)
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(screen.queryByText('이메일 인증 대기 중')).not.toBeInTheDocument()
+    await act(async () => resolveSignup(success({ message: accepted }, 202)))
+
+    expect(screen.getByRole('heading', { name: '회원가입' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '이메일 인증 대기 중' })).toBeDisabled()
+    expect(screen.getByLabelText('비밀번호', { exact: true })).toHaveValue('')
+    expect(screen.getByLabelText('비밀번호 확인')).toHaveValue('')
+    expect(screen.getByRole('button', { name: '이메일 인증 재전송 · 60초' })).toBeDisabled()
+    act(() => vi.advanceTimersByTime(60_000))
+
+    let resolveResend: (response: Response) => void = () => {}
+    fetchMock.mockResolvedValueOnce(csrf()).mockReturnValueOnce(new Promise(resolve => { resolveResend = resolve }))
+    await act(async () => {
+      const resend = screen.getByRole('button', { name: '이메일 인증 재전송' })
+      fireEvent.click(resend)
+      fireEvent.click(resend)
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(5)
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/auth/email-verification-requests', expect.objectContaining({
+      body: JSON.stringify({ email: member.email }),
+    }))
+    await act(async () => resolveResend(failure(429, 'RATE_LIMITED', [], { 'Retry-After': '7' })))
+    expect(screen.getByRole('button', { name: '이메일 인증 재전송 · 7초' })).toBeDisabled()
+
+    act(() => vi.advanceTimersByTime(7_000))
+    fetchMock.mockResolvedValueOnce(csrf()).mockResolvedValueOnce(success({ message: accepted }, 202))
+    await act(async () => submit('이메일 인증 재전송'))
+    expect(screen.getByRole('button', { name: '이메일 인증 재전송 · 60초' })).toBeDisabled()
+    expect(screen.getByText(/가장 최근 메일을 확인해 주세요/)).toBeInTheDocument()
+    expect(screen.getByLabelText('비밀번호 확인')).toHaveValue('')
+  })
+
+  it('StrictMode에서도 인증 POST를 한 번만 보내고 성공 후 별도로 로그인한다', async () => {
+    link()
+    const noContent = new Response(null, { status: 204 })
+    const parse = vi.spyOn(noContent, 'json')
+    fetchMock.mockResolvedValueOnce(csrf()).mockResolvedValueOnce(noContent)
+    render(<StrictMode><AuthEntry><p>메인화면</p></AuthEntry></StrictMode>)
+    expect(screen.getByRole('button', { name: '인증 확인 중' })).toBeDisabled()
+    expect(await screen.findByRole('heading', { name: '인증이 완료됐어요' })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/auth/csrf', expect.objectContaining({
+      credentials: 'include', cache: 'no-store',
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/auth/email-verifications', expect.objectContaining({
+      credentials: 'include', method: 'POST', body: JSON.stringify({ token }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': 'csrf-token' },
+    }))
+    expect(parse).not.toHaveBeenCalled()
+    expect(location.pathname).toBe('/email-verification')
+    expect(location.search).toBe('')
+    expect(history.state).toBeNull()
+    expect(document.body.innerHTML).not.toContain(token)
+    expect(JSON.stringify(localStorage)).not.toContain(token)
+    expect(JSON.stringify(sessionStorage)).not.toContain(token)
+    expect(screen.queryByText('메인화면')).not.toBeInTheDocument()
+    submit('로그인하기')
+    expect(screen.getByLabelText('이메일')).toHaveValue('')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['', '?token=', '?token=short', '?token=' + '!'.repeat(43), `?token=${token}&token=${token}`])(
+    '잘못된 링크를 서버에 보내지 않는다 (%s)', async query => {
+      link(query)
+      mount()
+      expect(screen.getByRole('heading', { name: '인증 링크를 확인해 주세요' })).toBeInTheDocument()
+      expect(location.search).toBe('')
+      await act(async () => {})
+      expect(fetchMock).not.toHaveBeenCalled()
+    },
+  )
+
+  it('만료 등 유효하지 않은 토큰은 재발송으로 안내한다', async () => {
+    link()
+    fetchMock.mockResolvedValueOnce(csrf()).mockResolvedValueOnce(failure(400, 'AUTH_TOKEN_INVALID'))
+    mount()
+    expect(await screen.findByRole('heading', { name: '유효하지 않은 인증 링크예요' })).toBeInTheDocument()
+    fill('가입한 이메일', ' TEST+tag@EXAMPLE.COM ')
+    fetchMock.mockResolvedValueOnce(csrf()).mockResolvedValueOnce(success({ message: accepted }, 202))
+    submit('인증 메일 다시 받기')
+    expect(await screen.findByText(/가장 최근 메일을 확인해 주세요/)).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/auth/email-verification-requests', expect.objectContaining({
+      body: JSON.stringify({ email: member.email }),
+    }))
+  })
+
+  it.each([
+    [failure(403, 'CSRF_INVALID'), '요청의 보안 확인에 실패했어요'],
+    [undefined, '인증 결과를 확인하지 못했어요'],
+    [failure(503, 'INTERNAL_SERVER_ERROR'), '인증 결과를 확인하지 못했어요'],
+  ])('보안·연결 오류 후 명시적으로만 재시도한다 (%s)', async (response, title) => {
+    link()
+    fetchMock.mockResolvedValueOnce(csrf())
+    if (response) fetchMock.mockResolvedValueOnce(response)
+    else fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'))
+    mount()
+    expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    fetchMock.mockResolvedValueOnce(csrf('fresh-csrf')).mockResolvedValueOnce(failure(400, 'AUTH_TOKEN_INVALID'))
+    submit('다시 확인하기')
+    expect(await screen.findByRole('heading', { name: '유효하지 않은 인증 링크예요' })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/auth/email-verifications', expect.objectContaining({
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': 'fresh-csrf' },
+    }))
+  })
+})
+
+it('로컬 가입 미리보기는 비밀번호 조건과 확인 값이 맞을 때만 대기 상태로 전환한다', () => {
+  render(<AuthForm resetToken={null} mockLogin onLogin={vi.fn()} />)
+  submit('회원가입')
+  const hint = screen.getByText(/11~32자/)
+  expect(hint).toHaveAttribute('data-password-valid', 'false')
+  fill('이메일', 'preview@example.com')
+  fill('비밀번호', 'short')
+  fill('비밀번호 확인', 'short')
+  submit('이메일 인증하고 가입하기')
+  expect(screen.queryByText('이메일 인증 대기 중')).not.toBeInTheDocument()
+
+  fill('비밀번호', 'a1!abcdefgh')
+  expect(hint).toHaveAttribute('data-password-valid', 'true')
+  submit('이메일 인증하고 가입하기')
+  expect(screen.getByText('비밀번호가 일치하지 않아요.')).toBeInTheDocument()
+  fill('비밀번호 확인', 'a1!abcdefgh')
+  submit('이메일 인증하고 가입하기')
+  expect(screen.getByRole('button', { name: '이메일 인증 재전송' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: '이메일 인증 대기 중' })).toBeDisabled()
+  expect(fetchMock).not.toHaveBeenCalled()
 })

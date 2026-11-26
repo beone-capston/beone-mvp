@@ -46,11 +46,12 @@ public record CodefSyncResult(long syncId, LocalDateTime syncedAt, HeldCards hel
 	}
 
 	/**
-	 * 새로 만든 보유 카드. 매핑은 {@code UNMAPPED}이고 상품 후보는 없다(결정 20 R3).
+	 * 새로 만든 보유 카드. 후보 상품이 있으면 매핑은 {@code CANDIDATE}, 없으면 {@code UNMAPPED}다(#268).
 	 * @param userCardId 보유 카드 번호
 	 * @param cardName CODEF 카드명 원문
+	 * @param candidateCardProductId 이름 사전으로 둔 후보 상품 ID. 없으면 {@code null}
 	 */
-	public record NewCandidate(long userCardId, String cardName) {
+	public record NewCandidate(long userCardId, String cardName, String candidateCardProductId) {
 	}
 
 	/**

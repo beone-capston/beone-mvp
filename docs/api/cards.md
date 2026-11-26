@@ -223,11 +223,11 @@ X-BeONE-Demo-User: MY_CARDS
 - `holdingSource` · String · `MANUAL`(수동 등록) / `CODEF`(2차 보유카드 조회) / `SYNTHETIC`(가상 포트폴리오)
 - `mapping.status` · String · `UNMAPPED` / `CANDIDATE` / `USER_CONFIRMED` / `NOT_SUPPORTED`. 계산에는 `USER_CONFIRMED`만 쓴다. 나중에 `OFFICIALLY_VERIFIED`를 더할 수 있다
 - `mapping.confirmationMethod` · String|null · `MANUAL_SELECTION` / `CODEF_CANDIDATE`
-- `mapping.candidateBasis` · Object|null · CODEF 후보일 때 후보를 낸 근거(예: `{"cardName":"..."}`). 카드명만으로 확정하지 않는다
+- `mapping.candidateBasis` · Object|null · **현재 미사용(항상 `null`).** 후보를 낸 근거(예: `{"cardName":"..."}`)를 담을 자리로 필드만 둔다. 근거는 저장하지 않는다(2026-11-26 사용자 결정, #268). 후보의 근거 카드명은 보유 카드의 `displayName`과 동기화 응답 `newCandidates[].cardName`으로 볼 수 있다
 - `mapping.note` · String|null · `USER_CONFIRMED`면 "사용자 확인 매핑, 공식 SKU·약관 버전 미검증"
 - `recommendationEligibility.reason` · String|null · `MAPPING_UNCONFIRMED`(UNMAPPED·CANDIDATE) / `NO_SUPPORTED_RULE`(NOT_SUPPORTED) / `USER_EXCLUDED`(사용자가 뺀 카드)
 - 가상 포트폴리오 사용자의 카드는 규칙 카드 자체라 매핑 대상이 아니다(D-15). `holdingSource=SYNTHETIC`이고 `mapping`은 `null`이며 `cardProductId`를 카드 항목에 직접 담는다
-- `mapping.candidateCardProductId` · String|null · `CANDIDATE`일 때 사용자가 확인할 수 있는 후보 상품(D-15). `CANDIDATE`의 `cardProductId`는 `null`이다
+- `mapping.candidateCardProductId` · String|null · `CANDIDATE`일 때 사용자가 확인할 수 있는 후보 상품(D-15). `CANDIDATE`의 `cardProductId`는 `null`이다. CODEF 카드명이 이름 사전과 정확히 일치할 때 동기화가 채운다([CODEF 동기화](codef.md#post-apiv1mecodefsyncs--codef-조회동기화)). 후보는 상품당 1장이다(같은 상품의 `USER_CONFIRMED`·`CANDIDATE` 카드가 이미 있으면 `UNMAPPED`). 확인·변경하면 `null`이 된다
 - `excludedFromRecommendation` · Boolean · 사용자가 직접 추천에서 뺀 카드(PRD §4.1). 켜면 `recommendationEligibility.reason=USER_EXCLUDED`. 이 값은 D-18 K3 순서에 넣지 않고 "사용자 제외"로 따로 표시한다(D-19)
 - 카드번호·끝 4자리·유효기간은 응답에 없다(D-14 ⑨)
 
@@ -372,7 +372,7 @@ X-BeONE-Demo-User: MY_CARDS
 
 #### status
 
-`CANDIDATE`는 서버만 만든다(2차 CODEF 후보). 요청으로 보낼 수 없다.
+`CANDIDATE`는 서버만 만든다(CODEF 카드명이 이름 사전과 정확히 일치할 때, D-15 2026-11-26 변경). 요청으로 보낼 수 없다.
 
 ```text
 USER_CONFIRMED
@@ -413,9 +413,7 @@ status
       "confirmationMethod": "CODEF_CANDIDATE",
       "confirmedAt": "2026-11-03T11:00:00+09:00",
       "candidateCardProductId": null,
-      "candidateBasis": {
-        "cardName": "청춘대로 톡톡카드"
-      },
+      "candidateBasis": null,
       "note": "사용자 확인 매핑, 공식 SKU·약관 버전 미검증"
     },
     "excludedFromRecommendation": false,

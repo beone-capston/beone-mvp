@@ -73,12 +73,14 @@ if [ "${1:-}" = compose ]; then
 			fi
 			[ "${FAKE_PS_RC:-0}" = 0 ] || exit "$FAKE_PS_RC"; printf '%b' "${FAKE_PS-beone-codef-verify-backend-1\nbeone-codef-verify-mysql-1\nbeone-codef-verify-web-1\n}"; exit 0 ;;
 		logs) [ "${FAKE_LOGS_RC:-0}" = 0 ] || exit "$FAKE_LOGS_RC"; printf '%b' "${FAKE_LOGS-started\nCODEF result CF-00000\n}"; exit 0 ;;
-		stop) log STOP; exit 0 ;;
+		stop) log STOP; exit "${FAKE_STOP_RC:-0}" ;;
 		down) log DOWN; exit "${FAKE_DOWN_RC:-0}" ;;
 		exec)
 			sql="${*: -1}"
 			[ "${FAKE_Q_RC:-0}" = 0 ] || exit "$FAKE_Q_RC"
 			case "$sql" in
+				BEONE_CODEF_BUDGET_PER_API)   # budget 블록의 printenv(실행 중인 백엔드의 상한 설정)
+					[ "${FAKE_LIMIT_RC:-0}" = 0 ] || exit "$FAKE_LIMIT_RC"; printf '%b' "${FAKE_LIMIT-3\n}" ;;
 				*"UPDATE members"*) printf '%b' "${FAKE_TA-1\n1\n}" ;;
 				*"COUNT(DISTINCT window_start)"*) printf '%b' "${FAKE_BUDGET_STAT-1\t1\n}" ;;
 				*"FROM codef_call_budgets"*) printf 'TOKEN\t2026-11-30 15:00:00.000\t1\n' ;;
@@ -195,7 +197,7 @@ failures=0
 echo "| 블록 | 주입 사례 | 기대 종료 코드 | 실제 | 실행되면 안 되는 동작 | 판정 |"
 echo "|---|---|---|---|---|---|"
 # run <블록> <설명> <기대 종료 코드> <금지 동작(쉼표, 없으면 ->)> [환경 변수=값...]
-# 앞에 SEED_BEFORE=(원장 기준 파일 내용), REQUIRE=(반드시 실행돼야 하는 동작)를 붙일 수 있다
+# 앞에 SEED_BEFORE=(원장 기준 파일 내용), REQUIRE=(반드시 실행돼야 하는 동작), EXPECT_OUT=(출력에 있어야 하는 줄의 일부)를 붙일 수 있다
 run() {
 	local name="$1" desc="$2" want="$3" forbid="$4" code rc bad="" f
 	shift 4
@@ -214,18 +216,20 @@ run() {
 	fi
 	local miss=""
 	if [ -n "${REQUIRE:-}" ]; then grep -qx "$REQUIRE" "$WORK/log" || miss=" (필수 동작 $REQUIRE 없음)"; fi
+	if [ -n "${EXPECT_OUT:-}" ]; then grep -qF -- "$EXPECT_OUT" "$WORK/out" || miss="$miss (출력 '$EXPECT_OUT' 없음)"; fi
 	local verdict=PASS
 	{ [ "$rc" = "$want" ] && [ -z "$bad" ] && [ -z "$miss" ]; } || { verdict=FAIL; failures=$((failures + 1)); }
 	echo "| $name | $desc | $want | $rc | ${forbid}${bad:+ (실행됨:$bad)}${miss} | $verdict |"
 }
 
-run verify-down "정상" 0 -
-run verify-down "down -v 실패" 1 - FAKE_DOWN_RC=1
-run verify-down "beone-verify 조회 실패" 1 - FAKE_PSQ_RC_verify=1
-run verify-down "beone-verify 컨테이너 남음" 1 - FAKE_PSQ_verify='v1\n'
-run verify-down "볼륨 조회 실패" 1 - FAKE_VOL_RC=1
-run verify-down "beone-verify 볼륨 남음" 1 - FAKE_VOLS='beone-verify_verify-mysql-data\n'
-run verify-down "compose.yaml 없음(9절로 지움)" 1 - FAKE_COMPOSE_RC=1
+# verify-down은 stop(볼륨 보존)이다. down(-v)은 어떤 경우에도 실행되면 안 된다
+REQUIRE=STOP run verify-down "정상(stop, down 안 함)" 0 DOWN
+run verify-down "stop 실패" 1 DOWN FAKE_STOP_RC=1
+run verify-down "beone-verify 조회 실패" 1 DOWN FAKE_PSQ_RC_verify=1
+run verify-down "실행 중 beone-verify 컨테이너 남음" 1 DOWN FAKE_PSQ_verify='v1\n'
+run verify-down "볼륨 조회 실패" 1 DOWN FAKE_VOL_RC=1
+REQUIRE=STOP run verify-down "beone-verify 볼륨 남음(보존, 통과)" 0 DOWN FAKE_VOLS='beone-verify_verify-mysql-data\n'
+run verify-down "compose.yaml 없음(9절로 지움)" 1 DOWN FAKE_COMPOSE_RC=1
 run up "정상" 0 -
 run up "config 실패" 1 UP FAKE_CONFIG_RC=1
 run up "키 빈 값(보간 실패, 닫힘)" 1 UP FAKE_KEYS=empty
@@ -276,7 +280,17 @@ run watch "중지 대상에 운영 컨테이너 섞임(중지 안 함)" 1 DSTOP,
 run budget "창 1개·최대 1" 0 -
 run budget "호출 전 행 0" 0 - FAKE_BUDGET_STAT='0\t0\n'
 run budget "창 2개(재기동 때 창 변경)" 1 - FAKE_BUDGET_STAT='2\t1\n'
-run budget "API별 3회 초과" 1 - FAKE_BUDGET_STAT='1\t4\n'
+run budget "API별 3회 초과(상한 3)" 1 - FAKE_BUDGET_STAT='1\t4\n'
+run budget "상한 5로 승인, 사용 4(통과)" 0 - FAKE_BUDGET_STAT='1\t4\n' FAKE_LIMIT='5\n'
+run budget "상한 5, 사용 6(초과)" 1 - FAKE_BUDGET_STAT='1\t6\n' FAKE_LIMIT='5\n'
+run budget "상한 설정 조회 실패" 1 - FAKE_LIMIT_RC=1
+run budget "상한 설정 빈 값" 1 - FAKE_LIMIT=''
+run budget "상한 설정 숫자 아님" 1 - FAKE_LIMIT='abc\n'
+run budget "상한 설정 0" 1 - FAKE_LIMIT='0\n'
+run budget "상한 설정 000(정규화 뒤 0)" 1 - FAKE_LIMIT='000\n'
+EXPECT_OUT='limit=10 remaining=9' run budget "상한 010(십진 10), 사용 1" 0 - FAKE_BUDGET_STAT='1\t1\n' FAKE_LIMIT='010\n'
+EXPECT_OUT='limit=8 remaining=8' run budget "상한 008(8진수로 읽으면 오류), 사용 0" 0 - FAKE_BUDGET_STAT='0\t0\n' FAKE_LIMIT='008\n'
+EXPECT_OUT='limit=3 remaining=2' run budget "기본 상한 3, 사용 1의 남은 횟수" 0 -
 run budget "DB 조회 실패" 1 - FAKE_Q_RC=1
 run budget "조회 결과 비어 있음" 1 - FAKE_BUDGET_STAT=''
 run ledger-before "정상" 0 -
@@ -292,6 +306,12 @@ run logs "정상" 0 -
 run logs "logs 조회 실패" 1 - FAKE_LOGS_RC=1
 run logs "로그 비어 있음" 1 - FAKE_LOGS=''
 run logs "금지 패턴 있음" 1 - FAKE_LOGS='password=x\n'
+# 동기화 진단 로그(#271) 한 줄은 카드번호 필드가 아니다: CARD_NOT_LINKED 등이 card_no로 오탐되지 않아야 한다
+EXPECT_OUT='sensitive=0 ' run logs "진단 로그 줄(오탐 없음)" 0 - FAKE_LOGS='started\ncodef sync diagnostics syncId=12 approvals={rows=73, imported=0, linkedByDictionary=0, incomplete={CARD_NOT_LINKED.MULTIPLE_HELD_CARDS_FOR_PRODUCT=1, CARD_NOT_LINKED.NO_HELD_CARD_FOR_PRODUCT=1, CARD_NOT_LINKED.ROW_NAME_NOT_IN_DICTIONARY=70, HELD_CARD_SKIPPED=1}, unlinkedCardNames={"KB국민 나라사랑체크카드(일반형 RF)"=61}} performances={cards=16, linkedByDictionary=3, incomplete={CARD_NOT_LINKED.ROW_NAME_NOT_IN_DICTIONARY=1, HELD_CARD_SKIPPED=1}, unlinkedCardNames={"KB Youth Club 체크카드"=1}}\n'
+# 진짜 카드번호 필드명은 여전히 잡는다
+run logs "card_no=값" 1 - FAKE_LOGS='card_no=1234\n'
+run logs "cardNo 필드" 1 - FAKE_LOGS='{"resCardNo":"x"}\n'
+run logs "CARDNO 줄 끝" 1 - FAKE_LOGS='field CARDNO\n'
 REQUIRE=DSTOP run stop "정상(키 있음)" 0 STOP,COMPOSE_LOAD_FAIL
 REQUIRE=DSTOP run stop "키 빈 값" 0 STOP,COMPOSE_LOAD_FAIL FAKE_KEYS=empty
 REQUIRE=DSTOP run stop "키 삭제" 0 STOP,COMPOSE_LOAD_FAIL FAKE_KEYS=deleted

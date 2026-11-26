@@ -8,6 +8,7 @@ import java.security.KeyPairGenerator;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 
 import javax.crypto.Cipher;
@@ -115,6 +116,20 @@ class LiveCodefGatewayTest {
 	}
 
 	@Test
+	void errorListCodesDoNotChangeTheRegistrationResult() {
+		// 관리자 판단 P1(#47) 유지: errorList 코드는 관측 로그에만 쓰고 로그인 실패(400)로 바꾸지 않는다
+		for (String errorList : List.of("[{\"code\":\"CF-12401\"}]", "[{\"code\":\"CF-12834\"}]",
+				"[{\"code\":\"CF-12999\"}]", "[{\"code\":\"OTHER-VALUE\"}]", "[]")) {
+			this.stub.respond(CREATE, 200, "{\"result\":{\"code\":\"CF-04000\"},\"data\":{\"errorList\":" + errorList + "}}");
+			assertThat(gateway().register("0301", "a", PASSWORD.toCharArray())).as(errorList)
+				.isInstanceOf(CodefRegistration.Unavailable.class);
+		}
+		this.stub.respond(CREATE, 200, "{\"result\":{\"code\":\"CF-04000\"},\"data\":{}}");
+		assertThat(gateway().register("0301", "a", PASSWORD.toCharArray()))
+			.isInstanceOf(CodefRegistration.Unavailable.class);
+	}
+
+	@Test
 	void serverErrorOnRegisterIsNotRetried() {
 		this.stub.respond(CREATE, 503, "");
 
@@ -173,7 +188,11 @@ class LiveCodefGatewayTest {
 			.isEqualTo(MAPPER.readTree("{\"organization\":\"0301\",\"connectedId\":\"" + CONNECTED_ID + "\"}"));
 		assertThat(MAPPER.readTree(this.stub.requestsTo(APPROVALS).getFirst().body()))
 			.isEqualTo(MAPPER.readTree("{\"organization\":\"0301\",\"connectedId\":\"" + CONNECTED_ID
-					+ "\",\"startDate\":\"20261001\",\"endDate\":\"20261031\",\"orderBy\":\"0\"}"));
+					+ "\",\"startDate\":\"20261001\",\"endDate\":\"20261031\",\"orderBy\":\"0\",\"inquiryType\":\"1\","
+					+ "\"memberStoreInfoType\":\"0\"}"));
+		// 카드 식별값·생년월일은 보내지 않는다(전체 조회, 수집하지 않는 입력)
+		assertThat(MAPPER.readTree(this.stub.requestsTo(APPROVALS).getFirst().body()).propertyNames())
+			.doesNotContain("cardNo", "cardName", "duplicateCardSelect", "duplicateCardIdx", "birthDate");
 		assertThat(MAPPER.readTree(this.stub.requestsTo(PERFORMANCES).getFirst().body()))
 			.isEqualTo(MAPPER.readTree("{\"organization\":\"0301\",\"connectedId\":\"" + CONNECTED_ID + "\"}"));
 		// 토큰은 한 번 발급해 세 호출이 같이 쓴다

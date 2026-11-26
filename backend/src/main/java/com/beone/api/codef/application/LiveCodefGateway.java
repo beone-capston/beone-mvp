@@ -49,6 +49,19 @@ public class LiveCodefGateway implements CodefGateway, CodefSyncGateway {
 	/** 공식 문서 예시의 최신순 정렬. 샌드박스 확인 절차와 같다. */
 	private static final String ORDER_BY_LATEST = "0";
 
+	/**
+	 * 승인내역 조회구분. KB 필수 입력이다(파라미터 시트 {@code 승인내역!H4:H8}, docs/domains/codef-kb.md). 값 {@code "1"}은 공식 예제
+	 * {@code codef-io/codef-python}(커밋 {@code c6bec12}) {@code sandbox/cd/TestKR_CD_P002.py}의 값이다. "1"이 전체 카드 조회라는 의미는
+	 * 카드번호가 "카드별 조회 시"에만 쓰인다는 시트 주석에서 추정한 가정이며, 실호출로 확정한다. 카드번호는 보내지 않는다.
+	 */
+	private static final String INQUIRY_ALL_CARDS = "1";
+
+	/**
+	 * 가맹점정보 포함여부. KB에서는 선택 입력이다. 공식 예제와 같은 {@code "0"}(미포함)을 보낸다. 가맹점 사업자번호·주소 같은 추가 정보는
+	 * 옮기지 않는 값이고, 가맹점명은 기본 출력이라 이 값과 무관하다.
+	 */
+	private static final String MEMBER_STORE_INFO_EXCLUDED = "0";
+
 	private final CodefClient client;
 
 	private final CodefPasswordEncryptor encryptor;
@@ -110,7 +123,8 @@ public class LiveCodefGateway implements CodefGateway, CodefSyncGateway {
 			LocalDate to) {
 		return this.client.startObservation()
 			.approvals(Map.of("organization", organization, "connectedId", connectedId, "startDate",
-					YYYYMMDD.format(from), "endDate", YYYYMMDD.format(to), "orderBy", ORDER_BY_LATEST));
+					YYYYMMDD.format(from), "endDate", YYYYMMDD.format(to), "orderBy", ORDER_BY_LATEST, "inquiryType",
+					INQUIRY_ALL_CARDS, "memberStoreInfoType", MEMBER_STORE_INFO_EXCLUDED));
 	}
 
 	@Override

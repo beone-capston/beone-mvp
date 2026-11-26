@@ -137,6 +137,9 @@ password
 - **400 `INVALID_REQUEST`**: 요청값이 올바르지 않은 경우
   - 필수 필드 누락
   - `organization`·`loginType` 허용 밖 값
+  - `loginId`에 제어 문자, 서식 문자(예: U+200B·U+FEFF), 대체 문자 U+FFFD, 줄·문단 구분자, 짝 없는 서로게이트, 미할당 문자가 있거나 앞뒤에 공백(U+00A0·U+3000 포함)이 있는 경우. 가운데 공백은 허용한다
+  - `password`에 제어 문자(줄바꿈·탭·NUL 등)가 있는 경우. 앞뒤 공백은 실제 비밀번호일 수 있어 허용한다
+  - 위 두 경우는 `errors`에 필드 이름과 고정 문구 "사용할 수 없는 문자가 있습니다."만 담고 값·길이·위치는 담지 않는다. CODEF를 부르지 않으므로 호출 횟수에 세지 않는다
 
 - **400 `CODEF_LOGIN_FAILED`**: 카드사 로그인 실패
   - CODEF 결과 코드가 로그인 실패 계열
@@ -210,10 +213,11 @@ X-BeONE-Demo-User: MY_CARDS
 CODEF에서 KB국민카드 보유카드·승인내역·실적조회를 가져와 BeONE 데이터로 옮기는 API.
 
 ```text
-보유카드 → HeldCard(CODEF), UNMAPPED·candidateCardProductId=null로 생성, 상품은 사용자가 직접 선택(결정 20 R3)
+보유카드 → HeldCard(CODEF). 카드명이 이름 사전과 정확히 같으면 CANDIDATE·candidateCardProductId, 아니면 UNMAPPED·null로 생성. 확정은 사용자(D-15 2026-11-26 변경)
 승인내역 → CODEF 원장. 전액 취소로 확정된 형태만 반영, 부분취소 의심·짝 없음·짝 여럿·판단 불가 행은 넣지 않고 불완전 표시
 실적조회 → "카드사 조회 실적(참고)"로만 저장, 전월 실적에 자동 반영하지 않음
 재조회 → 중복 판단 키로 같은 행을 두 번 넣지 않음
+행 → 보유카드 연결: 카드명 정확 일치가 우선, 없으면 이름 사전으로 같은 상품이 되는 보유카드가 1장일 때만 연결(R1, 2026-11-27 변경)
 ```
 
 > 2차 설계 초안입니다. D-14에 따라 CODEF 전송 계약(헤더·인코딩·OAuth·timeout·재시도) 결정 직후 확정합니다. 공식 오류 목록에서 오류 응답 다수가 과금 대상으로 표시돼 있어 서버는 자동 재시도하지 않습니다.
@@ -259,8 +263,8 @@ to
         {
           "userCardId": "uc-2001",
           "cardName": "청춘대로 톡톡카드",
-          "candidateCardProductId": null,
-          "mappingStatus": "UNMAPPED"
+          "candidateCardProductId": "09174",
+          "mappingStatus": "CANDIDATE"
         }
       ]
     },
@@ -295,9 +299,11 @@ to
 
 #### 응답 필드
 
-- `heldCards.newCandidates[]` · 새 CODEF 카드는 `mappingStatus`=`UNMAPPED`, `candidateCardProductId`=`null`이다. 카드명으로 상품 후보를 정하지 않고 사용자가 직접 고른다(결정 20 R3, 2026-11-18 관리자 판단 K1).
+- `heldCards.newCandidates[]` · 이번에 새로 만든 CODEF 카드. 카드명이 이름 사전과 정확히 같으면 `mappingStatus`=`CANDIDATE`, `candidateCardProductId`=후보 상품 ID이고, 아니면 `UNMAPPED`·`null`이다. 후보는 상품당 1장이다. 같은 사용자에게 그 상품의 해제하지 않은 `USER_CONFIRMED` 카드나 그 상품이 후보인 `CANDIDATE` 카드가 이미 있으면 `UNMAPPED`·`null`이고, 한 번의 동기화에서 같은 상품에 일치하는 카드가 여럿이면 응답 순서로 먼저 처리한 카드만 후보다. 확정은 사용자가 매핑 변경 API(`CODEF_CANDIDATE`)로 한다([D-15 2026-11-26 변경](../decisions.md#d-15d-16d-17-확정-정책)). 이전 기준(결정 20 R3, 관리자 판단 K1)은 항상 `UNMAPPED`·`null`이었다.
+- 재동기화에서 다시 대조된 기존 카드에 후보를 둔 경우는 `newCandidates`에 담지 않는다. 보유 카드 목록(`GET /api/v1/me/cards`)의 `mapping`으로 확인한다.
 - `performances[].usedInCalculation` · 항상 `false`. 사용자가 확인해 수동 입력해야 계산에 쓴다(D-16)
-- `incompleteRows[]` · 원장에 넣지 않은 행과 이유. 카드번호·승인번호 원문은 담지 않는다
+- `incompleteRows[]` · 원장에 넣지 않은 행과 이유. 카드번호·승인번호 원문은 담지 않는다. 사유 코드는 그대로이며, 카드 미연결은 계속 `UNDETERMINED_ROW`·`userCardId=null`이다
+- 승인 행·실적의 `userCardId` · 행 카드명과 정확히 같은 보유카드가 1장이면 그 카드다. 없으면 행 카드명을 [이름 사전](../../backend/src/main/java/com/beone/api/codef/application/CodefCardNameDictionary.java)으로 상품으로 바꾸고, 같은 동기화의 보유카드 중 사전으로 같은 상품이 되는 카드가 정확히 1장일 때만 그 카드다. KB가 API마다 같은 카드의 카드명을 다르게 주기 때문이다(예: 보유카드 `nori 체크카드(RF)`, 실적 `KB국민 노리체크카드`). 0장·2장 이상·사전에 없음이면 붙이지 않는다([D-15 2026-11-27 변경](../decisions.md#d-15d-16d-17-확정-정책))
 - 부분 동기화 실패와 전체 실패를 구분한다. 일부 항목만 실패하면 200과 `data.partialFailures[]`(항목: `target`=`HELD_CARDS`/`APPROVALS`/`PERFORMANCES`(제안, 샌드박스 확인 뒤 확정), 공개 `code`·`message`, 실패가 없으면 `[]`)를 담고, 전부 실패하면 502를 준다(제안). timeout을 504로 나눌지는 전송 계약과 함께 정한다
 - HTTP 200만으로 CODEF 성공으로 보지 않는다. URL 디코딩 뒤 결과 코드를 확인한다. 전체 카드번호가 오면 모델·저장·로그·브라우저로 넘기기 전에 제거한다. 카드 이용한도를 월 혜택 한도로 쓰지 않는다
 
