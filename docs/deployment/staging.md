@@ -26,7 +26,7 @@ develop에 병합된 변경을 사용자가 직접 배포하지 않아도 확인
 - **메모리:** 상한 합계 1344MiB(mysql 512 + backend 768 + web 64)이며 검증 환경 `beone-verify`(PR #206 `deploy/verify/compose.yaml`)와 같은 배분입니다. 스테이징과 `beone-verify`는 동시에 띄우지 않습니다.
 - **먼저 종료:** 운영 컨테이너는 `oom_score_adj`가 기본값 0입니다. 스테이징은 800·900이라 서버 메모리가 모자라면 커널이 스테이징을 먼저 종료합니다. 재시작은 `on-failure:3`으로 세 번까지만 해서 운영 메모리를 계속 빼앗지 않게 했습니다. 서버 재부팅 뒤에는 자동으로 뜨지 않고 다음 배포(`up -d`)가 다시 띄웁니다.
 - **이미지:** 세 서비스 모두 `pull_policy: never`입니다. backend는 `deploy.sh`가 digest로 먼저 pull하고, mysql·nginx는 서버에 있는 이미지를 씁니다(추가 다운로드 없음).
-- **CODEF:** 키를 넣지 않습니다(결정 40-7). `deploy.sh`는 env에 `CODEF_`·`BEONE_CODEF_` 키 이름이 있거나 `codef-live`가 있으면 배포를 거부합니다.
+- **CODEF:** 기본은 꺼짐이며 키를 넣지 않습니다(결정 40-7). 시연용으로 스테이징에서만 켤 수 있습니다(#275, 2026-11-27 사용자 결정, 아직 켜지 않음). `.env`에 `BEONE_STAGING_CODEF_ENABLED=true`와 필수 키를 모두 넣으면 `deploy.sh`가 오버레이 [`deploy/staging/compose.codef.yaml`](../../deploy/staging/compose.codef.yaml)을 붙입니다. 플래그가 없거나 `false`인데 `CODEF_`·`BEONE_CODEF_` 키 이름이나 `codef-live`가 있으면 지금처럼 배포를 거부합니다. 절차는 [스테이징 한정 CODEF](staging-codef.md)에 있습니다.
 
 ## nginx
 
@@ -43,7 +43,7 @@ develop에 병합된 변경을 사용자가 직접 배포하지 않아도 확인
 
 ## 프로필과 메일 (권장안)
 
-**권장: 운영과 같은 `prod` 프로필 + 실메일.** compose는 `SPRING_PROFILES_ACTIVE: prod`이고 메일 키 6개를 필수(`:?`)로 받습니다.
+**권장: 운영과 같은 `prod` 프로필 + 실메일.** compose는 `SPRING_PROFILES_ACTIVE: prod,staging`이고 메일 키 6개를 필수(`:?`)로 받습니다. `staging`은 설정 파일이 없는 스테이징 표지 프로필로, `PublicProfileGuard`가 스테이징 한정 CODEF 예외를 판단할 때만 씁니다(#275). 운영 배포는 프로필 지정에 `staging`이 있으면 거부합니다.
 
 | 근거 | 내용 |
 |---|---|

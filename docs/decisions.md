@@ -809,6 +809,15 @@ PR #81(#80) 구현 중 2026-11-16 사용자가 고른 결정이다. 새 D-번호
 - **웹 경로:** web 이미지 안 dist 위치는 `/dist`다. 운영 웹은 `/opt/beone/web/current`, 스테이징 웹은 `/opt/beone/staging/web/current`다. 둘 다 `releases/<GitSha 12자리>-<무작위>`를 가리키는 상대 심볼릭 링크이고, 공개 nginx 정적 루트는 운영 링크로 고정한다.
 - 자세한 정책 JSON·문서 JSON·설정 순서는 [배포 자동화](deployment/cd.md)에 있다.
 
+**변경 이력 초안 2026-11-27 — 스테이징 한정 CODEF(사용자 결정, 이슈 #275, 최종 문구 결정 필요)**
+
+- **바꾸는 결정:** 결정 40-7 "CODEF는 자동 배포 대상에서 뺀다"와 결정 38-8 "공개 `prod`에서 CODEF를 등록하지 않는다·키를 두지 않는다"에 **기본 인증 뒤 스테이징 한정** 예외를 둔다. 운영(`beone-app`)은 바꾸지 않는다.
+- **켜는 조건:** 스테이징 `.env`의 `BEONE_STAGING_CODEF_ENABLED=true`와 필수 키 9개(CODEF 3키, connectedId 키, 승인 HMAC 키, 상품 호스트, 호출 상한 3변수)가 모두 있을 때만 `deploy.sh staging`이 오버레이 `deploy/staging/compose.codef.yaml`을 붙인다. 백엔드는 `prod`에서 스테이징 표지 프로필 `staging`과 플래그 `true`가 함께 있을 때만 `codef-live`·CODEF 키를 허용한다. 하나라도 어긋나면 배포 거부 또는 기동 실패로 닫힌다.
+- **운영 방어:** `deploy.sh production`은 운영 env의 플래그 이름(값 무관), 운영 env·compose 프로필 지정의 `staging` 표지, 운영 폴더의 오버레이 파일을 거부한다. 백엔드는 플래그가 `staging` 없이 있으면 기동을 멈춘다.
+- **호출 상한:** 스테이징 DB의 `codef_call_budgets`로 따로 센다. 권장 API별 10회, 창 `2026-11-26T00:00+09:00` ~ `2026-12-10T00:00+09:00`(결정 필요).
+- **결정 필요:** 플래그 꺼짐인데 CODEF 키가 있을 때의 동작(권장: 배포 거부, 현재 구현), 상한·창 값, 시연 종료 뒤 스테이징 DB의 CODEF 연결 데이터 처리. 절차는 [스테이징 한정 CODEF](deployment/staging-codef.md).
+- 켜는 실행(서버 파일 반영·키 입력·재기동)은 이 기록과 별도로 사용자 재확인 뒤 운영 담당이 한다.
+
 ## 운영 정책 미결 사항
 
 PRD에 없는 저장소 운영 정책입니다. 팀 합의 전까지 임의로 정하지 않습니다.
