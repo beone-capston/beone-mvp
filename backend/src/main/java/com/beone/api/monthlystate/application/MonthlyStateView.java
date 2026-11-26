@@ -20,14 +20,32 @@ import java.util.Objects;
  * @param noServiceSelection 선택 없음. {@code NONE}이 아니면 {@code null}
  * @param registeredOn 카드 사용 등록일. 이 달 입력의 일부다(결정 27 A3-5)
  * @param afterSnapshot 스냅샷 뒤 모의 승인 요약. {@code snapshotAt}이 없으면 {@code null}
+ * @param codefReference 전월 실적 칸에 미리 채워 보여 줄 카드사 조회 실적(참고). 계산에 쓰지 않는다. 없으면 {@code null}
+ * @param referencedCodef 사용자가 전월 실적을 입력할 때 참고한 CODEF 값(입력 당시 스냅샷). 참고 없이 입력했으면 {@code null}
+ * @param conflicts 출처 충돌. 없으면 빈 목록
  */
 public record MonthlyStateView(String userCardId, YearMonth month, LocalDateTime snapshotAt,
 		StateValue<Long> previousMonthPerformanceWon, List<BucketUsage> limitBucketUsages,
 		StateValue<Long> otherBucketsUsedWon, List<Selection> selectedServices,
 		ServiceSelectionStatus serviceSelectionStatus, NoSelection noServiceSelection,
-		StateValue<LocalDate> registeredOn, AfterSnapshot afterSnapshot) {
+		StateValue<LocalDate> registeredOn, AfterSnapshot afterSnapshot, CodefReference codefReference,
+		ReferencedCodef referencedCodef, List<Conflict> conflicts) {
+
+	/**
+	 * CODEF 참고값·충돌이 없는 상태.
+	 */
+	public MonthlyStateView(String userCardId, YearMonth month, LocalDateTime snapshotAt,
+			StateValue<Long> previousMonthPerformanceWon, List<BucketUsage> limitBucketUsages,
+			StateValue<Long> otherBucketsUsedWon, List<Selection> selectedServices,
+			ServiceSelectionStatus serviceSelectionStatus, NoSelection noServiceSelection,
+			StateValue<LocalDate> registeredOn, AfterSnapshot afterSnapshot) {
+		this(userCardId, month, snapshotAt, previousMonthPerformanceWon, limitBucketUsages, otherBucketsUsedWon,
+				selectedServices, serviceSelectionStatus, noServiceSelection, registeredOn, afterSnapshot, null, null,
+				List.of());
+	}
 
 	public MonthlyStateView {
+		conflicts = (conflicts == null) ? List.of() : List.copyOf(conflicts);
 		Objects.requireNonNull(userCardId, "userCardId");
 		Objects.requireNonNull(month, "month");
 		Objects.requireNonNull(previousMonthPerformanceWon, "previousMonthPerformanceWon");
@@ -117,6 +135,81 @@ public record MonthlyStateView(String userCardId, YearMonth month, LocalDateTime
 		 */
 		public StateReason reason() {
 			return usable() ? null : StateReason.NOT_ENTERED;
+		}
+
+	}
+
+	/**
+	 * 카드사 조회 실적(참고) 하나. 이 카드에 연결된 참고값 중 반영기간이 대상 월의 전월 1일~말일과 정확히 같은 최신 값이다(D-16). 계산에 쓰지
+	 * 않는다.
+	 *
+	 * @param referenceId 참고값 ID
+	 * @param period 반영기간
+	 * @param currentUseWon 현재이용금액. 해석하지 못했으면 {@code null}(0이 아니다)
+	 * @param fetchedAt 조회 시각(서울)
+	 */
+	public record CodefReference(long referenceId, DatePeriod period, Long currentUseWon, LocalDateTime fetchedAt) {
+
+		public CodefReference {
+			Objects.requireNonNull(period, "period");
+			Objects.requireNonNull(fetchedAt, "fetchedAt");
+		}
+
+	}
+
+	/**
+	 * 사용자가 전월 실적을 입력할 때 참고한 CODEF 값. 입력 당시 스냅샷이며 참고값이 나중에 바뀌어도 그대로다.
+	 *
+	 * @param referenceId 참고값 ID. 참고값 행이 지워졌으면 {@code null}
+	 * @param syncId 그 참고값을 저장한 동기화 ID
+	 * @param period 반영기간
+	 * @param currentUseWon 그때의 현재이용금액. 해석하지 못했으면 {@code null}
+	 * @param fetchedAt 그 참고값의 조회 시각(서울)
+	 */
+	public record ReferencedCodef(Long referenceId, long syncId, DatePeriod period, Long currentUseWon,
+			LocalDateTime fetchedAt) {
+
+		public ReferencedCodef {
+			Objects.requireNonNull(period, "period");
+			Objects.requireNonNull(fetchedAt, "fetchedAt");
+		}
+
+	}
+
+	/**
+	 * 출처 충돌 하나. 같은 카드·같은 항목·같은 기준 기간에 출처가 다른 값이 서로 다르다(D-16).
+	 *
+	 * @param item 항목 이름(응답 필드 이름)
+	 * @param period 기준 기간
+	 * @param conflictVersion 충돌 내용 식별값. 후보가 바뀌면 달라진다
+	 * @param candidates 출처별 후보 값
+	 */
+	public record Conflict(String item, DatePeriod period, String conflictVersion, List<Candidate> candidates) {
+
+		public Conflict {
+			Objects.requireNonNull(item, "item");
+			Objects.requireNonNull(period, "period");
+			Objects.requireNonNull(conflictVersion, "conflictVersion");
+			candidates = List.copyOf(candidates);
+		}
+
+	}
+
+	/**
+	 * 충돌 후보 값 하나.
+	 *
+	 * @param source 출처
+	 * @param value 값
+	 * @param period 기준 기간
+	 * @param updatedAt 입력·조회 시각(서울)
+	 */
+	public record Candidate(StateSource source, Long value, DatePeriod period, LocalDateTime updatedAt) {
+
+		public Candidate {
+			Objects.requireNonNull(source, "source");
+			Objects.requireNonNull(value, "value");
+			Objects.requireNonNull(period, "period");
+			Objects.requireNonNull(updatedAt, "updatedAt");
 		}
 
 	}

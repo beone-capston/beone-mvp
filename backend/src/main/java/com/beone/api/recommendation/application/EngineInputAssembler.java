@@ -100,6 +100,11 @@ final class EngineInputAssembler {
 		}
 		LocalDate from = value.period().from();
 		LocalDate to = value.period().to();
+		if (!value.usable()) {
+			// 출처 충돌(D-16, 사용자 결정 2026-11-27 Q2): 값은 넘기되 계산에 쓰지 않는다. 엔진은 미입력과 같게 처리한다
+			return new StateInput<>(value.value(), "MANUAL", from, to, seoul(value.updatedAt()), false,
+					value.reason().name());
+		}
 		return StateInput.manual(value.value(), from, to, seoul(value.updatedAt()));
 	}
 

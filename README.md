@@ -112,6 +112,35 @@ VITE_DEVICE_AUTH_MODE=mock VITE_PAYMENT_API_MODE=mock npm run dev
 
 인증과 결제 전송 모드는 각각 `native`·`mock`, `api`·`mock`으로 선택합니다. 개발 플래그가 없거나 배포 빌드일 때는 네이티브 인증과 기존 백엔드 계약을 사용합니다. 서버 승인에는 시연 프로필과 실제로 생성한 주문이 필요하며, 서버의 결제 전 설정을 사용합니다. 구조는 [가상카드 및 모의 승인 안내](docs/domains/frontend-payment.md)를 참고합니다.
 
+결제 설정 저장·새로고침·주문 생성·모의 승인까지 백엔드 없이 확인하려면
+`frontend/`에서 `VITE_PAYMENT_PREFERENCE_MODE=mock npm run dev`를 실행합니다.
+로컬 5173의 개발용 로그인으로 진입한 뒤 **결제 선택 방식**에서 대표 카드를
+설정하고 새로고침해 확인합니다. 새 설정으로 테스트하려면
+`VITE_PAYMENT_MOCK_PROFILE`에 사용한 적 없는 합성 프로필 이름을 지정합니다. `VITE_PAYMENT_PREFERENCE_MOCK_FAILURE=read` 또는 `save`로 오류를 검수할 수 있습니다.
+
+실제 API 모드는 개발 기본 `demo`이며 `VITE_API_BASE_URL`로 업무 API 주소를 지정합니다.
+`VITE_WORKSPACE_CONTEXT=member`는 회원 로그인·세션 쿠키·CSRF를 사용하므로
+로컬에서는 인증과 업무 API를 동일 origin으로 전달하는 프록시가 필요합니다.
+배포 빌드의 기본은 `member`이며 목 설정은 개발 서버에서만 활성화됩니다.
+
+### 카드 추가 목 흐름
+
+`frontend/`에서 `VITE_ADD_CARD_MODE=mock npm run dev`를 실행한 뒤
+로컬 5173의 **빠른결제 → 내 카드 → +**로 진입합니다. 카드사 입력란에는 테스트 문자열을 사용합니다.
+기존 결제 목 모드에서도 카드 추가를 시험할 수 있습니다.
+
+`VITE_ADD_CARD_SCENARIO`는 `success`(기본), `connection-failure`, `query-failure`,
+`empty`, `unsupported`, `partial-data`, `partial-registration` 중 하나를 지정합니다.
+이미 등록한 카드의 재조회는 기본 시나리오에서 확인합니다. 초기화하려면 개발자 도구의
+Local Storage에서 `beone:dev:imported-cards:v1:fixture` 키를 삭제하고 새로고침합니다.
+`VITE_PAYMENT_MOCK_PROFILE`을 사용한 경우 키의 마지막에 그 프로필 이름을 넣습니다.
+
+실제 연동 시 `CardImportAdapter`를 카드사 연결, 동기화, 후보 매핑 확인 API 구현으로 교체합니다.
+현재 서버는 동기화에서 후보와 미매핑 보유 카드를 이미 저장합니다. 동기화 후
+`GET /api/v1/me/cards`로 전체 목록을 읽어야 하며, 등록 버튼은 새 카드 생성이 아니라
+선택한 기존 후보의 매핑을 확인하는 동작입니다. 미확정 카드를 메인에 표시할 기준,
+부분 성공을 보고하고 재시도할 기준, 일괄 확인 API 필요 여부는 실연동 전에 합의해야 합니다.
+
 ## 빌드·테스트
 
 ### Backend

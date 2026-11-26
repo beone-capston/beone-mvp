@@ -43,7 +43,13 @@ case "$1" in
 		shift
 		proj=""
 		while [ $# -gt 0 ]; do
-			case "$1" in -p) proj="$2"; shift 2 ;; -f | --env-file) shift 2 ;; *) break ;; esac
+			case "$1" in
+				-p) proj="$2"; shift 2 ;;
+				# 스테이징 CODEF 오버레이(#275)가 붙었는지 기록한다
+				-f) [ "${2##*/}" = compose.codef.yaml ] && log OVERLAY; shift 2 ;;
+				--env-file) shift 2 ;;
+				*) break ;;
+			esac
 		done
 		sub="$1"; shift
 		case "$sub" in
@@ -180,7 +186,7 @@ echo "| # | 사례 | 기대 종료 코드 | 실제 | 상태 파일 | 웹 링크 
 echo "|---|---|---|---|---|---|---|---|"
 
 # run_deploy <설명> <기대 종료 코드> <금지 동작(쉼표, 없으면 -)> <필수 동작(쉼표, 없으면 -)> <상태 기대 new|old|none> <링크 기대 new|old|none> [-- deploy 인자...]
-# 사례 설정(앞에 붙이는 변수): WANT_MSG=<출력에 있어야 할 사유 문구>, SEED_STATE=no, STATE_CORRUPT=1, INIT_RUNNING=<이미지>, ENV_EXTRA=<줄>, COMPOSE_EXTRA=<줄>, WANT_RECORD=1
+# 사례 설정(앞에 붙이는 변수): OVERLAY_FILE=1(app·staging에 compose.codef.yaml을 둔다), WANT_MSG=<출력에 있어야 할 사유 문구>, SEED_STATE=no, STATE_CORRUPT=1, INIT_RUNNING=<이미지>, ENV_EXTRA=<줄>, COMPOSE_EXTRA=<줄>, WANT_RECORD=1
 # 나머지 FAKE_* 변수는 env로 넘긴다
 run_deploy() {
 	local desc="$1" want="$2" forbid="$3" need="$4" want_state="$5" want_link="$6" rc f bad="" miss="" st="none" ln="none" extra=""
@@ -192,6 +198,7 @@ run_deploy() {
 	for e in app staging; do
 		printf 'MYSQL_DATABASE=beone\nMYSQL_USER=beone\nMYSQL_PASSWORD=%s\nMYSQL_ROOT_PASSWORD=%s\nBEONE_API_IMAGE=beone-api:old\n%b' "$SECRET" "$SECRET" "${ENV_EXTRA:-}" > "$c/$e/.env"
 		printf 'services: {}\n%b' "${COMPOSE_EXTRA:-}" > "$c/$e/compose.yaml"
+		[ -z "${OVERLAY_FILE:-}" ] || printf 'services: {}\n# SPRING_PROFILES_ACTIVE: prod,staging,codef-live\n' > "$c/$e/compose.codef.yaml"
 	done
 	local webbase="$c/staging/web"
 	[ "$target_env" = production ] && webbase="$c/web"
@@ -254,6 +261,29 @@ ENV_EXTRA='CODEF_CLIENT_ID=x\n' WANT_MSG="CODEF 키 이름이 있음: CODEF_CLIE
 ENV_EXTRA='BEONE_CODEF_CONNECTED_ID_KEY=\n' run_deploy "env에 CODEF 키 이름(빈 값)" 3 PULL_API,UP_NEW - old old
 TARGET_ENV=production ENV_EXTRA='SPRING_PROFILES_ACTIVE=prod,codef-live\n' run_deploy "env에 codef-live" 3 PULL_API,UP_NEW,DUMP - old old
 COMPOSE_EXTRA='# SPRING_PROFILES_ACTIVE: member,codef-live\n' run_deploy "compose에 codef-live" 3 PULL_API,UP_NEW - old old
+# 스테이징 한정 CODEF(#275). 값은 비밀값 표지($SECRET)로 채워 출력에 나오지 않는지도 본다
+CODEF_KEYS="CODEF_CLIENT_ID=$SECRET\nCODEF_CLIENT_SECRET=$SECRET\nCODEF_PUBLIC_KEY=$SECRET\nBEONE_CODEF_CONNECTED_ID_KEY=$SECRET\nBEONE_CODEF_APPROVAL_HMAC_KEY=$SECRET\nBEONE_CODEF_PRODUCT_HOST=https://sandbox.codef.io\nBEONE_CODEF_BUDGET_PER_API=10\nBEONE_CODEF_BUDGET_WINDOW_START=2026-11-26T00:00:00+09:00\nBEONE_CODEF_BUDGET_WINDOW_END=2026-12-10T00:00:00+09:00\n"
+OVERLAY_FILE=1 ENV_EXTRA="BEONE_STAGING_CODEF_ENABLED=true\n$CODEF_KEYS" WANT_MSG="스테이징 CODEF 켬" run_deploy "CODEF 켬(플래그 true·필수 키 모두): 키 유지·오버레이 사용" 0 UP_OLD PULL_API,PULL_WEB,UP_NEW,OVERLAY new new
+OVERLAY_FILE=1 ENV_EXTRA="BEONE_STAGING_CODEF_ENABLED=true\n${CODEF_KEYS//CODEF_CLIENT_SECRET=$SECRET/CODEF_CLIENT_SECRET=}" WANT_MSG="필수 키가 없거나 비었거나 중복됨: CODEF_CLIENT_SECRET" run_deploy "CODEF 켬인데 필수 키 빈 값" 3 PULL_API,UP_NEW,OVERLAY - old old
+OVERLAY_FILE=1 ENV_EXTRA="BEONE_STAGING_CODEF_ENABLED=true\n${CODEF_KEYS//CODEF_PUBLIC_KEY=$SECRET\\n/}" WANT_MSG="필수 키가 없거나 비었거나 중복됨: CODEF_PUBLIC_KEY" run_deploy "CODEF 켬인데 필수 키 누락" 3 PULL_API,UP_NEW,OVERLAY - old old
+OVERLAY_FILE=1 ENV_EXTRA="BEONE_STAGING_CODEF_ENABLED=true\n${CODEF_KEYS//BEONE_CODEF_BUDGET_PER_API=10/BEONE_CODEF_BUDGET_PER_API=\"\"}" WANT_MSG="필수 키가 없거나 비었거나 중복됨: BEONE_CODEF_BUDGET_PER_API" run_deploy "CODEF 켬인데 상한 값이 따옴표만" 3 PULL_API,UP_NEW,OVERLAY - old old
+OVERLAY_FILE=1 ENV_EXTRA="BEONE_STAGING_CODEF_ENABLED=true\n${CODEF_KEYS}CODEF_CLIENT_ID=$SECRET\n" WANT_MSG="필수 키가 없거나 비었거나 중복됨: CODEF_CLIENT_ID" run_deploy "CODEF 켬인데 키 중복" 3 PULL_API,UP_NEW,OVERLAY - old old
+ENV_EXTRA="BEONE_STAGING_CODEF_ENABLED=true\n$CODEF_KEYS" WANT_MSG="CODEF 오버레이가 없음" run_deploy "CODEF 켬인데 오버레이 파일 없음" 3 PULL_API,UP_NEW,OVERLAY - old old
+OVERLAY_FILE=1 ENV_EXTRA="BEONE_STAGING_CODEF_ENABLED=true\nSPRING_PROFILES_ACTIVE=prod,staging,codef-live\n$CODEF_KEYS" WANT_MSG="오버레이만 켠다" run_deploy "CODEF 켬인데 env에 codef-live" 3 PULL_API,UP_NEW,OVERLAY - old old
+OVERLAY_FILE=1 ENV_EXTRA="BEONE_STAGING_CODEF_ENABLED=false\n$CODEF_KEYS" WANT_MSG="CODEF 키 이름이 있음" run_deploy "플래그 false인데 CODEF 키" 3 PULL_API,UP_NEW,OVERLAY - old old
+OVERLAY_FILE=1 ENV_EXTRA='BEONE_STAGING_CODEF_ENABLED=false\n' run_deploy "플래그 false·키 없음: 오버레이 안 붙음" 0 UP_OLD,OVERLAY PULL_API,UP_NEW new new
+OVERLAY_FILE=1 run_deploy "플래그 없음·오버레이 파일만 있음: 안 붙음" 0 UP_OLD,OVERLAY PULL_API,UP_NEW new new
+for v in TRUE 1 yes '"true"' ''; do
+	OVERLAY_FILE=1 ENV_EXTRA="BEONE_STAGING_CODEF_ENABLED=$v\n$CODEF_KEYS" WANT_MSG="true 또는 false만" run_deploy "플래그 값 '$v'는 거부" 3 PULL_API,UP_NEW,OVERLAY - old old
+done
+OVERLAY_FILE=1 ENV_EXTRA="BEONE_STAGING_CODEF_ENABLED=true\nBEONE_STAGING_CODEF_ENABLED=true\n$CODEF_KEYS" WANT_MSG="두 번 이상" run_deploy "플래그 중복" 3 PULL_API,UP_NEW,OVERLAY - old old
+# 운영은 플래그·스테이징 표지·오버레이 파일 어느 것이든 있으면 거부한다(운영 방어 이중화)
+TARGET_ENV=production ENV_EXTRA="BEONE_STAGING_CODEF_ENABLED=true\n$CODEF_KEYS" WANT_MSG="운영 env에 BEONE_STAGING_CODEF_ENABLED가 있음" run_deploy "플래그 true·CODEF 키" 3 PULL_API,UP_NEW,DUMP,OVERLAY - old old
+TARGET_ENV=production ENV_EXTRA='BEONE_STAGING_CODEF_ENABLED=false\n' WANT_MSG="운영 env에 BEONE_STAGING_CODEF_ENABLED가 있음" run_deploy "플래그 false(값 무관 거부)" 3 PULL_API,UP_NEW,DUMP - old old
+TARGET_ENV=production ENV_EXTRA='SPRING_PROFILES_ACTIVE=prod,staging\n' WANT_MSG="staging 표지가 있음" run_deploy "env 프로필에 staging" 3 PULL_API,UP_NEW,DUMP - old old
+TARGET_ENV=production COMPOSE_EXTRA='      SPRING_PROFILES_ACTIVE: staging,prod\n' WANT_MSG="staging 표지가 있음" run_deploy "compose 프로필에 staging" 3 PULL_API,UP_NEW,DUMP - old old
+TARGET_ENV=production OVERLAY_FILE=1 WANT_MSG="운영 폴더에 CODEF 오버레이가 있음" run_deploy "운영 폴더에 오버레이 파일" 3 PULL_API,UP_NEW,DUMP - old old
+TARGET_ENV=production ENV_EXTRA='SPRING_PROFILES_ACTIVE=prod\nBEONE_STAGING_URL=x\n' run_deploy "staging이 프로필 지정 밖 이름에만 있음: 정상" 0 UP_OLD,OVERLAY DUMP,UP_NEW new new
 run_deploy "compose config 실패" 3 PULL_API,UP_NEW - old old FAKE_CONFIG_RC=1
 TARGET_ENV=production run_deploy "compose 서비스 다름(nginx 포함)" 3 PULL_API,UP_NEW,DUMP - old old FAKE_SERVICES='mysql\nbackend\nnginx\n'
 run_deploy "compose 서비스 조회 결과 비어 있음" 3 PULL_API,UP_NEW - old old FAKE_SERVICES=''

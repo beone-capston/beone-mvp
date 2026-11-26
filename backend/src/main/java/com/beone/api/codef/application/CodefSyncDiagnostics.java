@@ -1,12 +1,17 @@
 package com.beone.api.codef.application;
 
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
+import com.beone.api.codef.CodefAmount;
+import com.beone.api.codef.CodefAmountShape;
+import com.beone.api.codef.CodefApproval;
 import com.beone.api.codef.sync.CodefCardLink;
 import com.beone.api.codef.sync.CodefIncompleteDetail;
 import com.beone.api.codef.sync.CodefLedgerCandidateRow;
@@ -22,7 +27,11 @@ import com.beone.api.codef.sync.CodefLedgerCandidateRow;
  * <p>연결기가 보유카드 이름을 돌려줬어도 그 보유카드 ID가 없으면(동기화에서 건너뛴 보유카드) 실제로 붙지 않았으므로 미연결로 세고 사유는
  * {@value #HELD_CARD_SKIPPED}다. 승인과 실적이 같다(#272).
  *
- * <p>담지 않는 것: 카드번호, 승인번호(원문·지문), 금액, 가맹점, 사용일시, connectedId, 사용자 ID. API 응답의 공개 사유 코드는 바꾸지 않는다.
+ * <p>금액 계열 불완전 행({@link #AMOUNT_DETAILS})은 원인 필드별로 금액 원문의 형태 키와 길이 구간 개수를 {@code amountShapes}에 더한다(#274).
+ * 형태는 {@link CodefAmountShape}의 고정 어휘라 원문 문자·숫자 값은 들어가지 않는다. 해당 행이 없으면 {@code amountShapes}를 적지 않아 이전 줄
+ * 형식과 같다.
+ *
+ * <p>담지 않는 것: 카드번호, 승인번호(원문·지문), 금액 값, 가맹점, 사용일시, connectedId, 사용자 ID. API 응답의 공개 사유 코드는 바꾸지 않는다.
  */
 final class CodefSyncDiagnostics {
 
@@ -32,6 +41,15 @@ final class CodefSyncDiagnostics {
 
 	/** 건너뛴 CODEF 카드(Q2)에 붙은 행. 판정은 받아들였지만 붙일 보유 카드가 없다. */
 	static final String HELD_CARD_SKIPPED = "HELD_CARD_SKIPPED";
+
+	/** 금액 형태를 함께 세는 불완전 분기. 둘 다 금액을 정수로 읽지 못한 경우다. */
+	static final Set<CodefIncompleteDetail> AMOUNT_DETAILS = EnumSet.of(CodefIncompleteDetail.FORM_AMOUNT_NOT_PARSED,
+			CodefIncompleteDetail.KRW_USED_AMOUNT_NOT_PARSED);
+
+	private static final List<String> LENGTH_ORDER = List.of("none", "0", "1-3", "4-6", "7-9", "10+");
+
+	// 키: 분기.필드 → 형태 키·길이 구간별 개수
+	private final Map<String, Shapes> amountShapes = new TreeMap<>();
 
 	private final Part approvals = new Part();
 
@@ -69,6 +87,35 @@ final class CodefSyncDiagnostics {
 				Integer::sum));
 	}
 
+	/**
+	 * 승인 행 하나를 세고, 금액 계열 불완전 행이면 원인 필드의 금액 형태도 센다.
+	 * @param approval 승인 항목. 카드명과 금액 원문 형태만 쓴다
+	 * @param row 판정 결과
+	 * @param heldCardSkipped 받아들였지만 붙일 보유 카드가 없어 불완전으로 둔 행인지
+	 */
+	void approval(CodefApproval approval, CodefLedgerCandidateRow row, boolean heldCardSkipped) {
+		approval(approval.cardName(), row, heldCardSkipped);
+		if (heldCardSkipped) {
+			return;
+		}
+		row.incompleteDetail().filter(AMOUNT_DETAILS::contains).ifPresent(detail -> {
+			// 판정과 같은 조건으로 원인 필드를 고른다: 이용금액이 정수가 아니거나, 취소금액이 값은 있는데 정수가 아님
+			if (!(approval.usedAmount() instanceof CodefAmount.Parsed)) {
+				countShape(detail + ".resUsedAmount", approval.usedAmountShape());
+			}
+			if (detail == CodefIncompleteDetail.FORM_AMOUNT_NOT_PARSED
+					&& approval.cancelAmount() instanceof CodefAmount.Unparsed) {
+				countShape(detail + ".resCancelAmount", approval.cancelAmountShape());
+			}
+		});
+	}
+
+	private void countShape(String key, CodefAmountShape shape) {
+		Shapes shapes = this.amountShapes.computeIfAbsent(key, ignored -> new Shapes());
+		shapes.forms.merge(shape.form(), 1, Integer::sum);
+		shapes.lengths.merge(shape.length(), 1, Integer::sum);
+	}
+
 	/** 실적을 판정했음을 알린다. 부르지 않으면 로그에 {@code NOT_FETCHED}로 남는다. */
 	void performancesJudged() {
 		this.performancesFetched = true;
@@ -100,12 +147,24 @@ final class CodefSyncDiagnostics {
 	String line(long syncId) {
 		String approvalPart = this.approvalsFetched
 				? "{rows=" + this.approvals.rows + ", imported=" + this.approvalsImported + ", " + this.approvals.describe()
-						+ "}"
+						+ describeAmountShapes() + "}"
 				: "NOT_FETCHED";
 		String performancePart = this.performancesFetched
 				? "{cards=" + this.performances.rows + ", " + this.performances.describe() + "}" : "NOT_FETCHED";
 		return "codef sync diagnostics syncId=" + syncId + " approvals=" + approvalPart + " performances="
 				+ performancePart;
+	}
+
+	private String describeAmountShapes() {
+		if (this.amountShapes.isEmpty()) {
+			return "";
+		}
+		String shown = this.amountShapes.entrySet()
+			.stream()
+			.map(entry -> entry.getKey() + "={form=" + entry.getValue().forms + ", length=" + entry.getValue().lengths
+					+ "}")
+			.collect(Collectors.joining(", "));
+		return ", amountShapes={" + shown + "}";
 	}
 
 	private static String key(CodefIncompleteDetail detail, CodefCardLink card) {
@@ -139,6 +198,16 @@ final class CodefSyncDiagnostics {
 		return codePoint == '"' || codePoint == '\\' || type == Character.CONTROL || type == Character.FORMAT
 				|| type == Character.LINE_SEPARATOR || type == Character.PARAGRAPH_SEPARATOR
 				|| type == Character.SURROGATE || type == Character.UNASSIGNED || type == Character.PRIVATE_USE;
+	}
+
+	/** 금액 필드 하나의 형태 집계. 키는 고정 어휘라 출력할 때 바꾸지 않는다. */
+	private static final class Shapes {
+
+		private final Map<String, Integer> forms = new TreeMap<>();
+
+		// 길이 구간은 짧은 것부터 적는다
+		private final Map<String, Integer> lengths = new TreeMap<>(Comparator.comparingInt(LENGTH_ORDER::indexOf));
+
 	}
 
 	/** 승인 또는 실적 한쪽의 집계. */

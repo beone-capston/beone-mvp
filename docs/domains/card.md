@@ -32,7 +32,7 @@
 - **규칙 상태(`ruleStatus`)**: `VERIFIED`(판정일에 유효한 검증 규칙 있음), `RULE_EXPIRED`(규칙은 있지만 판정일을 포함하는 버전 없음), `NO_VERIFIED_RULE`(검증 규칙 없음). 판정 순서는 `RuleCatalog.select`를 그대로 따릅니다.
 - **지원 상태(`supportStatus`)**: 서비스 하나를 BeONE이 계산할 수 있는 범위인지([D-18](../decisions.md) K1). 범위 밖은 계산하지 않고 `확인 필요`로 둡니다.
 - **보유 카드(`userCardId`)**: 사용자가 가진 카드 한 장. ID는 `uc-` 뒤에 저장소 번호를 붙인 문자열입니다(예: `uc-1001`). 카드번호·끝 4자리·CVV·유효기간은 받지도 저장하지도 않습니다(D-14 ⑨).
-- **보유 출처(`holdingSource`)**: `MANUAL`(수동 등록), `CODEF`(CODEF 동기화 #129가 만듦, local·demo 가짜 게이트웨이만), `SYNTHETIC`(가상 포트폴리오 시드).
+- **보유 출처(`holdingSource`)**: `MANUAL`(수동 등록), `CODEF`(CODEF 동기화 #129가 만듦. local·demo는 가짜 게이트웨이, `codef-live`는 실 게이트웨이이며 운영 `prod`에는 동기화 API가 없음), `SYNTHETIC`(가상 포트폴리오 시드).
 - **매핑(`mapping`)**: 보유 카드가 규칙 카드 4종 중 무엇인지 연결한 기록([D-15](../decisions.md#d-15d-16d-17-확정-정책)). 상태는 `UNMAPPED`(모름)·`CANDIDATE`(CODEF 후보)·`USER_CONFIRMED`(사용자 확인)·`NOT_SUPPORTED`(4종 아님)이고 계산에는 `USER_CONFIRMED`만 씁니다. `CANDIDATE`는 CODEF 카드명이 이름 사전과 정확히 일치할 때만 서버가 만들고, 후보 상품(`candidateCardProductId`)을 함께 가집니다. 확정 상품(`cardProductId`)은 `null`이라 계산에 쓰지 않습니다. 가상 포트폴리오 카드는 규칙 카드 자체라 매핑이 없습니다(`mapping: null`).
 - **추천 비교 대상(`recommendationEligibility`)**: 이 카드가 추천 비교에 들어갈 수 있는지와 빠지는 이유(`USER_EXCLUDED`·`MAPPING_UNCONFIRMED`·`NO_SUPPORTED_RULE`).
 
@@ -235,3 +235,15 @@ if (detail.ruleStatus() != RuleStatus.VERIFIED) {
 - 월 사용액은 기간이 일치하는 버킷의 조회값이다. 잔여액은 실적과 적용 구간이 확정되고
   유예·선택의 영향이 없으며 스냅샷 이후 승인·취소가 없을 때 해당 버킷에 한해 표시한다.
   모의 승인 총액 및 기타 버킷 집계는 혜택 사용액으로 환산하지 않는다.
+
+### 프런트 카드 가져오기 목 흐름
+
+`frontend/src/card-import/`의 화면은 카드사 연결, 조회, 후보 확인을
+`CardImportAdapter`로 호출한다. 현재 개발용 목 구현만 연결되어 있다.
+`repository.ts`는 사용자 확인이 성공한 카드의 보유 ID, 표시명, 확정 상품 ID를
+합성 프로필별로 저장한다. 메인 캐러셀과 부가서비스는 이 저장소에서 읽은 카드를 사용한다.
+확정 상품 ID는 매핑 응답의 `mapping.cardProductId`에서 읽는다.
+
+내 카드의 캐러셀은 빈 상태로 시작하며 등록을 완료한 카드만 표시한다. 가져온 카드는
+기존 결제 목의 대표 카드 후보에 추가하지 않는다. 부가서비스는 기존 검증 카탈로그를
+사용하며 조회되지 않은 월 실적과 사용액은 확인 필요로 표시한다.

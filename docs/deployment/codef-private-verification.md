@@ -30,7 +30,7 @@
 
 | 항목 | 내용 | 상태 |
 |---|---|---|
-| 실 게이트웨이 | `LiveCodefGateway`, 프로필 조건 `member & codef-live & !prod`([codef 문서](../domains/codef.md#비공개-실연동-프로필-codef-live-lp-1-193)). `prod`와 함께 켜면 `PublicProfileGuard`가 기동을 멈춤 | develop 병합(#195) |
+| 실 게이트웨이 | `LiveCodefGateway`, 프로필 조건 `member & codef-live & (!prod \| staging)`(스테이징 예외는 [스테이징 한정 CODEF](staging-codef.md), #275. 이 런북은 `staging` 없이 `member,codef-live`)([codef 문서](../domains/codef.md#비공개-실연동-프로필-codef-live-lp-1-193)). `prod`와 함께 켜면 `PublicProfileGuard`가 기동을 멈춤 | develop 병합(#195) |
 | 호출 상한 카운터 | 프로세스를 넘는 호출 총량(LP-2, [codef 문서](../domains/codef.md#프로세스를-넘는-호출-총량-lp-2-196)). 표 `codef_call_budgets`(V15)에 API·창 시작 시각별 누적 시도 수. **설정이 하나라도 없거나 창 밖이면 닫힘(호출 0)** | develop 병합(#205, `97fe4c3`) |
 | 호출 상한 설정 | `BEONE_CODEF_BUDGET_PER_API`(=`3`), `BEONE_CODEF_BUDGET_WINDOW_START`, `BEONE_CODEF_BUDGET_WINDOW_END`(ISO-8601 오프셋 시각, 시작 포함·끝 제외). Spring 키 `beone.codef.budget.per-api`·`window-start`·`window-end` | 코드 기준(#205) |
 | 프로필 | `SPRING_PROFILES_ACTIVE=member,codef-live`(`prod` 없음) | 코드 기준(#195, `LiveCodefGateway.PROFILE`) |
@@ -483,7 +483,7 @@ echo LOGS_OK
 )
 ```
 
-- 카드번호 필드명은 `card_?no([^A-Za-z0-9_]|$)`로 셉니다(`cardNo`·`card_no`·`resCardNo` 뒤에 영숫자·밑줄이 오지 않을 때). 이전 `cardNo|card_no`는 대소문자 무시 때문에 동기화 진단 로그(#271)의 `CARD_NOT_LINKED`와 일치해 카드번호가 없어도 `sensitive`가 1 이상이 됐습니다. 이식성을 위해 `\b` 대신 POSIX ERE로 적었습니다. 같은 블록의 다른 이름(`password`·`passwd`·`connectedId=`·`approvalNo`)은 진단 로그의 키(`CARD_NOT_LINKED.*`, `HELD_CARD_SKIPPED`, `linkedByDictionary`, `unlinkedCardNames`, 사유 코드)와 일치하지 않습니다. 진단 로그 한 줄은 0건, 진짜 카드번호 필드명은 검출되는 사례를 [`codef-runbook-selftest.sh`](../../deploy/scripts/codef-runbook-selftest.sh)에 두었습니다.
+- 카드번호 필드명은 `card_?no([^A-Za-z0-9_]|$)`로 셉니다(`cardNo`·`card_no`·`resCardNo` 뒤에 영숫자·밑줄이 오지 않을 때). 이전 `cardNo|card_no`는 대소문자 무시 때문에 동기화 진단 로그(#271)의 `CARD_NOT_LINKED`와 일치해 카드번호가 없어도 `sensitive`가 1 이상이 됐습니다. 이식성을 위해 `\b` 대신 POSIX ERE로 적었습니다. 같은 블록의 다른 이름(`password`·`passwd`·`connectedId=`·`approvalNo`)은 진단 로그의 키(`CARD_NOT_LINKED.*`, `HELD_CARD_SKIPPED`, `linkedByDictionary`, `unlinkedCardNames`, 사유 코드, #274의 `amountShapes`·`form`·`length`·`resUsedAmount`·`resCancelAmount`·형태 낱말)와 일치하지 않습니다. 진단 로그 한 줄(금액 형태 집계가 붙은 줄 포함)은 0건, 진짜 카드번호 필드명은 검출되는 사례를 [`codef-runbook-selftest.sh`](../../deploy/scripts/codef-runbook-selftest.sh)에 두었습니다.
 - 이 점검은 **알려진 이름 패턴**(비밀번호·connectedId·카드번호·승인번호 필드명, 키 이름=값 형태)만 셉니다. 0건이어도 이름 없이 찍힌 값, 다른 형식, nginx·MySQL 등 다른 컨테이너 로그의 민감값이 없다는 보장은 아닙니다. 결과를 공유할 때는 이 숫자와 결과 코드만 씁니다.
 
 ## 4. 해제·폐기 (K7, 승인 ⑪)

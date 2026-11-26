@@ -329,7 +329,7 @@ public class CodefSyncService {
 		for (CodefLedgerCandidateRow row : candidates.rows()) {
 			Long userCardId = userCardIdOf(row.card(), userCardIds);
 			boolean approvalNoPresent = approvals.get(row.position()).approvalNo().isPresent();
-			diagnostics.approval(approvals.get(row.position()).cardName(), row,
+			diagnostics.approval(approvals.get(row.position()), row,
 					row.decision() instanceof CodefLedgerCandidateRow.Decision.Accepted && userCardId == null);
 			switch (row.decision()) {
 				case CodefLedgerCandidateRow.Decision.Incomplete incompleteRow ->

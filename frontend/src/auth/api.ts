@@ -32,11 +32,11 @@ export class AuthApiError extends Error {
 }
 
 // Authentication defaults to the page origin so the browser can send the session cookie.
-const baseUrl = (import.meta.env.VITE_AUTH_API_BASE_URL ?? '').replace(/\/+$/, '')
+export const authBaseUrl = (import.meta.env.VITE_AUTH_API_BASE_URL ?? '').replace(/\/+$/, '')
 
 async function request<T>(path: string, options: RequestInit = {}, expectedStatus?: number): Promise<T> {
   const timeout = AbortSignal.timeout(15000)
-  const response = await fetch(`${baseUrl}/api/v1/auth/${path}`, {
+  const response = await fetch(`${authBaseUrl}/api/v1/auth/${path}`, {
     ...options,
     credentials: 'include',
     cache: 'no-store',
@@ -64,7 +64,7 @@ type PostBody = Credentials | { email: string } | { token: string; newPassword?:
 
 let pendingCsrf: Promise<Csrf> | undefined
 
-function getCsrf() {
+export function getCsrf() {
   pendingCsrf ??= request<Csrf>('csrf').finally(() => { pendingCsrf = undefined })
   return pendingCsrf
 }

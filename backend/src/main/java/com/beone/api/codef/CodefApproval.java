@@ -26,11 +26,14 @@ import tools.jackson.databind.JsonNode;
  * @param cancelStatus 취소여부({@code resCancelYN})
  * @param cancelAmount 취소금액({@code resCancelAmount}). 취소건에만 제공
  * @param approvalNo 승인번호({@code resApprovalNo})
+ * @param usedAmountShape 이용금액 원문의 형태(진단 로그 전용, #274). 값은 담지 않는다
+ * @param cancelAmountShape 취소금액 원문의 형태(진단 로그 전용, #274). 값은 담지 않는다
  */
 public record CodefApproval(Optional<String> usedDate, Optional<String> usedTime, Optional<String> cardName,
 		Optional<String> merchantName, Optional<String> merchantType, CodefAmount usedAmount, CodefAmount krwAmount,
 		Optional<String> currency, PaymentType paymentType, DomesticForeign domesticForeign, CancelStatus cancelStatus,
-		CodefAmount cancelAmount, Optional<String> approvalNo) {
+		CodefAmount cancelAmount, Optional<String> approvalNo, CodefAmountShape usedAmountShape,
+		CodefAmountShape cancelAmountShape) {
 
 	/**
 	 * null을 거부한다. 값 없음은 빈 {@code Optional}·{@code Absent}·{@code UNKNOWN}으로 표현한다.
@@ -51,6 +54,20 @@ public record CodefApproval(Optional<String> usedDate, Optional<String> usedTime
 		Objects.requireNonNull(cancelStatus, "cancelStatus");
 		Objects.requireNonNull(cancelAmount, "cancelAmount");
 		Objects.requireNonNull(approvalNo, "approvalNo");
+		Objects.requireNonNull(usedAmountShape, "usedAmountShape");
+		Objects.requireNonNull(cancelAmountShape, "cancelAmountShape");
+	}
+
+	/**
+	 * 금액 원문 형태를 기록하지 않는 승인 항목(직접 만든 값). 형태는 {@link CodefAmountShape#NOT_CAPTURED}다.
+	 */
+	public CodefApproval(Optional<String> usedDate, Optional<String> usedTime, Optional<String> cardName,
+			Optional<String> merchantName, Optional<String> merchantType, CodefAmount usedAmount, CodefAmount krwAmount,
+			Optional<String> currency, PaymentType paymentType, DomesticForeign domesticForeign,
+			CancelStatus cancelStatus, CodefAmount cancelAmount, Optional<String> approvalNo) {
+		this(usedDate, usedTime, cardName, merchantName, merchantType, usedAmount, krwAmount, currency, paymentType,
+				domesticForeign, cancelStatus, cancelAmount, approvalNo, CodefAmountShape.NOT_CAPTURED,
+				CodefAmountShape.NOT_CAPTURED);
 	}
 
 	static CodefApproval read(JsonNode item) {
@@ -62,7 +79,8 @@ public record CodefApproval(Optional<String> usedDate, Optional<String> usedTime
 				CodefFields.code(item, "resHomeForeignType", DomesticForeign.values(), DomesticForeign::code,
 						DomesticForeign.UNKNOWN),
 				CodefFields.code(item, "resCancelYN", CancelStatus.values(), CancelStatus::code, CancelStatus.UNKNOWN),
-				CodefFields.amount(item, "resCancelAmount"), CodefFields.text(item, "resApprovalNo"));
+				CodefFields.amount(item, "resCancelAmount"), CodefFields.text(item, "resApprovalNo"),
+				CodefAmountShape.of(item, "resUsedAmount"), CodefAmountShape.of(item, "resCancelAmount"));
 	}
 
 	/** 결제방법. 문서 값 "1"·"2"·"3". 국민카드의 "3"에는 선할인(할부건)이 포함된다. */

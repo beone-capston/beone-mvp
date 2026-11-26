@@ -3,8 +3,13 @@ package com.beone.api.user.application;
 import java.util.Optional;
 
 import com.beone.api.auth.application.MemberEmailVerifiedEvent;
+import com.beone.api.auth.application.MemberWithdrawnEvent;
+import com.beone.api.user.persistence.MemberLedgerEraser;
 import com.beone.api.user.persistence.UserEntity;
 import com.beone.api.user.persistence.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -19,10 +24,19 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class MemberUserService {
 
+	private static final Logger log = LoggerFactory.getLogger(MemberUserService.class);
+
 	private final UserRepository userRepository;
 
-	public MemberUserService(UserRepository userRepository) {
+	private final MemberLedgerEraser ledgerEraser;
+
+	private final ApplicationEventPublisher events;
+
+	public MemberUserService(UserRepository userRepository, MemberLedgerEraser ledgerEraser,
+			ApplicationEventPublisher events) {
 		this.userRepository = userRepository;
+		this.ledgerEraser = ledgerEraser;
+		this.events = events;
 	}
 
 	/**
@@ -47,6 +61,25 @@ public class MemberUserService {
 		if (!this.userRepository.existsByMemberId(event.memberId())) {
 			this.userRepository.save(UserEntity.memberCards(event.memberId()));
 		}
+	}
+
+	/**
+	 * 탈퇴하는 회원의 장부와 그 업무 행을 지운다(결정 D10). 지우기 전에 {@link MemberLedgerErasingEvent}를 발행해 업무 패키지가 지워질 값을
+	 * 읽게 한다. 발행한 탈퇴 트랜잭션 안에서 실행하므로 하나라도 실패하면 탈퇴 전체가 취소된다. 장부가 없으면 아무것도 하지 않는다.
+	 * @param event 회원 탈퇴
+	 */
+	@EventListener
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void onWithdrawn(MemberWithdrawnEvent event) {
+		Optional<UserEntity> ledger = this.userRepository.findByMemberId(event.memberId());
+		if (ledger.isEmpty()) {
+			return;
+		}
+		long userId = ledger.get().getUserId();
+		this.events.publishEvent(new MemberLedgerErasingEvent(userId, event.memberRef()));
+		this.userRepository.flush();
+		int rows = this.ledgerEraser.erase(userId);
+		log.info("member ledger erased ref={} rows={}", event.memberRef(), rows);
 	}
 
 }

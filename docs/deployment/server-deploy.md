@@ -51,6 +51,11 @@ deploy.sh <staging|production> <ApiDigest> <WebDigest> <GitSha>
 
 CODEF는 자동 배포 대상이 아닙니다(결정 40-7). env 파일에 `CODEF_`·`BEONE_CODEF_`로 시작하는 키 **이름**이 있거나, env·compose 파일에 `codef-live`라는 글자가 있으면 배포를 거부합니다. 값은 출력하지 않습니다. 앱의 `PublicProfileGuard`(prod에서 CODEF 키·`codef-live` 거부)보다 앞에서 막는 보강입니다.
 
+스테이징 한정 예외(#275, 결정 40 변경 이력 초안, 절차는 [스테이징 한정 CODEF](staging-codef.md)):
+
+- **staging:** `.env`에 `BEONE_STAGING_CODEF_ENABLED=true`(따옴표 없이, 한 번)가 있으면 필수 키 9개(`CODEF_CLIENT_ID`·`CODEF_CLIENT_SECRET`·`CODEF_PUBLIC_KEY`·`BEONE_CODEF_CONNECTED_ID_KEY`·`BEONE_CODEF_APPROVAL_HMAC_KEY`·`BEONE_CODEF_PRODUCT_HOST`·`BEONE_CODEF_BUDGET_PER_API`·`BEONE_CODEF_BUDGET_WINDOW_START`·`BEONE_CODEF_BUDGET_WINDOW_END`)가 비어 있지 않게 한 번씩 있는지와 `compose.codef.yaml`이 있는지 확인하고, 모두 맞을 때만 그 오버레이를 붙입니다. 하나라도 어긋나면 이름만 출력하고 종료 3입니다. 이때도 기본 compose·env에는 `codef-live`를 두지 않습니다(오버레이만 켬). 플래그 값이 `true`·`false`가 아니거나 두 번 있으면 거부합니다. 플래그가 없거나 `false`면 위 기본 가드 그대로입니다.
+- **production(방어 이중화):** 운영 env에 플래그 이름이 있거나(값 무관), 운영 env·compose의 프로필 지정 줄(`profiles`를 포함한 줄)에 `staging` 단어가 있거나, 운영 폴더에 `compose.codef.yaml`이 있으면 거부합니다. 백엔드 가드는 `staging` 프로필과 플래그가 함께 있으면 스테이징으로 보므로, 운영 compose에 이 둘이 잘못 들어가는 경우를 배포 단계에서 막습니다.
+
 ### 운영 배포 직전 백업과 짝 기록
 
 [백엔드 배포 기반의 백업](backend-compose.md#백업)과 같은 방식입니다. `/opt/beone/app/backups/app-<UTC 시각>-<무작위>/`에 `app.sql`(앱 계정, `--single-transaction`, 완료 표식 확인, `.partial` → `mv -n`), `app.sql.flyway`(백업 시점 이력), `app.sql.record`를 남깁니다. `app.sql.record`에는 문서의 항목(덤프·이력 sha256, 실행 중 backend 이미지 ID·이름·revision 라벨)에 더해 다음을 짝으로 적습니다.

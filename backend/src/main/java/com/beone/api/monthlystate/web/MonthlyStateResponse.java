@@ -2,10 +2,12 @@ package com.beone.api.monthlystate.web;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+import com.beone.api.codef.application.CodefPerformanceReferenceQuery;
 import com.beone.api.monthlystate.application.DatePeriod;
 import com.beone.api.monthlystate.application.MonthlyStateView;
 import com.beone.api.monthlystate.application.ServiceSelectionStatus;
@@ -17,7 +19,8 @@ import com.beone.api.monthlystate.application.StateValue;
  * 월간 상태 조회 응답(docs/api/monthly-states.md). 입력 응답은 {@link Saved}이며 {@code afterSnapshot}이 없다는 점만 다르다. 시점은
  * {@code +09:00}이 붙은 서울 시각 문자열이다.
  *
- * <p>{@code conflicts}는 1차에 항상 빈 목록, {@code referencedCodef}는 항상 {@code null}이다(2차 출처 선택 범위).
+ * <p>전월 실적에는 미리 채워 보여 줄 카드사 조회 실적(참고) {@code codefReference}와, 입력할 때 참고한 CODEF 값 {@code referencedCodef}가
+ * 붙는다(D-16, #281). {@code conflicts}는 같은 기준 기간의 참고값과 전월 실적 값이 다를 때만 항목이 있다.
  *
  * @param userCardId 보유 카드 ID
  * @param month {@code YYYY-MM}
@@ -29,14 +32,14 @@ import com.beone.api.monthlystate.application.StateValue;
  * @param serviceSelectionStatus 택1 입력 상태
  * @param noServiceSelection 선택 없음
  * @param registeredOn 카드 사용 등록일
- * @param conflicts 출처 충돌. 1차는 항상 빈 목록
+ * @param conflicts 출처 충돌. 없으면 빈 목록
  * @param afterSnapshot 스냅샷 뒤 모의 승인 요약. 입력이 없으면 {@code null}
  */
 public record MonthlyStateResponse(String userCardId, String month, String snapshotAt,
 		PreviousMonthState previousMonthPerformanceWon, List<BucketUsageState> limitBucketUsages,
 		State otherBucketsUsedWon, List<SelectionState> selectedServices,
 		ServiceSelectionStatus serviceSelectionStatus, NoSelectionState noServiceSelection, State registeredOn,
-		List<Object> conflicts, AfterSnapshot afterSnapshot) {
+		List<ConflictState> conflicts, AfterSnapshot afterSnapshot) {
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
@@ -44,11 +47,12 @@ public record MonthlyStateResponse(String userCardId, String month, String snaps
 
 	static MonthlyStateResponse from(MonthlyStateView view) {
 		return new MonthlyStateResponse(view.userCardId(), view.month().toString(), instant(view.snapshotAt()),
-				PreviousMonthState.from(view.previousMonthPerformanceWon()),
+				PreviousMonthState.from(view.previousMonthPerformanceWon(), view.referencedCodef(), view.codefReference()),
 				view.limitBucketUsages().stream().map(BucketUsageState::from).toList(),
 				State.from(view.otherBucketsUsedWon()),
 				view.selectedServices().stream().map(SelectionState::from).toList(), view.serviceSelectionStatus(),
-				NoSelectionState.from(view.noServiceSelection()), State.from(view.registeredOn()), List.of(),
+				NoSelectionState.from(view.noServiceSelection()), State.from(view.registeredOn()),
+				view.conflicts().stream().map(ConflictState::from).toList(),
 				AfterSnapshot.from(view.afterSnapshot()));
 	}
 
@@ -69,13 +73,13 @@ public record MonthlyStateResponse(String userCardId, String month, String snaps
 	 * @param serviceSelectionStatus 택1 입력 상태
 	 * @param noServiceSelection 선택 없음
 	 * @param registeredOn 카드 사용 등록일
-	 * @param conflicts 출처 충돌. 1차는 항상 빈 목록
+	 * @param conflicts 출처 충돌. 없으면 빈 목록
 	 */
 	public record Saved(String userCardId, String month, String snapshotAt,
 			PreviousMonthState previousMonthPerformanceWon, List<BucketUsageState> limitBucketUsages,
 			State otherBucketsUsedWon, List<SelectionState> selectedServices,
 			ServiceSelectionStatus serviceSelectionStatus, NoSelectionState noServiceSelection, State registeredOn,
-			List<Object> conflicts) {
+			List<ConflictState> conflicts) {
 
 		static Saved from(MonthlyStateView view) {
 			MonthlyStateResponse r = MonthlyStateResponse.from(view);
@@ -114,14 +118,75 @@ public record MonthlyStateResponse(String userCardId, String month, String snaps
 	}
 
 	/**
-	 * 전월 실적. {@code referencedCodef}는 1차에 항상 {@code null}이다.
+	 * 전월 실적. {@code referencedCodef}는 참고 입력일 때만, {@code codefReference}는 전월 기간의 연결 참고값이 있을 때만 있다.
 	 */
 	record PreviousMonthState(Long value, StateSource source, Period period, String updatedAt, boolean usable,
-			StateReason reason, Object referencedCodef) {
+			StateReason reason, ReferencedCodefState referencedCodef, CodefReferenceState codefReference) {
 
-		static PreviousMonthState from(StateValue<Long> state) {
+		static PreviousMonthState from(StateValue<Long> state, MonthlyStateView.ReferencedCodef referenced,
+				MonthlyStateView.CodefReference reference) {
 			return new PreviousMonthState(state.value(), state.source(), Period.from(state.period()),
-					instant(state.updatedAt()), state.usable(), state.reason(), null);
+					instant(state.updatedAt()), state.usable(), state.reason(), ReferencedCodefState.from(referenced),
+					CodefReferenceState.from(reference));
+		}
+
+	}
+
+	/**
+	 * 입력할 때 참고한 CODEF 값(입력 당시 스냅샷). 조회월은 반영기간 시작일의 달이다.
+	 */
+	record ReferencedCodefState(String referenceId, String syncId, String inquiryMonth, Period period,
+			Long currentUseWon, String fetchedAt) {
+
+		static ReferencedCodefState from(MonthlyStateView.ReferencedCodef referenced) {
+			return (referenced == null) ? null
+					: new ReferencedCodefState(
+							(referenced.referenceId() == null) ? null
+									: CodefPerformanceReferenceQuery.ReferenceId.format(referenced.referenceId()),
+							"sync-" + referenced.syncId(), YearMonth.from(referenced.period().from()).toString(),
+							Period.from(referenced.period()), referenced.currentUseWon(),
+							instant(referenced.fetchedAt()));
+		}
+
+	}
+
+	/**
+	 * 미리 채워 보여 줄 카드사 조회 실적(참고). {@code usedInCalculation}은 항상 {@code false}다(D-16).
+	 */
+	record CodefReferenceState(String referenceId, String label, String inquiryMonth, Period period,
+			Long currentUseWon, String fetchedAt, boolean usedInCalculation) {
+
+		static CodefReferenceState from(MonthlyStateView.CodefReference reference) {
+			return (reference == null) ? null
+					: new CodefReferenceState(CodefPerformanceReferenceQuery.ReferenceId.format(reference.referenceId()),
+							"카드사 조회 실적(참고)", YearMonth.from(reference.period().from()).toString(),
+							Period.from(reference.period()), reference.currentUseWon(), instant(reference.fetchedAt()),
+							false);
+		}
+
+	}
+
+	/**
+	 * 출처 충돌 하나. 계산 기준 선택({@code source-selections})은 아직 저장하지 않으므로 {@code selection}은 항상 {@code null}이다.
+	 */
+	record ConflictState(String item, Period period, String conflictVersion, List<CandidateState> candidates,
+			Object selection) {
+
+		static ConflictState from(MonthlyStateView.Conflict conflict) {
+			return new ConflictState(conflict.item(), Period.from(conflict.period()), conflict.conflictVersion(),
+					conflict.candidates().stream().map(CandidateState::from).toList(), null);
+		}
+
+	}
+
+	/**
+	 * 충돌 후보 값 하나.
+	 */
+	record CandidateState(StateSource source, Long value, Period period, String updatedAt) {
+
+		static CandidateState from(MonthlyStateView.Candidate candidate) {
+			return new CandidateState(candidate.source(), candidate.value(), Period.from(candidate.period()),
+					instant(candidate.updatedAt()));
 		}
 
 	}
