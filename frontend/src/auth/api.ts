@@ -60,9 +60,18 @@ async function request<T>(path: string, options: RequestInit = {}, expectedStatu
   return body.data
 }
 
-async function post<T>(path: string, body: Credentials | { email: string } | { token: string; newPassword: string }, expectedStatus?: number): Promise<T> {
+type PostBody = Credentials | { email: string } | { token: string; newPassword?: string }
+
+let pendingCsrf: Promise<Csrf> | undefined
+
+function getCsrf() {
+  pendingCsrf ??= request<Csrf>('csrf').finally(() => { pendingCsrf = undefined })
+  return pendingCsrf
+}
+
+async function post<T>(path: string, body: PostBody, expectedStatus?: number): Promise<T> {
   // Get a token for the current cookie before each explicit attempt. Never replay a POST.
-  const csrf = await request<Csrf>('csrf')
+  const csrf = await getCsrf()
   if (typeof csrf.headerName !== 'string' || !csrf.headerName || typeof csrf.token !== 'string' || !csrf.token) {
     throw new AuthApiError(200, null, null)
   }
@@ -100,6 +109,12 @@ export const authApi = {
   },
   async signUp(credentials: Credentials) {
     return checkAcceptance(await post<MailAcceptance>('sign-up', credentials, 202))
+  },
+  async requestEmailVerification(email: string) {
+    return checkAcceptance(await post<MailAcceptance>('email-verification-requests', { email }, 202))
+  },
+  async verifyEmail(token: string): Promise<void> {
+    await post<void>('email-verifications', { token }, 204)
   },
   async requestPasswordReset(email: string) {
     return checkAcceptance(await post<MailAcceptance>('password-reset-requests', { email }, 202))

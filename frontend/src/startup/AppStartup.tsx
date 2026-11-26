@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AuthEntry } from '../auth/AuthEntry'
+import { emailVerificationPath } from '../auth/EmailVerification'
 import { BrandSplash } from './BrandSplash'
 import { splashTiming } from './splashTiming'
 
@@ -16,7 +17,7 @@ export function AppStartup({ children, startedAt = 0, clock = now }: {
     const duration = Math.min(reduced ? splashTiming.reduced : splashTiming.exit, splashTiming.cap)
     const elapsed = Math.max(0, clock() - startedAt)
     return { reduced, elapsed, end: startedAt + duration,
-      show: window.location.pathname !== '/password-reset' && elapsed < duration }
+      show: !['/password-reset', emailVerificationPath].includes(window.location.pathname) && elapsed < duration }
   })
   const [show, setShow] = useState(launch.show)
   const finish = useCallback(() => setShow(false), [])
