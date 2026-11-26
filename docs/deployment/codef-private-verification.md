@@ -30,7 +30,7 @@
 
 | 항목 | 내용 | 상태 |
 |---|---|---|
-| 실 게이트웨이 | `LiveCodefGateway`, 프로필 조건 `member & codef-live & !prod`([codef 문서](../domains/codef.md#비공개-실연동-프로필-codef-live-lp-1-193)). `prod`와 함께 켜면 `PublicProfileGuard`가 기동을 멈춤 | develop 병합(#195) |
+| 실 게이트웨이 | `LiveCodefGateway`, 프로필 조건 `member & codef-live & (!prod \| staging)`(스테이징 예외는 [스테이징 한정 CODEF](staging-codef.md), #275. 이 런북은 `staging` 없이 `member,codef-live`)([codef 문서](../domains/codef.md#비공개-실연동-프로필-codef-live-lp-1-193)). `prod`와 함께 켜면 `PublicProfileGuard`가 기동을 멈춤 | develop 병합(#195) |
 | 호출 상한 카운터 | 프로세스를 넘는 호출 총량(LP-2, [codef 문서](../domains/codef.md#프로세스를-넘는-호출-총량-lp-2-196)). 표 `codef_call_budgets`(V15)에 API·창 시작 시각별 누적 시도 수. **설정이 하나라도 없거나 창 밖이면 닫힘(호출 0)** | develop 병합(#205, `97fe4c3`) |
 | 호출 상한 설정 | `BEONE_CODEF_BUDGET_PER_API`(=`3`), `BEONE_CODEF_BUDGET_WINDOW_START`, `BEONE_CODEF_BUDGET_WINDOW_END`(ISO-8601 오프셋 시각, 시작 포함·끝 제외). Spring 키 `beone.codef.budget.per-api`·`window-start`·`window-end` | 코드 기준(#205) |
 | 프로필 | `SPRING_PROFILES_ACTIVE=member,codef-live`(`prod` 없음) | 코드 기준(#195, `LiveCodefGateway.PROFILE`) |

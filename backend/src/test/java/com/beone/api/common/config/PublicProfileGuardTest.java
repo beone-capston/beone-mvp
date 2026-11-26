@@ -192,6 +192,108 @@ class PublicProfileGuardTest {
 			.run(context -> assertThat(context).hasNotFailed());
 	}
 
+	/** 스테이징 CODEF 켜기 조합(#275). 스테이징 표지·플래그·codef-live·키 5개. */
+	private static String[] stagingCodef(String flag) {
+		return new String[] { "spring.profiles.active=prod,member,staging,codef-live",
+				PublicProfileGuard.STAGING_CODEF_FLAG + "=" + flag, "CODEF_CLIENT_ID=" + FAKE_VALUE,
+				"CODEF_CLIENT_SECRET=" + FAKE_VALUE, "CODEF_PUBLIC_KEY=" + FAKE_VALUE,
+				"BEONE_CODEF_CONNECTED_ID_KEY=" + FAKE_VALUE, "BEONE_CODEF_APPROVAL_HMAC_KEY=" + FAKE_VALUE };
+	}
+
+	@Test
+	void stagingMarkerWithTheFlagAllowsCodefLiveAndCodefVariables() {
+		this.runner.withPropertyValues(stagingCodef("true")).run(context -> assertThat(context).hasNotFailed());
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "", "false", "TRUE", "True", "1", "yes" })
+	void stagingMarkerWithoutAnExactTrueFlagStillRejectsCodefLive(String flag) {
+		this.runner.withPropertyValues(stagingCodef(flag)).run(context -> {
+			assertThat(context).hasFailed();
+			assertThat(context.getStartupFailure()).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("prod 프로필은 codef-live 프로필과 함께 켤 수 없습니다")
+				.message()
+				.doesNotContain(FAKE_VALUE);
+		});
+	}
+
+	@Test
+	void stagingMarkerWithoutTheFlagRejectsCodefVariables() {
+		this.runner
+			.withPropertyValues("spring.profiles.active=prod,member,staging", "CODEF_CLIENT_SECRET=" + FAKE_VALUE)
+			.run(context -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure()).hasMessageContaining(CODEF_MESSAGE)
+					.message()
+					.doesNotContain(FAKE_VALUE);
+			});
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "true", "false", "" })
+	void flagWithoutTheStagingMarkerFailsStartupEvenWithoutCodef(String flag) {
+		// 운영(staging 표지 없음)에 플래그 이름이 있으면 값과 관계없이 멈춘다
+		this.runner
+			.withPropertyValues("spring.profiles.active=prod,member", PublicProfileGuard.STAGING_CODEF_FLAG + "=" + flag)
+			.run(context -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure()).isInstanceOf(IllegalStateException.class)
+					.hasMessageContaining(PublicProfileGuard.STAGING_CODEF_FLAG + "는 staging 프로필과 함께만");
+			});
+	}
+
+	@Test
+	void productionShapeWithTheFlagAndCodefLiveStillFails() {
+		this.runner
+			.withPropertyValues("spring.profiles.active=prod,member,codef-live",
+					PublicProfileGuard.STAGING_CODEF_FLAG + "=true", "CODEF_CLIENT_ID=" + FAKE_VALUE)
+			.run(context -> assertThat(context).hasFailed());
+	}
+
+	@Test
+	void stagingMarkerAloneStartsAndStagingFlagDoesNotRelaxOtherRules() {
+		this.runner.withPropertyValues("spring.profiles.active=prod,member,staging")
+			.run(context -> assertThat(context).hasNotFailed());
+		this.runner.withPropertyValues("spring.profiles.active=prod,staging,codef-live",
+				PublicProfileGuard.STAGING_CODEF_FLAG + "=true").run(context -> {
+					assertThat(context).hasFailed();
+					assertThat(context.getStartupFailure()).hasMessageContaining(PROD_WITHOUT_MEMBER_MESSAGE);
+				});
+		this.runner.withPropertyValues("spring.profiles.active=prod,member,staging,demo",
+				PublicProfileGuard.STAGING_CODEF_FLAG + "=true").run(context -> {
+					assertThat(context).hasFailed();
+					assertThat(context.getStartupFailure()).hasMessageContaining(PROD_WITH_DEMO_MESSAGE);
+				});
+	}
+
+	@Test
+	void stagingFlagFromTheOperatingSystemEnvironmentIsRead() {
+		StandardEnvironment environment = new StandardEnvironment();
+		environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+		environment.getPropertySources()
+			.addFirst(new SystemEnvironmentPropertySource(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
+					Map.of(PublicProfileGuard.STAGING_CODEF_FLAG, "true", "CODEF_CLIENT_SECRET", FAKE_VALUE)));
+		environment.setActiveProfiles("prod", "member", "staging", "codef-live");
+		assertThatNoException().isThrownBy(() -> PublicProfileGuard.check(environment));
+
+		environment.setActiveProfiles("prod", "member", "codef-live");
+		assertThatIllegalStateException().isThrownBy(() -> PublicProfileGuard.check(environment))
+			.withMessageNotContaining(FAKE_VALUE);
+	}
+
+	@Test
+	void stagingFlagWithSurroundingSpaceIsNotTrue() {
+		// 운영체제 환경 변수는 앞뒤 공백을 그대로 둔다. 정확히 true가 아니면 꺼짐이다
+		StandardEnvironment environment = new StandardEnvironment();
+		environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+		environment.getPropertySources()
+			.addFirst(new SystemEnvironmentPropertySource(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
+					Map.of(PublicProfileGuard.STAGING_CODEF_FLAG, " true")));
+		environment.setActiveProfiles("prod", "member", "staging", "codef-live");
+		assertThatIllegalStateException().isThrownBy(() -> PublicProfileGuard.check(environment))
+			.withMessageContaining("codef-live");
+	}
+
 	@Test
 	void checkedNamesMatchTheNamesCodefReads() {
 		assertThat(PublicProfileGuard.CODEF_SECRET_VARIABLES).contains(EnvironmentApprovalFingerprintKeySource.VARIABLE,

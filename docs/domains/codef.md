@@ -395,8 +395,8 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
 
 공개 프로필 `prod`(회원 프로필 `member`를 프로필 그룹으로 함께 켬, #183)에서는 **CODEF 연결·조회 API를 등록하지 않습니다.** 결정 38-8에 따라 비공개 실연동 검증을 마치기 전에는 미등록이며, 공개 전환은 별도 승인으로만 합니다.
 
-- **지금 상태**: `CodefConnectionController`·`CodefSyncController`는 `@Profile({"local","demo","member & codef-live & !prod"})`(#193), `FakeCodefGateway`는 `@Profile({"local","demo"})`입니다. `!prod` 조건과 별개로 `PublicProfileGuard`가 `prod`와 `codef-live` 조합의 기동을 멈춥니다. prod에서는 `GET`·`POST`·`DELETE /api/v1/me/codef/connection`, `POST /api/v1/me/codef/syncs` 네 경로가 세션 유무와 관계없이 404 `NOT_FOUND`이고, `CodefGateway`·`CodefSyncGateway` 구현 Bean이 없습니다. 이 동작을 바꾸는 제품 코드는 없으며 테스트로만 고정했습니다.
-- **기능 플래그 없음**: 설정 값 하나로 prod에서 CODEF를 여는 경로는 만들지 않습니다. `PublicProfileGuard`는 프로필 조합과 함께, `prod`에 CODEF 키·토큰 환경 변수 이름이 있으면 기동을 멈춥니다(값은 읽지 않음, #191, 아래 제약 절).
+- **지금 상태**: `CodefConnectionController`·`CodefSyncController`는 `@Profile({"local","demo","member & codef-live & (!prod | staging)"})`(#193, 스테이징 예외 #275), `FakeCodefGateway`는 `@Profile({"local","demo"})`입니다. `!prod` 조건과 별개로 `PublicProfileGuard`가 `prod`와 `codef-live` 조합의 기동을 멈춥니다. prod에서는 `GET`·`POST`·`DELETE /api/v1/me/codef/connection`, `POST /api/v1/me/codef/syncs` 네 경로가 세션 유무와 관계없이 404 `NOT_FOUND`이고, `CodefGateway`·`CodefSyncGateway` 구현 Bean이 없습니다. 이 동작을 바꾸는 제품 코드는 없으며 테스트로만 고정했습니다.
+- **운영에는 기능 플래그 없음**: 설정 값 하나로 운영 prod에서 CODEF를 여는 경로는 만들지 않습니다. 스테이징 예외(#275)는 플래그 `BEONE_STAGING_CODEF_ENABLED=true`만으로 열리지 않고 스테이징 표지 프로필 `staging`이 함께 있어야 하며, 운영 배포는 `staging` 표지·플래그 이름을 거부합니다([스테이징 한정 CODEF](../deployment/staging-codef.md)). `PublicProfileGuard`는 프로필 조합과 함께, `prod`에 CODEF 키·토큰 환경 변수 이름이 있으면 기동을 멈춥니다(값은 읽지 않음, #191, 아래 제약 절).
 - **현재 사용자 응답**: 연결 행이 생길 길이 없으므로 `GET /api/v1/me`의 `codefConnected`는 `false`입니다. member 프로필 값은 `MemberProfileIntegrationTest`가, prod 프로필 값은 `PublicProfileIntegrationTest`(G5 L3, #189)가 확인합니다.
 - **공개 전환 방식(미구현)**: 비공개 실연동 검증(사용자 PC의 로컬 환경, 실키·실계정은 별도 승인)과 공개 전환 승인 뒤, **코드 PR**로 `@Profile` 표현식을 바꾸고 아래 테스트의 기대값을 새 계약에 맞춰 고칩니다. 비공개 검증 환경과 전환 표현식의 모양은 결정 전입니다.
 - **테스트**: 웹 `CodefPublicProfileWebTest`(`@ActiveProfiles("prod")`, 4경로 404·no-store, 컨트롤러 2개·가짜 게이트웨이 Bean 없음, prod가 member로 펼쳐지고 local·demo는 꺼짐). 가짜 게이트웨이는 웹 슬라이스 스캔 대상이 아니라 `@Import`로 직접 넣어 프로필 조건으로 빠지는지 봅니다.
@@ -405,7 +405,7 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
 
 비공개 실연동 검증(결정 38-8)을 위해 실 게이트웨이를 전용 프로필 `codef-live`에 둡니다. **이 단계에서 실제 CODEF 호출은 하지 않았고, 실호출은 별도 승인(N9 검증 환경, N14 호출 상한) 뒤에만 합니다.** 시험은 모두 루프백(`127.0.0.1`) 스텁 HTTP입니다.
 
-- **켜지는 조건**: `member & codef-live & !prod`. 이때만 [LiveCodefGateway](../../backend/src/main/java/com/beone/api/codef/application/LiveCodefGateway.java)(`CodefGateway`·`CodefSyncGateway` 구현)와 CODEF 경로 4개가 등록됩니다. 현재 사용자는 회원 세션으로 정하고(기존 `CurrentUser` 해석), 쓰기는 CSRF를 따르며, 연결은 사용자별 행이라 다른 회원에게는 `NOT_CONNECTED`·409입니다. `member`만 켜면 미등록(404), local·demo는 가짜 게이트웨이 그대로입니다. `prod`와 함께 켜면 `PublicProfileGuard`가 기동을 멈춥니다.
+- **켜지는 조건**: `member & codef-live & (!prod | staging)`(스테이징 예외 #275). 이때만 [LiveCodefGateway](../../backend/src/main/java/com/beone/api/codef/application/LiveCodefGateway.java)(`CodefGateway`·`CodefSyncGateway` 구현)와 CODEF 경로 4개가 등록됩니다. 현재 사용자는 회원 세션으로 정하고(기존 `CurrentUser` 해석), 쓰기는 CSRF를 따르며, 연결은 사용자별 행이라 다른 회원에게는 `NOT_CONNECTED`·409입니다. `member`만 켜면 미등록(404), local·demo는 가짜 게이트웨이 그대로입니다. `prod`와 함께 켜면 `PublicProfileGuard`가 기동을 멈춥니다. 단 `prod,staging,codef-live`에 `BEONE_STAGING_CODEF_ENABLED=true`(정확히 소문자)가 있으면 허용하고, 플래그가 `staging` 없이 있으면 값과 관계없이 멈춥니다(#275).
 - **호출 방식**: 기존 전송 계층(`CodefClient`·`CodefObservation`)을 그대로 씁니다. 호출마다 관측을 하나 열고, 동기화 한 번은 API마다 한 번씩 부릅니다. 실패(시간 초과·5xx·연결 끊김)해도 다시 부르지 않고 리다이렉트를 따르지 않습니다. 토큰은 메모리 캐시를 공유합니다. 호스트 허용 목록(공식 HTTPS 호스트 또는 루프백 HTTP)도 그대로입니다.
 - **계정 등록·삭제(근거 확인 필요)**: 전송 계층에 계정 API(`CodefAccountApi`: `/v1/account/create`·`/v1/account/delete`)를 더했습니다. 요청은 `accountList`에 개인(`P`) 카드(`CD`), 아이디 로그인(`1`), 기관 코드를 담고, 비밀번호는 [CodefPasswordEncryptor](../../backend/src/main/java/com/beone/api/codef/application/CodefPasswordEncryptor.java)가 공개키(`CODEF_PUBLIC_KEY`, Base64 X.509)로 RSA/ECB/PKCS1Padding 암호화한 Base64 값만 싣습니다. 응답은 `data.connectedId`를 읽고 결과 분류는 기존 `CodefRegistrations` 표를 씁니다. 공개키가 없거나 읽지 못하면 CODEF를 부르지 않고 `CODEF_UNAVAILABLE`입니다.
 - **계정 API 근거 대조(2026-11-25)**: 공식 개발자 문서(`developer.codef.io/cert/account/cid-overview`)는 스크립트로 그려지는 페이지라 본문을 읽지 못했습니다. 대신 공식 SDK [codef-io/easycodef-java](https://github.com/codef-io/easycodef-java)(커밋 `ea96123`, 2024-09-26)와 대조했습니다.
@@ -457,7 +457,7 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
   ```
 
   창을 새로 정하면(시작 시각이 바뀌면) 새 행으로 다시 셉니다. 검증 뒤에는 설정을 지워 닫습니다.
-- **범위**: `member & codef-live & !prod`에서만 빈이 있습니다. 그 밖의 프로필은 전송 계층을 쓰는 게이트웨이가 없어 세지 않습니다(`CodefCallBudget.UNLIMITED`). 비용 상한은 다루지 않습니다.
+- **범위**: `member & codef-live & (!prod | staging)`에서만 빈이 있습니다. 스테이징에서 켜면 스테이징 DB의 `codef_call_budgets`에 따로 셉니다(#275). 그 밖의 프로필은 전송 계층을 쓰는 게이트웨이가 없어 세지 않습니다(`CodefCallBudget.UNLIMITED`). 비용 상한은 다루지 않습니다.
 - **테스트**: 단위 `CodefCallBudgetTransportTest`(토큰·상품·계정 거절 시 요청 0, 캐시 토큰은 묻지 않음, 관측 상한 먼저), `CodefCallBudgetSettingsTest`(없음·잘못된 값 닫힘, 창 경계), `CodefLiveProfileTest`(codef-live에서만 등록), 통합 `CodefCallBudgetIntegrationTest`(16개 동시 요청에 3건만 허락, 같은 DB를 쓰는 새 애플리케이션 컨텍스트에서도 누적 유지, API별 분리, 창 경계와 새 창, 설정 없음 시 행 0, 상한 도달 뒤 스텁 요청 0). `CodefLiveMemberIntegrationTest`는 시험 시계를 포함하는 창과 API별 3을 설정해 씁니다.
 
 ## 제약과 후속 작업

@@ -26,7 +26,9 @@ import com.beone.api.codef.transport.CodefClient;
 /**
  * 실 CODEF 게이트웨이(LP-1). 기존 전송 계층({@link CodefClient}·관측)으로 계정 등록·삭제와 상품 3종을 부른다.
  *
- * <p>프로필 {@value #PROFILE}에서만 등록한다. 회원 프로필이 함께 켜져 있고 공개 프로필 {@code prod}가 아닐 때뿐이다(결정 38-8). 실호출은 별도
+ * <p>프로필 {@value #PROFILE}에서만 등록한다. 회원 프로필이 함께 켜져 있고 공개 프로필 {@code prod}가 아닐 때(결정 38-8), 또는 스테이징 표지
+ * 프로필 {@code staging}이 함께 있을 때다(#275). {@code prod}와 {@code codef-live}·{@code staging}의 조합은 {@code PublicProfileGuard}가
+ * 플래그까지 확인한다. 실호출은 별도
  * 승인 뒤 비공개 검증 환경에서만 하며, 이 클래스의 시험은 루프백 스텁 HTTP로만 한다.
  *
  * <p>호출마다 관측을 하나 연다. 동기화 한 번은 API마다 한 번씩만 부르고, 실패해도 다시 부르지 않으며 리다이렉트를 따르지 않는다(전송 계층 규칙).
@@ -40,7 +42,7 @@ import com.beone.api.codef.transport.CodefClient;
 public class LiveCodefGateway implements CodefGateway, CodefSyncGateway {
 
 	/** 실 게이트웨이와 회원 CODEF 경로를 켜는 프로필 조건. */
-	public static final String PROFILE = "member & codef-live & !prod";
+	public static final String PROFILE = "member & codef-live & (!prod | staging)";
 
 	private static final Logger log = LoggerFactory.getLogger(LiveCodefGateway.class);
 

@@ -1,0 +1,23 @@
+# 스테이징 CODEF 오버레이(#275, 2026-11-27 사용자 결정). 기본 인증 뒤 스테이징 시연 전용이다. 운영에는 두지 않는다.
+#
+# deploy.sh staging은 /opt/beone/staging/.env에 BEONE_STAGING_CODEF_ENABLED=true가 있고 아래 키가 모두 채워졌을 때만 이 파일을
+# compose.yaml 뒤에 -f로 붙인다. 플래그가 없거나 false면 붙이지 않고, 그때 env에 CODEF 키가 있으면 배포를 거부한다.
+# 백엔드 PublicProfileGuard는 staging 표지 프로필과 플래그 true가 함께 있을 때만 prod에서 codef-live·CODEF 키를 허용한다.
+# 값은 저장소에 두지 않는다. 서버 .env에서 사용자가 직접 넣는다(docs/deployment/staging-codef.md).
+services:
+  backend:
+    environment:
+      # 기본 compose의 prod,staging에 codef-live를 더한다. 실 게이트웨이 조건은 member & codef-live & (!prod | staging)
+      SPRING_PROFILES_ACTIVE: prod,staging,codef-live
+      BEONE_STAGING_CODEF_ENABLED: ${BEONE_STAGING_CODEF_ENABLED:?set BEONE_STAGING_CODEF_ENABLED=true}
+      CODEF_CLIENT_ID: ${CODEF_CLIENT_ID:?set CODEF_CLIENT_ID}
+      CODEF_CLIENT_SECRET: ${CODEF_CLIENT_SECRET:?set CODEF_CLIENT_SECRET}
+      CODEF_PUBLIC_KEY: ${CODEF_PUBLIC_KEY:?set CODEF_PUBLIC_KEY}
+      BEONE_CODEF_CONNECTED_ID_KEY: ${BEONE_CODEF_CONNECTED_ID_KEY:?set BEONE_CODEF_CONNECTED_ID_KEY}
+      BEONE_CODEF_APPROVAL_HMAC_KEY: ${BEONE_CODEF_APPROVAL_HMAC_KEY:?set BEONE_CODEF_APPROVAL_HMAC_KEY}
+      # 비밀 아님. 허용 호스트는 sandbox·development·api.codef.io(CodefTransportSettings)
+      BEONE_CODEF_PRODUCT_HOST: ${BEONE_CODEF_PRODUCT_HOST:?set BEONE_CODEF_PRODUCT_HOST}
+      # 호출 상한(LP-2). 스테이징 DB의 codef_call_budgets에 따로 센다. 설정이 없거나 창 밖이면 호출 0
+      BEONE_CODEF_BUDGET_PER_API: ${BEONE_CODEF_BUDGET_PER_API:?set BEONE_CODEF_BUDGET_PER_API}
+      BEONE_CODEF_BUDGET_WINDOW_START: ${BEONE_CODEF_BUDGET_WINDOW_START:?set BEONE_CODEF_BUDGET_WINDOW_START}
+      BEONE_CODEF_BUDGET_WINDOW_END: ${BEONE_CODEF_BUDGET_WINDOW_END:?set BEONE_CODEF_BUDGET_WINDOW_END}
