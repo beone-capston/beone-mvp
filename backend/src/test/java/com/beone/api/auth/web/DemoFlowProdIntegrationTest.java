@@ -131,7 +131,7 @@ class DemoFlowProdIntegrationTest {
 		assertNoStore(cards);
 		assertThat(items(cards)).singleElement()
 			.satisfies(item -> assertThat(item).containsEntry("userCardId", card)
-				.containsEntry("cardProductId", "09271"));
+				.satisfies(entry -> assertThat(map(entry.get("mapping"))).containsEntry("cardProductId", "09271")));
 
 		// 4. 월간 상태 입력·조회, 결제 전 설정 조회
 		String state = "/api/v1/me/cards/" + card + "/monthly-states/2026-11";
