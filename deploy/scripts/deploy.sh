@@ -100,6 +100,9 @@ case "$ENVIRONMENT" in
 		;;
 esac
 COMPOSE_FILE="$APP_DIR/compose.yaml"
+# 스테이징 CODEF 오버레이(#275). 스테이징 env의 BEONE_STAGING_CODEF_ENABLED=true이고 필수 키가 모두 채워졌을 때만 붙인다
+CODEF_OVERLAY="$APP_DIR/compose.codef.yaml"
+COMPOSE_FILES=(-f "$COMPOSE_FILE")
 ENV_FILE="$APP_DIR/.env"
 STATE_FILE="$STATE_DIR/$ENVIRONMENT.state"
 HISTORY_FILE="$STATE_DIR/$ENVIRONMENT.history"
@@ -110,7 +113,7 @@ NEW_WEB_REF="$WEB_REPO@$WEB_DIGEST"
 LOG_TAG="$ENVIRONMENT"; [ "$MODE" = deploy ] || LOG_TAG="$ENVIRONMENT bootstrap-$MODE"
 log() { echo "[deploy $(date -u +%H:%M:%SZ) $LOG_TAG] $*"; }
 stop_pre() { log "중단(변경 없음): $*"; exit 3; }
-compose() { docker compose -f "$COMPOSE_FILE" -p "$PROJECT" --env-file "$ENV_FILE" "$@"; }
+compose() { docker compose "${COMPOSE_FILES[@]}" -p "$PROJECT" --env-file "$ENV_FILE" "$@"; }
 # 이미지 변수만 덮어써서 compose를 실행한다. 셸 환경 값이 --env-file 값보다 우선한다
 compose_with() { local ref="$1"; shift; BEONE_API_IMAGE="$ref" compose "$@"; }
 
@@ -238,15 +241,64 @@ fi
 log "시작: api=$API_DIGEST web=$WEB_DIGEST git=$GIT_SHA"
 
 # 0-1. 대상 파일과 CODEF 가드. CODEF는 자동 배포 대상이 아니다(결정 40-7). 값은 출력하지 않는다
+# 예외: 스테이징 env에 BEONE_STAGING_CODEF_ENABLED=true가 있으면 CODEF 키를 유지하고 오버레이를 붙인다(#275). 운영은 그대로 거부
 [ -f "$COMPOSE_FILE" ] || stop_pre "compose 파일 없음: $COMPOSE_FILE"
 [ -f "$ENV_FILE" ] || stop_pre "env 파일 없음: $ENV_FILE"
 env_names=$(awk -F= '!/^[[:space:]]*#/ && NF { sub(/^[[:space:]]*(export[[:space:]]+)?/, "", $1); print $1 }' "$ENV_FILE") || stop_pre "env 파일을 읽지 못함"
-codef_names=$(printf '%s\n' "$env_names" | grep -E '^(CODEF_|BEONE_CODEF_)' || true)
-[ -z "$codef_names" ] || stop_pre "env에 CODEF 키 이름이 있음: $(echo $codef_names)"
-for f in "$ENV_FILE" "$COMPOSE_FILE"; do
-	rc=0; grep -q 'codef-live' "$f" || rc=$?
-	case "$rc" in 0) stop_pre "codef-live 프로필 지정이 있음: $f" ;; 1) ;; *) stop_pre "가드 검사 실패(읽기 오류): $f" ;; esac
-done
+STAGING_CODEF_FLAG=BEONE_STAGING_CODEF_ENABLED
+# 스테이징 CODEF 필수 키(#275). 하나라도 없거나 비면 배포를 거부한다(닫힘 실패). 이름만 출력한다
+STAGING_CODEF_REQUIRED='CODEF_CLIENT_ID CODEF_CLIENT_SECRET CODEF_PUBLIC_KEY BEONE_CODEF_CONNECTED_ID_KEY BEONE_CODEF_APPROVAL_HMAC_KEY BEONE_CODEF_PRODUCT_HOST BEONE_CODEF_BUDGET_PER_API BEONE_CODEF_BUDGET_WINDOW_START BEONE_CODEF_BUDGET_WINDOW_END'
+# env의 이름 하나가 비어 있지 않은 값으로 정확히 한 번 있는지. 값은 출력하지 않는다(따옴표만 있는 값도 빈 값)
+env_filled() {
+	awk -F= -v k="$1" '!/^[[:space:]]*#/ && NF { n=$1; sub(/^[[:space:]]*(export[[:space:]]+)?/, "", n); sub(/[[:space:]]+$/, "", n)
+		if (n == k) { c++; v=substr($0, index($0, "=") + 1); gsub(/^[[:space:]"\047]+|[[:space:]"\047]+$/, "", v); if (v != "") f++ } }
+		END { exit !(c == 1 && f == 1) }' "$ENV_FILE"
+}
+# 프로필 지정 줄에 스테이징 표지(staging 단어)가 있는지
+has_staging_marker() { grep -iE 'profiles' "$1" | grep -qE '(^|[^A-Za-z0-9_.-])staging([^A-Za-z0-9_.-]|$)'; }
+flag_count=$(printf '%s\n' "$env_names" | grep -cx "$STAGING_CODEF_FLAG" || true)
+STAGING_CODEF=0
+case "$ENVIRONMENT" in
+	production)
+		# 운영 방어 이중화: 플래그 이름(값 무관)·스테이징 프로필 표지가 운영 env·compose에 있으면 거부한다
+		[ "$flag_count" = 0 ] || stop_pre "운영 env에 $STAGING_CODEF_FLAG가 있음(스테이징 전용)"
+		for f in "$ENV_FILE" "$COMPOSE_FILE"; do
+			! has_staging_marker "$f" || stop_pre "운영 프로필 지정에 staging 표지가 있음: $f"
+		done
+		[ ! -e "$CODEF_OVERLAY" ] || stop_pre "운영 폴더에 CODEF 오버레이가 있음: $CODEF_OVERLAY"
+		;;
+	staging)
+		if [ "$flag_count" -gt 1 ]; then stop_pre "env에 $STAGING_CODEF_FLAG가 두 번 이상 있음"; fi
+		if [ "$flag_count" = 1 ]; then
+			flag_value=$(awk -F= -v k="$STAGING_CODEF_FLAG" '!/^[[:space:]]*#/ && NF { n=$1; sub(/^[[:space:]]*(export[[:space:]]+)?/, "", n); sub(/[[:space:]]+$/, "", n); if (n == k) print substr($0, index($0, "=") + 1) }' "$ENV_FILE")
+			case "$flag_value" in
+				true) STAGING_CODEF=1 ;;
+				false) ;;
+				*) stop_pre "$STAGING_CODEF_FLAG 값은 true 또는 false만 쓴다" ;;
+			esac
+		fi
+		;;
+esac
+if [ "$STAGING_CODEF" = 1 ]; then
+	[ -f "$CODEF_OVERLAY" ] || stop_pre "$STAGING_CODEF_FLAG=true인데 CODEF 오버레이가 없음: $CODEF_OVERLAY"
+	missing=""
+	for k in $STAGING_CODEF_REQUIRED; do env_filled "$k" || missing="$missing $k"; done
+	[ -z "$missing" ] || stop_pre "$STAGING_CODEF_FLAG=true인데 필수 키가 없거나 비었거나 중복됨:$missing"
+	# 기본 compose·env에는 여전히 codef-live를 두지 않는다. codef-live는 오버레이만 켠다
+	for f in "$ENV_FILE" "$COMPOSE_FILE"; do
+		rc=0; grep -q 'codef-live' "$f" || rc=$?
+		case "$rc" in 0) stop_pre "codef-live 프로필 지정이 있음(오버레이만 켠다): $f" ;; 1) ;; *) stop_pre "가드 검사 실패(읽기 오류): $f" ;; esac
+	done
+	COMPOSE_FILES+=(-f "$CODEF_OVERLAY")
+	log "스테이징 CODEF 켬: 오버레이 사용($CODEF_OVERLAY)"
+else
+	codef_names=$(printf '%s\n' "$env_names" | grep -E '^(CODEF_|BEONE_CODEF_)' || true)
+	[ -z "$codef_names" ] || stop_pre "env에 CODEF 키 이름이 있음: $(echo $codef_names)"
+	for f in "$ENV_FILE" "$COMPOSE_FILE"; do
+		rc=0; grep -q 'codef-live' "$f" || rc=$?
+		case "$rc" in 0) stop_pre "codef-live 프로필 지정이 있음: $f" ;; 1) ;; *) stop_pre "가드 검사 실패(읽기 오류): $f" ;; esac
+	done
+fi
 
 # 0-2. compose 해석. 값이 풀려 출력되지 않게 --quiet·--services만 쓴다
 compose_with "$NEW_API_REF" config --quiet || stop_pre "compose config 실패(값 누락 등)"

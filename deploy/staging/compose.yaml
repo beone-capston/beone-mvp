@@ -54,7 +54,9 @@ services:
         condition: service_healthy
     environment:
       # 운영과 같은 공개 프로필(prod → member 그룹). 실메일 키가 하나라도 없으면 기동하지 않는다(결정 39-6)
-      SPRING_PROFILES_ACTIVE: prod
+      # staging은 스테이징 표지 프로필이다(#275). 설정 파일은 없고 PublicProfileGuard의 스테이징 CODEF 예외 판단에만 쓴다.
+      # deploy.sh production은 운영 env·compose의 프로필 지정에 staging이 있으면 배포를 거부한다
+      SPRING_PROFILES_ACTIVE: prod,staging
       DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:?set MYSQL_DATABASE}
       DB_USERNAME: ${MYSQL_USER:?set MYSQL_USER}
       DB_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD}
@@ -66,7 +68,8 @@ services:
       BEONE_MAIL_LINK_BASE_URL: ${BEONE_MAIL_LINK_BASE_URL:?set BEONE_MAIL_LINK_BASE_URL (https 스테이징 주소)}
       TZ: Asia/Seoul
       JAVA_TOOL_OPTIONS: -Xms128m -Xmx384m -XX:MaxMetaspaceSize=160m -Xss512k -XX:+ExitOnOutOfMemoryError
-      # CODEF 키는 넣지 않는다(결정 40-7). deploy.sh는 env에 CODEF 키 이름이 있으면 배포를 거부한다
+      # CODEF 키는 여기 넣지 않는다(결정 40-7). 스테이징 한정 CODEF는 compose.codef.yaml 오버레이가 전달하며 deploy.sh가
+      # BEONE_STAGING_CODEF_ENABLED=true일 때만 붙인다(#275). 플래그가 꺼져 있는데 env에 CODEF 키 이름이 있으면 배포를 거부한다
     networks: [staging]
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
