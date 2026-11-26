@@ -123,6 +123,24 @@ VITE_DEVICE_AUTH_MODE=mock VITE_PAYMENT_API_MODE=mock npm run dev
 로컬에서는 인증과 업무 API를 동일 origin으로 전달하는 프록시가 필요합니다.
 배포 빌드의 기본은 `member`이며 목 설정은 개발 서버에서만 활성화됩니다.
 
+### 카드 추가 목 흐름
+
+`frontend/`에서 `VITE_ADD_CARD_MODE=mock npm run dev`를 실행한 뒤
+로컬 5173의 **빠른결제 → 내 카드 → +**로 진입합니다. 카드사 입력란에는 테스트 문자열을 사용합니다.
+기존 결제 목 모드에서도 카드 추가를 시험할 수 있습니다.
+
+`VITE_ADD_CARD_SCENARIO`는 `success`(기본), `connection-failure`, `query-failure`,
+`empty`, `unsupported`, `partial-data`, `partial-registration` 중 하나를 지정합니다.
+이미 등록한 카드의 재조회는 기본 시나리오에서 확인합니다. 초기화하려면 개발자 도구의
+Local Storage에서 `beone:dev:imported-cards:v1:fixture` 키를 삭제하고 새로고침합니다.
+`VITE_PAYMENT_MOCK_PROFILE`을 사용한 경우 키의 마지막에 그 프로필 이름을 넣습니다.
+
+실제 연동 시 `CardImportAdapter`를 카드사 연결, 동기화, 후보 매핑 확인 API 구현으로 교체합니다.
+현재 서버는 동기화에서 후보와 미매핑 보유 카드를 이미 저장합니다. 동기화 후
+`GET /api/v1/me/cards`로 전체 목록을 읽어야 하며, 등록 버튼은 새 카드 생성이 아니라
+선택한 기존 후보의 매핑을 확인하는 동작입니다. 미확정 카드를 메인에 표시할 기준,
+부분 성공을 보고하고 재시도할 기준, 일괄 확인 API 필요 여부는 실연동 전에 합의해야 합니다.
+
 ## 빌드·테스트
 
 ### Backend

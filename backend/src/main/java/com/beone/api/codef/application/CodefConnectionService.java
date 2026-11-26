@@ -11,12 +11,18 @@ import java.util.Optional;
 import com.beone.api.codef.persistence.CodefConnectionEntity;
 import com.beone.api.codef.persistence.CodefConnectionRepository;
 import com.beone.api.user.application.CurrentUser;
+import com.beone.api.user.application.MemberLedgerErasingEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -183,6 +189,49 @@ public class CodefConnectionService {
 	}
 
 	// 복호화 실패(키 교체 등)도 BeONE 상태를 바꾸지 않는다. 로그에는 예외 클래스 이름만 남긴다
+	/**
+	 * 회원 탈퇴(결정 D10): 장부가 지워지기 전에 연결 행의 암호문을 읽어 두고, 탈퇴 트랜잭션이 커밋된 뒤 CODEF 쪽 연결 해제를 요청한다. 연결
+	 * 행은 장부 삭제가 함께 지운다. 해제 요청이 실패하거나 게이트웨이·키가 없어도 탈퇴는 그대로이고 결과만 로그에 남긴다(RELEASED·FAILED·
+	 * SKIPPED). 탈퇴가 롤백되면 요청하지 않는다.
+	 * @param event 장부 삭제 직전
+	 */
+	@EventListener
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void onMemberLedgerErasing(MemberLedgerErasingEvent event) {
+		Optional<String> ciphertext = this.codefConnectionRepository.lockByUserId(event.userId())
+			.map(CodefConnectionEntity::getConnectedIdCiphertext);
+		if (ciphertext.isEmpty()) {
+			return;
+		}
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCommit() {
+				log.info("CODEF release on withdrawal ref={} result={}", event.memberRef(),
+						releaseOnWithdrawal(event.userId(), ciphertext.get()));
+			}
+		});
+	}
+
+	// 탈퇴 뒤 해제 요청. 예외를 밖으로 내지 않고 결과 이름만 돌려준다. 로그에는 예외 클래스 이름만 남긴다
+	private String releaseOnWithdrawal(long userId, String ciphertext) {
+		try {
+			CodefGateway codef = this.gateway.getIfAvailable();
+			Optional<ConnectedIdCipher> cipher = cipher();
+			if (codef == null) {
+				return "SKIPPED_NO_GATEWAY";
+			}
+			if (cipher.isEmpty()) {
+				return "SKIPPED_NO_KEY";
+			}
+			codef.release(cipher.get().decrypt(userId, ciphertext));
+			return "RELEASED";
+		}
+		catch (RuntimeException ex) {
+			log.warn("CODEF release on withdrawal failed exception={}", ex.getClass().getName());
+			return "FAILED";
+		}
+	}
+
 	private static void releaseStored(CodefGateway codef, ConnectedIdCipher cipher, long userId, String ciphertext) {
 		String connectedId;
 		try {

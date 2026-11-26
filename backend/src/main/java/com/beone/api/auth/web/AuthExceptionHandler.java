@@ -1,11 +1,14 @@
 package com.beone.api.auth.web;
 
 import java.time.Duration;
+import java.util.List;
 
 import com.beone.api.auth.application.AuthTokenInvalidException;
 import com.beone.api.auth.application.MailRateLimitedException;
 import com.beone.api.common.web.ApiErrorCode;
 import com.beone.api.common.web.ApiErrorResponse;
+import com.beone.api.common.web.CommonApiErrorCode;
+import com.beone.api.common.web.FieldViolation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -26,6 +29,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 class AuthExceptionHandler {
 
 	private static final Logger log = LoggerFactory.getLogger(AuthExceptionHandler.class);
+
+	/** 탈퇴 비밀번호 불일치 필드 오류 문구. */
+	static final String PASSWORD_MISMATCH_MESSAGE = "비밀번호가 일치하지 않습니다.";
 
 	@ExceptionHandler(CsrfInvalidException.class)
 	ResponseEntity<ApiErrorResponse> handleCsrfInvalid(CsrfInvalidException ex) {
@@ -50,6 +56,17 @@ class AuthExceptionHandler {
 	@ExceptionHandler(EmailNotVerifiedException.class)
 	ResponseEntity<ApiErrorResponse> handleEmailNotVerified(EmailNotVerifiedException ex) {
 		return respond(AuthErrorCode.EMAIL_NOT_VERIFIED, ex);
+	}
+
+	/** 탈퇴 비밀번호 재확인 실패: 세션은 유효하므로 401 대신 400과 {@code password} 필드 오류. */
+	@ExceptionHandler(PasswordConfirmationFailedException.class)
+	ResponseEntity<ApiErrorResponse> handlePasswordConfirmationFailed(PasswordConfirmationFailedException ex) {
+		log.debug("API error code={} status={} exception={}", CommonApiErrorCode.INVALID_REQUEST.code(),
+				CommonApiErrorCode.INVALID_REQUEST.status().value(), ex.getClass().getName());
+		return ResponseEntity.status(CommonApiErrorCode.INVALID_REQUEST.status())
+			.contentType(MediaType.APPLICATION_JSON)
+			.body(ApiErrorResponse.of(CommonApiErrorCode.INVALID_REQUEST,
+					List.of(new FieldViolation("password", PASSWORD_MISMATCH_MESSAGE))));
 	}
 
 	/** 메일 요청 제한: 429와 남은 초({@code Retry-After}). */
