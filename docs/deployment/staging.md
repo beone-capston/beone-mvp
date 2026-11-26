@@ -37,7 +37,7 @@ develop에 병합된 변경을 사용자가 직접 배포하지 않아도 확인
 
 - **N2 조건:** `/email-verification`·`/password-reset`에 `Referrer-Policy: no-referrer`를 붙이고, 이 경로의 접근 로그는 `$request` 대신 `$uri`를 쓰는 형식으로 남겨 `?token=`이 로그에 들어가지 않게 합니다.
 - 전달 헤더(`X-Forwarded-For`·`X-Forwarded-Proto`)는 덮어쓰고 `Forwarded`는 비웁니다. 기본 인증의 `Authorization` 헤더는 backend로 넘기지 않습니다.
-- 본문 크기 64k는 N4 결정 전 검증 환경과 같은 값입니다.
+- 본문 크기 64k는 검증 환경과 같은 값이며 N4 표준안도 같은 값입니다. 보안 헤더·요청 제한은 스테이징 web이 아니라 공개 nginx의 `staging.conf`에 겁니다(스테이징 web은 접속 주소가 항상 공개 nginx라서, [공개 nginx 보안 헤더·요청 제한](public-nginx-security.md) 3절).
 - 8081은 기본 인증이 없으므로 점검 경로만 엽니다. 호스트에서는 127.0.0.1에만 묶여 서버 밖에서 닿지 않습니다.
 - **`htpasswd` 권한:** 컨테이너는 파일을 `/etc/nginx/htpasswd`로 읽기 전용 마운트하고, 요청을 처리하는 nginx 워커는 uid/gid 101로 돕니다. 그래서 `640 root:101`로 둡니다. `root:root`면 워커가 읽지 못해 기본 인증이 동작하지 않습니다.
 
