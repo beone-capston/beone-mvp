@@ -256,12 +256,189 @@ class UserCardServiceTest {
 	}
 
 	@Test
-	void changeMappingRejectsCodefCandidateBecauseNoCandidateExists() {
+	void changeMappingRejectsCodefCandidateWhenTheCardHasNoCandidate() {
 		givenCard(unmappedCard(1001L));
 
 		assertThatThrownBy(() -> this.service.changeMapping(MY_CARDS, "uc-1001",
 				new MappingChange(MappingStatus.USER_CONFIRMED, "09174", ConfirmationMethod.CODEF_CANDIDATE)))
 			.isInstanceOf(CandidateMismatchException.class);
+		verify(this.repository, never()).saveAndFlush(any());
+	}
+
+	// CODEF 이름 사전 후보(#268)
+
+	@Test
+	void codefCandidateConfirmationTurnsTheCandidateIntoUserConfirmed() {
+		givenCard(candidateCard(1001L, "09271"));
+		given(this.invalidations.validUsing(MY_CARDS, 1001L)).willReturn(List.of());
+		given(this.invalidations.invalidatedByMapping(MY_CARDS, List.of())).willReturn(List.of());
+
+		UserCardChangeResult result = this.service.changeMapping(MY_CARDS, "uc-1001",
+				new MappingChange(MappingStatus.USER_CONFIRMED, "09271", ConfirmationMethod.CODEF_CANDIDATE));
+
+		assertThat(result.card().mapping()).isEqualTo(new UserCardMapping(MappingStatus.USER_CONFIRMED, "09271",
+				ConfirmationMethod.CODEF_CANDIDATE, NOW, null));
+		assertThat(saved().getCandidateCardProductId()).isNull();
+		assertThat(saved().isMappingChangedByUser()).isTrue();
+	}
+
+	@Test
+	void codefCandidateConfirmationRejectsAnotherProduct() {
+		givenCard(candidateCard(1001L, "09271"));
+
+		assertThatThrownBy(() -> this.service.changeMapping(MY_CARDS, "uc-1001",
+				new MappingChange(MappingStatus.USER_CONFIRMED, "09174", ConfirmationMethod.CODEF_CANDIDATE)))
+			.isInstanceOf(CandidateMismatchException.class);
+		verify(this.repository, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void manualSelectionOnACandidateClearsTheCandidate() {
+		givenCard(candidateCard(1001L, "09271"));
+
+		UserCardChangeResult result = this.service.changeMapping(MY_CARDS, "uc-1001",
+				new MappingChange(MappingStatus.UNMAPPED, null, null));
+
+		assertThat(result.card().mapping()).isEqualTo(new UserCardMapping(MappingStatus.UNMAPPED, null, null, null,
+				null));
+		assertThat(saved().isMappingChangedByUser()).isTrue();
+	}
+
+	@Test
+	void listShowsTheCandidateProductOnlyForCandidates() {
+		given(this.repository.findByUserIdAndReleasedAtIsNullOrderByUserCardIdAsc(1L))
+			.willReturn(List.of(candidateCard(1001L, "01664"), codefCard(1002L)));
+
+		List<UserCardView> cards = this.service.list(MY_CARDS);
+
+		assertThat(cards.get(0).mapping()).isEqualTo(new UserCardMapping(MappingStatus.CANDIDATE, null, null, null,
+				"01664"));
+		assertThat(cards.get(0).recommendationEligibility().reason()).isEqualTo(EligibilityReason.MAPPING_UNCONFIRMED);
+		assertThat(cards.get(1).mapping().candidateCardProductId()).isNull();
+	}
+
+	@Test
+	void registerCodefCardWithACandidateIsCandidateNotUserConfirmed() {
+		RegisteredCodefCard registered = this.service.registerCodefCard(MY_CARDS, "올라운드 티타늄카드", "09271");
+
+		assertThat(registered).isEqualTo(new RegisteredCodefCard(1001L, "09271"));
+		assertThat(registered.mappingStatus()).isEqualTo(MappingStatus.CANDIDATE);
+		UserCardEntity entity = saved();
+		assertThat(entity.getMappingStatus()).isEqualTo(MappingStatus.CANDIDATE);
+		assertThat(entity.getCandidateCardProductId()).isEqualTo("09271");
+		assertThat(entity.getCardProductId()).isNull();
+		assertThat(entity.getConfirmationMethod()).isNull();
+		assertThat(entity.getConfirmedAt()).isNull();
+		assertThat(entity.isMappingChangedByUser()).isFalse();
+	}
+
+	@Test
+	void registerCodefCardWithoutCandidateIsUnmapped() {
+		RegisteredCodefCard registered = this.service.registerCodefCard(MY_CARDS, "가짜 카드", null);
+
+		assertThat(registered).isEqualTo(new RegisteredCodefCard(1001L, null));
+		assertThat(saved().getMappingStatus()).isEqualTo(MappingStatus.UNMAPPED);
+		verify(this.repository, never()).existsByUserIdAndCardProductIdAndMappingStatusAndReleasedAtIsNull(anyLong(),
+				any(), any());
+	}
+
+	@Test
+	void registerCodefCardSkipsTheCandidateWhenTheProductIsAlreadyConfirmed() {
+		// 이미 확인한 상품을 후보로 두면 사용자가 확인할 때 409가 되므로 UNMAPPED로 둔다
+		given(this.repository.existsByUserIdAndCardProductIdAndMappingStatusAndReleasedAtIsNull(1L, "09271",
+				MappingStatus.USER_CONFIRMED))
+			.willReturn(true);
+
+		RegisteredCodefCard registered = this.service.registerCodefCard(MY_CARDS, "올라운드 티타늄카드", "09271");
+
+		assertThat(registered.candidateCardProductId()).isNull();
+		assertThat(saved().getMappingStatus()).isEqualTo(MappingStatus.UNMAPPED);
+		assertThat(saved().getCandidateCardProductId()).isNull();
+	}
+
+	@Test
+	void registerCodefCardSkipsTheCandidateWhenAnotherCardAlreadyHoldsItAsCandidate() {
+		// 후보는 상품당 1장(2026-11-26 사용자 결정)
+		given(this.repository.existsByUserIdAndCandidateCardProductIdAndMappingStatusAndReleasedAtIsNull(1L, "01664",
+				MappingStatus.CANDIDATE))
+			.willReturn(true);
+
+		RegisteredCodefCard registered = this.service.registerCodefCard(MY_CARDS, "노리 체크카드", "01664");
+
+		assertThat(registered.candidateCardProductId()).isNull();
+		assertThat(saved().getMappingStatus()).isEqualTo(MappingStatus.UNMAPPED);
+	}
+
+	@Test
+	void onlyTheFirstOfTwoCardsForTheSameProductBecomesACandidate() {
+		// 같은 동기화에서 앞 카드의 후보가 저장된 뒤에는 조회가 그 후보를 본다
+		given(this.repository.existsByUserIdAndCandidateCardProductIdAndMappingStatusAndReleasedAtIsNull(1L, "01664",
+				MappingStatus.CANDIDATE))
+			.willReturn(false, true);
+
+		RegisteredCodefCard first = this.service.registerCodefCard(MY_CARDS, "nori 체크카드(RF)", "01664");
+		RegisteredCodefCard second = this.service.registerCodefCard(MY_CARDS, "노리 체크카드", "01664");
+
+		assertThat(first.mappingStatus()).isEqualTo(MappingStatus.CANDIDATE);
+		assertThat(second.mappingStatus()).isEqualTo(MappingStatus.UNMAPPED);
+		assertThat(second.candidateCardProductId()).isNull();
+	}
+
+	@Test
+	void proposeCodefCandidateSkipsWhenAnotherCardAlreadyHoldsItAsCandidate() {
+		givenCard(codefCard(1001L));
+		given(this.repository.existsByUserIdAndCandidateCardProductIdAndMappingStatusAndReleasedAtIsNull(1L, "01914",
+				MappingStatus.CANDIDATE))
+			.willReturn(true);
+
+		assertThat(this.service.proposeCodefCandidate(MY_CARDS, 1001L, "01914")).isFalse();
+		verify(this.repository, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void proposeCodefCandidateFillsAnUntouchedUnmappedCodefCard() {
+		givenCard(codefCard(1001L));
+
+		assertThat(this.service.proposeCodefCandidate(MY_CARDS, 1001L, "01914")).isTrue();
+
+		UserCardEntity entity = saved();
+		assertThat(entity.getMappingStatus()).isEqualTo(MappingStatus.CANDIDATE);
+		assertThat(entity.getCandidateCardProductId()).isEqualTo("01914");
+	}
+
+	@Test
+	void proposeCodefCandidateLeavesProtectedOrChangedCardsAlone() {
+		UserCardEntity confirmed = codefCard(1001L);
+		confirmed.changeMapping(MappingStatus.USER_CONFIRMED, "09174", ConfirmationMethod.MANUAL_SELECTION, EARLIER);
+		UserCardEntity notSupported = codefCard(1002L);
+		notSupported.changeMapping(MappingStatus.NOT_SUPPORTED, null, ConfirmationMethod.MANUAL_SELECTION, EARLIER);
+		UserCardEntity userUnmapped = codefCard(1003L);
+		userUnmapped.changeMapping(MappingStatus.UNMAPPED, null, null, null);
+		UserCardEntity candidate = candidateCard(1004L, "09271");
+		UserCardEntity manual = unmappedCard(1005L);
+		for (UserCardEntity card : List.of(confirmed, notSupported, userUnmapped, candidate, manual)) {
+			givenCard(card);
+		}
+
+		for (long id = 1001L; id <= 1005L; id++) {
+			assertThat(this.service.proposeCodefCandidate(MY_CARDS, id, "01914")).as("uc-%d", id).isFalse();
+		}
+		assertThat(this.service.proposeCodefCandidate(MY_CARDS, 9999L, "01914")).isFalse();
+		verify(this.repository, never()).saveAndFlush(any());
+		assertThat(confirmed.getMappingStatus()).isEqualTo(MappingStatus.USER_CONFIRMED);
+		assertThat(notSupported.getMappingStatus()).isEqualTo(MappingStatus.NOT_SUPPORTED);
+		assertThat(userUnmapped.getMappingStatus()).isEqualTo(MappingStatus.UNMAPPED);
+		assertThat(candidate.getCandidateCardProductId()).isEqualTo("09271");
+	}
+
+	@Test
+	void proposeCodefCandidateSkipsAProductTheUserAlreadyConfirmed() {
+		givenCard(codefCard(1001L));
+		given(this.repository.existsByUserIdAndCardProductIdAndMappingStatusAndReleasedAtIsNull(1L, "01914",
+				MappingStatus.USER_CONFIRMED))
+			.willReturn(true);
+
+		assertThat(this.service.proposeCodefCandidate(MY_CARDS, 1001L, "01914")).isFalse();
 		verify(this.repository, never()).saveAndFlush(any());
 	}
 
@@ -425,6 +602,14 @@ class UserCardServiceTest {
 
 	private static UserCardEntity unmappedCard(long id) {
 		return withId(UserCardEntity.manual(1L, "카드", MappingStatus.UNMAPPED, null, null, null, EARLIER), id);
+	}
+
+	private static UserCardEntity codefCard(long id) {
+		return withId(UserCardEntity.codef(1L, "카드", null, EARLIER), id);
+	}
+
+	private static UserCardEntity candidateCard(long id, String candidateCardProductId) {
+		return withId(UserCardEntity.codef(1L, "카드", candidateCardProductId, EARLIER), id);
 	}
 
 	private static UserCardEntity confirmedCard(long id) {

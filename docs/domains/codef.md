@@ -204,7 +204,7 @@ if (snapshot.approvals() instanceof CodefTargetOutcome.Unusable<CodefApprovalRow
 }
 ```
 
-1단계에서 구현하지 않은 것: 카드 연결(R1), Type2 짝짓기와 재조회 중복 판단 키(R2), 승인 일자·시각 해석(R4), CODEF 원장 행·불완전 사유는 아래 [2단계](#원장-후보-행짝짓기재조회-대조-92)에서 구현했습니다. 카드명 → 후보 상품(`candidateCardProductId`) 산출(R3, 보류), 공개 오류 코드 대응(R5, 팀원), 완전 선언·도메인 `Ledger`/`LedgerTransaction` 연결(R7·R8), 엔진 입력 생성, 저장, 엔드포인트는 여전히 없습니다. 실제 KB 응답이 시트의 `O`·`△` 필드를 주는지는 실계정 관측 전까지 미확인입니다.
+1단계에서 구현하지 않은 것: 카드 연결(R1), Type2 짝짓기와 재조회 중복 판단 키(R2), 승인 일자·시각 해석(R4), CODEF 원장 행·불완전 사유는 아래 [2단계](#원장-후보-행짝짓기재조회-대조-92)에서 구현했습니다. 카드명 → 후보 상품(`candidateCardProductId`) 산출(R3, 당시 보류. 2026-11-26 변경으로 아래 [CODEF 조회·동기화](#codef-조회동기화-api-129)의 이름 사전에서 구현), 공개 오류 코드 대응(R5, 팀원), 완전 선언·도메인 `Ledger`/`LedgerTransaction` 연결(R7·R8), 엔진 입력 생성, 저장, 엔드포인트는 여전히 없습니다. 실제 KB 응답이 시트의 `O`·`△` 필드를 주는지는 실계정 관측 전까지 미확인입니다.
 
 ## 원장 후보 행·짝짓기·재조회 대조 (#92)
 
@@ -257,7 +257,7 @@ candidates.acceptedKinds();   // 저장은 호출자가 한다
 구현하지 않은 것:
 
 - HMAC 운영 구현체, 키 이름·보관 위치·공급 방식(환경 변수·사용자 입력 등)·회전: 미결입니다. 설정 키·환경 변수·Spring Bean도 만들지 않았습니다. 테스트는 테스트 코드 안 합성 키만 씁니다.
-- 카드명 → 후보 상품 산출(R3, 보류): 새 후보는 `UNMAPPED`이고, `USER_CONFIRMED`를 만들거나 바꾸지 않습니다.
+- 카드명 → 후보 상품 산출(R3): 이 순수 함수는 하지 않습니다. 동기화가 [`CodefCardNameDictionary`](../../backend/src/main/java/com/beone/api/codef/application/CodefCardNameDictionary.java)로 합니다(#268). 어느 쪽도 `USER_CONFIRMED`를 만들거나 바꾸지 않습니다.
 - 원장 완전 선언(R7), 도메인 `Ledger`/`LedgerTransaction` 연결(R8), 저장·영속·HTTP·DB.
 - 실계정 미확인: 승인번호를 승인 행과 취소 행이 공유하는지, Type1 행이 재조회 때 같은 행 그대로 정상에서 취소로 바뀌는지, 사용일자·사용일시 실제 형식.
 - 조회 기간이 달라진 재조회에서 이미 짝지어 기록한 Type2 취소의 원 승인이 기간 밖으로 빠지면, 그 취소 행은 다시 `NO_MATCHING_APPROVAL`로 표시됩니다(이전 기록으로 짝을 대신하지 않는 보수적 처리).
@@ -328,6 +328,7 @@ codef/
 │   ├── CodefSyncGateway             보유카드·승인내역·실적 조회 경계(인터페이스). FakeCodefGateway가 함께 구현
 │   ├── CodefSyncPeriod              조회 기간 규칙(P9). 위반은 CodefSyncPeriodException(400)
 │   ├── CodefHeldCardMatcher         CODEF 보유카드 ↔ 기존 CODEF 보유 카드 대조(P8·Q1·Q2, 순수 함수)
+│   ├── CodefCardNameDictionary      카드명 → 규칙 카드 후보 상품 사전(정확 일치, 근거 OBSERVED/ASSUMED, #268)
 │   ├── ApprovalFingerprintKeySource 승인번호 HMAC 키 공급. 운영 구현 EnvironmentApprovalFingerprintKeySource(환경 변수)
 │   ├── HmacApprovalFingerprinter    승인번호 → HMAC-SHA256 소문자 16진수 64자(패키지 내부)
 │   ├── CodefSyncResult·CodefSyncTarget 결과와 부분 실패 대상
@@ -347,7 +348,13 @@ codef/
 → codef_syncs 1행 → 보유 카드 → 승인 행 → 실적 참고값 → last_synced_at 갱신
 ```
 
-- **보유카드(관리자 판단 K1·P8·Q1~Q3)**: 새 카드는 `user_cards`에 `holdingSource=CODEF`, `UNMAPPED`, 상품 ID 없음으로 만듭니다. 카드명으로 상품 후보를 정하지 않습니다(결정 20 R3). 같은 카드 판단 정보(카드명 원문, 발급일자 원문)는 `codef_held_cards`에 둡니다. 같은 (카드명, 발급일자) 묶음이 응답에 n장, 해제하지 않은 기존 CODEF 카드에 m장일 때 m=0이면 n장 모두 새로 만들고, n=1·m=1이면 그 기존 카드이며, 그 밖은 같은 카드를 정할 수 없어 건너뜁니다(중복 누적 방지). 발급일자는 둘 다 없음도 같은 값입니다. KB는 보유카드 발급일자를 주지 않으므로(보유카드!H14) KB에서는 사실상 카드명만으로 대조합니다. 카드명이 없거나 앞뒤 공백을 뗀 표시 이름이 1~30자가 아니면 보유 카드로 만들지 않고 이름을 자르거나 지어내지 않습니다(Q2). 해제한 카드는 대조 대상이 아니라서 다시 동기화하면 새 카드가 생깁니다. 응답 `newCandidates`에는 이번에 새로 만든 카드만 담습니다.
+- **보유카드(관리자 판단 K1·P8·Q1~Q3)**: 새 카드는 `user_cards`에 `holdingSource=CODEF`, 확정 상품 ID 없음으로 만듭니다. 카드명이 이름 사전과 정확히 일치하면 `CANDIDATE`와 후보 상품을, 아니면 `UNMAPPED`를 둡니다(아래 「카드명 이름 사전」). 같은 카드 판단 정보(카드명 원문, 발급일자 원문)는 `codef_held_cards`에 둡니다. 같은 (카드명, 발급일자) 묶음이 응답에 n장, 해제하지 않은 기존 CODEF 카드에 m장일 때 m=0이면 n장 모두 새로 만들고, n=1·m=1이면 그 기존 카드이며, 그 밖은 같은 카드를 정할 수 없어 건너뜁니다(중복 누적 방지). 발급일자는 둘 다 없음도 같은 값입니다. KB는 보유카드 발급일자를 주지 않으므로(보유카드!H14) KB에서는 사실상 카드명만으로 대조합니다. 카드명이 없거나 앞뒤 공백을 뗀 표시 이름이 1~30자가 아니면 보유 카드로 만들지 않고 이름을 자르거나 지어내지 않습니다(Q2). 해제한 카드는 대조 대상이 아니라서 다시 동기화하면 새 카드가 생깁니다. 응답 `newCandidates`에는 이번에 새로 만든 카드만 담습니다.
+- **카드명 이름 사전(#268, [D-15 2026-11-26 변경](../decisions.md#d-15d-16d-17-확정-정책))**: [`CodefCardNameDictionary`](../../backend/src/main/java/com/beone/api/codef/application/CodefCardNameDictionary.java)는 규칙 카드 4종의 카드사 표기 목록이고 표기마다 근거(`OBSERVED`: 2026-11-26 비공개 실연동 동기화 응답의 표기, `ASSUMED`: KB 상품 페이지로부터의 추정)를 적습니다.
+  - 대조: 카드명 원문의 앞뒤 공백을 떼고 정확히 비교합니다. 일치하지 않고 `카드명|발급사` 형식이면 첫 `|` 앞부분으로 한 번 더 정확히 비교합니다. 부분 일치·대소문자 무시·유사도는 쓰지 않고, 동일 계열·변형 카드(펭수 노리, 위글위글 첵첵, 락스타, 해피노리 등)는 넣지 않습니다. 같은 표기가 두 상품에 걸리면 시작 시점에 실패합니다.
+  - 상품당 후보 1장(2026-11-26 사용자 결정): 이 사용자에게 그 상품의 해제하지 않은 `USER_CONFIRMED` 카드나 그 상품이 후보인 `CANDIDATE` 카드가 있으면 후보를 두지 않습니다. 응답 순서로 카드를 하나씩 저장하므로 같은 동기화에서는 먼저 처리한 카드만 후보입니다.
+  - 새 카드: 일치하면 `UserCardService.registerCodefCard`에 후보를 넘깁니다. 위 규칙에 걸리면 서비스가 후보를 두지 않고 `UNMAPPED`로 만듭니다. 응답 `newCandidates`의 `candidateCardProductId`·`mappingStatus`가 실제로 둔 값을 보여 줍니다.
+  - 기존 카드(같은 카드로 다시 대조됨): 일치하면 `UserCardService.proposeCodefCandidate`를 부릅니다. `UNMAPPED`·후보 없음·사용자가 매핑을 바꾼 적 없음·같은 상품 보유 카드(`USER_CONFIRMED`·`CANDIDATE`) 없음일 때만 후보를 둡니다. `USER_CONFIRMED`·`NOT_SUPPORTED`·사용자가 고른 `UNMAPPED`는 그대로입니다. `newCandidates`에는 담지 않습니다.
+  - 카드 연결(R1)과 저장하는 카드명 원문은 나누지 않은 그대로입니다. `|` 분리는 후보 대조에만 씁니다.
 - **승인내역(관리자 판단 K2·Q4, 결정 20 R1·R2, 결정 22 R7·R8·#93)**: [`CodefLedgerCandidateBuilder`](../../backend/src/main/java/com/beone/api/codef/sync/CodefLedgerCandidateBuilder.java)로 판정해 받아들인 행(정상, Type1 전액 취소, 짝지은 Type2 취소)만 `codef_approval_rows`에 넣습니다. `ledger_transactions`와 원장 조회는 바꾸지 않습니다. 원장 조회 coverage에는 새 카드가 나오지만 CODEF는 지금처럼 `complete=false`입니다. 이전 기록은 이 사용자의 저장된 승인 행이며, 같은 키·같은 종류는 `skippedDuplicates`, 정상으로 기록된 키가 Type1 전액 취소로 바뀌면 그 행의 종류만 바꾸고 `imported`에 셉니다.
 - **불완전 행은 저장하지 않습니다.** 응답 `incompleteRows`에만 담고, 다음 동기화에서 그때의 응답으로 다시 판정합니다(결정 22의 "기간이 바뀐 재조회의 Type2 재표시" 보완은 하지 않았습니다). 보유 카드에 붙지 않은 행(카드 미연결, 건너뛴 카드의 행)도 숨기지 않고 `userCardId=null`로 담습니다. 건너뛴 카드에 붙은 행은 판정이 받아들여도 붙일 보유 카드가 없어 `UNDETERMINED_ROW`로 둡니다.
 - **승인번호 HMAC 키(2026-11-18 사용자 직접 결정 P6, 결정 22 1안)**: 프로세스 환경 변수 `BEONE_CODEF_APPROVAL_HMAC_KEY`(Base64로 적은 32바이트)에서 읽고 `application*.yml`에는 두지 않습니다. local·demo에도 고정 기본값이 없습니다. 키가 없으면 승인내역을 조회하지 않고(과금 회피) 저장하지 않으며 `partialFailures`에 `APPROVALS`·`CODEF_UNAVAILABLE`로 알리고 `imported`·`skippedDuplicates`는 `null`입니다. 성공이나 완전 수집으로 보이게 하지 않습니다. 승인번호 원문은 저장·로그·응답에 남기지 않고 지문만 저장하며, DB CHECK가 64자 소문자 16진수만 받습니다. 키가 바뀌면 이전 지문과 비교가 끊깁니다. 키 회전(이전 키 병행 비교)과 운영 키 공급은 별도 승인이며 구현하지 않았습니다. 테스트는 합성 키를 주입합니다.
@@ -357,7 +364,7 @@ codef/
 - **재연결 필요(관리자 판단 P2)**: 게이트웨이가 연결 무효를 알리면 연결 상태를 `RECONNECT_REQUIRED`로 바꾸고 409입니다. 지금은 가짜 게이트웨이만 이 결과를 내며 실 CODEF 결과 코드와의 대응은 없습니다. 다음 연결 성공이 `CONNECTED`로 돌립니다.
 - **가상 포트폴리오(관리자 판단 Q7)**: 409 `PORTFOLIO_READ_ONLY`입니다. [docs/api.md](../api.md#업무-오류-코드)의 "가상 포트폴리오의 CODEF 쓰기 요청" 규칙에 따른 것이며 계약 syncs 실패 목록에도 반영했습니다.
 - **동시성(관리자 판단 Q8)**: CODEF 조회는 트랜잭션 밖입니다. 저장은 보유 카드 행 → 사용자 행 → 연결 행 순으로 잠급니다. 모의 승인(주문 → 보유 카드 → 원장 삽입의 사용자 행 공유 잠금)과 보유 카드 잠금 순서를 맞춰 교착을 피하고, 같은 사용자의 동시 동기화·카드 해제는 차례로 처리합니다. 중복 판단 키의 유니크 제약(`uk_codef_approval_rows_key`)이 마지막 방어선입니다. 카드명 칼럼은 응답 문자열을 그대로 비교하려고 후행 공백까지 구분하는 `utf8mb4_0900_bin`(NO PAD)입니다. `utf8mb4_bin`은 후행 공백을 무시해 쓰지 않았습니다.
-- **card 패키지 접근(관리자 판단 P8의 최소 접근)**: [`UserCardService`](../../backend/src/main/java/com/beone/api/card/application/UserCardService.java)의 `lockHeldCardsForCodefSync`(해제하지 않은 보유 카드 잠금, CODEF 카드 ID 반환)와 `registerCodefCard`(CODEF·UNMAPPED 카드 생성), [`UserCardEntity.codef`](../../backend/src/main/java/com/beone/api/card/persistence/UserCardEntity.java)만 더했습니다. `user_cards` 스키마는 바꾸지 않았습니다.
+- **card 패키지 접근(관리자 판단 P8의 최소 접근)**: [`UserCardService`](../../backend/src/main/java/com/beone/api/card/application/UserCardService.java)의 `lockHeldCardsForCodefSync`(해제하지 않은 보유 카드 잠금, CODEF 카드 ID 반환), `registerCodefCard`(CODEF 카드 생성. #268부터 후보 상품을 받아 상품당 후보 1장 규칙에 맞으면 `CANDIDATE`, 아니면 `UNMAPPED`), `proposeCodefCandidate`(#268, 재대조된 기존 CODEF 카드에 같은 규칙으로 후보 두기), [`UserCardEntity.codef`](../../backend/src/main/java/com/beone/api/card/persistence/UserCardEntity.java)만 더했습니다. #129는 `user_cards` 스키마를 바꾸지 않았고, #268의 Flyway V16이 `candidate_card_product_id`·`mapping_changed_by_user` 열 2개와 CHECK 제약 `ck_user_cards_candidate`를 더했습니다.
 - **가짜 게이트웨이 조회**: `classpath:codef/fake/`의 합성 fixture(실제 카드명·승인번호 형식을 복사하지 않음)를 전송 계층과 같은 해석기로 읽습니다. 기본 시나리오는 카드 3장(그중 1장은 30자를 넘어 건너뜀), 승인 5행(정상, Type2 짝, 부분취소 코드, 건너뛴 카드의 행), 카드 A의 전월 실적 1건입니다. 승인 사용일자는 요청 시작일, 실적 기간은 서울 기준 전월로 채웁니다. 연결 때 쓴 합성 아이디로 동기화 시나리오를 고릅니다: `fake-sync-reconnect`(연결 무효), `fake-sync-unavailable`(세 조회 모두 실패), `fake-sync-partial`(실적만 실패). 서버를 다시 띄워 모르는 connectedId는 기본 시나리오입니다.
 
 ```bash
@@ -367,7 +374,7 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
   -d '{"from":"2026-11-01","to":"2026-11-04"}'
 ```
 
-테스트: 단위 `CodefSyncPeriodTest`(생략·한쪽 생략·오늘 이후·역순·12개월 경계·월말), `HmacApprovalFingerprinterTest`(Python으로 따로 계산한 값, 원문 미포함, 키 길이), `EnvironmentApprovalFingerprintKeySourceTest`, `CodefHeldCardMatcherTest`(새로·같은 카드·발급일자 구분·정확 비교·n·m 조합·이름 규칙·코드 포인트), `CodefSyncServiceHelpersTest`(실적 펼치기, 부분 실패 대상), `FakeCodefGatewayTest`(fixture 조회·시나리오), 웹 `CodefSyncApiWebTest`(계약 예시 JSON, 부분 실패·null 건수, 미연결 행 `userCardId=null`, 본문 생략, 날짜 형식 400, 기간 400, 실패 응답 전부, 헤더), `CodefSyncProfileOffWebTest`(프로필 밖 404), 통합 `CodefSyncIntegrationTest`(V12, 첫 동기화 저장 내용과 응답, 원장 불변, 승인번호 원문 없음, 재동기화 중복 없음, 해제 카드 재생성, 부분 실패, 전체 실패 502, 재연결 필요, 포트폴리오·미연결·기간 400, 요청 기간 전달, 사용자 분리), `CodefSyncRecheckIntegrationTest`(정상→Type1 갱신·이미 기록·Type1→정상 모순·취소금액 불일치·새 행, 같은 이름 2장 대조), `CodefSyncWithoutHmacKeyIntegrationTest`(HMAC 키 없음).
+테스트: 단위 `CodefSyncPeriodTest`(생략·한쪽 생략·오늘 이후·역순·12개월 경계·월말), `HmacApprovalFingerprinterTest`(Python으로 따로 계산한 값, 원문 미포함, 키 길이), `EnvironmentApprovalFingerprintKeySourceTest`, `CodefHeldCardMatcherTest`(새로·같은 카드·발급일자 구분·정확 비교·n·m 조합·이름 규칙·코드 포인트), `CodefSyncServiceHelpersTest`(실적 펼치기, 부분 실패 대상), `FakeCodefGatewayTest`(fixture 조회·시나리오), 웹 `CodefSyncApiWebTest`(계약 예시 JSON, 부분 실패·null 건수, 미연결 행 `userCardId=null`, 본문 생략, 날짜 형식 400, 기간 400, 실패 응답 전부, 헤더), `CodefSyncProfileOffWebTest`(프로필 밖 404), 통합 `CodefSyncIntegrationTest`(V12, 첫 동기화 저장 내용과 응답, 원장 불변, 승인번호 원문 없음, 재동기화 중복 없음, 해제 카드 재생성, 부분 실패, 전체 실패 502, 재연결 필요, 포트폴리오·미연결·기간 400, 요청 기간 전달, 사용자 분리), `CodefSyncRecheckIntegrationTest`(정상→Type1 갱신·이미 기록·Type1→정상 모순·취소금액 불일치·새 행, 같은 이름 2장 대조), `CodefSyncWithoutHmacKeyIntegrationTest`(HMAC 키 없음). 이름 사전(#268): 단위 `CodefCardNameDictionaryTest`(사전 표기 정확 일치, 앞뒤 공백, `|` 형식, 대소문자·부분·동일 계열·안쪽 공백 불일치, 중복·상품 ID·근거 무결성), 통합 `CodefCardNameCandidateIntegrationTest`(V16, 후보·불일치 응답과 목록, `CODEF_CANDIDATE` 확인과 400, 재동기화 적용·보호 상태 불변, 이미 확인한 상품, 상품당 후보 1장: 같은 동기화 2장·기존 후보·후보 확인 뒤·후보 해제 뒤 응답 순서별 결과).
 
 ## 공개(prod) 범위 (결정 38-8, #186)
 

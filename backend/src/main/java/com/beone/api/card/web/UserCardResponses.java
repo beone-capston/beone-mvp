@@ -19,7 +19,8 @@ final class UserCardResponses {
 	}
 
 	/**
-	 * 매핑 기록. CODEF 후보 값은 2차에서 만들므로 항상 {@code null}이다(결정 27 A2-10).
+	 * 매핑 기록. {@code candidateCardProductId}는 {@code CANDIDATE}일 때만 값이 있고(#268), {@code candidateBasis}는 항상
+	 * {@code null}이다.
 	 */
 	record Mapping(String status, String cardProductId, String confirmationMethod, String confirmedAt,
 			String candidateCardProductId, Object candidateBasis, String note) {
@@ -30,7 +31,8 @@ final class UserCardResponses {
 			}
 			return new Mapping(mapping.status().name(), mapping.cardProductId(),
 					(mapping.confirmationMethod() == null) ? null : mapping.confirmationMethod().name(),
-					UserCardValueFormats.seoulInstant(mapping.confirmedAt()), null, null, mapping.note());
+					UserCardValueFormats.seoulInstant(mapping.confirmedAt()), mapping.candidateCardProductId(), null,
+					mapping.note());
 		}
 
 	}
