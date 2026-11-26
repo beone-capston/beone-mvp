@@ -175,7 +175,7 @@ sudo docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | grep -E 'beon
 ```bash
 exec bash
 V='sudo docker compose -f /opt/beone/verify/compose.yaml -p beone-verify --env-file /opt/beone/verify/.env'
-$V exec -T verify-mysql sh -c 'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -N -e "SELECT version, success FROM flyway_schema_history ORDER BY installed_rank" "$MYSQL_DATABASE"' 2>/dev/null
+$V exec -T verify-mysql sh -c 'mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -N -e "SELECT version, success FROM flyway_schema_history ORDER BY installed_rank" "$MYSQL_DATABASE"' 2>/dev/null
 ```
 
 | 단계 | 확인값 | 실패 시 |
@@ -189,7 +189,7 @@ exec bash
 EMAIL='smoke-a-XXXXXXXXXX@example.test'   # 스크립트 안내값으로 바꾼다
 case "$EMAIL" in *@example.test) ;; *) echo '합성 주소 아님, 중단'; exit 1 ;; esac
 V='sudo docker compose -f /opt/beone/verify/compose.yaml -p beone-verify --env-file /opt/beone/verify/.env'
-$V exec -T -e EMAIL="$EMAIL" verify-mysql sh -c 'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -N -e "START TRANSACTION; UPDATE members SET email_verified_at=NOW() WHERE email=\"$EMAIL\" AND email_verified_at IS NULL; SELECT ROW_COUNT(); INSERT INTO users (demo_user, member_id, display_name, portfolio_type, read_only) SELECT NULL, m.member_id, \"내 카드\", \"REAL\", FALSE FROM members m WHERE m.email=\"$EMAIL\" AND NOT EXISTS (SELECT 1 FROM users u WHERE u.member_id=m.member_id); SELECT ROW_COUNT(); COMMIT;" "$MYSQL_DATABASE"' 2>/dev/null
+$V exec -T -e EMAIL="$EMAIL" verify-mysql sh -c 'mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -N -e "START TRANSACTION; UPDATE members SET email_verified_at=NOW() WHERE email=\"$EMAIL\" AND email_verified_at IS NULL; SELECT ROW_COUNT(); INSERT INTO users (demo_user, member_id, display_name, portfolio_type, read_only) SELECT NULL, m.member_id, \"내 카드\", \"REAL\", FALSE FROM members m WHERE m.email=\"$EMAIL\" AND NOT EXISTS (SELECT 1 FROM users u WHERE u.member_id=m.member_id); SELECT ROW_COUNT(); COMMIT;" "$MYSQL_DATABASE"' 2>/dev/null
 ```
 
 | 확인값 | 실패 시 |

@@ -533,4 +533,66 @@ class CodefCardResponseParserTest {
 
 	}
 
+	@Nested
+	class AccountErrorList {
+
+		private CodefAccount account(String body) {
+			CodefResponse<CodefAccount> response = CodefCardResponseParser.parseAccount(body);
+			return ((CodefList.Items<CodefAccount>) response.data()).items().get(0);
+		}
+
+		@Test
+		void keepsOnlyWellFormedCodesAndReplacesTheRest() {
+			CodefAccount account = account("{\"result\":{\"code\":\"CF-04000\"},\"data\":{\"errorList\":["
+					+ "{\"code\":\"CF-12834\",\"message\":\"synthetic-message\"},{\"code\":\"cf-12834\"},"
+					+ "{\"code\":\"CF-1234\"},{\"code\":\"CF-12345\\nresultCode=CF-00000\"},{\"code\":123},{}]}}");
+
+			assertThat(account.errorCodes()).containsExactly("CF-12834", "OTHER", "OTHER", "OTHER", "OTHER");
+			assertThat(account.errorCount()).isEqualTo(6);
+			assertThat(account.toString()).doesNotContain("synthetic-message");
+		}
+
+		@Test
+		void capsKeptCodesButCountsAllItems() {
+			StringBuilder list = new StringBuilder();
+			for (int i = 0; i < 8; i++) {
+				list.append(i == 0 ? "" : ",").append("{\"code\":\"CF-1240").append(i).append("\"}");
+			}
+			CodefAccount account = account("{\"result\":{\"code\":\"CF-04000\"},\"data\":{\"errorList\":[" + list + "]}}");
+
+			assertThat(account.errorCodes()).hasSize(CodefAccount.MAX_ERROR_CODES)
+				.containsExactly("CF-12400", "CF-12401", "CF-12402", "CF-12403", "CF-12404");
+			assertThat(account.errorCount()).isEqualTo(8);
+		}
+
+		@Test
+		void missingEmptyOrNonArrayErrorListHasNoCodes() {
+			for (String data : List.of("{}", "{\"errorList\":[]}", "{\"errorList\":\"CF-12834\"}", "{\"errorList\":null}")) {
+				CodefAccount account = account("{\"result\":{\"code\":\"CF-04000\"},\"data\":" + data + "}");
+				assertThat(account.errorCodes()).as(data).isEmpty();
+				assertThat(account.errorCount()).as(data).isZero();
+			}
+		}
+
+		@Test
+		void extraMessageKeepsPresenceOnly() {
+			assertThat(CodefCardResponseParser
+				.parseAccount("{\"result\":{\"code\":\"CF-04000\",\"extraMessage\":\"synthetic-extra\"},\"data\":{}}")
+				.result()).satisfies(result -> {
+					assertThat(result.extraMessagePresent()).isTrue();
+					assertThat(result.toString()).doesNotContain("synthetic-extra");
+				});
+			for (String extra : List.of("\"\"", "\"  \"", "null")) {
+				assertThat(CodefCardResponseParser
+					.parseAccount("{\"result\":{\"code\":\"CF-04000\",\"extraMessage\":" + extra + "},\"data\":{}}")
+					.result()
+					.extraMessagePresent()).as(extra).isFalse();
+			}
+			assertThat(CodefCardResponseParser.parseAccount("{\"result\":{\"code\":\"CF-04000\"},\"data\":{}}")
+				.result()
+				.extraMessagePresent()).isFalse();
+		}
+
+	}
+
 }

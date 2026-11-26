@@ -52,7 +52,7 @@ codef/
 [CodefCardResponseParser](../../backend/src/main/java/com/beone/api/codef/CodefCardResponseParser.java)의 `parseApprovals`·`parseHeldCards`·`parseCardPerformances`는 응답 본문을 받아 [CodefResponse](../../backend/src/main/java/com/beone/api/codef/CodefResponse.java)를 돌려줍니다.
 
 1. 본문이 JSON 객체가 아니면 예외를 던지지 않고 결과는 미분류, `data`는 형식 오류입니다. 파서 예외 문구에 본문 일부가 들어갈 수 있어 전달하지 않습니다.
-2. `result.code`·`transactionId`만 보관하고 [CodefResultCategory](../../backend/src/main/java/com/beone/api/codef/CodefResultCategory.java)로 분류합니다. `message`·`extraMessage`는 기관 문구가 그대로 담길 수 있어 보관하지 않습니다.
+2. `result.code`·`transactionId`만 보관하고 [CodefResultCategory](../../backend/src/main/java/com/beone/api/codef/CodefResultCategory.java)로 분류합니다. `message`·`extraMessage`는 기관 문구가 그대로 담길 수 있어 보관하지 않습니다. `extraMessage`는 내용 없이 값이 있었는지(`extraMessagePresent`)만 남깁니다(아래 "계정 등록 실패 관측").
 3. `data`는 [CodefList](../../backend/src/main/java/com/beone/api/codef/CodefList.java)로 읽습니다. 객체 → 1건, 배열 → N건(빈 배열은 0건), 키 누락 → 값 없음(`Missing`), null·원시값·객체가 아닌 배열 원소 → 형식 오류(`Malformed`). 실적조회의 중첩 목록도 같은 규칙이며, 중첩 목록의 빈 문자열은 "미제공시 빈칸"으로 보고 값 없음입니다(최상위 `data`의 빈 문자열은 형식 오류).
 4. 결과 코드 분류와 `data` 해석은 독립입니다. 성공 분류여도 `data`의 누락·형식 오류·빈 값·해석 못 한 금액·목록 밖 코드 값은 그대로 남고, 0원·0건·검증 완료로 바뀌지 않습니다. 해석기에는 두 값을 합쳐 "사용 가능"을 판정하는 메서드가 없으며, 그 판정은 하위 패키지 [`codef.sync`](#오프라인-동기화-변환-82)가 조회 대상별로 합니다. 판정을 통과해도 항목 값의 빈 값·미해석은 그대로입니다. 예를 들어 추가 인증 응답의 `data`도 형식상 객체 1건으로 읽힙니다.
 
@@ -297,7 +297,7 @@ codef/
 | `CARD_VERIFICATION_NOT_SUPPORTED`(`CF-12108`) | 카드소지확인 필요 | 409 `CODEF_CARD_VERIFICATION_NOT_SUPPORTED` |
 | 추가 인증 필요(2-way 범위 밖), 토큰·인증서·통신·요청 형식·도메인·IP·연결 계정 오류, 미분류 | 사용 불가 | 502 `CODEF_UNAVAILABLE` |
 
-  **실코드 대응이 없는 것**: 결과 분류에 로그인 실패 분류가 없으므로(#47에서 `CF-12401`·`CF-12834`를 미분류로 정정) 400 `CODEF_LOGIN_FAILED`로 가는 실 결과 코드는 없습니다. 이 응답은 가짜 게이트웨이의 로그인 거절로만 나옵니다. `RECONNECT_REQUIRED`로 바꾸는 실 결과 코드도 없습니다. 근거 있는 코드가 확인되면 별도 결정으로 더합니다. 시간 초과를 504로 나누지 않습니다.
+  **실코드 대응이 없는 것**: 결과 분류에 로그인 실패 분류가 없으므로(#47에서 `CF-12401`·`CF-12834`를 미분류로 정정) 400 `CODEF_LOGIN_FAILED`로 가는 실 결과 코드는 없습니다. 계정 등록 응답의 `errorList` 코드도 관측 로그에만 쓰고 이 대응을 바꾸지 않습니다(2026-11-26 검토, 아래 "계정 등록 실패 관측"). 이 응답은 가짜 게이트웨이의 로그인 거절로만 나옵니다. `RECONNECT_REQUIRED`로 바꾸는 실 결과 코드도 없습니다. 근거 있는 코드가 확인되면 별도 결정으로 더합니다. 시간 초과를 504로 나누지 않습니다.
 - **민감 정보**: 비밀번호는 `char[]`로 받아 게이트웨이에 넘긴 뒤 지우고 저장하지 않습니다. 아이디도 저장하지 않습니다. 요청 객체·등록 결과·엔티티의 문자열 표현에 아이디·비밀번호·connectedId를 넣지 않습니다. 가짜 게이트웨이는 RSA 암호화를 하지 않습니다(관리자 판단 P7). 실 구현은 받은 즉시 CODEF 공개키로 암호화해 보내야 합니다(D-14 원칙 9).
 - **가짜 게이트웨이 합성 아이디**: `fake-login-rejected`(로그인 거절), `fake-card-verification`(카드소지확인), `fake-unavailable`(사용 불가). 그 밖의 아이디는 성공이며 `fake-cid-` 접두어의 무작위 connectedId를 줍니다. 실계정 아이디를 넣어도 CODEF로 보내지 않습니다.
 - **현재 사용자 응답(#136)**: `GET /api/v1/me`의 `codefConnected`는 연결 행이 있으면 `true`입니다(`RECONNECT_REQUIRED` 포함, 재연결 필요 여부는 연결 상태 GET으로 봄). card가 codef를 참조하지 않도록 card의 조회 포트 `CodefConnectionLookup`을 codef의 `CodefConnectionStatusLookup`이 구현합니다.
@@ -385,6 +385,23 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
 - **계정 API 근거 대조(2026-11-25)**: 공식 개발자 문서(`developer.codef.io/cert/account/cid-overview`)는 스크립트로 그려지는 페이지라 본문을 읽지 못했습니다. 대신 공식 SDK [codef-io/easycodef-java](https://github.com/codef-io/easycodef-java)(커밋 `ea96123`, 2024-09-26)와 대조했습니다.
   - 일치: 경로 `/v1/account/create`·`/v1/account/delete`(`EasyCodefConstant`), 등록 `accountList` 항목 `countryCode` `KR`·`businessType` `CD`·`clientType` `P`·`loginType` `1`·`id`·`password`(`CreateAccountTest`, README), 삭제는 `connectedId`를 최상위에 두고 `accountList`에 로그인 입력 없이 같은 5개 항목(`DeleteAccountTest`), 응답 `data`에 `connectedId`·`successList`·`errorList`(README 응답 예시), 비밀번호는 공개키(Base64 → X.509) RSA 암호문의 Base64(`EasyCodefUtil.encryptRSA`, `Cipher.getInstance("RSA")`는 JDK 기본 제공자에서 RSA/ECB/PKCS1Padding).
   - **실호출 전 확인 필요**: `loginType` `1`이 아이디 로그인이라는 설명(SDK에는 값만 있음), 카드소지확인 등 등록 실패 코드가 최상위 `result`에 오는지 `errorList`에 오는지, 요청 본문을 URL 인코딩해야 하는지(상품 호출과 같은 미확인 항목), 기관 코드 `0301`(KB국민카드)로 SDK 예제(`0309`)와 같은 형식이 통하는지, 공식 개발자 문서 본문과의 일치.
+- **계정 등록 실패 관측(2026-11-26)**: 비공개 실연동 1차 시도에서 계정 등록이 `CF-04000`(Aside 보고의 설명 "사용자 계정정보 등록에 실패", 저장소의 공식 목록 사본에는 이 코드 행이 없음)으로 끝났습니다. 로그만으로는 로그인 실패인지 기관 오류인지 알 수 없었습니다. 그래서 원인 판단에 쓸 값만 관측 로그에 더했습니다.
+  - **남기는 것**: 결과 코드가 `CF-00000`이 아니면, 기존 한 줄(`codef call api=… http=… resultCode=…`) 뒤에 한 줄을 더 남깁니다.
+    - 계정 API: `codef call detail api=ACCOUNT_CREATE extraMessage=<true|false> errorCodes=<코드,…> errorCount=<항목 수>`
+    - 상품 API: `codef call detail api=<API> extraMessage=<true|false>`
+  - **`errorCodes` 규칙**([CodefAccount](../../backend/src/main/java/com/beone/api/codef/CodefAccount.java))
+    - `data.errorList[].code`만 읽습니다.
+    - `CF-`와 숫자 5자리 형식만 그대로 둡니다. 누락·문자열 아님·다른 형식(줄바꿈 등 로그 주입 시도 포함)은 `OTHER`로 바꿉니다.
+    - 앞에서부터 최대 5개만 남기고, `errorCount`는 배열의 실제 항목 수입니다. 배열이 없거나 배열이 아니면 빈 값과 0입니다.
+  - **`extraMessage`**: 비어 있지 않은 값이 있었는지만 남깁니다. null·빈 문자열·공백뿐이면 `false`입니다.
+  - **남기지 않는 것**: `result.message`·`errorList[].message`·`extraMessage`의 내용, 아이디, connectedId, 비밀번호, 응답 전문.
+  - **분류는 바꾸지 않음(관리자 판단 P1 유지)**
+    - 저장소에 있는 공식 오류 목록 근거는 `CF-12401`("로그인 파라미터가 누락되었습니다.")과 `CF-12834`("계정 잠김 해제가 필요합니다.")뿐입니다. 아이디·비밀번호 불일치를 뜻하는 코드의 근거는 없습니다.
+    - 그래서 `errorList` 코드로 400 `CODEF_LOGIN_FAILED`를 나누지 않고 502 `CODEF_UNAVAILABLE`을 유지합니다.
+    - 특히 `CF-12834`를 로그인 실패로 안내하면 사용자가 같은 비밀번호로 다시 시도해 잠금이 악화될 수 있습니다.
+    - 다음 시도 로그의 `errorCodes`로 실제 코드를 확인한 뒤 별도 결정으로 정합니다.
+  - 호출 총량(`CodefCallBudget`) 차감과 재시도 없음 규칙은 그대로입니다.
+  - 테스트: `CodefTransportLoggingTest`(계정·상품 실패 관측 줄, 메시지·아이디·connectedId 비출력, 형식 치환·상한), `CodefCardResponseParserTest.AccountErrorList`(코드 치환·상한·항목 수·`extraMessage` 유무), `LiveCodefGatewayTest`(`errorList` 코드와 무관하게 사용 불가 유지)
 - **조회 요청**: 보유카드·실적은 `organization`·`connectedId`, 승인내역은 여기에 `startDate`·`endDate`(yyyyMMdd)·`orderBy`(`0`)를 더합니다(샌드박스 확인 절차와 같은 값, 근거 확인 대상). 응답 판정은 기존 `codef.sync`가 합니다. 근거 있는 결과 코드가 없어 연결 무효(재연결 필요)로 바꾸는 대응은 아직 없습니다.
 - **키**: 환경 변수 이름만 씁니다(`CODEF_CLIENT_ID`·`CODEF_CLIENT_SECRET`·`CODEF_PUBLIC_KEY`·`BEONE_CODEF_CONNECTED_ID_KEY`·`BEONE_CODEF_APPROVAL_HMAC_KEY`). 시험은 합성 값만 씁니다. 비밀번호·connectedId·암호문은 로그·예외 문구에 넣지 않습니다.
 - **저장 분리(R8)**: 동기화 결과는 기존과 같이 CODEF 전용 테이블과 `user_cards`(`CODEF`, `UNMAPPED`)에만 저장하고 `ledger_transactions`는 바꾸지 않습니다.

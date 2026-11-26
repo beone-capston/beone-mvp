@@ -33,6 +33,8 @@ class CodefTransportLoggingTest {
 
 	private static final String BODY_MARKER = "synthetic-body-marker";
 
+	private static final String LOGIN_MARKER = "synthetic-login-marker";
+
 	private final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
 
 	private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
@@ -98,6 +100,48 @@ class CodefTransportLoggingTest {
 		assertThat(codefMessages()).contains("codef call api=HELD_CARDS http=500 resultCode=NONE",
 				"codef call failed api=APPROVALS stage=PRODUCT reason=TIMEOUT",
 				"codef call failed api=CARD_PERFORMANCES stage=PRODUCT reason=CONNECTION_FAILED");
+		assertNoSecretsLogged();
+	}
+
+	@Test
+	void accountFailureLogsOnlyCodesCountAndExtraMessagePresence() {
+		StringBuilder errors = new StringBuilder("{\"code\":\"CF-12834\",\"message\":\"" + BODY_MARKER + "\",\"extraMessage\":\""
+				+ BODY_MARKER + "\",\"id\":\"" + LOGIN_MARKER + "\"},{\"code\":\"" + BODY_MARKER + "\\nresultCode=CF-00000\"}");
+		for (int i = 0; i < 5; i++) {
+			errors.append(",{\"code\":\"CF-1240").append(i).append("\"}");
+		}
+		stub.respond(CodefAccountApi.ACCOUNT_CREATE.path(), 200, "{\"result\":{\"code\":\"CF-04000\",\"message\":\"" + BODY_MARKER
+				+ "\",\"extraMessage\":\"" + BODY_MARKER + "\"},\"data\":{\"connectedId\":\"" + CONNECTED_MARKER
+				+ "\",\"errorList\":[" + errors + "]}}");
+
+		client.startObservation().createAccount("0301", LOGIN_MARKER, VALUE_MARKER);
+
+		assertThat(codefMessages()).containsExactly("codef call api=TOKEN http=200",
+				"codef call api=ACCOUNT_CREATE http=200 resultCode=CF-04000",
+				"codef call detail api=ACCOUNT_CREATE extraMessage=true errorCodes=CF-12834,OTHER,CF-12400,CF-12401,CF-12402 errorCount=7");
+		assertNoSecretsLogged();
+		assertThat(appender.list).allSatisfy(event -> assertThat(event.getFormattedMessage()).doesNotContain(LOGIN_MARKER));
+	}
+
+	@Test
+	void accountFailureWithoutErrorListLogsEmptyCodes() {
+		stub.respond(CodefAccountApi.ACCOUNT_CREATE.path(), 200, "{\"result\":{\"code\":\"CF-04000\"},\"data\":{}}");
+
+		client.startObservation().createAccount("0301", LOGIN_MARKER, VALUE_MARKER);
+
+		assertThat(codefMessages()).contains("codef call detail api=ACCOUNT_CREATE extraMessage=false errorCodes= errorCount=0");
+		assertNoSecretsLogged();
+	}
+
+	@Test
+	void productFailureLogsExtraMessagePresenceOnly() {
+		stub.respond(CodefApi.HELD_CARDS.path(), 200,
+				"{\"result\":{\"code\":\"CF-12801\",\"extraMessage\":\"" + BODY_MARKER + "\"},\"data\":[]}");
+
+		client.startObservation().heldCards(Map.of("connectedId", CONNECTED_MARKER));
+
+		assertThat(codefMessages()).containsExactly("codef call api=TOKEN http=200",
+				"codef call api=HELD_CARDS http=200 resultCode=CF-12801", "codef call detail api=HELD_CARDS extraMessage=true");
 		assertNoSecretsLogged();
 	}
 
