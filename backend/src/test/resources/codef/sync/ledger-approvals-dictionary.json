@@ -1,0 +1,112 @@
+{
+  "_fixture": {
+    "synthetic": true,
+    "basis": "승인내역!H24:H48(출력 O). R1 이름 사전 연결 시나리오(#270): 공개 상품명만 쓴 합성 응답",
+    "observed": false
+  },
+  "result": {
+    "code": "CF-00000",
+    "transactionId": "SYN-TX-DLINK-0001"
+  },
+  "data": [
+    {
+      "resUsedDate": "20261015",
+      "resUsedTime": "100000",
+      "resCardName": "nori 체크카드(RF)",
+      "resUsedAmount": "1000",
+      "resAccountCurrency": "KRW",
+      "resHomeForeignType": "1",
+      "resCancelYN": "0",
+      "resCancelAmount": "",
+      "resApprovalNo": "SYN-APR-D00"
+    },
+    {
+      "resUsedDate": "20261015",
+      "resUsedTime": "100100",
+      "resCardName": "KB국민 노리체크카드",
+      "resUsedAmount": "1000",
+      "resAccountCurrency": "KRW",
+      "resHomeForeignType": "1",
+      "resCancelYN": "0",
+      "resCancelAmount": "",
+      "resApprovalNo": "SYN-APR-D01"
+    },
+    {
+      "resUsedDate": "20261015",
+      "resUsedTime": "100200",
+      "resCardName": "KB Youth Club 체크카드",
+      "resUsedAmount": "1000",
+      "resAccountCurrency": "KRW",
+      "resHomeForeignType": "1",
+      "resCancelYN": "0",
+      "resCancelAmount": "",
+      "resApprovalNo": "SYN-APR-D02"
+    },
+    {
+      "resUsedDate": "20261015",
+      "resUsedTime": "100300",
+      "resCardName": "첵첵 체크카드",
+      "resUsedAmount": "1000",
+      "resAccountCurrency": "KRW",
+      "resHomeForeignType": "1",
+      "resCancelYN": "0",
+      "resCancelAmount": "",
+      "resApprovalNo": "SYN-APR-D03"
+    },
+    {
+      "resUsedDate": "20261015",
+      "resUsedTime": "100400",
+      "resCardName": "청춘대로 톡톡카드 ",
+      "resUsedAmount": "1000",
+      "resAccountCurrency": "KRW",
+      "resHomeForeignType": "1",
+      "resCancelYN": "0",
+      "resCancelAmount": "",
+      "resApprovalNo": "SYN-APR-D04"
+    },
+    {
+      "resUsedDate": "20261015",
+      "resUsedTime": "100500",
+      "resCardName": "올라운드 티타늄카드|KB국민카드",
+      "resUsedAmount": "1000",
+      "resAccountCurrency": "KRW",
+      "resHomeForeignType": "1",
+      "resCancelYN": "0",
+      "resCancelAmount": "",
+      "resApprovalNo": "SYN-APR-D05"
+    },
+    {
+      "resUsedDate": "20261015",
+      "resUsedTime": "100600",
+      "resCardName": "kb국민 노리체크카드",
+      "resUsedAmount": "1000",
+      "resAccountCurrency": "KRW",
+      "resHomeForeignType": "1",
+      "resCancelYN": "0",
+      "resCancelAmount": "",
+      "resApprovalNo": "SYN-APR-D06"
+    },
+    {
+      "resUsedDate": "20261015",
+      "resUsedTime": "100700",
+      "resCardName": "청춘대로 톡톡카드",
+      "resUsedAmount": "1000",
+      "resAccountCurrency": "KRW",
+      "resHomeForeignType": "1",
+      "resCancelYN": "0",
+      "resCancelAmount": "",
+      "resApprovalNo": "SYN-APR-D07"
+    },
+    {
+      "resUsedDate": "20261015",
+      "resUsedTime": "100800",
+      "resCardName": "KB국민 노리체크카드",
+      "resUsedAmount": "1000",
+      "resAccountCurrency": "USD",
+      "resHomeForeignType": "1",
+      "resCancelYN": "0",
+      "resCancelAmount": "",
+      "resApprovalNo": "SYN-APR-D08"
+    }
+  ]
+}

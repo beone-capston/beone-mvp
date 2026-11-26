@@ -206,6 +206,39 @@ class CodefLedgerCandidateBuilderTest {
 	}
 
 	@Test
+	void incompleteDetailsNameTheActualBranchWhilePublicReasonsStay() {
+		// 공개 사유는 위 시험들 그대로이고, 내부 진단 분기만 나눠 센다(#270)
+		CodefLedgerCandidates pairing = LedgerFixture.build("ledger-approvals-pairing.json");
+		Map<Integer, CodefIncompleteDetail> expected = Map.of(3, CodefIncompleteDetail.NO_MATCHING_APPROVAL, 6,
+				CodefIncompleteDetail.MULTIPLE_MATCHING_APPROVALS, 8, CodefIncompleteDetail.CANCEL_SMALLER_THAN_APPROVAL,
+				11, CodefIncompleteDetail.TYPE1_CANCEL_AMOUNT_MISMATCH, 12, CodefIncompleteDetail.PARTIAL_CANCEL_CODE, 13,
+				CodefIncompleteDetail.CANCEL_STATUS_NOT_DESCRIBED, 17, CodefIncompleteDetail.CANCEL_LARGER_THAN_APPROVAL,
+				18, CodefIncompleteDetail.KRW_CURRENCY_NOT_KRW, 19, CodefIncompleteDetail.FORM_SHAPE_MISMATCH);
+		expected.forEach((position, detail) -> assertThat(pairing.row(position).incompleteDetail())
+			.as("row %d", position)
+			.contains(detail));
+		assertThat(pairing.row(2).incompleteDetail()).isEmpty();
+
+		CodefLedgerCandidates duplicate = LedgerFixture.build("ledger-approvals-duplicate.json");
+		assertThat(duplicate.row(0).incompleteDetail()).contains(CodefIncompleteDetail.DUPLICATE_KEY_IN_RESPONSE);
+		assertThat(duplicate.row(2).incompleteDetail()).contains(CodefIncompleteDetail.APPROVAL_NO_ABSENT);
+		assertThat(duplicate.row(3).incompleteDetail()).contains(CodefIncompleteDetail.USED_DATE_ABSENT);
+
+		CodefLedgerCandidates first = LedgerFixture.build("ledger-recheck-first.json");
+		assertThat(LedgerFixture.build("ledger-recheck-second.json", first.acceptedKinds()).row(2).incompleteDetail())
+			.contains(CodefIncompleteDetail.RECHECK_CONTRADICTION);
+		assertThat(LedgerFixture.build("ledger-approvals-dates.json").row(4).incompleteDetail())
+			.contains(CodefIncompleteDetail.USED_DATE_TIME_NOT_PARSED);
+		assertThat(LedgerFixture.build("ledger-approvals-link.json").row(2).incompleteDetail())
+			.contains(CodefIncompleteDetail.CARD_NOT_LINKED);
+		assertThat(CodefLedgerCandidateBuilder
+			.build("0309", LedgerFixture.linker(), LedgerFixture.approvals("ledger-approvals-pairing.json"),
+					SyntheticHmacFingerprinter.KEY_ONE, Map.of())
+			.row(0)
+			.incompleteDetail()).contains(CodefIncompleteDetail.ORGANIZATION_NOT_DOCUMENTED);
+	}
+
+	@Test
 	void sameInputGivesTheSameResult() {
 		assertThat(LedgerFixture.build("ledger-approvals-pairing.json"))
 			.isEqualTo(LedgerFixture.build("ledger-approvals-pairing.json"));
