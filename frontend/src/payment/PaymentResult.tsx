@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { WalletCard } from '../data/portfolio'
+import type { PreferenceCard } from '../preferences/preferenceApi'
 import { formatWon, orderName } from '../orders/order'
 import { Icon } from '../components/Icon'
 import type { Amount, Approval, Attempt, PaymentGateway, Recommendation, Rule } from './contract'
@@ -45,7 +45,7 @@ const differenceFields: Record<string, string> = {
 }
 
 export function PaymentResult({ approval, attempt, gateway, cards, onReturn, onRestart }: {
-  approval: Approval; attempt: Attempt; gateway: PaymentGateway; cards: readonly WalletCard[]
+  approval: Approval; attempt: Attempt; gateway: PaymentGateway; cards: readonly PreferenceCard[]
   onReturn: () => void; onRestart: () => void
 }) {
   const [comparison, setComparison] = useState<Recommendation>()
@@ -55,6 +55,8 @@ export function PaymentResult({ approval, attempt, gateway, cards, onReturn, onR
   const reference = approval.recalculation.recommendationId
   const fixed = approval.selectionMode === 'FIXED_REPRESENTATIVE'
   const chosen = comparison?.comparedCards.find(card => card.userCardId === approval.userCardId)
+  const optimum = comparison?.comparedCards.find(card =>
+    card.userCardId === comparison.fixedCardComparison?.optimalUserCardId)
   const cardName = chosen?.displayName ?? cards.find(card => card.id === approval.userCardId)?.name ??
     '카드 정보 확인 필요 (' + approval.userCardId + ')'
 
@@ -110,6 +112,7 @@ export function PaymentResult({ approval, attempt, gateway, cards, onReturn, onR
               {comparison.comparedCards.map(card => <li key={card.userCardId}>{card.displayName} · {benefit(card.currentOrderBenefit)}</li>)}
               {comparison.excludedCards.map(card => <li key={card.userCardId}>{card.userCardId} · 비교 제외 · {card.detail ?? card.reason}</li>)}
             </ul>
+            {fixed && optimum && <p>계산상 최적 카드 · {optimum.displayName}</p>}
             {comparison.fixedCardComparison?.differenceWon != null &&
               <p>대표 카드와 비교 카드의 차이 · {formatWon(comparison.fixedCardComparison.differenceWon)}원</p>}
           </>}
