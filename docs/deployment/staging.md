@@ -22,7 +22,7 @@ develop에 병합된 변경을 사용자가 직접 배포하지 않아도 확인
 | `backend` | `ghcr.io/beone-capston/beone-api@<digest>`(deploy.sh가 `BEONE_API_IMAGE`로 덮어씀) | 768MiB | 900 | 없음 |
 | `web` | 서버에 있는 nginx 이미지(`BEONE_STAGING_NGINX_IMAGE`) | 64MiB | 900 | `127.0.0.1:18082`(기본 인증), `127.0.0.1:18081`(배포 스모크 전용) |
 
-- **분리:** 프로젝트 이름 `beone-staging`, 네트워크 `beone-staging_staging`, 볼륨 `beone-staging_staging-mysql-data`. 운영(`beone-app`)·공개 nginx(`beone`)·검증(`beone-verify`)과 공유하지 않습니다.
+- **분리:** 프로젝트 이름 `beone-staging`, 네트워크 `beone-staging_staging`, 볼륨 `beone-staging_staging-mysql-data`. 운영(`beone-app`)·검증(`beone-verify`)과는 공유하지 않습니다. 공개 nginx(`beone`)는 스테이징 web(`beone-staging-web-1:8080`)으로 요청을 넘기려고 `beone-staging_staging`에 외부 네트워크로 연결되어 있습니다(2026-11-26, [공개 nginx 2-1절](public-proxy.md#2-1-스테이징-server-블록-기본-인증은-스테이징-web이-함)). 볼륨은 공유하지 않습니다.
 - **메모리:** 상한 합계 1344MiB(mysql 512 + backend 768 + web 64)이며 검증 환경 `beone-verify`(PR #206 `deploy/verify/compose.yaml`)와 같은 배분입니다. 스테이징과 `beone-verify`는 동시에 띄우지 않습니다.
 - **먼저 종료:** 운영 컨테이너는 `oom_score_adj`가 기본값 0입니다. 스테이징은 800·900이라 서버 메모리가 모자라면 커널이 스테이징을 먼저 종료합니다. 재시작은 `on-failure:3`으로 세 번까지만 해서 운영 메모리를 계속 빼앗지 않게 했습니다. 서버 재부팅 뒤에는 자동으로 뜨지 않고 다음 배포(`up -d`)가 다시 띄웁니다.
 - **이미지:** 세 서비스 모두 `pull_policy: never`입니다. backend는 `deploy.sh`가 digest로 먼저 pull하고, mysql·nginx는 서버에 있는 이미지를 씁니다(추가 다운로드 없음).

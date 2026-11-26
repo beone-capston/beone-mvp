@@ -211,11 +211,18 @@ sudo grep -cE '^(BEONE_)?CODEF_' $S/.env
 **`htpasswd`(기본 인증):** 생성 명령만 적는다. 사용자 이름과 비밀번호는 실행하는 사람이 프롬프트로 입력하고 기록하지 않는다. 서버에 `htpasswd` 도구(apache2-utils 계열)가 없으므로 패키지를 설치하지 않고 `openssl passwd -6`(SHA-512 crypt, nginx `auth_basic`이 읽는 형식)으로 만든다.
 
 ```bash
-sudo install -m 640 -o root -g 101 /dev/null $S/htpasswd   # 빈 파일을 권한부터 맞춰 만든다
-H=$(openssl passwd -6)                                     # 비밀번호 프롬프트 입력(두 번), 화면에 나오지 않음
-printf '%s:%s\n' '<기본 인증 사용자 이름>' "$H" | sudo tee $S/htpasswd > /dev/null
+# 해시가 만들어진 뒤에만 파일을 만들고 쓴다. 해시 생성이 실패하면(확인 입력 불일치·취소 등) 파일을 만들지도 바꾸지도 않는다
+if H=$(openssl passwd -6) && [ -n "$H" ]; then                # 비밀번호 프롬프트 입력(두 번), 화면에 나오지 않음
+	sudo install -m 640 -o root -g 101 /dev/null $S/htpasswd \
+		&& printf '%s:%s\n' '<기본 인증 사용자 이름>' "$H" | sudo tee $S/htpasswd > /dev/null \
+		&& echo HTPASSWD_OK || echo "파일 쓰기 실패: 권한·내용을 확인하고 다시 실행"
+else
+	echo "해시 생성 실패: 파일을 쓰지 않음"
+fi
 unset H
 ```
+
+- `HTPASSWD_OK`가 나와야 성공이다. "해시 생성 실패"면 파일은 만들어지지 않았고(이미 있던 파일은 그대로), 같은 블록을 다시 실행한다.
 
 - **권한 `640 root:101`:** 스테이징 web 컨테이너는 이 파일을 읽기 전용으로 마운트하고(`/etc/nginx/htpasswd`), 요청을 처리하는 nginx 워커는 uid/gid 101로 돈다. 처음 런북의 `640 root:root`로는 워커가 파일을 읽지 못해 기본 인증이 동작하지 않는다. 그룹을 101로 두고 그룹 읽기만 연다.
 
