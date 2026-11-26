@@ -96,6 +96,17 @@ public class LoginAttemptThrottle {
 		this.failures.deleteAllFailures(SessionTokens.hash(normalizedEmail));
 	}
 
+	/**
+	 * 회원 탈퇴: 그 이메일의 실패 기록과 잠금 상태 행을 지운다. 같은 트랜잭션에서 {@link #lockedFor}로 행을 잠근 뒤 부른다.
+	 * @param normalizedEmail 정규화한 이메일
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void forget(String normalizedEmail) {
+		String key = SessionTokens.hash(normalizedEmail);
+		this.failures.deleteAllFailures(key);
+		this.throttles.delete(lockRow(normalizedEmail));
+	}
+
 	private LoginThrottleEntity lockRow(String normalizedEmail) {
 		String key = SessionTokens.hash(normalizedEmail);
 		this.throttles.createOrLock(key);

@@ -127,6 +127,18 @@ final class MemberApiTestClient {
 		return request.retrieve().toEntity(String.class);
 	}
 
+	/** {@code DELETE}에 JSON 본문을 담아 보낸다({@link #send}는 DELETE 본문을 보내지 않는다). */
+	ResponseEntity<String> deleteWithBody(String path, Session session, String body) {
+		RestClient.RequestBodySpec request = client().method(HttpMethod.DELETE).uri(path);
+		if (session.id() != null) {
+			request = request.header(HttpHeaders.COOKIE, cookie(session.id()));
+		}
+		if (session.csrf() != null) {
+			request = request.header("X-CSRF-TOKEN", session.csrf());
+		}
+		return request.contentType(MediaType.APPLICATION_JSON).body(body).retrieve().toEntity(String.class);
+	}
+
 	/**
 	 * 추가 요청 헤더(예: {@code Idempotency-Key}, 시연 헤더)를 붙여 보낸다. 값이 {@code null}인 헤더는 보내지 않는다.
 	 */
