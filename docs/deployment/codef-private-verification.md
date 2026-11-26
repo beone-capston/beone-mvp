@@ -474,7 +474,7 @@ C=(sudo docker compose -f /opt/beone/verify/compose.yaml -f /opt/beone/codef/com
 fail() { echo "중단: $*" >&2; exit 1; }
 logs=$("${C[@]}" logs --no-color verify-backend) || fail "logs 조회 실패(0건과 다름)"
 [ -n "$logs" ] || fail "로그가 비어 있음(백엔드 미기동 의심, 0건과 다름)"
-sens=$(printf '%s\n' "$logs" | grep -ciE 'password|passwd|connectedId=|cardNo|card_no|approvalNo' || true)
+sens=$(printf '%s\n' "$logs" | grep -ciE 'password|passwd|connectedId=|card_?no([^A-Za-z0-9_]|$)|approvalNo' || true)
 keys=$(printf '%s\n' "$logs" | grep -cE 'CODEF_(CLIENT_ID|CLIENT_SECRET|PUBLIC_KEY)=|CODEF_[A-Z_]*KEY=' || true)
 printf '%s\n' "$logs" | grep -oE 'CF-[0-9]{5}' | sort | uniq -c || true   # 결과 코드만
 echo "sensitive=$sens keyform=$keys"
@@ -483,6 +483,7 @@ echo LOGS_OK
 )
 ```
 
+- 카드번호 필드명은 `card_?no([^A-Za-z0-9_]|$)`로 셉니다(`cardNo`·`card_no`·`resCardNo` 뒤에 영숫자·밑줄이 오지 않을 때). 이전 `cardNo|card_no`는 대소문자 무시 때문에 동기화 진단 로그(#271)의 `CARD_NOT_LINKED`와 일치해 카드번호가 없어도 `sensitive`가 1 이상이 됐습니다. 이식성을 위해 `\b` 대신 POSIX ERE로 적었습니다. 같은 블록의 다른 이름(`password`·`passwd`·`connectedId=`·`approvalNo`)은 진단 로그의 키(`CARD_NOT_LINKED.*`, `HELD_CARD_SKIPPED`, `linkedByDictionary`, `unlinkedCardNames`, 사유 코드)와 일치하지 않습니다. 진단 로그 한 줄은 0건, 진짜 카드번호 필드명은 검출되는 사례를 [`codef-runbook-selftest.sh`](../../deploy/scripts/codef-runbook-selftest.sh)에 두었습니다.
 - 이 점검은 **알려진 이름 패턴**(비밀번호·connectedId·카드번호·승인번호 필드명, 키 이름=값 형태)만 셉니다. 0건이어도 이름 없이 찍힌 값, 다른 형식, nginx·MySQL 등 다른 컨테이너 로그의 민감값이 없다는 보장은 아닙니다. 결과를 공유할 때는 이 숫자와 결과 코드만 씁니다.
 
 ## 4. 해제·폐기 (K7, 승인 ⑪)

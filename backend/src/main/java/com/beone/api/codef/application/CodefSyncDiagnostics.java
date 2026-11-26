@@ -16,7 +16,11 @@ import com.beone.api.codef.sync.CodefLedgerCandidateRow;
  *
  * <p>담는 것: 승인 행 수·받아들인 수, 불완전 행의 실제 판정 분기별 개수(카드 미연결은 연결하지 않은 이유별), 이름 사전으로 연결한 행 수, 미연결 행의 카드명
  * 고유값과 개수. 실적도 같은 방식이다. 카드명은 공개 상품명이라 남기되, 로그 주입을 막으려고 제어·서식 문자와 따옴표·역슬래시를 {@code ?}로 바꾸고
- * {@value #NAME_MAX_CODE_POINTS}자에서 자르며, 고유값은 {@value #NAMES_MAX}개까지만 적는다.
+ * {@value #NAME_MAX_CODE_POINTS}자에서 자르며, 고유값은 {@value #NAMES_MAX}개까지만 적는다. 고유값은 원본 카드명으로 세고 정렬·상한도 원본 기준이며,
+ * 바꾸기는 출력할 때만 한다. 그래서 표시 문자열이 같아 보여도 원본이 다르면 다른 항목이다(#272).
+ *
+ * <p>연결기가 보유카드 이름을 돌려줬어도 그 보유카드 ID가 없으면(동기화에서 건너뛴 보유카드) 실제로 붙지 않았으므로 미연결로 세고 사유는
+ * {@value #HELD_CARD_SKIPPED}다. 승인과 실적이 같다(#272).
  *
  * <p>담지 않는 것: 카드번호, 승인번호(원문·지문), 금액, 가맹점, 사용일시, connectedId, 사용자 ID. API 응답의 공개 사유 코드는 바꾸지 않는다.
  */
@@ -56,7 +60,7 @@ final class CodefSyncDiagnostics {
 	 */
 	void approval(Optional<String> rowCardName, CodefLedgerCandidateRow row, boolean heldCardSkipped) {
 		this.approvals.rows++;
-		this.approvals.countLink(rowCardName, row.card());
+		this.approvals.countLink(rowCardName, row.card(), !heldCardSkipped);
 		if (heldCardSkipped) {
 			this.approvals.incomplete.merge(HELD_CARD_SKIPPED, 1, Integer::sum);
 			return;
@@ -74,12 +78,17 @@ final class CodefSyncDiagnostics {
 	 * 실적 참고값 하나(카드 한 장)를 센다.
 	 * @param rowCardName 실적의 카드명
 	 * @param link 연결 결과
+	 * @param heldCardFound 연결된 보유카드의 보유 카드 ID가 있는지. 미연결이면 의미 없다
 	 */
-	void performance(Optional<String> rowCardName, CodefCardLink link) {
+	void performance(Optional<String> rowCardName, CodefCardLink link, boolean heldCardFound) {
 		this.performances.rows++;
-		this.performances.countLink(rowCardName, link);
+		boolean attached = link instanceof CodefCardLink.Linked && heldCardFound;
+		this.performances.countLink(rowCardName, link, attached);
 		if (link instanceof CodefCardLink.NotLinked notLinked) {
 			this.performances.incomplete.merge("CARD_NOT_LINKED." + notLinked.reason(), 1, Integer::sum);
+		}
+		else if (!attached) {
+			this.performances.incomplete.merge(HELD_CARD_SKIPPED, 1, Integer::sum);
 		}
 	}
 
@@ -143,15 +152,17 @@ final class CodefSyncDiagnostics {
 
 		private final Map<String, Integer> unlinkedNames = new TreeMap<>();
 
-		private void countLink(Optional<String> rowCardName, CodefCardLink link) {
-			if (link instanceof CodefCardLink.Linked linked) {
+		// attached: 연결됐고 붙일 보유 카드 ID도 있는지. 아니면 미연결로 센다
+		private void countLink(Optional<String> rowCardName, CodefCardLink link, boolean attached) {
+			if (attached && link instanceof CodefCardLink.Linked linked) {
 				// 정확 일치면 행 이름과 연결된 보유카드 이름이 같다. 다르면 이름 사전으로 연결한 것이다
 				if (rowCardName.filter(name -> !name.equals(linked.cardName())).isPresent()) {
 					this.linkedByDictionary++;
 				}
 				return;
 			}
-			rowCardName.ifPresent(name -> this.unlinkedNames.merge(safeName(name), 1, Integer::sum));
+			// 원본 카드명으로 센다. 로그용 바꾸기(safeName)는 출력할 때만 한다
+			rowCardName.ifPresent(name -> this.unlinkedNames.merge(name, 1, Integer::sum));
 		}
 
 		private String describe() {
@@ -162,7 +173,7 @@ final class CodefSyncDiagnostics {
 				.toList();
 			String shown = names.stream()
 				.limit(NAMES_MAX)
-				.map(entry -> "\"" + entry.getKey() + "\"=" + entry.getValue())
+				.map(entry -> "\"" + safeName(entry.getKey()) + "\"=" + entry.getValue())
 				.collect(Collectors.joining(", "));
 			String more = names.size() > NAMES_MAX ? ", +" + (names.size() - NAMES_MAX) + " more" : "";
 			return "linkedByDictionary=" + this.linkedByDictionary + ", incomplete=" + this.incomplete

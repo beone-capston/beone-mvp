@@ -377,7 +377,7 @@ public class CodefSyncService {
 		for (CodefPerformanceLink link : linker.linkPerformances(usable.items())) {
 			Long userCardId = userCardIdOf(link.card(), userCardIds);
 			String cardName = link.reference().cardName().orElse(null);
-			diagnostics.performance(link.reference().cardName(), link.card());
+			diagnostics.performance(link.reference().cardName(), link.card(), userCardId != null);
 			for (CodefSyncResult.PerformanceItem item : flatten(userCardId, link.reference(), syncedAt)) {
 				this.performanceReferences.save(new CodefPerformanceReferenceEntity(user.userId(), userCardId, syncId,
 						cardName, item.periodFrom(), item.periodTo(), item.currentUseWon(), syncedAt));

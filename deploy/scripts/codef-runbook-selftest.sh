@@ -306,6 +306,12 @@ run logs "정상" 0 -
 run logs "logs 조회 실패" 1 - FAKE_LOGS_RC=1
 run logs "로그 비어 있음" 1 - FAKE_LOGS=''
 run logs "금지 패턴 있음" 1 - FAKE_LOGS='password=x\n'
+# 동기화 진단 로그(#271) 한 줄은 카드번호 필드가 아니다: CARD_NOT_LINKED 등이 card_no로 오탐되지 않아야 한다
+EXPECT_OUT='sensitive=0 ' run logs "진단 로그 줄(오탐 없음)" 0 - FAKE_LOGS='started\ncodef sync diagnostics syncId=12 approvals={rows=73, imported=0, linkedByDictionary=0, incomplete={CARD_NOT_LINKED.MULTIPLE_HELD_CARDS_FOR_PRODUCT=1, CARD_NOT_LINKED.NO_HELD_CARD_FOR_PRODUCT=1, CARD_NOT_LINKED.ROW_NAME_NOT_IN_DICTIONARY=70, HELD_CARD_SKIPPED=1}, unlinkedCardNames={"KB국민 나라사랑체크카드(일반형 RF)"=61}} performances={cards=16, linkedByDictionary=3, incomplete={CARD_NOT_LINKED.ROW_NAME_NOT_IN_DICTIONARY=1, HELD_CARD_SKIPPED=1}, unlinkedCardNames={"KB Youth Club 체크카드"=1}}\n'
+# 진짜 카드번호 필드명은 여전히 잡는다
+run logs "card_no=값" 1 - FAKE_LOGS='card_no=1234\n'
+run logs "cardNo 필드" 1 - FAKE_LOGS='{"resCardNo":"x"}\n'
+run logs "CARDNO 줄 끝" 1 - FAKE_LOGS='field CARDNO\n'
 REQUIRE=DSTOP run stop "정상(키 있음)" 0 STOP,COMPOSE_LOAD_FAIL
 REQUIRE=DSTOP run stop "키 빈 값" 0 STOP,COMPOSE_LOAD_FAIL FAKE_KEYS=empty
 REQUIRE=DSTOP run stop "키 삭제" 0 STOP,COMPOSE_LOAD_FAIL FAKE_KEYS=deleted

@@ -8,6 +8,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.beone.api.codef.CodefApproval;
 import com.beone.api.codef.CodefCardPerformance;
@@ -62,6 +65,12 @@ class CodefRowDictionaryLinkIntegrationTest {
 
 	private static final String CHECK = "첵첵 체크카드";
 
+	/** 표시 이름 규칙(1~30자)에 맞지 않아 동기화가 건너뛰는 합성 보유카드 이름(31자). */
+	private static final String SKIPPED = "합성 건너뜀 카드 " + "가".repeat(21);
+
+	/** 보유카드·실적 응답에 덧붙일 카드명. 테스트마다 비운다. */
+	static final List<String> EXTRA = new CopyOnWriteArrayList<>();
+
 	@LocalServerPort
 	int port;
 
@@ -71,6 +80,7 @@ class CodefRowDictionaryLinkIntegrationTest {
 	@BeforeEach
 	@AfterEach
 	void clearRows() {
+		EXTRA.clear();
 		this.jdbcTemplate.update("DELETE FROM codef_approval_rows");
 		this.jdbcTemplate.update("DELETE FROM codef_performance_references");
 		this.jdbcTemplate.update("DELETE FROM codef_held_cards");
@@ -114,6 +124,28 @@ class CodefRowDictionaryLinkIntegrationTest {
 		// 승인번호·금액·일시·connectedId·로그인 아이디는 담지 않는다
 		assertThat(line).doesNotContain("SYN-APR").doesNotContain("13579").doesNotContain("24680")
 			.doesNotContain("20261110").doesNotContain("120000").doesNotContain("kbuser01").doesNotContain("101500");
+	}
+
+	@Test
+	void performanceLinkedToASkippedHeldCardIsCountedAsSkippedInTheDiagnostics(CapturedOutput output) {
+		// 건너뛴 보유카드와 같은 이름의 실적은 연결기가 이름을 주지만 보유 카드 ID가 없어 붙지 않는다(#272)
+		assertThat(SKIPPED.codePointCount(0, SKIPPED.length())).isEqualTo(31);
+		EXTRA.add(SKIPPED);
+		connect();
+
+		ResponseEntity<String> sync = send("POST", SYNCS, "{\"from\":\"2026-11-01\",\"to\":\"2026-11-20\"}");
+
+		assertThat(sync.getStatusCode().value()).isEqualTo(200);
+		List<Map<String, Object>> performances = JsonPath.read(sync.getBody(), "$.data.performances");
+		assertThat(performances).extracting(item -> item.get("userCardId"))
+			.containsExactly(userCardId(NORI), null, userCardId(TITANIUM), null);
+		String line = Arrays.stream(output.getOut().split("\\R"))
+			.filter(text -> text.contains("codef sync diagnostics syncId="))
+			.reduce((first, second) -> second)
+			.orElseThrow();
+		assertThat(line).contains("performances={cards=4, linkedByDictionary=1, "
+				+ "incomplete={CARD_NOT_LINKED.ROW_NAME_NOT_IN_DICTIONARY=1, HELD_CARD_SKIPPED=1}, "
+				+ "unlinkedCardNames={\"KB Youth Club 체크카드\"=1, \"" + SKIPPED + "\"=1}}");
 	}
 
 	private void connect() {
@@ -173,8 +205,7 @@ class CodefRowDictionaryLinkIntegrationTest {
 				@Override
 				public CodefCallResult<CodefHeldCard> heldCards(String organization, String connectedId) {
 					String data = String.join(",",
-							List.of(NORI, YOUTH_HELD, TITANIUM)
-								.stream()
+							Stream.concat(List.of(NORI, YOUTH_HELD, TITANIUM).stream(), EXTRA.stream())
 								.map(name -> "{\"resCardName\":\"" + name + "\",\"resSleepYN\":\"N\"}")
 								.toList());
 					return new CodefCallResult.Answered<>(
@@ -194,8 +225,10 @@ class CodefRowDictionaryLinkIntegrationTest {
 
 				@Override
 				public CodefCallResult<CodefCardPerformance> performances(String organization, String connectedId) {
-					String data = String.join(",", performance(NORI_ROW), performance(YOUTH_ROW),
-							performance(TITANIUM));
+					String data = Stream
+						.concat(List.of(NORI_ROW, YOUTH_ROW, TITANIUM).stream(), EXTRA.stream())
+						.map(CodefRowDictionaryLinkIntegrationTest::performance)
+						.collect(Collectors.joining(","));
 					return new CodefCallResult.Answered<>(
 							CodefProductResponseReader.readCardPerformances(200, envelope("SYN-TX-PERF", data)));
 				}

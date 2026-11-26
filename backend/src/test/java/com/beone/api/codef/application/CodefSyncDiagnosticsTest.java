@@ -68,17 +68,76 @@ class CodefSyncDiagnosticsTest {
 		diagnostics.approval(Optional.of("건너뛴 카드"), accepted(7, "건너뛴 카드"), true);
 		diagnostics.approvalsJudged(2);
 		diagnostics.performancesJudged();
-		diagnostics.performance(Optional.of("KB국민 노리체크카드"), new CodefCardLink.Linked(NORI));
+		diagnostics.performance(Optional.of("KB국민 노리체크카드"), new CodefCardLink.Linked(NORI), true);
 		diagnostics.performance(Optional.of("KB Youth Club 체크카드"),
-				new CodefCardLink.NotLinked(CodefCardLink.Reason.ROW_NAME_NOT_IN_DICTIONARY));
+				new CodefCardLink.NotLinked(CodefCardLink.Reason.ROW_NAME_NOT_IN_DICTIONARY), true);
 
 		assertThat(diagnostics.line(41)).isEqualTo("codef sync diagnostics syncId=41 approvals={rows=8, imported=2, "
 				+ "linkedByDictionary=1, incomplete={CARD_NOT_LINKED.NO_HELD_CARD_FOR_PRODUCT=1, "
 				+ "CARD_NOT_LINKED.ROW_CARD_NAME_ABSENT=1, CARD_NOT_LINKED.ROW_NAME_NOT_IN_DICTIONARY=2, "
 				+ "HELD_CARD_SKIPPED=1, KRW_CURRENCY_NOT_KRW=1}, "
-				+ "unlinkedCardNames={\"KB Youth Club 체크카드\"=2, \"첵첵 체크카드\"=1}} "
+				+ "unlinkedCardNames={\"KB Youth Club 체크카드\"=2, \"건너뛴 카드\"=1, \"첵첵 체크카드\"=1}} "
 				+ "performances={cards=2, linkedByDictionary=1, incomplete={CARD_NOT_LINKED.ROW_NAME_NOT_IN_DICTIONARY=1}, "
 				+ "unlinkedCardNames={\"KB Youth Club 체크카드\"=1}}");
+	}
+
+	@Test
+	void namesThatLookTheSameAfterSanitizingStaySeparate() {
+		// 원본으로 세고 출력할 때만 바꾸므로, 앞 40자가 같은 서로 다른 이름과 "A\nB"·"A?B"는 합쳐지지 않는다(#272)
+		String prefix = "가".repeat(CodefSyncDiagnostics.NAME_MAX_CODE_POINTS);
+		CodefSyncDiagnostics diagnostics = new CodefSyncDiagnostics();
+		CodefCardLink notLinked = new CodefCardLink.NotLinked(CodefCardLink.Reason.ROW_NAME_NOT_IN_DICTIONARY);
+		diagnostics.performance(Optional.of(prefix + "하나"), notLinked, true);
+		diagnostics.performance(Optional.of(prefix + "둘"), notLinked, true);
+		diagnostics.performance(Optional.of("A\nB"), notLinked, true);
+		diagnostics.performance(Optional.of("A?B"), notLinked, true);
+		diagnostics.performance(Optional.of("A?B"), notLinked, true);
+		diagnostics.performancesJudged();
+
+		String line = diagnostics.line(9);
+
+		// 개수 내림차순, 같으면 원본 카드명 순서. 원본 "A\nB"('\n'=10)는 한글로 시작하는 두 이름보다 앞이다
+		assertThat(line).contains("unlinkedCardNames={\"A?B\"=2, \"A?B\"=1, \"" + prefix + "...\"=1, \"" + prefix
+				+ "...\"=1}");
+	}
+
+	@Test
+	void namesOverTheCapAreChosenByTheOriginalNames() {
+		// 상한 밖으로 밀리는 항목도 원본 기준으로 정해진다: 표시가 같아도 원본이 다르면 각각 센다
+		CodefSyncDiagnostics diagnostics = new CodefSyncDiagnostics();
+		CodefCardLink notLinked = new CodefCardLink.NotLinked(CodefCardLink.Reason.ROW_NAME_NOT_IN_DICTIONARY);
+		for (int index = 0; index < CodefSyncDiagnostics.NAMES_MAX; index++) {
+			diagnostics.performance(Optional.of("X\u0000" + (char) ('a' + index)), notLinked, true);
+		}
+		diagnostics.performance(Optional.of("X?a"), notLinked, true);
+		diagnostics.performancesJudged();
+
+		// 원본 21개가 모두 다르므로 하나가 상한 밖이다. "X?a"('?'=63)는 "X\u0000…"(0)보다 뒤라 밀려난다
+		assertThat(diagnostics.line(10)).contains(", +1 more}").contains("\"X?a\"=1");
+	}
+
+	@Test
+	void linkedPerformanceWithoutAHeldCardIdIsCountedAsSkipped() {
+		// 연결기는 보유카드 이름을 줬지만 그 보유카드가 동기화에서 건너뛰어져 보유 카드 ID가 없다(#272)
+		CodefSyncDiagnostics diagnostics = new CodefSyncDiagnostics();
+		diagnostics.performance(Optional.of("KB국민 노리체크카드"), new CodefCardLink.Linked(NORI), false);
+		diagnostics.performance(Optional.of(NORI), new CodefCardLink.Linked(NORI), false);
+		diagnostics.performance(Optional.of(NORI), new CodefCardLink.Linked(NORI), true);
+		diagnostics.performancesJudged();
+
+		assertThat(diagnostics.line(11)).isEqualTo("codef sync diagnostics syncId=11 approvals=NOT_FETCHED "
+				+ "performances={cards=3, linkedByDictionary=0, incomplete={HELD_CARD_SKIPPED=2}, "
+				+ "unlinkedCardNames={\"KB국민 노리체크카드\"=1, \"nori 체크카드(RF)\"=1}}");
+	}
+
+	@Test
+	void skippedApprovalRowIsNotCountedAsLinked() {
+		CodefSyncDiagnostics diagnostics = new CodefSyncDiagnostics();
+		diagnostics.approval(Optional.of("KB국민 노리체크카드"), accepted(0, NORI), true);
+		diagnostics.approvalsJudged(0);
+
+		assertThat(diagnostics.line(12)).contains("approvals={rows=1, imported=0, linkedByDictionary=0, "
+				+ "incomplete={HELD_CARD_SKIPPED=1}, unlinkedCardNames={\"KB국민 노리체크카드\"=1}}");
 	}
 
 	@Test
@@ -112,10 +171,10 @@ class CodefSyncDiagnosticsTest {
 		CodefSyncDiagnostics diagnostics = new CodefSyncDiagnostics();
 		for (int index = 0; index < CodefSyncDiagnostics.NAMES_MAX + 3; index++) {
 			diagnostics.performance(Optional.of("카드" + (char) ('A' + index)),
-					new CodefCardLink.NotLinked(CodefCardLink.Reason.ROW_NAME_NOT_IN_DICTIONARY));
+					new CodefCardLink.NotLinked(CodefCardLink.Reason.ROW_NAME_NOT_IN_DICTIONARY), true);
 		}
 		diagnostics.performance(Optional.of("주입\r\ncodef sync diagnostics syncId=999"),
-				new CodefCardLink.NotLinked(CodefCardLink.Reason.ROW_NAME_NOT_IN_DICTIONARY));
+				new CodefCardLink.NotLinked(CodefCardLink.Reason.ROW_NAME_NOT_IN_DICTIONARY), true);
 		diagnostics.performancesJudged();
 
 		String line = diagnostics.line(5);
