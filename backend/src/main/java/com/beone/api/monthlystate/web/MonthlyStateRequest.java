@@ -7,12 +7,14 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
 
+import com.beone.api.codef.application.CodefPerformanceReferenceQuery;
 import com.beone.api.monthlystate.application.DatePeriod;
 import com.beone.api.monthlystate.application.MonthlyStateInput;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import tools.jackson.databind.annotation.JsonDeserialize;
 
 /**
@@ -104,15 +106,22 @@ public record MonthlyStateRequest(@Valid AmountRequest previousMonthPerformanceW
 	/**
 	 * 전월 실적. 음수를 받는다(D-17).
 	 *
-	 * @param value 필수. JSON 정수
+	 * @param value 필수. JSON 정수. 참고값을 보고 입력해도 값은 사용자가 정한다
 	 * @param period 필수
+	 * @param referencedCodefId 선택. 보고 확인한 카드사 조회 실적(참고)의 {@code referenceId}({@code cpr-} 형식, D-16 #281). 이
+	 * 카드에 연결됐고 반영기간이 {@code period}와 같은 참고값이어야 한다
 	 */
 	public record AmountRequest(
 			@NotNull(message = "필수 값입니다.") @JsonDeserialize(using = StrictWonDeserializer.class) Long value,
-			@NotNull(message = "필수 값입니다.") @Valid PeriodRequest period) implements UnknownFieldRejecting {
+			@NotNull(message = "필수 값입니다.") @Valid PeriodRequest period,
+			@Pattern(regexp = "cpr-[1-9][0-9]{0,18}", message = "형식이 올바르지 않습니다.") String referencedCodefId)
+			implements UnknownFieldRejecting {
 
 		MonthlyStateInput.Amount toAmount() {
-			return new MonthlyStateInput.Amount(this.value, this.period.toPeriod());
+			// 형식은 위 검증을 지났다. 19자리 범위를 넘으면 없는 참고값과 같게 다룬다(서비스가 400)
+			Long referenced = (this.referencedCodefId == null) ? null
+					: CodefPerformanceReferenceQuery.ReferenceId.parse(this.referencedCodefId).orElse(0L);
+			return new MonthlyStateInput.Amount(this.value, this.period.toPeriod(), referenced);
 		}
 
 	}

@@ -332,6 +332,7 @@ codef/
 │   ├── CodefHeldCardMatcher         CODEF 보유카드 ↔ 기존 CODEF 보유 카드 대조(P8·Q1·Q2, 순수 함수)
 │   ├── CodefCardNameDictionary      카드명 → 규칙 카드 상품 사전(정확 일치, 근거 OBSERVED/ASSUMED·출처, #268 후보·#270 행 연결)
 │   ├── CodefSyncDiagnostics         동기화 진단 집계와 INFO 로그 한 줄(#270)
+│   ├── CodefPerformanceReferenceQuery 저장된 실적 참고값의 읽기 전용 창구(월간 상태용, 연결된 참고값만, cpr- ID, #281)
 │   ├── ApprovalFingerprintKeySource 승인번호 HMAC 키 공급. 운영 구현 EnvironmentApprovalFingerprintKeySource(환경 변수)
 │   ├── HmacApprovalFingerprinter    승인번호 → HMAC-SHA256 소문자 16진수 64자(패키지 내부)
 │   ├── CodefSyncResult·CodefSyncTarget 결과와 부분 실패 대상
@@ -373,7 +374,7 @@ codef/
 - **승인내역(관리자 판단 K2·Q4, 결정 20 R1·R2, 결정 22 R7·R8·#93)**: [`CodefLedgerCandidateBuilder`](../../backend/src/main/java/com/beone/api/codef/sync/CodefLedgerCandidateBuilder.java)로 판정해 받아들인 행(정상, Type1 전액 취소, 짝지은 Type2 취소)만 `codef_approval_rows`에 넣습니다. `ledger_transactions`와 원장 조회는 바꾸지 않습니다. 원장 조회 coverage에는 새 카드가 나오지만 CODEF는 지금처럼 `complete=false`입니다. 이전 기록은 이 사용자의 저장된 승인 행이며, 같은 키·같은 종류는 `skippedDuplicates`, 정상으로 기록된 키가 Type1 전액 취소로 바뀌면 그 행의 종류만 바꾸고 `imported`에 셉니다.
 - **불완전 행은 저장하지 않습니다.** 응답 `incompleteRows`에만 담고, 다음 동기화에서 그때의 응답으로 다시 판정합니다(결정 22의 "기간이 바뀐 재조회의 Type2 재표시" 보완은 하지 않았습니다). 보유 카드에 붙지 않은 행(카드 미연결, 건너뛴 카드의 행)도 숨기지 않고 `userCardId=null`로 담습니다. 건너뛴 카드에 붙은 행은 판정이 받아들여도 붙일 보유 카드가 없어 `UNDETERMINED_ROW`로 둡니다.
 - **승인번호 HMAC 키(2026-11-18 사용자 직접 결정 P6, 결정 22 1안)**: 프로세스 환경 변수 `BEONE_CODEF_APPROVAL_HMAC_KEY`(Base64로 적은 32바이트)에서 읽고 `application*.yml`에는 두지 않습니다. local·demo에도 고정 기본값이 없습니다. 키가 없으면 승인내역을 조회하지 않고(과금 회피) 저장하지 않으며 `partialFailures`에 `APPROVALS`·`CODEF_UNAVAILABLE`로 알리고 `imported`·`skippedDuplicates`는 `null`입니다. 성공이나 완전 수집으로 보이게 하지 않습니다. 승인번호 원문은 저장·로그·응답에 남기지 않고 지문만 저장하며, DB CHECK가 64자 소문자 16진수만 받습니다. 키가 바뀌면 이전 지문과 비교가 끊깁니다. 키 회전(이전 키 병행 비교)과 운영 키 공급은 별도 승인이며 구현하지 않았습니다. 테스트는 합성 키를 주입합니다.
-- **실적(D-16, 관리자 판단 Q5)**: 실적현황 하나당 `performances[]` 항목 하나이고 `label`은 "카드사 조회 실적(참고)", `usedInCalculation`은 항상 `false`입니다. 확인하지 못한 금액·날짜는 `null`이며 혜택·실적현황 목록이 누락·형식 오류면 값을 모르는 항목 하나를 남겨 0건과 구분합니다. `codef_performance_references`에 동기화마다 이력으로 저장하고 `monthly_states`에는 넣지 않습니다.
+- **실적(D-16, 관리자 판단 Q5)**: 실적현황 하나당 `performances[]` 항목 하나이고 `label`은 "카드사 조회 실적(참고)", `usedInCalculation`은 항상 `false`입니다. 확인하지 못한 금액·날짜는 `null`이며 혜택·실적현황 목록이 누락·형식 오류면 값을 모르는 항목 하나를 남겨 0건과 구분합니다. `codef_performance_references`에 동기화마다 이력으로 저장하고 `monthly_states`에는 넣지 않습니다. 월간 상태는 읽기 전용 창구 [`CodefPerformanceReferenceQuery`](../../backend/src/main/java/com/beone/api/codef/application/CodefPerformanceReferenceQuery.java)로 카드에 연결되고 반영기간이 있는 참고값만 읽어 전월 실적 칸의 `codefReference`(계산 미사용)와 사용자 확인 기록·충돌 판정에 씁니다(#281, [monthlystate 안내](monthlystate.md#codef-실적-참고값-281)). 참고값 ID의 외부 표현은 `cpr-{번호}`입니다. 이 창구는 참고값을 계산 입력으로 바꾸지 않습니다.
 - **부분 실패**: 실패한 대상은 `partialFailures[]`(`target`, `code`=`CODEF_UNAVAILABLE`, 공개 문구)에 담고, 그 대상의 건수는 `null`로 두어 0건과 구분합니다. 추가 인증 필요 등 연결 API에서 502로 묶은 분류도 같은 코드입니다(관리자 판단 P1).
 - **기간(관리자 판단 P9)**: 생략하면 서울 기준 이번 달 1일~오늘, `to`만 없으면 오늘, `from`만 없으면 `to`가 속한 달 1일입니다. `to`가 오늘보다 늦으면 400(`field`=`to`), `from`이 `to`보다 늦으면 400, `from < to.minusMonths(12).plusDays(1)`이면 400(관계 오류는 `field`=`null`)입니다. 짝을 맞추려고 기간을 넓히지 않습니다.
 - **재연결 필요(관리자 판단 P2)**: 게이트웨이가 연결 무효를 알리면 연결 상태를 `RECONNECT_REQUIRED`로 바꾸고 409입니다. 지금은 가짜 게이트웨이만 이 결과를 내며 실 CODEF 결과 코드와의 대응은 없습니다. 다음 연결 성공이 `CONNECTED`로 돌립니다.

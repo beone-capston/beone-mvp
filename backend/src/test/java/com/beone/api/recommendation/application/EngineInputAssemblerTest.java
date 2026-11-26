@@ -62,6 +62,15 @@ class EngineInputAssemblerTest {
 	}
 
 	@Test
+	void conflictedManualValueIsPassedButNotUsable() {
+		// 출처 충돌(D-16, 사용자 결정 2026-11-27 Q2): 값·기간·시각은 그대로, 계산에는 쓰지 않는다
+		StateInput<Long> input = EngineInputAssembler.state(StateValue.manual(500_000L, OCTOBER, AT).conflicted());
+
+		assertThat(input).isEqualTo(new StateInput<>(500_000L, "MANUAL", OCTOBER.from(), OCTOBER.to(), AT_SEOUL, false,
+				"SOURCE_CONFLICT"));
+	}
+
+	@Test
 	void selectedServicesWithoutEffectiveFromStayUsableForTheEngineToJudge() {
 		MonthlyStateView state = new MonthlyStateView("uc-1", YearMonth.of(2026, 11), AT,
 				StateValue.manual(523000L, OCTOBER, AT),

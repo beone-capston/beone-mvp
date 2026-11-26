@@ -47,8 +47,8 @@ public class MonthlyStateController {
 	}
 
 	/**
-	 * 출처 충돌 계산 기준 선택(관리자 판단 P10). 지금은 충돌이 생기는 경로가 없어 서비스가 항상 409 {@code SOURCE_CONFLICT_NOT_FOUND}로
-	 * 끝난다. 200 응답 본문은 충돌 후보가 생길 때 서비스와 함께 만든다({@link MonthlyStateService#selectSource}의 확장 지점).
+	 * 출처 충돌 계산 기준 선택(관리자 판단 P10). 서비스가 항상 409 {@code SOURCE_CONFLICT_NOT_FOUND}로 끝난다. 전월 실적과 CODEF
+	 * 참고값의 충돌은 월간 상태 재저장으로 해소한다(#281, 사용자 결정 2026-11-27 Q3). 200 응답 본문은 충돌 후보가 생길 때 서비스와 함께 만든다({@link MonthlyStateService#selectSource}의 확장 지점).
 	 * @param currentUser 현재 사용자
 	 * @param userCardId 보유 카드 ID 외부 표현
 	 * @param month 대상 달({@code yyyy-MM})
