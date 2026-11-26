@@ -254,7 +254,7 @@ class MemberLedgerIntegrationTest {
 				{"ledgerTransactionId":"lt-%d","userCardId":"%s","source":"SIMULATION","entryType":"%s","amountWon":%d,
 				 "transactionDate":"%s","transactionTime":%s,"merchantClass":"ORDINARY_DOMESTIC",
 				 "paymentMethod":"DIRECT","transactionNature":null,"merchantName":"동네 마트","originalTransactionId":%s,
-				 "simulatedPaymentId":null,"attributionMonth":{"value":"2026-11","status":"CONFIRMED"}}"""
+				 "simulatedPaymentId":null,"attributionMonth":{"value":"2026-11","status":"CONFIRMED"},"syncId":null,"fullyCanceled":null}"""
 			.formatted(ledgerId, userCardId, entryType, amountWon, date,
 					"CANCELLATION".equals(entryType) ? "null" : "\"10:00:00\"",
 					(originalLedgerId == null) ? "null" : "\"lt-" + originalLedgerId + "\"");

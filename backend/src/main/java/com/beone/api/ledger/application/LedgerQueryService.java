@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,8 @@ import java.util.stream.Collectors;
 import com.beone.api.card.application.UserCardId;
 import com.beone.api.card.application.UserCardService;
 import com.beone.api.card.application.UserCardView;
+import com.beone.api.codef.application.CodefApprovalLedgerQuery;
+import com.beone.api.codef.sync.CodefLedgerRowKind;
 import com.beone.api.ledger.persistence.LedgerTransactionEntity;
 import com.beone.api.ledger.persistence.LedgerTransactionRepository;
 import com.beone.api.ledger.persistence.LedgerUsageEffectRepository;
@@ -28,12 +31,15 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>관리자 승인으로 정한 규칙(결정 28 보충, #118):
  * <ul>
  * <li>달 조건은 거래일({@code transactionDate})이 그 달인 행이다. 2차 CODEF 취소 행은 귀속월이 확인 필요라 귀속월로는 둘 곳이 없다.</li>
- * <li>정렬은 거래일 → 행 ID 오름차순이다.</li>
+ * <li>정렬은 거래일 → 행 ID 오름차순이다. CODEF 행이 함께 나오면 같은 날 안에서 모의 행 뒤에 사용일시·행 ID 순으로 둔다(#289).</li>
  * <li>대상 카드는 해제하지 않은 이 사용자의 보유 카드다. 해제한 카드의 행은 보이지 않는다.</li>
- * <li>완전성: 모의 승인·취소는 빠짐없이 기록하므로 {@code SIMULATION}은 완전하다. CODEF 조회·동기화(#131)는 이 원장에 행을
- * 넣지 않으므로(도메인 원장 미연결 유지, R8) {@code CODEF}는 완전하다고 선언하지 않고({@code complete=false}) 사유는 비워
- * 둔다. 완전 선언과 사유 채우기는 원장 연결을 다시 정할 때 함께 정한다(추후 결정).</li>
+ * <li>완전성: 모의 승인·취소는 빠짐없이 기록하므로 {@code SIMULATION}은 완전하다.</li>
  * </ul>
+ *
+ * <p>CODEF 행(사용자 결정 2026-11-27 T4, #289): {@code ledger_transactions}에 옮기지 않고 codef의 {@code codef_approval_rows}를
+ * {@link CodefApprovalLedgerQuery}로 읽어 출처 {@code CODEF} 항목으로 보여 준다. 승인번호·카드번호·가맹점은 저장하지 않아 내보내지
+ * 않는다. CODEF 완전성은 그 창구의 규칙(승인 판정 동기화의 기간·불완전 행)을 따르고, 수동 카드는 CODEF 행이 생기지 않아 사유 없이
+ * {@code complete=false}다.
  * 다른 패키지가 다시 쓸 수 있게 공개한다. 월간 상태 요약과 추천 입력은 {@link #activityAfter}로 스냅샷 뒤 활동을 읽는다(#120).
  */
 @Service
@@ -41,6 +47,12 @@ public class LedgerQueryService {
 
 	// 모의 결제 ID 접두사. payment가 ledger를 쓰므로 ledger가 payment를 참조하지 않게 여기 둔다(payment PaymentIds와 같은 값).
 	private static final String SIMULATED_PAYMENT_PREFIX = "pay-";
+
+	// CODEF 승인 행 ID 접두사(#289). 모의 원장 행 lt-와 겹치지 않게 따로 둔다
+	private static final String CODEF_ROW_PREFIX = "car-";
+
+	// 동기화 ID 접두사. codef 동기화 응답의 syncId와 같은 값이다
+	private static final String SYNC_PREFIX = "sync-";
 
 	// docs/api.md 값 형식: 시각 없는 시간 값은 HH:mm:ss
 	private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
@@ -51,11 +63,15 @@ public class LedgerQueryService {
 
 	private final UserCardService userCardService;
 
+	private final CodefApprovalLedgerQuery codefApprovals;
+
 	public LedgerQueryService(LedgerTransactionRepository transactionRepository,
-			LedgerUsageEffectRepository usageEffectRepository, UserCardService userCardService) {
+			LedgerUsageEffectRepository usageEffectRepository, UserCardService userCardService,
+			CodefApprovalLedgerQuery codefApprovals) {
 		this.transactionRepository = transactionRepository;
 		this.usageEffectRepository = usageEffectRepository;
 		this.userCardService = userCardService;
+		this.codefApprovals = codefApprovals;
 	}
 
 	/**
@@ -78,8 +94,16 @@ public class LedgerQueryService {
 			.stream()
 			.filter(row -> cardSet.contains(row.getUserCardId()) && sources.contains(row.getSource()))
 			.toList();
-		return new LedgerMonthView(month.toString(), rows.stream().map(LedgerQueryService::toItem).toList(),
-				coverage(cardIds, sources, month));
+		List<LedgerMonthView.Item> items = new ArrayList<>(rows.stream().map(LedgerQueryService::toItem).toList());
+		CodefApprovalLedgerQuery.MonthCoverage codef = null;
+		if (sources.contains(LedgerSource.CODEF)) {
+			this.codefApprovals.rows(user.userId(), cardIds, month).forEach(row -> items.add(toCodefItem(row)));
+			// 거래일만으로 안정 정렬해 같은 날 안의 출처별 순서(모의 → CODEF)를 지킨다
+			items.sort(Comparator.comparing(LedgerMonthView.Item::transactionDate));
+			codef = this.codefApprovals.coverage(user.userId(), cardIds, month);
+		}
+		return new LedgerMonthView(month.toString(), items,
+				coverage(cardIds, sources, month, codef, userCardId == null));
 	}
 
 	/**
@@ -129,17 +153,43 @@ public class LedgerQueryService {
 	}
 
 	private static List<LedgerMonthView.Coverage> coverage(List<Long> cardIds, List<LedgerSource> sources,
-			YearMonth month) {
+			YearMonth month, CodefApprovalLedgerQuery.MonthCoverage codef, boolean allCards) {
 		LedgerMonthView.Period period = new LedgerMonthView.Period(month.atDay(1).toString(),
 				month.atEndOfMonth().toString());
 		List<LedgerMonthView.Coverage> coverage = new ArrayList<>();
 		for (Long cardId : cardIds) {
 			for (LedgerSource source : sources) {
+				if (source == LedgerSource.SIMULATION) {
+					coverage.add(new LedgerMonthView.Coverage(UserCardId.format(cardId), source.name(), period, true,
+							List.of()));
+					continue;
+				}
+				CodefApprovalLedgerQuery.Coverage card = codef.cards().get(cardId);
 				coverage.add(new LedgerMonthView.Coverage(UserCardId.format(cardId), source.name(), period,
-						source == LedgerSource.SIMULATION, List.of()));
+						card != null && card.complete(), (card == null) ? List.of() : card.incompleteReasons()));
 			}
 		}
+		// 보유 카드에 붙지 않은 불완전 행은 어느 카드의 것인지 몰라 특정 카드를 불완전으로 만들지 않고 따로 알린다
+		if (codef != null && allCards && !codef.unlinkedReasons().isEmpty()) {
+			coverage.add(new LedgerMonthView.Coverage(null, LedgerSource.CODEF.name(), period, false,
+					codef.unlinkedReasons()));
+		}
 		return coverage;
+	}
+
+	private static LedgerMonthView.Item toCodefItem(CodefApprovalLedgerQuery.ApprovalRow row) {
+		boolean cancellation = row.kind() == CodefLedgerRowKind.CANCELLATION;
+		// 승인은 사용월에 귀속하고, 취소는 접수일을 몰라 귀속월을 정하지 않는다(D-17)
+		LedgerMonthView.AttributionMonth attribution = cancellation
+				? new LedgerMonthView.AttributionMonth(null, AttributionStatus.NEEDS_CONFIRMATION.name())
+				: new LedgerMonthView.AttributionMonth(YearMonth.from(row.usedDate()).toString(),
+						AttributionStatus.CONFIRMED.name());
+		return new LedgerMonthView.Item(CODEF_ROW_PREFIX + row.rowId(), UserCardId.format(row.userCardId()),
+				LedgerSource.CODEF.name(),
+				cancellation ? LedgerEntryType.CANCELLATION.name() : LedgerEntryType.APPROVAL.name(),
+				row.signedAmount(), row.usedDate().toString(), TIME.format(row.usedTime()), null, null, null, null,
+				null, null, attribution, SYNC_PREFIX + row.syncId(),
+				row.kind() == CodefLedgerRowKind.APPROVAL_FULLY_CANCELED);
 	}
 
 	private static LedgerMonthView.Item toItem(LedgerTransactionEntity row) {

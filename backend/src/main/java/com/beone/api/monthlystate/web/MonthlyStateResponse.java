@@ -47,7 +47,8 @@ public record MonthlyStateResponse(String userCardId, String month, String snaps
 
 	static MonthlyStateResponse from(MonthlyStateView view) {
 		return new MonthlyStateResponse(view.userCardId(), view.month().toString(), instant(view.snapshotAt()),
-				PreviousMonthState.from(view.previousMonthPerformanceWon(), view.referencedCodef(), view.codefReference()),
+				PreviousMonthState.from(view.previousMonthPerformanceWon(), view.referencedCodef(), view.codefReference(),
+						view.inferredReference(), view.referencedInferred()),
 				view.limitBucketUsages().stream().map(BucketUsageState::from).toList(),
 				State.from(view.otherBucketsUsedWon()),
 				view.selectedServices().stream().map(SelectionState::from).toList(), view.serviceSelectionStatus(),
@@ -119,15 +120,51 @@ public record MonthlyStateResponse(String userCardId, String month, String snaps
 
 	/**
 	 * 전월 실적. {@code referencedCodef}는 참고 입력일 때만, {@code codefReference}는 전월 기간의 연결 참고값이 있을 때만 있다.
+	 * {@code inferredReference}는 CODEF 카드이고 전월과 겹치는 승인 판정 동기화가 있을 때만, {@code referencedInferred}는 추정값 참고
+	 * 입력일 때만 있다(#289).
 	 */
 	record PreviousMonthState(Long value, StateSource source, Period period, String updatedAt, boolean usable,
-			StateReason reason, ReferencedCodefState referencedCodef, CodefReferenceState codefReference) {
+			StateReason reason, ReferencedCodefState referencedCodef, CodefReferenceState codefReference,
+			InferredReferenceState inferredReference, ReferencedInferredState referencedInferred) {
 
 		static PreviousMonthState from(StateValue<Long> state, MonthlyStateView.ReferencedCodef referenced,
-				MonthlyStateView.CodefReference reference) {
+				MonthlyStateView.CodefReference reference, MonthlyStateView.InferredReference inferred,
+				MonthlyStateView.ReferencedInferred referencedInferred) {
 			return new PreviousMonthState(state.value(), state.source(), Period.from(state.period()),
 					instant(state.updatedAt()), state.usable(), state.reason(), ReferencedCodefState.from(referenced),
-					CodefReferenceState.from(reference));
+					CodefReferenceState.from(reference), InferredReferenceState.from(inferred),
+					ReferencedInferredState.from(referencedInferred));
+		}
+
+	}
+
+	/**
+	 * 미리 채워 보여 줄 CODEF 승인 합계 추정값(INFERRED, #289). 불완전이면 {@code totalWon}이 {@code null}이고 사유가 있다.
+	 * {@code usedInCalculation}은 항상 {@code false}다.
+	 */
+	record InferredReferenceState(String label, String source, String month, Period period, Long totalWon,
+			boolean complete, List<String> incompleteReasons, String basisSyncId, String basisSyncedAt,
+			boolean usedInCalculation) {
+
+		static InferredReferenceState from(MonthlyStateView.InferredReference inferred) {
+			return (inferred == null) ? null
+					: new InferredReferenceState("카드사 승인내역 합계(추정)", "INFERRED", inferred.month().toString(),
+							Period.from(inferred.period()), inferred.totalWon(), inferred.incompleteReasons().isEmpty(),
+							inferred.incompleteReasons(), "sync-" + inferred.basisSyncId(),
+							instant(inferred.basisSyncedAt()), false);
+		}
+
+	}
+
+	/**
+	 * 입력할 때 참고한 승인 합계 추정값(입력 당시 스냅샷, #289).
+	 */
+	record ReferencedInferredState(String basisSyncId, Long totalWon, String computedAt) {
+
+		static ReferencedInferredState from(MonthlyStateView.ReferencedInferred referenced) {
+			return (referenced == null) ? null
+					: new ReferencedInferredState("sync-" + referenced.basisSyncId(), referenced.totalWon(),
+							instant(referenced.computedAt()));
 		}
 
 	}

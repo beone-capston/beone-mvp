@@ -110,18 +110,43 @@ public record MonthlyStateRequest(@Valid AmountRequest previousMonthPerformanceW
 	 * @param period 필수
 	 * @param referencedCodefId 선택. 보고 확인한 카드사 조회 실적(참고)의 {@code referenceId}({@code cpr-} 형식, D-16 #281). 이
 	 * 카드에 연결됐고 반영기간이 {@code period}와 같은 참고값이어야 한다
+	 * @param referencedInferredSyncId 선택. 보고 확인한 승인 합계 추정값의 {@code basisSyncId}({@code sync-} 형식, #289). 지금 다시 낸
+	 * 전월 합계가 완전하고 근거 동기화가 같아야 하며 {@code period}가 전월 1일~말일이어야 한다
 	 */
 	public record AmountRequest(
 			@NotNull(message = "필수 값입니다.") @JsonDeserialize(using = StrictWonDeserializer.class) Long value,
 			@NotNull(message = "필수 값입니다.") @Valid PeriodRequest period,
-			@Pattern(regexp = "cpr-[1-9][0-9]{0,18}", message = "형식이 올바르지 않습니다.") String referencedCodefId)
+			@Pattern(regexp = "cpr-[1-9][0-9]{0,18}", message = "형식이 올바르지 않습니다.") String referencedCodefId,
+			@Pattern(regexp = SYNC_ID, message = "형식이 올바르지 않습니다.") String referencedInferredSyncId)
 			implements UnknownFieldRejecting {
+
+		private static final String SYNC_ID = "sync-[1-9][0-9]{0,18}";
+
+		/**
+		 * 추정값을 참고하지 않은 전월 실적.
+		 */
+		public AmountRequest(Long value, PeriodRequest period, String referencedCodefId) {
+			this(value, period, referencedCodefId, null);
+		}
 
 		MonthlyStateInput.Amount toAmount() {
 			// 형식은 위 검증을 지났다. 19자리 범위를 넘으면 없는 참고값과 같게 다룬다(서비스가 400)
 			Long referenced = (this.referencedCodefId == null) ? null
 					: CodefPerformanceReferenceQuery.ReferenceId.parse(this.referencedCodefId).orElse(0L);
-			return new MonthlyStateInput.Amount(this.value, this.period.toPeriod(), referenced);
+			return new MonthlyStateInput.Amount(this.value, this.period.toPeriod(), referenced,
+					syncNumber(this.referencedInferredSyncId));
+		}
+
+		private static Long syncNumber(String syncId) {
+			if (syncId == null || !syncId.matches(SYNC_ID)) {
+				return (syncId == null) ? null : 0L;
+			}
+			try {
+				return Long.parseLong(syncId.substring("sync-".length()));
+			}
+			catch (NumberFormatException overflow) {
+				return 0L;
+			}
 		}
 
 	}

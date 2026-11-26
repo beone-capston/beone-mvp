@@ -4,10 +4,12 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -28,6 +30,8 @@ import com.beone.api.codef.persistence.CodefHeldCardRepository;
 import com.beone.api.codef.persistence.CodefPerformanceReferenceEntity;
 import com.beone.api.codef.persistence.CodefPerformanceReferenceRepository;
 import com.beone.api.codef.persistence.CodefSyncEntity;
+import com.beone.api.codef.persistence.CodefSyncIncompleteMarkEntity;
+import com.beone.api.codef.persistence.CodefSyncIncompleteMarkRepository;
 import com.beone.api.codef.persistence.CodefSyncRepository;
 import com.beone.api.codef.sync.CodefApprovalFingerprint;
 import com.beone.api.codef.sync.CodefApprovalFingerprinter;
@@ -43,6 +47,7 @@ import com.beone.api.codef.sync.CodefLedgerRowKind;
 import com.beone.api.codef.sync.CodefPerformanceLink;
 import com.beone.api.codef.sync.CodefPerformanceReference;
 import com.beone.api.codef.sync.CodefTargetOutcome;
+import com.beone.api.codef.sync.CodefUsedDateTime;
 import com.beone.api.codef.transport.CodefCallResult;
 import com.beone.api.user.application.CurrentUser;
 import org.slf4j.Logger;
@@ -90,6 +95,8 @@ public class CodefSyncService {
 
 	private final CodefPerformanceReferenceRepository performanceReferences;
 
+	private final CodefSyncIncompleteMarkRepository incompleteMarks;
+
 	private final UserCardService userCardService;
 
 	private final ObjectProvider<CodefSyncGateway> gateway;
@@ -109,6 +116,7 @@ public class CodefSyncService {
 	 * @param heldCards CODEF 카드 대조 정보 저장소
 	 * @param approvalRows CODEF 승인 행 저장소
 	 * @param performanceReferences 실적 참고값 저장소
+	 * @param incompleteMarks 동기화별 불완전 행 건수 저장소(#289)
 	 * @param userCardService 보유 카드 잠금·CODEF 카드 생성
 	 * @param gateway CODEF 조회 게이트웨이. 없을 수 있다
 	 * @param connectedIdKeySource connectedId 복호화 키 공급
@@ -119,7 +127,8 @@ public class CodefSyncService {
 	@Autowired
 	public CodefSyncService(CodefConnectionRepository connections, CodefSyncRepository syncs,
 			CodefHeldCardRepository heldCards, CodefApprovalRowRepository approvalRows,
-			CodefPerformanceReferenceRepository performanceReferences, UserCardService userCardService,
+			CodefPerformanceReferenceRepository performanceReferences,
+			CodefSyncIncompleteMarkRepository incompleteMarks, UserCardService userCardService,
 			ObjectProvider<CodefSyncGateway> gateway, ConnectedIdKeySource connectedIdKeySource,
 			ApprovalFingerprintKeySource fingerprintKeySource, PlatformTransactionManager transactionManager,
 			ObjectProvider<Clock> clock) {
@@ -128,6 +137,7 @@ public class CodefSyncService {
 		this.heldCards = Objects.requireNonNull(heldCards, "heldCards");
 		this.approvalRows = Objects.requireNonNull(approvalRows, "approvalRows");
 		this.performanceReferences = Objects.requireNonNull(performanceReferences, "performanceReferences");
+		this.incompleteMarks = Objects.requireNonNull(incompleteMarks, "incompleteMarks");
 		this.userCardService = Objects.requireNonNull(userCardService, "userCardService");
 		this.gateway = Objects.requireNonNull(gateway, "gateway");
 		this.connectedIdKeySource = Objects.requireNonNull(connectedIdKeySource, "connectedIdKeySource");
@@ -251,9 +261,9 @@ public class CodefSyncService {
 		CodefConnectionEntity current = this.connections.lockByUserId(user.userId())
 			.filter(entity -> entity.getConnectedIdCiphertext().equals(connection.ciphertext()))
 			.orElseThrow(CodefNotConnectedException::new);
-		long syncId = this.syncs
-			.save(new CodefSyncEntity(user.userId(), period.from(), period.to(), syncedAt))
-			.getSyncId();
+		CodefSyncEntity sync = this.syncs
+			.save(new CodefSyncEntity(user.userId(), period.from(), period.to(), syncedAt));
+		long syncId = sync.getSyncId();
 		HeldCardStep held = storeHeldCards(user, syncId, heldOutcome, activeCodefCards);
 		CodefCardLinker linker = CodefCardLinker.of(heldOutcome, CodefCardNameDictionary::candidateFor);
 		CodefSyncResult.Approvals approvals = (approvalOutcome.isPresent()
@@ -261,6 +271,8 @@ public class CodefSyncService {
 						? storeApprovals(user, syncId, syncedAt, usable.items(), linker, held.userCardIds(),
 								fingerprinter.orElseThrow(), diagnostics)
 						: new CodefSyncResult.Approvals(null, null, List.of());
+		// 승인 판정을 마쳤는지 남겨 원장 완전성·추정 합계가 이 동기화 기간을 믿을 수 있는지 판단하게 한다(#289)
+		sync.recordApprovalsJudged(approvals.imported() != null);
 		List<CodefSyncResult.PerformanceItem> performances = storePerformances(user, syncId, syncedAt,
 				performanceOutcome, linker, held.userCardIds(), diagnostics);
 		current.markSynced(syncedAt);
@@ -326,19 +338,26 @@ public class CodefSyncService {
 		int imported = 0;
 		int skipped = 0;
 		List<CodefSyncResult.IncompleteRow> incomplete = new ArrayList<>();
+		Map<IncompleteMarkKey, Integer> marks = new LinkedHashMap<>();
 		for (CodefLedgerCandidateRow row : candidates.rows()) {
 			Long userCardId = userCardIdOf(row.card(), userCardIds);
 			boolean approvalNoPresent = approvals.get(row.position()).approvalNo().isPresent();
 			diagnostics.approval(approvals.get(row.position()), row,
 					row.decision() instanceof CodefLedgerCandidateRow.Decision.Accepted && userCardId == null);
 			switch (row.decision()) {
-				case CodefLedgerCandidateRow.Decision.Incomplete incompleteRow ->
+				case CodefLedgerCandidateRow.Decision.Incomplete incompleteRow -> {
 					incomplete.add(new CodefSyncResult.IncompleteRow(userCardId, approvalNoPresent,
 							incompleteRow.reason()));
-				case CodefLedgerCandidateRow.Decision.Accepted accepted when userCardId == null ->
+					marks.merge(new IncompleteMarkKey(userCardId, usedMonthOf(approvals.get(row.position())),
+							incompleteRow.reason()), 1, Integer::sum);
+				}
+				case CodefLedgerCandidateRow.Decision.Accepted accepted when userCardId == null -> {
 					// 건너뛴 CODEF 카드(Q2)의 행은 붙일 보유 카드가 없어 카드 미연결과 같게 둔다
 					incomplete.add(new CodefSyncResult.IncompleteRow(null, approvalNoPresent,
 							CodefIncompleteReason.UNDETERMINED_ROW));
+					marks.merge(new IncompleteMarkKey(null, usedMonthOf(approvals.get(row.position())),
+							CodefIncompleteReason.UNDETERMINED_ROW), 1, Integer::sum);
+				}
 				case CodefLedgerCandidateRow.Decision.Accepted accepted -> {
 					switch (accepted.recheck()) {
 						case NEW -> {
@@ -358,7 +377,20 @@ public class CodefSyncService {
 			}
 		}
 		diagnostics.approvalsJudged(imported);
+		marks.forEach((key, count) -> this.incompleteMarks.save(new CodefSyncIncompleteMarkEntity(syncId,
+				user.userId(), key.userCardId(), key.usedMonth(), key.reason(), count)));
 		return new CodefSyncResult.Approvals(imported, skipped, incomplete);
+	}
+
+	// 불완전 행의 사용월. 사용일자를 해석하지 못하면 null(그 동기화 기간 전체에 걸림)
+	static String usedMonthOf(CodefApproval approval) {
+		return CodefUsedDateTime.parse(approval.usedDate(), Optional.empty())
+			.date()
+			.map(date -> YearMonth.from(date).toString())
+			.orElse(null);
+	}
+
+	private record IncompleteMarkKey(Long userCardId, String usedMonth, CodefIncompleteReason reason) {
 	}
 
 	private static CodefApprovalKey keyOf(CodefApprovalRowEntity row) {

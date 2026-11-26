@@ -69,6 +69,16 @@ public class MonthlyStateEntity {
 	@Column(name = "previous_month_codef_fetched_at")
 	private LocalDateTime previousMonthCodefFetchedAt;
 
+	// 전월 실적을 입력할 때 참고한 CODEF 승인 합계 추정값의 스냅샷(V18, #289). previousMonthInferredComputedAt이 있으면 참고 입력이다.
+	@Column(name = "previous_month_inferred_won")
+	private Long previousMonthInferredWon;
+
+	@Column(name = "previous_month_inferred_sync_id")
+	private Long previousMonthInferredSyncId;
+
+	@Column(name = "previous_month_inferred_computed_at")
+	private LocalDateTime previousMonthInferredComputedAt;
+
 	@Column(name = "other_buckets_used_won")
 	private Long otherBucketsUsedWon;
 
@@ -125,13 +135,16 @@ public class MonthlyStateEntity {
 		this.registeredOn = registeredOn;
 		this.noServiceSelection = noServiceSelection;
 		this.noSelectionEffectiveFrom = noSelectionEffectiveFrom;
-		// 교체는 참고 기록도 지운다. 이번 입력이 참고 입력이면 호출자가 이어서 referPreviousMonthToCodef를 부른다
+		// 교체는 참고 기록도 지운다. 이번 입력이 참고 입력이면 호출자가 이어서 referPreviousMonthToCodef·referPreviousMonthToInferred를 부른다
 		this.previousMonthCodefReferenceId = null;
 		this.previousMonthCodefSyncId = null;
 		this.previousMonthCodefWon = null;
 		this.previousMonthCodefFrom = null;
 		this.previousMonthCodefTo = null;
 		this.previousMonthCodefFetchedAt = null;
+		this.previousMonthInferredWon = null;
+		this.previousMonthInferredSyncId = null;
+		this.previousMonthInferredComputedAt = null;
 	}
 
 	/**
@@ -154,6 +167,34 @@ public class MonthlyStateEntity {
 		this.previousMonthCodefFrom = Objects.requireNonNull(from, "from");
 		this.previousMonthCodefTo = Objects.requireNonNull(to, "to");
 		this.previousMonthCodefFetchedAt = Objects.requireNonNull(fetchedAt, "fetchedAt");
+	}
+
+	/**
+	 * 전월 실적을 CODEF 승인 합계 추정값을 보고 입력했다고 기록한다(#289). {@link #replace} 뒤에 부른다.
+	 * @param won 그때의 추정 합계
+	 * @param syncId 산출 근거 동기화 ID
+	 * @param computedAt 산출(확인 저장) 시각
+	 * @throws IllegalStateException 전월 실적 값이 없는 경우
+	 */
+	public void referPreviousMonthToInferred(long won, long syncId, LocalDateTime computedAt) {
+		if (this.previousMonthWon == null) {
+			throw new IllegalStateException("an inferred reference needs a previous month value");
+		}
+		this.previousMonthInferredWon = won;
+		this.previousMonthInferredSyncId = syncId;
+		this.previousMonthInferredComputedAt = Objects.requireNonNull(computedAt, "computedAt");
+	}
+
+	public Long getPreviousMonthInferredWon() {
+		return this.previousMonthInferredWon;
+	}
+
+	public Long getPreviousMonthInferredSyncId() {
+		return this.previousMonthInferredSyncId;
+	}
+
+	public LocalDateTime getPreviousMonthInferredComputedAt() {
+		return this.previousMonthInferredComputedAt;
 	}
 
 	public Long getPreviousMonthCodefReferenceId() {

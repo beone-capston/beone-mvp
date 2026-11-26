@@ -76,6 +76,7 @@ class CodefSyncIntegrationTest {
 		this.jdbcTemplate.update("DELETE FROM codef_approval_rows");
 		this.jdbcTemplate.update("DELETE FROM codef_performance_references");
 		this.jdbcTemplate.update("DELETE FROM codef_held_cards");
+		this.jdbcTemplate.update("DELETE FROM codef_sync_incomplete_marks");
 		this.jdbcTemplate.update("DELETE FROM codef_syncs");
 		this.jdbcTemplate.update("DELETE FROM user_cards WHERE holding_source = 'CODEF'");
 		this.jdbcTemplate.update("DELETE FROM codef_connections");
@@ -124,14 +125,22 @@ class CodefSyncIntegrationTest {
 			.allSatisfy(value -> assertThat(value).matches("[0-9a-f]{64}"));
 		assertThat(count("SELECT COUNT(*) FROM codef_approval_rows WHERE approval_fingerprint LIKE '%FAKE%'")).isZero();
 		assertThat(response.getBody()).doesNotContain("FAKE-APR").doesNotContain("fake-cid-");
-		// 원장 행은 바뀌지 않는다(K2). 새 카드는 원장 조회 coverage에 나오지만 CODEF는 완전하다고 선언하지 않는다(R7)
+		// 모의 원장 행은 바뀌지 않는다(K2). 승인 행은 원장 조회에 출처 CODEF로 보이고(#289), 이번 달은 조회일 전날까지만 덮어
+		// 완전하다고 선언하지 않는다
 		assertThat(count("SELECT COUNT(*) FROM ledger_transactions")).isEqualTo(ledgerRows);
 		String ledger = send("GET", "/api/v1/me/ledger-transactions?month=2026-11&source=CODEF", "MY_CARDS", null)
 			.getBody();
-		assertThat(ledger).contains("\"items\":[]")
-			.contains("{\"userCardId\":\"uc-" + cardA + "\",\"source\":\"CODEF\",\"period\":{\"from\":\"2026-11-01\","
-					+ "\"to\":\"2026-11-30\"},\"complete\":false,\"incompleteReasons\":[]}")
+		assertThat(ledger).contains("\"source\":\"CODEF\",\"entryType\":\"CANCELLATION\",\"amountWon\":-30000")
+			.contains("\"userCardId\":\"uc-" + cardA + "\",\"source\":\"CODEF\",\"period\":{\"from\":\"2026-11-01\","
+					+ "\"to\":\"2026-11-30\"},\"complete\":false,\"incompleteReasons\":[")
+			.contains("PERIOD_NOT_COVERED")
 			.doesNotContain("\"complete\":true");
+		// 승인 판정을 마쳤다고 남기고, 저장하지 않은 불완전 행은 카드·사유별 건수로만 남는다(V18, #289)
+		assertThat(this.jdbcTemplate.queryForObject("SELECT approvals_judged FROM codef_syncs", Boolean.class)).isTrue();
+		assertThat(this.jdbcTemplate.queryForList(
+				"SELECT user_card_id, reason, row_count FROM codef_sync_incomplete_marks ORDER BY reason"))
+			.extracting(row -> row.get("user_card_id") + ":" + row.get("reason") + ":" + row.get("row_count"))
+			.containsExactly(cardA + ":PARTIAL_CANCELLATION_SUSPECTED:1", "null:UNDETERMINED_ROW:1");
 		// 실적은 참고값으로만 저장하고 월간 상태에 넣지 않는다(D-16)
 		assertThat(this.jdbcTemplate.queryForList("SELECT user_card_id, period_from, period_to, current_use_won"
 				+ " FROM codef_performance_references"))
