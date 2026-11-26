@@ -266,7 +266,7 @@ candidates.acceptedKinds();   // 저장은 호출자가 한다
 
 ## CODEF 연결 API (#126)
 
-`/api/v1/me/codef/connection`의 GET(연결 상태)·POST(계정 연결)·DELETE(연결 해제)입니다([계약](../api/codef.md)). 결정 30에 따라 **fixture·가짜 구현·로컬 HTTP·테스트 영속까지**이며 실 CODEF·실키·실계정은 쓰지 않습니다. 해제 범위(P4)와 connectedId 암호화(P5)는 2026-11-18 사용자 직접 결정입니다.
+`/api/v1/me/codef/connection`의 GET(연결 상태)·POST(계정 연결)·DELETE(연결 해제)입니다([계약](../api/codef.md)). 처음 구현(#126)은 결정 30에 따라 fixture·가짜 구현·로컬 HTTP·테스트 영속까지였습니다. 지금은 local·demo에서 가짜 게이트웨이를, `member & codef-live & (!prod | staging)`에서 [실 게이트웨이](#비공개-실연동-프로필-codef-live-lp-1-193)(#193)를 같은 서비스·컨트롤러로 씁니다. 저장소의 시험은 가짜 게이트웨이와 루프백 스텁 HTTP만 쓰며 실키·실계정을 쓰지 않습니다. 해제 범위(P4)와 connectedId 암호화(P5)는 2026-11-18 사용자 직접 결정입니다.
 
 ```text
 codef/
@@ -321,7 +321,7 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/connection" \
 
 ## CODEF 조회·동기화 API (#129)
 
-`POST /api/v1/me/codef/syncs`입니다([계약](../api/codef.md#post-apiv1mecodefsyncs--codef-조회동기화)). 연결 API와 같이 **fixture·가짜 구현·로컬 HTTP·테스트 영속까지**이며 실 CODEF·실키·실계정은 쓰지 않습니다. 보유카드·승인내역·실적을 조회해 각각 매핑 전 보유 카드, codef 전용 승인 행, 카드사 조회 실적(참고)으로 옮깁니다. 조회는 요청 안에서 동기로 끝납니다(관리자 판단 P11). 이 절의 관리자 판단 K1·K2·P2·P6·P8·P9·Q1~Q8은 2026-11-18 C0·C3 확인에서 정한 것이고, P6은 사용자 직접 결정입니다.
+`POST /api/v1/me/codef/syncs`입니다([계약](../api/codef.md#post-apiv1mecodefsyncs--codef-조회동기화)). 연결 API와 같은 프로필 조건으로 등록하고 local·demo는 가짜 게이트웨이(합성 fixture), `codef-live`는 실 게이트웨이를 씁니다. 저장소의 시험은 합성 fixture와 루프백 스텁 HTTP만 씁니다. 보유카드·승인내역·실적을 조회해 각각 매핑 전 보유 카드, codef 전용 승인 행, 카드사 조회 실적(참고)으로 옮깁니다. 조회는 요청 안에서 동기로 끝납니다(관리자 판단 P11). 이 절의 관리자 판단 K1·K2·P2·P6·P8·P9·Q1~Q8은 2026-11-18 C0·C3 확인에서 정한 것이고, P6은 사용자 직접 결정입니다.
 
 ```text
 codef/
@@ -397,9 +397,12 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
 
 - **지금 상태**: `CodefConnectionController`·`CodefSyncController`는 `@Profile({"local","demo","member & codef-live & (!prod | staging)"})`(#193, 스테이징 예외 #275), `FakeCodefGateway`는 `@Profile({"local","demo"})`입니다. `!prod` 조건과 별개로 `PublicProfileGuard`가 `prod`와 `codef-live` 조합의 기동을 멈춥니다. 운영 형태(`prod`, `staging` 없음)에서는 `GET`·`POST`·`DELETE /api/v1/me/codef/connection`, `POST /api/v1/me/codef/syncs` 네 경로가 세션 유무와 관계없이 404 `NOT_FOUND`이고, `CodefGateway`·`CodefSyncGateway` 구현 Bean이 없습니다. 운영에서 `codef-live`를 켜거나 CODEF 키를 두면 경로가 열리기 전에 기동이 멈춥니다.
 - **운영에는 기능 플래그 없음**: 설정 값 하나로 운영 prod에서 CODEF를 여는 경로는 만들지 않습니다. 스테이징 예외(#275)는 플래그 `BEONE_STAGING_CODEF_ENABLED=true`만으로 열리지 않고 스테이징 표지 프로필 `staging`이 함께 있어야 하며, 운영 배포는 `staging` 표지·플래그 이름을 거부합니다([스테이징 한정 CODEF](../deployment/staging-codef.md)). `PublicProfileGuard`는 프로필 조합과 함께, `prod`에 CODEF 키·토큰 환경 변수 이름이 있으면 기동을 멈춥니다(값은 읽지 않음, #191, 아래 제약 절).
-- **현재 사용자 응답**: 운영에는 연결 행이 생길 길이 없으므로 `GET /api/v1/me`의 `codefConnected`는 `false`입니다(스테이징에서 CODEF를 켜고 연결하면 스테이징 DB 기준으로 `true`가 될 수 있습니다). member 프로필 값은 `MemberProfileIntegrationTest`가, prod 프로필 값은 `PublicProfileIntegrationTest`(G5 L3, #189)가 확인합니다.
+- **현재 사용자 응답**: `GET /api/v1/me`의 `codefConnected`는 그 회원의 연결 행(`codef_connections`)이 있는지로 정합니다. 연결 행이 없으면 `false`이고, 있으면 프로필과 관계없이 `true`입니다. 운영 `prod`에는 CODEF 경로가 없어 새 연결 행이 생길 길이 없으므로 운영 회원은 보통 `false`이지만, DB에 이미 있던 행이 남아 있으면 `true`일 수 있습니다. 스테이징에서 CODEF를 켜고 연결하면 스테이징 DB에 행이 생겨 `true`가 됩니다. member 프로필 값은 `MemberProfileIntegrationTest`가, prod 프로필 값은 `PublicProfileIntegrationTest`(G5 L3, #189)가 확인합니다.
 - **운영 미등록의 이중 방어(구현됨)**: 백엔드 `PublicProfileGuard`가 운영 `prod`에서 `codef-live`·CODEF 키 환경 변수(빈 값 포함)·`staging` 없는 스테이징 플래그를 기동 단계에서 거부합니다. 배포 단계에서는 `deploy.sh production`이 운영 env의 CODEF 키 이름·`codef-live`·스테이징 플래그 이름(값 무관)·프로필 지정의 `staging` 표지·운영 폴더의 CODEF 오버레이를 거부합니다([서버 배포 스크립트](../deployment/server-deploy.md#codef-가드), `deploy-selftest.sh`).
-- **스테이징 한정 예외(구현됨, 켜는 실행은 별도)**: 기본 인증 뒤 스테이징에서만 `prod,staging,codef-live`와 `BEONE_STAGING_CODEF_ENABLED=true`, 필수 키 9개(CODEF 3키·connectedId 키·승인 HMAC 키·상품 호스트·호출 상한 3변수)가 모두 있을 때 실 게이트웨이를 등록합니다. 호출 상한은 스테이징 DB의 `codef_call_budgets`로 따로 셉니다. 켜기·확인·끄기는 [스테이징 한정 CODEF 런북](../deployment/staging-codef.md)을 따르고, 결정 40-7·38-8의 최종 변경 문구는 결정 필요입니다.
+- **스테이징 한정 예외(구현됨, 켜는 실행은 별도)**: 기본 인증 뒤 스테이징에서만 엽니다. 조건은 두 층입니다.
+  - **등록(백엔드):** 프로필 `prod,staging,codef-live`와 `BEONE_STAGING_CODEF_ENABLED=true`(정확히 소문자)만 봅니다. 이때 `PublicProfileGuard`가 기동을 허용하고 실 게이트웨이와 CODEF 경로 4개가 등록됩니다. 키 값이 있는지는 등록 조건이 아닙니다.
+  - **배포 전 검사(`deploy.sh staging`):** 플래그가 켜져 있으면 필수 키 9개(CODEF 3키·connectedId 키·승인 HMAC 키·상품 호스트·호출 상한 3변수)가 비지 않게 한 번씩 있어야 오버레이를 붙이고, 아니면 배포를 거부합니다. 이 검사를 거치지 않고 키가 빠진 채 기동되면 경로는 등록되지만 CODEF 호출은 보내기 전에 실패합니다(코드 기준): connectedId 키가 없으면 연결·동기화가 게이트웨이를 부르지 않고 502 `CODEF_UNAVAILABLE`, 클라이언트 ID·비밀이 없으면 호출마다 `CREDENTIALS_MISSING`, 호출 상한 설정이 없거나 창 밖이면 `BUDGET_EXHAUSTED`로 보내지 않아 연결은 502, 동기화는 대상별 `partialFailures`(모두 실패면 502)가 됩니다. 공개키가 없으면 연결이 `NO_PUBLIC_KEY`로 502, 승인 HMAC 키가 없으면 승인내역을 조회하지 않고 부분 실패로 알립니다.
+  - 호출 상한은 스테이징 DB의 `codef_call_budgets`로 따로 셉니다. 켜기·확인·끄기는 [스테이징 한정 CODEF 런북](../deployment/staging-codef.md)을 따르고, 결정 40-7·38-8의 최종 변경 문구는 결정 필요입니다.
 - **운영 공개 전환(계획 없음)**: 운영 `prod`에 CODEF를 여는 코드·설정은 없습니다. 하려면 별도 사용자 승인과 코드 PR(가드·프로필 조건·배포 가드·아래 테스트 기대값 변경)이 필요합니다.
 - **테스트**: 웹 `CodefPublicProfileWebTest`(`@ActiveProfiles("prod")`, 4경로 404·no-store, 컨트롤러 2개·가짜 게이트웨이 Bean 없음, prod가 member로 펼쳐지고 local·demo는 꺼짐). 가짜 게이트웨이는 웹 슬라이스 스캔 대상이 아니라 `@Import`로 직접 넣어 프로필 조건으로 빠지는지 봅니다.
 
