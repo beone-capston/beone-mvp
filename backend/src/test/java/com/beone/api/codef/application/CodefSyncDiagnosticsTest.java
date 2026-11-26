@@ -5,7 +5,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+import com.beone.api.codef.CodefAmount;
+import com.beone.api.codef.CodefAmountShape;
+import com.beone.api.codef.CodefApproval;
+import com.beone.api.codef.CodefApproval.CancelStatus;
+import com.beone.api.codef.CodefApproval.DomesticForeign;
+import com.beone.api.codef.CodefApproval.PaymentType;
 import com.beone.api.codef.CodefCancellationForm;
+import com.beone.api.codef.CodefCardResponseParser;
+import com.beone.api.codef.CodefList;
 import com.beone.api.codef.sync.CodefApprovalFingerprint;
 import com.beone.api.codef.sync.CodefApprovalKey;
 import com.beone.api.codef.sync.CodefCardLink;
@@ -50,6 +58,96 @@ class CodefSyncDiagnosticsTest {
 		return new CodefLedgerCandidateRow(position, new CodefCardLink.Linked(NORI), USED_AT,
 				new CodefCancellationForm.NormalRow(), new Decision.Incomplete(CodefIncompleteReason.UNDETERMINED_ROW),
 				Optional.of(detail));
+	}
+
+	private static CodefApproval approval(CodefAmount used, CodefAmountShape usedShape, CodefAmount canceled,
+			CodefAmountShape cancelShape) {
+		return new CodefApproval(Optional.empty(), Optional.empty(), Optional.of(NORI), Optional.empty(),
+				Optional.empty(), used, new CodefAmount.Absent(), Optional.empty(), PaymentType.UNKNOWN,
+				DomesticForeign.UNKNOWN, CancelStatus.NORMAL, canceled, Optional.empty(), usedShape, cancelShape);
+	}
+
+	@Test
+	void amountShapesAreCountedPerBranchAndField() {
+		CodefAmountShape comma = new CodefAmountShape("digits+comma", "4-6");
+		CodefAmountShape plain = new CodefAmountShape("digits", "4-6");
+		CodefSyncDiagnostics diagnostics = new CodefSyncDiagnostics();
+		// 이용금액 해석 실패 3행(쉼표 2, JSON 숫자 1), 취소금액만 해석 실패 1행, 둘 다 실패 1행
+		diagnostics.approval(approval(new CodefAmount.Unparsed(), comma, new CodefAmount.Absent(),
+				new CodefAmountShape("empty", "0")), incomplete(0, CodefIncompleteDetail.FORM_AMOUNT_NOT_PARSED), false);
+		diagnostics.approval(approval(new CodefAmount.Unparsed(), new CodefAmountShape("digits+comma", "7-9"),
+				new CodefAmount.Absent(), new CodefAmountShape("missing", "none")),
+				incomplete(1, CodefIncompleteDetail.FORM_AMOUNT_NOT_PARSED), false);
+		diagnostics.approval(approval(new CodefAmount.Absent(), new CodefAmountShape("jsonNumber+digits", "4-6"),
+				new CodefAmount.Absent(), new CodefAmountShape("missing", "none")),
+				incomplete(2, CodefIncompleteDetail.FORM_AMOUNT_NOT_PARSED), false);
+		diagnostics.approval(approval(new CodefAmount.Parsed(5_000), plain, new CodefAmount.Unparsed(),
+				new CodefAmountShape("digits+dot", "4-6")), incomplete(3, CodefIncompleteDetail.FORM_AMOUNT_NOT_PARSED),
+				false);
+		diagnostics.approval(approval(new CodefAmount.Unparsed(), new CodefAmountShape("digits+currency", "1-3"),
+				new CodefAmount.Unparsed(), new CodefAmountShape("other", "10+")),
+				incomplete(4, CodefIncompleteDetail.FORM_AMOUNT_NOT_PARSED), false);
+		diagnostics.approval(approval(new CodefAmount.Absent(), new CodefAmountShape("empty", "0"),
+				new CodefAmount.Absent(), new CodefAmountShape("missing", "none")),
+				incomplete(5, CodefIncompleteDetail.KRW_USED_AMOUNT_NOT_PARSED), false);
+		// 금액 계열이 아닌 분기·건너뛴 카드 행은 형태를 세지 않는다
+		diagnostics.approval(approval(new CodefAmount.Unparsed(), comma, new CodefAmount.Absent(),
+				new CodefAmountShape("empty", "0")), unlinked(6, CodefCardLink.Reason.ROW_NAME_NOT_IN_DICTIONARY),
+				false);
+		diagnostics.approval(approval(new CodefAmount.Unparsed(), comma, new CodefAmount.Absent(),
+				new CodefAmountShape("empty", "0")), accepted(7, NORI), true);
+		diagnostics.approvalsJudged(0);
+
+		assertThat(diagnostics.line(4)).isEqualTo("codef sync diagnostics syncId=4 approvals={rows=8, imported=0, "
+				+ "linkedByDictionary=0, incomplete={CARD_NOT_LINKED.ROW_NAME_NOT_IN_DICTIONARY=1, "
+				+ "FORM_AMOUNT_NOT_PARSED=5, HELD_CARD_SKIPPED=1, KRW_USED_AMOUNT_NOT_PARSED=1}, "
+				+ "unlinkedCardNames={\"nori 체크카드(RF)\"=2}, amountShapes={"
+				+ "FORM_AMOUNT_NOT_PARSED.resCancelAmount={form={digits+dot=1, other=1}, length={4-6=1, 10+=1}}, "
+				+ "FORM_AMOUNT_NOT_PARSED.resUsedAmount={form={digits+comma=2, digits+currency=1, jsonNumber+digits=1}, "
+				+ "length={1-3=1, 4-6=2, 7-9=1}}, "
+				+ "KRW_USED_AMOUNT_NOT_PARSED.resUsedAmount={form={empty=1}, length={0=1}}}} performances=NOT_FETCHED");
+	}
+
+	@Test
+	void lineWithoutAmountRowsKeepsThePreviousFormat() {
+		CodefSyncDiagnostics diagnostics = new CodefSyncDiagnostics();
+		diagnostics.approval(approval(new CodefAmount.Parsed(5_000), CodefAmountShape.NOT_CAPTURED,
+				new CodefAmount.Absent(), CodefAmountShape.NOT_CAPTURED),
+				incomplete(0, CodefIncompleteDetail.KRW_CURRENCY_NOT_KRW), false);
+		diagnostics.approvalsJudged(0);
+
+		assertThat(diagnostics.line(2)).isEqualTo("codef sync diagnostics syncId=2 approvals={rows=1, imported=0, "
+				+ "linkedByDictionary=0, incomplete={KRW_CURRENCY_NOT_KRW=1}, unlinkedCardNames={}} "
+				+ "performances=NOT_FETCHED");
+	}
+
+	@Test
+	void amountTextsNeverReachTheLine() {
+		// 파서를 거친 합성 금액 원문. 형태만 남고 원문·숫자는 줄에 없어야 한다
+		String body = """
+				{"result":{"code":"CF-00000","transactionId":"SYN-TX"},"data":[
+				{"resUsedAmount":"SYN-9,876.5원","resCancelYN":"0"},
+				{"resUsedAmount":"7,654","resCancelYN":"0"},
+				{"resUsedAmount":"4321","resCancelYN":"1","resCancelAmount":"KRW 3210"}]}
+				""";
+		java.util.List<CodefApproval> approvals = ((CodefList.Items<CodefApproval>) CodefCardResponseParser
+			.parseApprovals(body)
+			.data()).items();
+		CodefSyncDiagnostics diagnostics = new CodefSyncDiagnostics();
+		for (int index = 0; index < approvals.size(); index++) {
+			diagnostics.approval(approvals.get(index), incomplete(index, CodefIncompleteDetail.FORM_AMOUNT_NOT_PARSED),
+					false);
+		}
+		diagnostics.approvalsJudged(0);
+
+		String line = diagnostics.line(8);
+
+		assertThat(line).contains("FORM_AMOUNT_NOT_PARSED.resUsedAmount={form={digits+comma=1, "
+				+ "digits+comma+minus+dot+currency+other=1}, length={4-6=1, 10+=1}}")
+			.contains("FORM_AMOUNT_NOT_PARSED.resCancelAmount={form={digits+currency+space=1}, length={7-9=1}}");
+		for (String forbidden : new String[] { "SYN", "9,876", "876", "7,654", "654", "4321", "3210", "KRW", "원" }) {
+			assertThat(line).doesNotContain(forbidden);
+		}
 	}
 
 	@Test

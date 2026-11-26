@@ -42,7 +42,9 @@ class CodefCardResponseParserTest {
 		return new CodefApproval(Optional.of("20261015"), Optional.of("123000"), Optional.of("SYN CARD"),
 				Optional.of("SYN CAFE"), Optional.of("SYN TYPE"), new CodefAmount.Parsed(10_000),
 				new CodefAmount.Parsed(10_000), Optional.of("KRW"), PaymentType.LUMP_SUM, DomesticForeign.DOMESTIC,
-				CancelStatus.NORMAL, new CodefAmount.Absent(), Optional.of("SYN-APPROVAL-1"));
+				CancelStatus.NORMAL, new CodefAmount.Absent(), Optional.of("SYN-APPROVAL-1"),
+				// 진단용 금액 원문 형태(#274): "10000"과 ""
+				new CodefAmountShape("digits", "4-6"), new CodefAmountShape("empty", "0"));
 	}
 
 	private static CodefList.Items<CodefApproval> items(CodefResponse<CodefApproval> response) {
@@ -198,7 +200,7 @@ class CodefCardResponseParserTest {
 			assertThat(items.items()).containsExactly(new CodefApproval(Optional.empty(), Optional.empty(), Optional.empty(),
 					Optional.empty(), Optional.empty(), new CodefAmount.Absent(), new CodefAmount.Absent(), Optional.empty(),
 					PaymentType.UNKNOWN, DomesticForeign.UNKNOWN, CancelStatus.UNKNOWN, new CodefAmount.Absent(),
-					Optional.empty()));
+					Optional.empty(), new CodefAmountShape("empty", "0"), new CodefAmountShape("missing", "none")));
 		}
 
 		@ParameterizedTest
