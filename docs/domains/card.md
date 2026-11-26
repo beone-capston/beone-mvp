@@ -17,10 +17,12 @@
 
 - (#111) 대표 카드 보호: 대표 카드 고정 모드의 대표 카드를 추천에서 빼거나 해제하면 409 `REPRESENTATIVE_CARD_IN_USE`, 자동 추천 모드 대표 카드를 해제하면 대표 카드를 비웁니다. 구현은 결제 전 설정([preference 안내](preference.md))이 맡습니다.
 
+- (#268) CODEF 후보 매핑(`CANDIDATE`): CODEF 동기화(#129)가 CODEF 보유카드(`holdingSource=CODEF`)를 만들거나 다시 대조할 때, 카드명이 [이름 사전](../../backend/src/main/java/com/beone/api/codef/application/CodefCardNameDictionary.java)과 정확히 일치하면 후보 상품을 저장합니다(`candidate_card_product_id`, Flyway V16, 상품당 후보 1장). 보유 카드 목록이 `mapping.status=CANDIDATE`·`candidateCardProductId`로 보여 주고, 사용자가 `PATCH .../mapping`(`USER_CONFIRMED`, `CODEF_CANDIDATE`)으로 확인합니다. 서버는 확정하지 않습니다([D-15 2026-11-26 변경](../decisions.md#d-15d-16d-17-확정-정책)).
+
 계획·미구현(자세한 내용은 [보유 카드](#보유-카드)의 "아직 하지 않는 것"):
 
 - 매핑·추천 제외 변경에 따른 이전 추천 무효화: 추천(B2)에서 연결합니다.
-- CODEF 후보 매핑(`CANDIDATE`, #268): CODEF 동기화(#129)가 CODEF 보유카드(`holdingSource=CODEF`)를 만들 때, 카드명이 [이름 사전](../../backend/src/main/java/com/beone/api/codef/application/CodefCardNameDictionary.java)과 정확히 일치하면 `CANDIDATE`·후보 상품으로, 아니면 `UNMAPPED`로 둡니다. 확정은 사용자가 `CODEF_CANDIDATE`로 합니다([D-15 2026-11-26 변경](../decisions.md#d-15d-16d-17-확정-정책)).
+- CODEF 후보의 근거 저장(`candidateBasis`, 현재 항상 `null`)과 추천 응답의 후보 표시(`excludedCards[].candidateCardProductId`, 현재 항상 `null`)는 하지 않습니다(2026-11-26 사용자 결정).
 
 ## 핵심 용어
 
