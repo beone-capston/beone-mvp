@@ -51,7 +51,8 @@ final class CodefSandboxCheck {
 		if (token != null) {
 			lines.add(product("CARD", token, CodefApi.HELD_CARDS, "{\"organization\":\"0301\"}"));
 			lines.add(product("APPROVAL", token, CodefApi.APPROVALS,
-					"{\"organization\":\"0301\",\"startDate\":\"20260901\",\"endDate\":\"20260930\",\"orderBy\":\"0\"}"));
+					"{\"organization\":\"0301\",\"startDate\":\"20260901\",\"endDate\":\"20260930\",\"orderBy\":\"0\","
+							+ "\"inquiryType\":\"1\",\"memberStoreInfoType\":\"0\"}"));
 			lines.add(product("RESULT", token, CodefApi.CARD_PERFORMANCES, "{\"organization\":\"0301\"}"));
 		}
 		return new Report(lines, token);

@@ -50,7 +50,7 @@ CODEF 전송 계층의 환경 변수와, 샌드박스 호스트에서 형식을 
 | --- | --- | --- |
 | 토큰 | `https://oauth.codef.io/oauth/token` | `grant_type=client_credentials&scope=read` |
 | 보유카드 | `/v1/kr/card/p/account/card-list` | `{"organization":"0301"}` |
-| 승인내역 | `/v1/kr/card/p/account/approval-list` | `{"organization":"0301","startDate":"20260901","endDate":"20260930","orderBy":"0"}` |
+| 승인내역 | `/v1/kr/card/p/account/approval-list` | `{"organization":"0301","startDate":"20260901","endDate":"20260930","orderBy":"0","inquiryType":"1","memberStoreInfoType":"0"}` |
 | 실적조회 | `/v1/kr/card/p/account/result-check-list` | `{"organization":"0301"}` |
 
 샌드박스에서 같은 경로인지, 기관코드 `0301`이 유효한지, `connectedId`가 필요한지는 문서에 없어 이 절차의 확인 항목입니다. 카드사 아이디·비밀번호와 카드번호는 넣지 않습니다.

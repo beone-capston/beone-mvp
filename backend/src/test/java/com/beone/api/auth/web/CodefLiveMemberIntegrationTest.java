@@ -9,6 +9,7 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -194,6 +195,25 @@ class CodefLiveMemberIntegrationTest {
 		assertThat(STUB.requestsTo(CodefApi.HELD_CARDS.path())).hasSize(1);
 		assertThat(STUB.requestsTo(CodefApi.APPROVALS.path())).hasSize(1);
 		assertThat(STUB.requestsTo(CodefApi.CARD_PERFORMANCES.path())).hasSize(1);
+	}
+
+	@Test
+	void controlCharactersAreRejectedBeforeAnyCodefCallOrBudgetUse() {
+		Session a = this.members.loginNew(MEMBER_A, "a@example.com");
+		String badLoginId = "{\"organization\":\"0301\",\"loginType\":\"ID\",\"loginId\":\"kbuser01\\u0000\","
+				+ "\"password\":\"" + PASSWORD + "\"}";
+		String badPassword = "{\"organization\":\"0301\",\"loginType\":\"ID\",\"loginId\":\"kbuser01\","
+				+ "\"password\":\"" + PASSWORD + "\\n\"}";
+
+		for (String body : List.of(badLoginId, badPassword)) {
+			ResponseEntity<String> rejected = this.members.send(HttpMethod.POST, CONNECTION, a, body);
+			assertThat(rejected.getStatusCode().value()).isEqualTo(400);
+			assertThat(rejected.getBody()).contains("\"code\":\"INVALID_REQUEST\"").doesNotContain(PASSWORD).doesNotContain("kbuser01");
+		}
+		// 토큰·계정 등록 호출 0, 호출 총량 행 0, 연결 행 0
+		assertThat(STUB.requests()).isEmpty();
+		assertThat(count("SELECT COUNT(*) FROM codef_call_budgets")).isZero();
+		assertThat(count("SELECT COUNT(*) FROM codef_connections")).isZero();
 	}
 
 	private int count(String sql, Object... args) {

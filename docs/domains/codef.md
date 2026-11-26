@@ -298,6 +298,10 @@ codef/
 | 추가 인증 필요(2-way 범위 밖), 토큰·인증서·통신·요청 형식·도메인·IP·연결 계정 오류, 미분류 | 사용 불가 | 502 `CODEF_UNAVAILABLE` |
 
   **실코드 대응이 없는 것**: 결과 분류에 로그인 실패 분류가 없으므로(#47에서 `CF-12401`·`CF-12834`를 미분류로 정정) 400 `CODEF_LOGIN_FAILED`로 가는 실 결과 코드는 없습니다. 계정 등록 응답의 `errorList` 코드도 관측 로그에만 쓰고 이 대응을 바꾸지 않습니다(2026-11-26 검토, 아래 "계정 등록 실패 관측"). 이 응답은 가짜 게이트웨이의 로그인 거절로만 나옵니다. `RECONNECT_REQUIRED`로 바꾸는 실 결과 코드도 없습니다. 근거 있는 코드가 확인되면 별도 결정으로 더합니다. 시간 초과를 504로 나누지 않습니다.
+- **입력 문자 검사(2026-11-26)**: CODEF를 부르기 전에 요청 검증에서 400 `INVALID_REQUEST`로 거절합니다. 잘못된 입력으로 호출 횟수(N14)와 KB 로그인 시도를 쓰지 않기 위해서입니다.
+  - 아이디([CodefLoginText](../../backend/src/main/java/com/beone/api/codef/web/CodefLoginText.java)): 제어(Cc)·서식(Cf)·짝 없는 서로게이트(Cs)·미할당(Cn) 문자, 줄·문단 구분자, U+FFFD, 앞뒤 공백(NBSP·전각 공백 포함)을 거절합니다. 가운데 공백은 허용합니다.
+  - 비밀번호([NoControlCharacters](../../backend/src/main/java/com/beone/api/codef/web/NoControlCharacters.java)): 제어 문자(Cc)만 거절합니다. 앞뒤 공백은 실제 비밀번호일 수 있어 그대로 보냅니다. 값을 문자열로 만들지 않고, 오류에는 필드 이름과 고정 문구만 담습니다.
+  - 테스트: 웹 `CodefConnectionApiWebTest`(거절 사례, 서비스 미호출, 응답에 값 없음, 가운데·앞뒤 공백 허용), 통합 `CodefLiveMemberIntegrationTest`(스텁 요청 0, `codef_call_budgets` 행 0, 연결 행 0)
 - **민감 정보**: 비밀번호는 `char[]`로 받아 게이트웨이에 넘긴 뒤 지우고 저장하지 않습니다. 아이디도 저장하지 않습니다. 요청 객체·등록 결과·엔티티의 문자열 표현에 아이디·비밀번호·connectedId를 넣지 않습니다. 가짜 게이트웨이는 RSA 암호화를 하지 않습니다(관리자 판단 P7). 실 구현은 받은 즉시 CODEF 공개키로 암호화해 보내야 합니다(D-14 원칙 9).
 - **가짜 게이트웨이 합성 아이디**: `fake-login-rejected`(로그인 거절), `fake-card-verification`(카드소지확인), `fake-unavailable`(사용 불가). 그 밖의 아이디는 성공이며 `fake-cid-` 접두어의 무작위 connectedId를 줍니다. 실계정 아이디를 넣어도 CODEF로 보내지 않습니다.
 - **현재 사용자 응답(#136)**: `GET /api/v1/me`의 `codefConnected`는 연결 행이 있으면 `true`입니다(`RECONNECT_REQUIRED` 포함, 재연결 필요 여부는 연결 상태 GET으로 봄). card가 codef를 참조하지 않도록 card의 조회 포트 `CodefConnectionLookup`을 codef의 `CodefConnectionStatusLookup`이 구현합니다.
@@ -402,7 +406,14 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
     - 다음 시도 로그의 `errorCodes`로 실제 코드를 확인한 뒤 별도 결정으로 정합니다.
   - 호출 총량(`CodefCallBudget`) 차감과 재시도 없음 규칙은 그대로입니다.
   - 테스트: `CodefTransportLoggingTest`(계정·상품 실패 관측 줄, 메시지·아이디·connectedId 비출력, 형식 치환·상한), `CodefCardResponseParserTest.AccountErrorList`(코드 치환·상한·항목 수·`extraMessage` 유무), `LiveCodefGatewayTest`(`errorList` 코드와 무관하게 사용 불가 유지)
-- **조회 요청**: 보유카드·실적은 `organization`·`connectedId`, 승인내역은 여기에 `startDate`·`endDate`(yyyyMMdd)·`orderBy`(`0`)를 더합니다(샌드박스 확인 절차와 같은 값, 근거 확인 대상). 응답 판정은 기존 `codef.sync`가 합니다. 근거 있는 결과 코드가 없어 연결 무효(재연결 필요)로 바꾸는 대응은 아직 없습니다.
+- **조회 요청**: 보유카드·실적은 `organization`·`connectedId`, 승인내역은 여기에 `startDate`·`endDate`(yyyyMMdd)·`orderBy`(`0`)·`inquiryType`(`1`)·`memberStoreInfoType`(`0`)을 더합니다.
+  - **승인내역 파라미터 보완(2026-11-26)**: 비공개 실연동 동기화에서 승인내역만 `CF-12411`(필수 파라미터 누락, `extraMessage` 있음)이었습니다. 보유카드·실적은 성공했습니다.
+    - KB 필수 입력은 기관코드·시작일자·종료일자·정렬·조회구분입니다([KB 조회 조건 근거](codef-kb.md#승인내역)의 `승인내역!H4:H8`). 이전 요청에는 조회구분(`inquiryType`)이 없었습니다.
+    - `inquiryType` `1`과 `memberStoreInfoType` `0`은 공식 예제 [codef-io/codef-python](https://github.com/codef-io/codef-python)(커밋 `c6bec12`) `sandbox/cd/TestKR_CD_P002.py`의 값입니다.
+    - **가정**: `1`이 전체 카드 조회라는 의미는 예제에 설명이 없습니다. 카드번호가 "카드별 조회 시"에만 쓰인다는 시트 주석에서 추정했습니다. 실호출 재시도로 확정합니다.
+    - `memberStoreInfoType`은 KB에서 선택 입력이고, `0`(미포함)으로 가맹점 사업자번호·주소 같은 추가 정보를 받지 않습니다. 가맹점명은 기본 출력입니다.
+    - 카드번호·카드명·중복카드 선택·생년월일은 보내지 않습니다(테스트로 고정). 카드번호는 수집하지 않는 입력입니다.
+  - 근거 확인 대상: 보유카드·실적의 요청은 샌드박스 확인 절차와 같은 값입니다. 응답 판정은 기존 `codef.sync`가 합니다. 근거 있는 결과 코드가 없어 연결 무효(재연결 필요)로 바꾸는 대응은 아직 없습니다.
 - **키**: 환경 변수 이름만 씁니다(`CODEF_CLIENT_ID`·`CODEF_CLIENT_SECRET`·`CODEF_PUBLIC_KEY`·`BEONE_CODEF_CONNECTED_ID_KEY`·`BEONE_CODEF_APPROVAL_HMAC_KEY`). 시험은 합성 값만 씁니다. 비밀번호·connectedId·암호문은 로그·예외 문구에 넣지 않습니다.
 - **저장 분리(R8)**: 동기화 결과는 기존과 같이 CODEF 전용 테이블과 `user_cards`(`CODEF`, `UNMAPPED`)에만 저장하고 `ledger_transactions`는 바꾸지 않습니다.
 - **하지 않은 것**: 실호출, 실키·환경 비밀 파일, 서버 접속, prod 등록, 추가 인증(2-way), 카드소지확인 지원. 프로세스를 넘는 호출 상한은 아래 LP-2 절.

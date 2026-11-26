@@ -79,6 +79,8 @@ if [ "${1:-}" = compose ]; then
 			sql="${*: -1}"
 			[ "${FAKE_Q_RC:-0}" = 0 ] || exit "$FAKE_Q_RC"
 			case "$sql" in
+				BEONE_CODEF_BUDGET_PER_API)   # budget 블록의 printenv(실행 중인 백엔드의 상한 설정)
+					[ "${FAKE_LIMIT_RC:-0}" = 0 ] || exit "$FAKE_LIMIT_RC"; printf '%b' "${FAKE_LIMIT-3\n}" ;;
 				*"UPDATE members"*) printf '%b' "${FAKE_TA-1\n1\n}" ;;
 				*"COUNT(DISTINCT window_start)"*) printf '%b' "${FAKE_BUDGET_STAT-1\t1\n}" ;;
 				*"FROM codef_call_budgets"*) printf 'TOKEN\t2026-11-30 15:00:00.000\t1\n' ;;
@@ -277,7 +279,13 @@ run watch "중지 대상에 운영 컨테이너 섞임(중지 안 함)" 1 DSTOP,
 run budget "창 1개·최대 1" 0 -
 run budget "호출 전 행 0" 0 - FAKE_BUDGET_STAT='0\t0\n'
 run budget "창 2개(재기동 때 창 변경)" 1 - FAKE_BUDGET_STAT='2\t1\n'
-run budget "API별 3회 초과" 1 - FAKE_BUDGET_STAT='1\t4\n'
+run budget "API별 3회 초과(상한 3)" 1 - FAKE_BUDGET_STAT='1\t4\n'
+run budget "상한 5로 승인, 사용 4(통과)" 0 - FAKE_BUDGET_STAT='1\t4\n' FAKE_LIMIT='5\n'
+run budget "상한 5, 사용 6(초과)" 1 - FAKE_BUDGET_STAT='1\t6\n' FAKE_LIMIT='5\n'
+run budget "상한 설정 조회 실패" 1 - FAKE_LIMIT_RC=1
+run budget "상한 설정 빈 값" 1 - FAKE_LIMIT=''
+run budget "상한 설정 숫자 아님" 1 - FAKE_LIMIT='abc\n'
+run budget "상한 설정 0" 1 - FAKE_LIMIT='0\n'
 run budget "DB 조회 실패" 1 - FAKE_Q_RC=1
 run budget "조회 결과 비어 있음" 1 - FAKE_BUDGET_STAT=''
 run ledger-before "정상" 0 -
