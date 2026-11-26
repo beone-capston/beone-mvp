@@ -134,7 +134,8 @@ class DemoModeFlowIntegrationTest {
 		for (String product : SAMPLE_PRODUCTS) {
 			registerWithState(product);
 		}
-		assertThat(items(get("/api/v1/me/cards"))).extracting(item -> item.get("cardProductId"))
+		// 상품 ID는 보유 카드 응답의 mapping 안에 있다(docs/api/cards.md)
+		assertThat(items(get("/api/v1/me/cards"))).extracting(item -> map(item.get("mapping")).get("cardProductId"))
 			.containsExactlyInAnyOrderElementsOf(SAMPLE_PRODUCTS);
 		String order = createOrder();
 
@@ -146,6 +147,8 @@ class DemoModeFlowIntegrationTest {
 		assertThat(benefit.get("amountWon")).isInstanceOf(Integer.class);
 		Map<String, Object> recommendation = data(
 				get("/api/v1/me/recommendations/" + map(approval.get("recalculation")).get("recommendationId")));
+		// 비교 가능한 카드가 0장일 때만 NOT_DETERMINED다(recommendations.md, D-18 K2). 09271은 같은 입력으로 확정되므로 선택이 있다
+		assertThat(recommendation).containsEntry("outcome", "SELECTED");
 		assertThat(map(recommendation.get("selected"))).containsEntry("userCardId", approval.get("userCardId"));
 	}
 
