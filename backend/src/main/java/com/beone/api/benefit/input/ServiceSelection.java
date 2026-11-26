@@ -29,6 +29,8 @@ public record ServiceSelection(Optional<ServiceId> service, LocalDate effectiveF
 
 	/**
 	 * 사용자가 명시 입력한 선택 없음.
+	 * @param effectiveFrom 적용 시작일
+	 * @return 선택 없음 값
 	 */
 	public static ServiceSelection none(LocalDate effectiveFrom) {
 		return new ServiceSelection(Optional.empty(), effectiveFrom);

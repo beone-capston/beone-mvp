@@ -52,7 +52,7 @@ codef/
 [CodefCardResponseParser](../../backend/src/main/java/com/beone/api/codef/CodefCardResponseParser.java)의 `parseApprovals`·`parseHeldCards`·`parseCardPerformances`는 응답 본문을 받아 [CodefResponse](../../backend/src/main/java/com/beone/api/codef/CodefResponse.java)를 돌려줍니다.
 
 1. 본문이 JSON 객체가 아니면 예외를 던지지 않고 결과는 미분류, `data`는 형식 오류입니다. 파서 예외 문구에 본문 일부가 들어갈 수 있어 전달하지 않습니다.
-2. `result.code`·`transactionId`만 보관하고 [CodefResultCategory](../../backend/src/main/java/com/beone/api/codef/CodefResultCategory.java)로 분류합니다. `message`·`extraMessage`는 기관 문구가 그대로 담길 수 있어 보관하지 않습니다.
+2. `result.code`·`transactionId`만 보관하고 [CodefResultCategory](../../backend/src/main/java/com/beone/api/codef/CodefResultCategory.java)로 분류합니다. `message`·`extraMessage`는 기관 문구가 그대로 담길 수 있어 보관하지 않습니다. `extraMessage`는 내용 없이 값이 있었는지(`extraMessagePresent`)만 남깁니다(아래 "계정 등록 실패 관측").
 3. `data`는 [CodefList](../../backend/src/main/java/com/beone/api/codef/CodefList.java)로 읽습니다. 객체 → 1건, 배열 → N건(빈 배열은 0건), 키 누락 → 값 없음(`Missing`), null·원시값·객체가 아닌 배열 원소 → 형식 오류(`Malformed`). 실적조회의 중첩 목록도 같은 규칙이며, 중첩 목록의 빈 문자열은 "미제공시 빈칸"으로 보고 값 없음입니다(최상위 `data`의 빈 문자열은 형식 오류).
 4. 결과 코드 분류와 `data` 해석은 독립입니다. 성공 분류여도 `data`의 누락·형식 오류·빈 값·해석 못 한 금액·목록 밖 코드 값은 그대로 남고, 0원·0건·검증 완료로 바뀌지 않습니다. 해석기에는 두 값을 합쳐 "사용 가능"을 판정하는 메서드가 없으며, 그 판정은 하위 패키지 [`codef.sync`](#오프라인-동기화-변환-82)가 조회 대상별로 합니다. 판정을 통과해도 항목 값의 빈 값·미해석은 그대로입니다. 예를 들어 추가 인증 응답의 `data`도 형식상 객체 1건으로 읽힙니다.
 
@@ -274,6 +274,8 @@ codef/
 │   ├── ConnectedIdKeySource     암호화 키 공급. 운영 구현 EnvironmentConnectedIdKeySource(환경 변수)
 │   ├── CodefGateway             CODEF 계정 등록·정리 경계(인터페이스)
 │   ├── FakeCodefGateway         local·demo용 가짜. 합성 아이디로 실패 재현, 그 밖은 합성 connectedId
+│   ├── LiveCodefGateway         codef-live용 실 게이트웨이(#193). 전송 계층으로 계정 등록·삭제·상품 3종
+│   ├── CodefPasswordEncryptor   카드사 비밀번호를 CODEF 공개키(CODEF_PUBLIC_KEY)로 암호화(#193)
 │   ├── CodefRegistration        등록 결과: Registered·LoginRejected·CardVerificationRequired·Unavailable
 │   ├── CodefRegistrations       결과 코드 분류 → 등록 결과 대응표
 │   ├── CodefConnectionStatusLookup card의 CodefConnectionLookup 구현. 연결 행이 있으면 GET /api/v1/me codefConnected=true(#136)
@@ -295,7 +297,7 @@ codef/
 | `CARD_VERIFICATION_NOT_SUPPORTED`(`CF-12108`) | 카드소지확인 필요 | 409 `CODEF_CARD_VERIFICATION_NOT_SUPPORTED` |
 | 추가 인증 필요(2-way 범위 밖), 토큰·인증서·통신·요청 형식·도메인·IP·연결 계정 오류, 미분류 | 사용 불가 | 502 `CODEF_UNAVAILABLE` |
 
-  **실코드 대응이 없는 것**: 결과 분류에 로그인 실패 분류가 없으므로(#47에서 `CF-12401`·`CF-12834`를 미분류로 정정) 400 `CODEF_LOGIN_FAILED`로 가는 실 결과 코드는 없습니다. 이 응답은 가짜 게이트웨이의 로그인 거절로만 나옵니다. `RECONNECT_REQUIRED`로 바꾸는 실 결과 코드도 없습니다. 근거 있는 코드가 확인되면 별도 결정으로 더합니다. 시간 초과를 504로 나누지 않습니다.
+  **실코드 대응이 없는 것**: 결과 분류에 로그인 실패 분류가 없으므로(#47에서 `CF-12401`·`CF-12834`를 미분류로 정정) 400 `CODEF_LOGIN_FAILED`로 가는 실 결과 코드는 없습니다. 계정 등록 응답의 `errorList` 코드도 관측 로그에만 쓰고 이 대응을 바꾸지 않습니다(2026-11-26 검토, 아래 "계정 등록 실패 관측"). 이 응답은 가짜 게이트웨이의 로그인 거절로만 나옵니다. `RECONNECT_REQUIRED`로 바꾸는 실 결과 코드도 없습니다. 근거 있는 코드가 확인되면 별도 결정으로 더합니다. 시간 초과를 504로 나누지 않습니다.
 - **민감 정보**: 비밀번호는 `char[]`로 받아 게이트웨이에 넘긴 뒤 지우고 저장하지 않습니다. 아이디도 저장하지 않습니다. 요청 객체·등록 결과·엔티티의 문자열 표현에 아이디·비밀번호·connectedId를 넣지 않습니다. 가짜 게이트웨이는 RSA 암호화를 하지 않습니다(관리자 판단 P7). 실 구현은 받은 즉시 CODEF 공개키로 암호화해 보내야 합니다(D-14 원칙 9).
 - **가짜 게이트웨이 합성 아이디**: `fake-login-rejected`(로그인 거절), `fake-card-verification`(카드소지확인), `fake-unavailable`(사용 불가). 그 밖의 아이디는 성공이며 `fake-cid-` 접두어의 무작위 connectedId를 줍니다. 실계정 아이디를 넣어도 CODEF로 보내지 않습니다.
 - **현재 사용자 응답(#136)**: `GET /api/v1/me`의 `codefConnected`는 연결 행이 있으면 `true`입니다(`RECONNECT_REQUIRED` 포함, 재연결 필요 여부는 연결 상태 GET으로 봄). card가 codef를 참조하지 않도록 card의 조회 포트 `CodefConnectionLookup`을 codef의 `CodefConnectionStatusLookup`이 구현합니다.
@@ -363,11 +365,74 @@ curl -X POST "http://localhost:8080/api/v1/me/codef/syncs" \
 
 테스트: 단위 `CodefSyncPeriodTest`(생략·한쪽 생략·오늘 이후·역순·12개월 경계·월말), `HmacApprovalFingerprinterTest`(Python으로 따로 계산한 값, 원문 미포함, 키 길이), `EnvironmentApprovalFingerprintKeySourceTest`, `CodefHeldCardMatcherTest`(새로·같은 카드·발급일자 구분·정확 비교·n·m 조합·이름 규칙·코드 포인트), `CodefSyncServiceHelpersTest`(실적 펼치기, 부분 실패 대상), `FakeCodefGatewayTest`(fixture 조회·시나리오), 웹 `CodefSyncApiWebTest`(계약 예시 JSON, 부분 실패·null 건수, 미연결 행 `userCardId=null`, 본문 생략, 날짜 형식 400, 기간 400, 실패 응답 전부, 헤더), `CodefSyncProfileOffWebTest`(프로필 밖 404), 통합 `CodefSyncIntegrationTest`(V12, 첫 동기화 저장 내용과 응답, 원장 불변, 승인번호 원문 없음, 재동기화 중복 없음, 해제 카드 재생성, 부분 실패, 전체 실패 502, 재연결 필요, 포트폴리오·미연결·기간 400, 요청 기간 전달, 사용자 분리), `CodefSyncRecheckIntegrationTest`(정상→Type1 갱신·이미 기록·Type1→정상 모순·취소금액 불일치·새 행, 같은 이름 2장 대조), `CodefSyncWithoutHmacKeyIntegrationTest`(HMAC 키 없음).
 
+## 공개(prod) 범위 (결정 38-8, #186)
+
+공개 프로필 `prod`(회원 프로필 `member`를 프로필 그룹으로 함께 켬, #183)에서는 **CODEF 연결·조회 API를 등록하지 않습니다.** 결정 38-8에 따라 비공개 실연동 검증을 마치기 전에는 미등록이며, 공개 전환은 별도 승인으로만 합니다.
+
+- **지금 상태**: `CodefConnectionController`·`CodefSyncController`는 `@Profile({"local","demo","member & codef-live & !prod"})`(#193), `FakeCodefGateway`는 `@Profile({"local","demo"})`입니다. `!prod` 조건과 별개로 `PublicProfileGuard`가 `prod`와 `codef-live` 조합의 기동을 멈춥니다. prod에서는 `GET`·`POST`·`DELETE /api/v1/me/codef/connection`, `POST /api/v1/me/codef/syncs` 네 경로가 세션 유무와 관계없이 404 `NOT_FOUND`이고, `CodefGateway`·`CodefSyncGateway` 구현 Bean이 없습니다. 이 동작을 바꾸는 제품 코드는 없으며 테스트로만 고정했습니다.
+- **기능 플래그 없음**: 설정 값 하나로 prod에서 CODEF를 여는 경로는 만들지 않습니다. `PublicProfileGuard`는 프로필 조합과 함께, `prod`에 CODEF 키·토큰 환경 변수 이름이 있으면 기동을 멈춥니다(값은 읽지 않음, #191, 아래 제약 절).
+- **현재 사용자 응답**: 연결 행이 생길 길이 없으므로 `GET /api/v1/me`의 `codefConnected`는 `false`입니다. member 프로필 값은 `MemberProfileIntegrationTest`가, prod 프로필 값은 `PublicProfileIntegrationTest`(G5 L3, #189)가 확인합니다.
+- **공개 전환 방식(미구현)**: 비공개 실연동 검증(사용자 PC의 로컬 환경, 실키·실계정은 별도 승인)과 공개 전환 승인 뒤, **코드 PR**로 `@Profile` 표현식을 바꾸고 아래 테스트의 기대값을 새 계약에 맞춰 고칩니다. 비공개 검증 환경과 전환 표현식의 모양은 결정 전입니다.
+- **테스트**: 웹 `CodefPublicProfileWebTest`(`@ActiveProfiles("prod")`, 4경로 404·no-store, 컨트롤러 2개·가짜 게이트웨이 Bean 없음, prod가 member로 펼쳐지고 local·demo는 꺼짐). 가짜 게이트웨이는 웹 슬라이스 스캔 대상이 아니라 `@Import`로 직접 넣어 프로필 조건으로 빠지는지 봅니다.
+
+## 비공개 실연동 프로필 codef-live (LP-1, #193)
+
+비공개 실연동 검증(결정 38-8)을 위해 실 게이트웨이를 전용 프로필 `codef-live`에 둡니다. **이 단계에서 실제 CODEF 호출은 하지 않았고, 실호출은 별도 승인(N9 검증 환경, N14 호출 상한) 뒤에만 합니다.** 시험은 모두 루프백(`127.0.0.1`) 스텁 HTTP입니다.
+
+- **켜지는 조건**: `member & codef-live & !prod`. 이때만 [LiveCodefGateway](../../backend/src/main/java/com/beone/api/codef/application/LiveCodefGateway.java)(`CodefGateway`·`CodefSyncGateway` 구현)와 CODEF 경로 4개가 등록됩니다. 현재 사용자는 회원 세션으로 정하고(기존 `CurrentUser` 해석), 쓰기는 CSRF를 따르며, 연결은 사용자별 행이라 다른 회원에게는 `NOT_CONNECTED`·409입니다. `member`만 켜면 미등록(404), local·demo는 가짜 게이트웨이 그대로입니다. `prod`와 함께 켜면 `PublicProfileGuard`가 기동을 멈춥니다.
+- **호출 방식**: 기존 전송 계층(`CodefClient`·`CodefObservation`)을 그대로 씁니다. 호출마다 관측을 하나 열고, 동기화 한 번은 API마다 한 번씩 부릅니다. 실패(시간 초과·5xx·연결 끊김)해도 다시 부르지 않고 리다이렉트를 따르지 않습니다. 토큰은 메모리 캐시를 공유합니다. 호스트 허용 목록(공식 HTTPS 호스트 또는 루프백 HTTP)도 그대로입니다.
+- **계정 등록·삭제(근거 확인 필요)**: 전송 계층에 계정 API(`CodefAccountApi`: `/v1/account/create`·`/v1/account/delete`)를 더했습니다. 요청은 `accountList`에 개인(`P`) 카드(`CD`), 아이디 로그인(`1`), 기관 코드를 담고, 비밀번호는 [CodefPasswordEncryptor](../../backend/src/main/java/com/beone/api/codef/application/CodefPasswordEncryptor.java)가 공개키(`CODEF_PUBLIC_KEY`, Base64 X.509)로 RSA/ECB/PKCS1Padding 암호화한 Base64 값만 싣습니다. 응답은 `data.connectedId`를 읽고 결과 분류는 기존 `CodefRegistrations` 표를 씁니다. 공개키가 없거나 읽지 못하면 CODEF를 부르지 않고 `CODEF_UNAVAILABLE`입니다.
+- **계정 API 근거 대조(2026-11-25)**: 공식 개발자 문서(`developer.codef.io/cert/account/cid-overview`)는 스크립트로 그려지는 페이지라 본문을 읽지 못했습니다. 대신 공식 SDK [codef-io/easycodef-java](https://github.com/codef-io/easycodef-java)(커밋 `ea96123`, 2024-09-26)와 대조했습니다.
+  - 일치: 경로 `/v1/account/create`·`/v1/account/delete`(`EasyCodefConstant`), 등록 `accountList` 항목 `countryCode` `KR`·`businessType` `CD`·`clientType` `P`·`loginType` `1`·`id`·`password`(`CreateAccountTest`, README), 삭제는 `connectedId`를 최상위에 두고 `accountList`에 로그인 입력 없이 같은 5개 항목(`DeleteAccountTest`), 응답 `data`에 `connectedId`·`successList`·`errorList`(README 응답 예시), 비밀번호는 공개키(Base64 → X.509) RSA 암호문의 Base64(`EasyCodefUtil.encryptRSA`, `Cipher.getInstance("RSA")`는 JDK 기본 제공자에서 RSA/ECB/PKCS1Padding).
+  - **실호출 전 확인 필요**: `loginType` `1`이 아이디 로그인이라는 설명(SDK에는 값만 있음), 카드소지확인 등 등록 실패 코드가 최상위 `result`에 오는지 `errorList`에 오는지, 요청 본문을 URL 인코딩해야 하는지(상품 호출과 같은 미확인 항목), 기관 코드 `0301`(KB국민카드)로 SDK 예제(`0309`)와 같은 형식이 통하는지, 공식 개발자 문서 본문과의 일치.
+- **계정 등록 실패 관측(2026-11-26)**: 비공개 실연동 1차 시도에서 계정 등록이 `CF-04000`(Aside 보고의 설명 "사용자 계정정보 등록에 실패", 저장소의 공식 목록 사본에는 이 코드 행이 없음)으로 끝났습니다. 로그만으로는 로그인 실패인지 기관 오류인지 알 수 없었습니다. 그래서 원인 판단에 쓸 값만 관측 로그에 더했습니다.
+  - **남기는 것**: 결과 코드가 `CF-00000`이 아니면, 기존 한 줄(`codef call api=… http=… resultCode=…`) 뒤에 한 줄을 더 남깁니다.
+    - 계정 API: `codef call detail api=ACCOUNT_CREATE extraMessage=<true|false> errorCodes=<코드,…> errorCount=<항목 수>`
+    - 상품 API: `codef call detail api=<API> extraMessage=<true|false>`
+  - **`errorCodes` 규칙**([CodefAccount](../../backend/src/main/java/com/beone/api/codef/CodefAccount.java))
+    - `data.errorList[].code`만 읽습니다.
+    - `CF-`와 숫자 5자리 형식만 그대로 둡니다. 누락·문자열 아님·다른 형식(줄바꿈 등 로그 주입 시도 포함)은 `OTHER`로 바꿉니다.
+    - 앞에서부터 최대 5개만 남기고, `errorCount`는 배열의 실제 항목 수입니다. 배열이 없거나 배열이 아니면 빈 값과 0입니다.
+  - **`extraMessage`**: 비어 있지 않은 값이 있었는지만 남깁니다. null·빈 문자열·공백뿐이면 `false`입니다.
+  - **남기지 않는 것**: `result.message`·`errorList[].message`·`extraMessage`의 내용, 아이디, connectedId, 비밀번호, 응답 전문.
+  - **분류는 바꾸지 않음(관리자 판단 P1 유지)**
+    - 저장소에 있는 공식 오류 목록 근거는 `CF-12401`("로그인 파라미터가 누락되었습니다.")과 `CF-12834`("계정 잠김 해제가 필요합니다.")뿐입니다. 아이디·비밀번호 불일치를 뜻하는 코드의 근거는 없습니다.
+    - 그래서 `errorList` 코드로 400 `CODEF_LOGIN_FAILED`를 나누지 않고 502 `CODEF_UNAVAILABLE`을 유지합니다.
+    - 특히 `CF-12834`를 로그인 실패로 안내하면 사용자가 같은 비밀번호로 다시 시도해 잠금이 악화될 수 있습니다.
+    - 다음 시도 로그의 `errorCodes`로 실제 코드를 확인한 뒤 별도 결정으로 정합니다.
+  - 호출 총량(`CodefCallBudget`) 차감과 재시도 없음 규칙은 그대로입니다.
+  - 테스트: `CodefTransportLoggingTest`(계정·상품 실패 관측 줄, 메시지·아이디·connectedId 비출력, 형식 치환·상한), `CodefCardResponseParserTest.AccountErrorList`(코드 치환·상한·항목 수·`extraMessage` 유무), `LiveCodefGatewayTest`(`errorList` 코드와 무관하게 사용 불가 유지)
+- **조회 요청**: 보유카드·실적은 `organization`·`connectedId`, 승인내역은 여기에 `startDate`·`endDate`(yyyyMMdd)·`orderBy`(`0`)를 더합니다(샌드박스 확인 절차와 같은 값, 근거 확인 대상). 응답 판정은 기존 `codef.sync`가 합니다. 근거 있는 결과 코드가 없어 연결 무효(재연결 필요)로 바꾸는 대응은 아직 없습니다.
+- **키**: 환경 변수 이름만 씁니다(`CODEF_CLIENT_ID`·`CODEF_CLIENT_SECRET`·`CODEF_PUBLIC_KEY`·`BEONE_CODEF_CONNECTED_ID_KEY`·`BEONE_CODEF_APPROVAL_HMAC_KEY`). 시험은 합성 값만 씁니다. 비밀번호·connectedId·암호문은 로그·예외 문구에 넣지 않습니다.
+- **저장 분리(R8)**: 동기화 결과는 기존과 같이 CODEF 전용 테이블과 `user_cards`(`CODEF`, `UNMAPPED`)에만 저장하고 `ledger_transactions`는 바꾸지 않습니다.
+- **하지 않은 것**: 실호출, 실키·환경 비밀 파일, 서버 접속, prod 등록, 추가 인증(2-way), 카드소지확인 지원. 프로세스를 넘는 호출 상한은 아래 LP-2 절.
+- **테스트**: 단위 `LiveCodefGatewayTest`(암호문만 전송·복호화 확인, 결과 코드 대응, 5xx·시간 초과·연결 끊김 재호출 0, 리다이렉트 미추적, 키·공개키 없으면 요청 0, 요청 본문, 삭제), `CodefLiveProfileTest`(프로필 조합별 게이트웨이·컨트롤러 등록), `PublicProfileGuardTest`(prod + codef-live 실패), 웹 `CodefLiveProfileWebTest`(4경로가 회원 인터셉터 뒤 401), 통합 `CodefLiveMemberIntegrationTest`(회원 세션·CSRF로 연결 → 동기화 → 해제, 스텁 요청 수 전체, 원장 불변, 다른 회원 분리, 5xx 재호출 0). 통합 시험은 전송 계층 클라이언트를 스텁 주소·합성 키 빈으로 바꾸고 합성 공개키 빈을 넣습니다(테스트 전용 주입).
+
+## 프로세스를 넘는 호출 총량 (LP-2, #196)
+
+비공개 검증 기간 전체의 CODEF 호출 수를 서버 재기동과 관계없이 제한합니다(N14, 결정 10·39-4). 관측 1회 상한(`CodefObservation.CALL_LIMIT = 3`)과 별개이며 둘 다 허락해야 보냅니다.
+
+- **저장**: `codef_call_budgets`(V15)에 API 이름(`TOKEN`, `ACCOUNT_CREATE`, `ACCOUNT_DELETE`, `HELD_CARDS`, `APPROVALS`, `CARD_PERFORMANCES`)과 창 시작 시각별 누적 시도 수를 둡니다. 사용자 데이터·원장과 섞지 않습니다(R8).
+- **동작**: [JdbcCodefCallBudget](../../backend/src/main/java/com/beone/api/codef/application/JdbcCodefCallBudget.java)이 전송 계층의 요청 직전에 불립니다(`CodefCallBudget`). 행이 없으면 0으로 만든 뒤 `used < 상한`일 때만 1을 더하는 갱신 한 문장으로 확인과 증가를 함께 하므로 동시 요청에도 상한을 넘지 않습니다. 거절이면 요청을 보내지 않고 결과는 `BUDGET_EXHAUSTED`이며, 연결·동기화 API는 기존과 같이 `CODEF_UNAVAILABLE`(502)입니다. 허락한 뒤 요청이 실패해도 되돌리지 않습니다(시도 수). 캐시된 토큰을 쓰면 토큰 총량은 쓰지 않습니다.
+- **설정과 기본값**: `beone.codef.budget.per-api`(API별 최대), `beone.codef.budget.window-start`·`window-end`(ISO-8601 오프셋 시각, 시작 포함·끝 제외). 환경 변수로는 `BEONE_CODEF_BUDGET_PER_API`·`BEONE_CODEF_BUDGET_WINDOW_START`·`BEONE_CODEF_BUDGET_WINDOW_END`입니다. **하나라도 없거나 읽을 수 없거나 지금이 창 밖이면 닫힘(호출 0)입니다.** 코드에는 숫자 기본값이 없습니다. 실수로 설정을 빠뜨렸을 때 상한 없이 열리지 않게 하려는 것이고, N14 값은 운영자가 검증 때 넣습니다.
+- **검증 환경 권장 설정(결정 39-4)**: 검증 기간에 연결 1회와 동기화 1회를 하므로 API별 3회로 둡니다. 예시(값은 검증 일정에 맞춰 바꿈):
+
+  ```bash
+  BEONE_CODEF_BUDGET_PER_API=3
+  BEONE_CODEF_BUDGET_WINDOW_START=2026-12-01T00:00:00+09:00
+  BEONE_CODEF_BUDGET_WINDOW_END=2026-12-08T00:00:00+09:00
+  ```
+
+  창을 새로 정하면(시작 시각이 바뀌면) 새 행으로 다시 셉니다. 검증 뒤에는 설정을 지워 닫습니다.
+- **범위**: `member & codef-live & !prod`에서만 빈이 있습니다. 그 밖의 프로필은 전송 계층을 쓰는 게이트웨이가 없어 세지 않습니다(`CodefCallBudget.UNLIMITED`). 비용 상한은 다루지 않습니다.
+- **테스트**: 단위 `CodefCallBudgetTransportTest`(토큰·상품·계정 거절 시 요청 0, 캐시 토큰은 묻지 않음, 관측 상한 먼저), `CodefCallBudgetSettingsTest`(없음·잘못된 값 닫힘, 창 경계), `CodefLiveProfileTest`(codef-live에서만 등록), 통합 `CodefCallBudgetIntegrationTest`(16개 동시 요청에 3건만 허락, 같은 DB를 쓰는 새 애플리케이션 컨텍스트에서도 누적 유지, API별 분리, 창 경계와 새 창, 설정 없음 시 행 0, 상한 도달 뒤 스텁 요청 0). `CodefLiveMemberIntegrationTest`는 시험 시계를 포함하는 창과 API별 3을 설정해 씁니다.
+
 ## 제약과 후속 작업
 
 - 실적 기간·충족 여부·현재이용금액을 BeONE 상태값(`StateValue`, `StateSource.CODEF`)으로 바꾸는 것은 후보 매핑일 뿐 확정하지 않습니다(D-04: [결정 기록](../decisions.md)의 상태 출처 결정). 기관마다 전월·당월 제공 범위가 다르다는 문서 설명이 있습니다(비씨: 시작일자 기준 전월, 신한: 당월, 현대·롯데: 전월·당월).
 - 카드명·발급사로 실제 상품(SKU)을 확정하지 않습니다(D-01: [결정 기록](../decisions.md)의 카드 상품 식별 결정, `CANDIDATE` 유지).
 - 조회 가능 기간(예: 승인내역 국민·삼성 최근 12개월, 신한·롯데 최근 6개월 등)과 기관별 필수 파라미터는 문서 참고일 뿐 코드화하지 않았습니다.
+- 공개 프로필 `prod`에 CODEF 키·토큰 환경 변수(`CODEF_CLIENT_ID`, `CODEF_CLIENT_SECRET`, `BEONE_CODEF_APPROVAL_HMAC_KEY`, `BEONE_CODEF_CONNECTED_ID_KEY`, `CODEF_PUBLIC_KEY`)가 있으면 `PublicProfileGuard`가 기동을 멈춥니다(결정 38-8, #191, 공개키는 #193에서 추가). 값은 읽지 않고 메시지에 이름만 넣으며, 빈 값으로 선언만 해도 멈춥니다. 키는 비공개 검증 서버에만 둡니다. **공개 전환이 승인되면 이 규칙을 걷어내야 합니다.**
 - 취소 표현은 KB의 형태 기술만 있습니다([KB 문서](codef-kb.md#취소-표현-구분)). 실승인금액·승인과 취소의 매칭·원장·실적·한도 반영 규칙과 추가 분류는 만들지 않습니다. 성공 분류가 있어도 `data`를 계산에 쓸 수 있는지는 별도 판단입니다.
 
 ## 관련 문서

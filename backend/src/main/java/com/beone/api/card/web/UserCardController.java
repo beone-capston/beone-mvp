@@ -19,10 +19,10 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 보유 카드 API 5개(docs/api/cards.md). 현재 사용자는 {@link CurrentUser} 인자로만 받는다(D-09).
  *
- * <p>{@code local}·{@code demo} 프로필에서만 등록한다. 그 밖의 환경에서는 경로가 없어 404 {@code NOT_FOUND}다.
+ * <p>{@code local}·{@code demo}와 로컬 회원 프로필 {@code member}에서만 등록한다. 그 밖의 환경에서는 경로가 없어 404 {@code NOT_FOUND}다.
  */
 @RestController
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 @RequestMapping("/api/v1/me/cards")
 public class UserCardController {
 

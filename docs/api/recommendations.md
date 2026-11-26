@@ -2,7 +2,9 @@
 
 추천 계산과 결과 조회를 다룹니다(D-12, D-13, D-15, D-18). 계산 상태는 HTTP 오류가 아니라 `data` 안에 담습니다.
 
-공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 모든 API는 구현 전입니다.
+공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 구현 상태는 [README](README.md#업무-api-1차-명세)의 상태 항목을 봅니다.
+
+프로필: 두 API는 `local`·`demo`와 로컬 회원 프로필 `member`에 등록돼 있습니다(G3b #160). 아래 `X-BeONE-Demo-User` 헤더는 `local`·`demo`의 방식입니다. `member`에서는 헤더 대신 회원 세션 쿠키(`__Host-BEONE_SESSION`)로 현재 사용자를 정합니다. 추천 계산은 추천 행을 저장하는 POST이므로 `X-CSRF-TOKEN`이 필요합니다. 검사 순서는 401 `UNAUTHENTICATED` → 403 `CSRF_INVALID` → 404 → 409이고 모든 응답에 `Cache-Control: no-store`가 붙습니다([회원 세션 규칙](../api.md#회원-세션member-프로필)). 다른 회원의 주문·추천은 없는 것과 같은 404입니다. 무효화 규칙은 프로필과 관계없이 같습니다. 추천 제외 변경은 `MAPPING_CHANGED`(결정 32 Q2)이고 결제 전 설정 변경은 무효화하지 않습니다(결정 32 Q3). 무효는 조회 시점 판정이라 되돌아갈 수 있습니다. 카드 근거(매핑 상태·규칙 상품·추천 제외 여부)가 계산 당시 값으로 돌아가면, 예를 들어 추천 제외를 켰다 끄면, 그 사이 무효였던 추천이 다시 유효해집니다. 정책을 정한 것이 아니라 현재 지연 판정 설계의 결과입니다. 모의 승인은 G3c(#161, 결정 38)에서 `member`에도 등록했습니다. 회원 화면은 승인 후 결과만 보여 주는 흐름을 유지합니다(결정 38-4). 승인 API가 서버에서 추천을 다시 계산하므로 이 추천 API를 승인 전에 부르지 않아도 승인할 수 있고, 그때 승인 요청에 `seenRecommendationId`가 없으면 비교 없이 승인해 `recalculation.changed=null`입니다([모의 승인](mock-payments.md)).
 
 ## POST /api/v1/me/orders/{orderId}/recommendations — 추천 계산
 
@@ -482,7 +484,9 @@ X-BeONE-Demo-User: MY_CARDS
 - 형식은 「추천 계산」과 같다
 - 이 조회는 과거 입력과 규칙 버전의 재현 기록이다. 승인 직전 검증을 대신하지 않는다
 - `invalidated` · Boolean · 매핑 변경·월간 상태 재입력 등으로 이 결과를 승인 근거로 쓸 수 없게 됐는지
-- `invalidatedReason` · String|null · `MAPPING_CHANGED` / `MONTHLY_STATE_CHANGED` / `ORDER_PAID`
+- `invalidatedReason` · String|null · `MAPPING_CHANGED` / `MONTHLY_STATE_CHANGED` / `ORDER_PAID`. 여럿이면 `ORDER_PAID` → `MAPPING_CHANGED` → `MONTHLY_STATE_CHANGED` 순으로 하나만 담는다
+  - `MAPPING_CHANGED`는 계산 당시 비교에 넣은 보유 카드의 비교 대상 여부가 바뀐 경우다. 매핑 상태·규칙 상품 변경, 카드 등록 해제, 추천 제외(`excludedFromRecommendation`) 변경을 모두 이 값으로 묶는다. 추천 제외 변경용 사유 값은 따로 없다(사용자 확인, 결정 32 Q2, 2026-11-18)
+  - 결제 설정(`selectionMode`·대표 카드) 변경은 기존 추천을 무효로 만들지 않는다. 추천의 `selectionMode`·`fixedCardComparison`은 계산 당시 설정 기준으로 남고, 모의 승인 때 서버가 그때의 결제 설정으로 다시 계산해 승인 카드를 정한다(사용자 확인, 결정 32 Q3, 2026-11-18)
 
 ### 실패 응답
 

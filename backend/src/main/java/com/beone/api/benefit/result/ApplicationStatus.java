@@ -59,6 +59,8 @@ public enum ApplicationStatus {
 	/**
 	 * 상태와 금액이 맞는지 확인한다.
 	 * 적용 상태는 0원보다 큰 확정 금액, 미적용 상태는 확정 0원, 규칙·상태 공백은 미확정 금액이어야 한다.
+	 * @param amount 확인할 금액
+	 * @return 상태와 금액이 맞으면 {@code true}
 	 */
 	public boolean isConsistentWith(BenefitAmount amount) {
 		return switch (amountShape) {

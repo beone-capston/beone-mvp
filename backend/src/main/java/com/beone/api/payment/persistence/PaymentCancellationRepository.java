@@ -9,7 +9,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
  */
 public interface PaymentCancellationRepository extends JpaRepository<PaymentCancellationEntity, Long> {
 
-	/** 한 결제의 취소를 취소 순서대로 찾는다. */
+	/**
+	 * 한 결제의 취소를 취소 순서대로 찾는다.
+	 * @param simulatedPaymentId 모의 결제 번호
+	 * @return 취소 행 목록
+	 */
 	List<PaymentCancellationEntity> findBySimulatedPaymentIdOrderByCancellationIdAsc(Long simulatedPaymentId);
 
 }

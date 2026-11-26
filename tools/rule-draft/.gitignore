@@ -1,0 +1,4 @@
+# Gradle 산출물·캐시. 커밋하지 않는다(backend/.gitignore와 같은 관례)
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar

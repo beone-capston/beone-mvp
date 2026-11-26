@@ -2,7 +2,9 @@
 
 현재 사용자와 보유 카드, 상품 매핑(D-09, D-15)을 다룹니다.
 
-공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 모든 API는 구현 전입니다.
+공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 구현 상태는 [README](README.md#업무-api-1차-명세)의 상태 항목을 봅니다.
+
+> 로컬 회원 프로필 `member`(결정 37, #157)에서는 `GET /api/v1/me`와 보유 카드 API 5개를 회원 세션으로 씁니다. 시연 헤더 대신 세션 쿠키로 현재 사용자를 정하고, 회원 세션이 없으면 401 `UNAUTHENTICATED`, 쓰기 요청의 `X-CSRF-TOKEN`이 틀리면 403 `CSRF_INVALID`(저장 안 함)입니다. 순서는 401 → 403 → 본문 400 → 404이고 남의 카드는 404입니다. 시연 사용자 목록(`/api/v1/demo-users`)은 이 프로필에 없어 404입니다. 자세한 규칙은 [공통 규약](../api.md#회원-세션member-프로필)을 봅니다.
 
 ## GET /api/v1/demo-users — 시연 사용자 목록 조회
 
@@ -92,6 +94,7 @@ X-BeONE-Demo-User: MY_CARDS
 ```
 
 - 현재 사용자는 서버의 `CurrentUserResolver` 한 곳에서 헤더를 읽어 정합니다. 경로·본문에 사용자 ID를 넣지 않습니다(D-09).
+- 로컬 회원 프로필 `member`에서는 헤더 대신 `__Host-BEONE_SESSION` 회원 세션 쿠키로 정하고 헤더는 무시합니다(결정 37 D4, [공통 규약](../api.md#회원-세션member-프로필)).
 
 ### Request Body
 
@@ -114,13 +117,30 @@ X-BeONE-Demo-User: MY_CARDS
 }
 ```
 
+`member` 프로필의 회원 응답(결정 37 D7). 형태는 같고 `demoUser`가 `null`이다.
+
+```json
+{
+  "data": {
+    "demoUser": null,
+    "displayName": "내 카드",
+    "portfolioType": "REAL",
+    "readOnly": false,
+    "cardCount": 0,
+    "codefConnected": false
+  }
+}
+```
+
 #### 응답 필드
 
+- `demoUser` · String · 시연 사용자 구분. `member` 프로필의 회원이면 `null`
 - `cardCount` · Integer · 등록 해제되지 않은 보유 카드 수
-- `codefConnected` · Boolean · CODEF 연결 여부. CODEF 연결 행이 있으면 `true`다. 상태가 `RECONNECT_REQUIRED`여도 연결은 있으므로 `true`이고, 재연결 필요 여부는 [CODEF 연결 상태 조회](codef.md)의 `status`·`reconnectRequired`로 본다. 연결이 없거나 가상 포트폴리오면 `false`
+- `codefConnected` · Boolean · CODEF 연결 여부. CODEF 연결 행이 있으면 `true`다. 상태가 `RECONNECT_REQUIRED`여도 연결은 있으므로 `true`이고, 재연결 필요 여부는 [CODEF 연결 상태 조회](codef.md)의 `status`·`reconnectRequired`로 본다. 연결이 없거나 가상 포트폴리오면 `false`(F1 #137, 사용자 확인 결정 32 Q8, 2026-11-18). `member` 프로필에서도 같은 규칙(연결 행 존재)이며, CODEF API 자체는 이 프로필에 등록하지 않는다
 
 ### 실패 응답
 
+- **401 `UNAUTHENTICATED`**: `member` 프로필에서 회원 세션이 없거나 만료·로그아웃됨
 - **500 `INTERNAL_SERVER_ERROR`**: 서버 오류
 
 ### 근거

@@ -96,6 +96,8 @@ class MemberRegistrationIntegrationTest {
 	@AfterEach
 	void clearTables() {
 		this.jdbcTemplate.update("DELETE FROM auth_tokens");
+		// 회원 장부(users.member_id, V14)가 회원을 RESTRICT로 참조하므로 먼저 지운다
+		this.jdbcTemplate.update("DELETE FROM users WHERE member_id IS NOT NULL");
 		this.jdbcTemplate.update("DELETE FROM members");
 		this.jdbcTemplate.update("DELETE FROM auth_mail_throttles");
 		this.jdbcTemplate.update("DELETE FROM auth_sessions");
@@ -189,6 +191,14 @@ class MemberRegistrationIntegrationTest {
 		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM auth_tokens", Integer.class)).isZero();
 		// 로그인 세션을 만들지 않는다: 이 요청의 세션은 그대로 익명 세션 하나다.
 		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM auth_sessions", Integer.class)).isOne();
+		// 같은 트랜잭션에서 회원의 '내 카드' 장부를 만든다(결정 37 D1a·D7)
+		assertThat(this.jdbcTemplate.queryForMap(
+				"SELECT u.demo_user, u.display_name, u.portfolio_type, u.read_only FROM users u"
+						+ " JOIN members m ON m.member_id = u.member_id"))
+			.containsEntry("demo_user", null)
+			.containsEntry("display_name", "내 카드")
+			.containsEntry("portfolio_type", "REAL")
+			.containsEntry("read_only", false);
 
 		// 1회용: 같은 토큰을 다시 쓰면 400이다.
 		assertBody(verify(token), 400, TOKEN_INVALID);

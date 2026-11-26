@@ -22,6 +22,8 @@ public sealed interface BenefitCalculation {
 
 	/**
 	 * 베이시스 포인트 요율(예: 1% = 100, 50% = 5,000). 부동소수점을 쓰지 않도록 정수로 둔다.
+	 *
+	 * @param basisPoints 베이시스 포인트 요율
 	 */
 	record Rate(int basisPoints) implements BenefitCalculation {
 
@@ -33,7 +35,11 @@ public sealed interface BenefitCalculation {
 
 	}
 
-	/** 대상 거래 한 건당 정액(예: 2,500원, D-10). */
+	/**
+	 * 대상 거래 한 건당 정액(예: 2,500원, D-10).
+	 *
+	 * @param amount 건당 정액
+	 */
 	record FixedAmount(Won amount) implements BenefitCalculation {
 
 		public FixedAmount {

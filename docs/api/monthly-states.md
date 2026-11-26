@@ -2,7 +2,9 @@
 
 카드별 월간 상태의 조회·수동 입력과, 2차의 출처 충돌 선택을 다룹니다(D-04, D-16, D-17).
 
-공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 모든 API는 구현 전입니다.
+공통 규약과 공통 실패 응답은 [`docs/api.md`](../api.md#업무-api-공통-규약)를, 전체 목록은 [README](README.md)를 봅니다. JSON은 합성 예시이며 실제 API 실행 결과나 약관 검증 결과가 아닙니다. 구현 상태는 [README](README.md#업무-api-1차-명세)의 상태 항목을 봅니다.
+
+프로필: 세 API는 `local`·`demo`와 로컬 회원 프로필 `member`에 등록돼 있습니다(G3a #159). 아래 `X-BeONE-Demo-User` 헤더는 `local`·`demo`의 방식입니다. `member`에서는 헤더 대신 회원 세션 쿠키(`__Host-BEONE_SESSION`)로 현재 사용자를 정하고 PUT 두 개에 `X-CSRF-TOKEN`이 필요합니다. 검사 순서는 401 `UNAUTHENTICATED` → 403 `CSRF_INVALID` → 400 → 404 → 409이고 모든 응답에 `Cache-Control: no-store`가 붙습니다([회원 세션 규칙](../api.md#회원-세션member-프로필)). 출처 충돌 계산 기준 선택은 `member`에서도 항상 409 `SOURCE_CONFLICT_NOT_FOUND`이고 저장하지 않습니다(결정 32 Q1).
 
 ## GET /api/v1/me/cards/{userCardId}/monthly-states/{month} — 월간 상태 조회
 
@@ -330,6 +332,8 @@ registeredOn
 월간 상태 값의 출처 충돌을 사용자가 해소하는 API. 선택은 그 값 하나에만 적용한다.
 
 충돌은 같은 카드·같은 항목·같은 기준 기간에 출처가 다른 값이 서로 다를 때만 생깁니다. 값이 같거나, 기준 기간이 다르거나, `UNKNOWN`이거나, 사용자가 참고해 입력한 MANUAL 값과 그 CODEF 값이면 충돌이 아닙니다. 1차(수동 입력만)에서는 충돌이 생기지 않습니다.
+
+> 현재 구현은 제한 구현입니다. 충돌이 생기는 경로가 생기기 전까지 요청 검증 400·카드 404 뒤 항상 409 `SOURCE_CONFLICT_NOT_FOUND`로 끝나고, 선택을 저장하지 않습니다. 아래 200 응답은 그 뒤에 구현할 형식입니다(#135, 사용자 확인 결정 32 Q1, 2026-11-18).
 
 ### Request Header
 

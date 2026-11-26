@@ -35,7 +35,10 @@ import jakarta.validation.Payload;
 	/** 스스로 필드 사이 규칙을 판정하는 요청. */
 	interface Checkable {
 
-		/** 위반 목록. 없으면 빈 목록. 필드 하나의 형식 오류는 그 필드의 제약이 다루므로 여기서 다시 보지 않는다. */
+		/**
+		 * 위반 목록. 없으면 빈 목록. 필드 하나의 형식 오류는 그 필드의 제약이 다루므로 여기서 다시 보지 않는다.
+		 * @return 교차 필드 위반 목록. 없으면 빈 목록
+		 */
 		List<Violation> crossFieldViolations();
 
 	}

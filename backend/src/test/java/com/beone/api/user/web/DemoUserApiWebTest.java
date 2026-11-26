@@ -93,7 +93,7 @@ class DemoUserApiWebTest {
 		MvcResult result = this.mockMvc.perform(get(PROBE).header(DemoUserHeader.NAME, "MY_CARDS")).andReturn();
 
 		assertThat(result.getResponse().getStatus()).isEqualTo(200);
-		assertJson(result, "{\"data\":{\"userId\":1,\"demoUser\":\"MY_CARDS\"}}");
+		assertJson(result, "{\"data\":{\"userId\":1,\"demoUser\":\"MY_CARDS\",\"portfolioType\":\"REAL\",\"readOnly\":false}}");
 	}
 
 	@Test
@@ -105,7 +105,7 @@ class DemoUserApiWebTest {
 			.andReturn();
 
 		assertThat(result.getResponse().getStatus()).isEqualTo(200);
-		assertJson(result, "{\"data\":{\"userId\":2,\"demoUser\":\"VIRTUAL_PORTFOLIO\"}}");
+		assertJson(result, "{\"data\":{\"userId\":2,\"demoUser\":\"VIRTUAL_PORTFOLIO\",\"portfolioType\":\"SYNTHETIC\",\"readOnly\":true}}");
 	}
 
 	@Test

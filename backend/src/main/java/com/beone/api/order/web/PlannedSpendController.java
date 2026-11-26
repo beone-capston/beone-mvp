@@ -14,10 +14,11 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 예정 소비 조회·일괄 교체 API(docs/api/orders.md). 1차에서는 저장만 하고 추천에 쓰지 않는다(D-18 K4).
  *
- * <p>{@code local}·{@code demo} 프로필에서만 등록한다.
+ * <p>{@code local}·{@code demo}·{@code member} 프로필에서 등록한다. {@code member}에서는 회원 세션의 장부가 현재 사용자이고,
+ * 세션 401·쓰기 CSRF 403·캐시 금지는 {@code /api/v1/me/**} 공통 인터셉터·필터가 컨트롤러 전에 처리한다(결정 37).
  */
 @RestController
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 @RequestMapping("/api/v1/me/planned-spends")
 public class PlannedSpendController {
 

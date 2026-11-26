@@ -11,10 +11,10 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * {@code /api/v1/auth/**}에 CSRF 검사 인터셉터({@link AuthRequestInterceptor})와 {@code no-store} 필터({@link AuthNoStoreFilter})를
- * 등록한다. {@code local}·{@code demo} 프로필 전용이다.
+ * 등록한다. {@code local}·{@code demo}·{@code member} 프로필 전용이다.
  */
 @Configuration(proxyBeanMethods = false)
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 public class AuthWebConfiguration implements WebMvcConfigurer {
 
 	/** 인증 API 경로 패턴. */

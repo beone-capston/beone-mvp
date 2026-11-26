@@ -11,7 +11,6 @@ import java.util.Optional;
 import com.beone.api.codef.persistence.CodefConnectionEntity;
 import com.beone.api.codef.persistence.CodefConnectionRepository;
 import com.beone.api.user.application.CurrentUser;
-import com.beone.api.user.application.DemoUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -76,7 +75,11 @@ public class CodefConnectionService {
 		this.clock = Objects.requireNonNull(clock, "clock").withZone(SEOUL);
 	}
 
-	/** 연결 상태. 연결이 없으면 {@link CodefConnectionView#NOT_CONNECTED}다. */
+	/**
+	 * 연결 상태. 연결이 없으면 {@link CodefConnectionView#NOT_CONNECTED}다.
+	 * @param user 현재 사용자
+	 * @return 연결 상태
+	 */
 	public CodefConnectionView get(CurrentUser user) {
 		return this.transactions.execute(status -> this.codefConnectionRepository.findById(user.userId())
 			.map(CodefConnectionService::toView)
@@ -174,7 +177,7 @@ public class CodefConnectionService {
 	}
 
 	private static void requireWritable(CurrentUser user) {
-		if (user.demoUser() == DemoUser.VIRTUAL_PORTFOLIO) {
+		if (user.readOnly()) {
 			throw new CodefPortfolioReadOnlyException();
 		}
 	}

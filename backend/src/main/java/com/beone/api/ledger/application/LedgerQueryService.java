@@ -30,8 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <li>달 조건은 거래일({@code transactionDate})이 그 달인 행이다. 2차 CODEF 취소 행은 귀속월이 확인 필요라 귀속월로는 둘 곳이 없다.</li>
  * <li>정렬은 거래일 → 행 ID 오름차순이다.</li>
  * <li>대상 카드는 해제하지 않은 이 사용자의 보유 카드다. 해제한 카드의 행은 보이지 않는다.</li>
- * <li>완전성: 모의 승인·취소는 빠짐없이 기록하므로 {@code SIMULATION}은 완전하다. 1차는 CODEF 원장을 수집하지 않으므로
- * {@code CODEF}는 완전하다고 선언하지 않고({@code complete=false}) 사유는 비워 둔다. 사유는 2차 CODEF 연결 때 채운다.</li>
+ * <li>완전성: 모의 승인·취소는 빠짐없이 기록하므로 {@code SIMULATION}은 완전하다. CODEF 조회·동기화(#131)는 이 원장에 행을
+ * 넣지 않으므로(도메인 원장 미연결 유지, R8) {@code CODEF}는 완전하다고 선언하지 않고({@code complete=false}) 사유는 비워
+ * 둔다. 완전 선언과 사유 채우기는 원장 연결을 다시 정할 때 함께 정한다(추후 결정).</li>
  * </ul>
  * 다른 패키지가 다시 쓸 수 있게 공개한다. 월간 상태 요약과 추천 입력은 {@link #activityAfter}로 스냅샷 뒤 활동을 읽는다(#120).
  */

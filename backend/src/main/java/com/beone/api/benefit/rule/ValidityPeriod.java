@@ -7,6 +7,9 @@ import java.util.Optional;
 /**
  * 규칙 버전의 적용 기간. 시작일과 종료일을 모두 포함한다.
  * 종료일이 비어 있으면 발표된 종료일이 없다는 뜻이다.
+ *
+ * @param from 시작일(포함)
+ * @param to 종료일(포함). 발표된 종료일이 없으면 빈 값
  */
 public record ValidityPeriod(LocalDate from, Optional<LocalDate> to) {
 

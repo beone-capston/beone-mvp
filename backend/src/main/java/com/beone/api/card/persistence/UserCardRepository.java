@@ -15,7 +15,11 @@ import org.springframework.data.repository.query.Param;
  */
 public interface UserCardRepository extends JpaRepository<UserCardEntity, Long> {
 
-	/** 이 사용자의 해제하지 않은 카드를 등록 순(ID 오름차순)으로 찾는다. */
+	/**
+	 * 이 사용자의 해제하지 않은 카드를 등록 순(ID 오름차순)으로 찾는다.
+	 * @param userId 사용자 ID
+	 * @return 해제하지 않은 카드 목록
+	 */
 	List<UserCardEntity> findByUserIdAndReleasedAtIsNullOrderByUserCardIdAsc(Long userId);
 
 	/**
@@ -23,6 +27,9 @@ public interface UserCardRepository extends JpaRepository<UserCardEntity, Long> 
 	 *
 	 * <p>행에 쓰기 잠금을 걸어 같은 카드를 바꾸는 요청을 차례로 처리한다. 뒤 요청은 앞 요청이 커밋한 값을 읽고 검사한다. 트랜잭션
 	 * 안에서만 부른다.
+	 * @param userCardId 보유 카드 ID
+	 * @param userId 사용자 ID
+	 * @return 잠근 카드, 없으면 빈 값
 	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<UserCardEntity> findByUserCardIdAndUserIdAndReleasedAtIsNull(Long userCardId, Long userId);
@@ -32,20 +39,39 @@ public interface UserCardRepository extends JpaRepository<UserCardEntity, Long> 
 	 *
 	 * <p>{@code idx_user_cards_user_id}(사용자 ID, 기본 키 순) 순서로 읽으며 잠그므로 같은 사용자의 요청들은 항상 같은 순서로 잠가
 	 * 서로 교착하지 않는다. 잠금 읽기이므로 이 호출이 트랜잭션의 일관 읽기 시점을 정하지 않는다. 트랜잭션 안에서만 부른다.
+	 * @param userId 사용자 ID
+	 * @return 잠근 카드 목록(ID 오름차순)
 	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select c from UserCardEntity c where c.userId = :userId and c.releasedAt is null order by c.userCardId")
 	List<UserCardEntity> lockActiveByUserIdOrderByUserCardId(@Param("userId") Long userId);
 
-	/** 이 사용자에게 이 상태·상품의 해제하지 않은 카드가 있는지. 수동 등록의 중복 검사에 쓴다. */
+	/**
+	 * 이 사용자에게 이 상태·상품의 해제하지 않은 카드가 있는지. 수동 등록의 중복 검사에 쓴다.
+	 * @param userId 사용자 ID
+	 * @param cardProductId 카드 상품 ID
+	 * @param mappingStatus 매핑 상태
+	 * @return 있으면 {@code true}
+	 */
 	boolean existsByUserIdAndCardProductIdAndMappingStatusAndReleasedAtIsNull(Long userId, String cardProductId,
 			MappingStatus mappingStatus);
 
-	/** 위와 같되 카드 하나를 뺀다. 매핑 변경에서 자기 자신을 중복으로 보지 않는다(결정 27 A2-8). */
+	/**
+	 * 위와 같되 카드 하나를 뺀다. 매핑 변경에서 자기 자신을 중복으로 보지 않는다(결정 27 A2-8).
+	 * @param userId 사용자 ID
+	 * @param cardProductId 카드 상품 ID
+	 * @param mappingStatus 매핑 상태
+	 * @param userCardId 검사에서 뺄 보유 카드 ID
+	 * @return 있으면 {@code true}
+	 */
 	boolean existsByUserIdAndCardProductIdAndMappingStatusAndReleasedAtIsNullAndUserCardIdNot(Long userId,
 			String cardProductId, MappingStatus mappingStatus, Long userCardId);
 
-	/** 이 사용자의 해제하지 않은 카드 수. */
+	/**
+	 * 이 사용자의 해제하지 않은 카드 수.
+	 * @param userId 사용자 ID
+	 * @return 해제하지 않은 카드 수
+	 */
 	long countByUserIdAndReleasedAtIsNull(Long userId);
 
 }

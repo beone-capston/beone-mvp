@@ -56,6 +56,17 @@ public final class CodefCardResponseParser {
 		return parse(body, CodefCardPerformance::read);
 	}
 
+	/**
+	 * 계정 등록·삭제 응답을 해석한다. {@code data}가 객체 하나이면 항목 1개로 본다.
+	 *
+	 * @param body 응답 본문
+	 * @return 결과 코드 분류와 계정 응답 항목
+	 * @throws NullPointerException 본문이 null인 경우
+	 */
+	public static CodefResponse<CodefAccount> parseAccount(String body) {
+		return parse(body, CodefAccount::read);
+	}
+
 	private static <T> CodefResponse<T> parse(String body, Function<JsonNode, T> reader) {
 		Objects.requireNonNull(body, "body");
 		JsonNode root;
@@ -75,13 +86,24 @@ public final class CodefCardResponseParser {
 		JsonNode result = root.get("result");
 		Optional<String> code = Optional.empty();
 		Optional<String> transactionId = Optional.empty();
+		boolean extraMessagePresent = false;
 		if (result != null && result.isObject()) {
 			code = CodefFields.text(result, "code");
 			transactionId = CodefFields.text(result, "transactionId");
+			extraMessagePresent = present(result.get("extraMessage"));
 		}
 		return new CodefResponse<>(
-				new CodefResult(code, transactionId, CodefResultCategory.classify(code, continue2Way)),
+				new CodefResult(code, transactionId, CodefResultCategory.classify(code, continue2Way),
+						extraMessagePresent),
 				CodefFields.list(data, reader, false));
+	}
+
+	// 값의 유무만 본다. 내용은 읽어 두지 않는다(null·빈 문자열·공백뿐이면 없음)
+	private static boolean present(JsonNode value) {
+		if (value == null || value.isNull() || value.isMissingNode()) {
+			return false;
+		}
+		return !value.isString() || !value.stringValue().isBlank();
 	}
 
 	private static <T> CodefResponse<T> unreadable(String reason) {

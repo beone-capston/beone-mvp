@@ -12,10 +12,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 비밀번호 재설정 요청·완료 API(docs/api/auth.md U4). 요청은 계정 유무와 관계없이 같은 202, 완료는 204다. CSRF·{@code no-store}는
- * 인증 경로 공통 처리가 맡는다. {@code local}·{@code demo} 프로필 전용이다.
+ * 인증 경로 공통 처리가 맡는다. {@code local}·{@code demo}·{@code member} 프로필 전용이다.
  */
 @RestController
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 class PasswordResetController {
 
 	private final PasswordResetService resetService;

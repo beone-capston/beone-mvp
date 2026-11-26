@@ -23,7 +23,7 @@ import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 회원 로그인·로그아웃·현재 세션 조회(docs/api/auth.md U3). {@code local}·{@code demo} 프로필 전용이다.
+ * 회원 로그인·로그아웃·현재 세션 조회(docs/api/auth.md U3). {@code local}·{@code demo}·{@code member} 프로필 전용이다.
  *
  * <p>로그인 판정 순서: 실패 제한 잠금(429) → 비밀번호 확인(계정 없음과 불일치는 같은 401) → 이메일 인증(403, 비밀번호가 맞은 뒤에만)
  * → 새 회원 세션. 계정이 없어도 미리 만든 더미 해시와 비교해 Argon2id 계산을 똑같이 하므로 응답 시간으로 계정 존재가 드러나지 않게
@@ -41,7 +41,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 판정이 늦거나 잠금 기간이 짧아지지 않게 하기 위해서다.
  */
 @Service
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 public class MemberLoginService {
 
 	/** 교착으로 진 로그인의 최대 시도 횟수(첫 시도 포함). */

@@ -219,8 +219,8 @@ export function CardServicesPage({ card, onClose }: { card: WalletCard; onClose:
       result.product.ruleStatus !== 'VERIFIED' ? '기준일에 유효한 규칙이 없어요.' :
       !matchesCatalog(product, result.product) && '현재 서버 규칙과 상세 안내 버전이 달라 혜택 조건을 표시할 수 없어요.')
 
-  return <main className="services-page" id="main">
-    <h1><button type="button" aria-label="빠른결제로 돌아가기" onClick={onClose}><Icon name="chevron" /></button>부가서비스</h1>
+  return <section className="services-page" aria-labelledby="card-services-title">
+    <h1 id="card-services-title"><button type="button" aria-label="빠른결제로 돌아가기" onClick={onClose}><Icon name="chevron" /></button>부가서비스</h1>
     {message ? <div className="services-box services-status" role="status">
       {message}{result.productError && <button onClick={retry}>다시 시도</button>}
     </div> : product && <>
@@ -266,5 +266,5 @@ export function CardServicesPage({ card, onClose }: { card: WalletCard; onClose:
       <Common product={product} month={month} monthly={result.monthly} />
     </>}
     <footer className="services-footer"><button className="primary-button" onClick={onClose}>확인</button></footer>
-  </main>
+  </section>
 }

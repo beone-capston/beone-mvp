@@ -75,7 +75,17 @@ public class UserCardEntity {
 	protected UserCardEntity() {
 	}
 
-	/** 수동 등록 카드를 만든다. 매핑 값은 {@link #changeMapping}과 같은 규칙으로 채운다. */
+	/**
+	 * 수동 등록 카드를 만든다. 매핑 값은 {@link #changeMapping}과 같은 규칙으로 채운다.
+	 * @param userId 소유 사용자 ID
+	 * @param displayName 표시 이름
+	 * @param mappingStatus 매핑 상태
+	 * @param cardProductId 카드 상품 ID. {@code USER_CONFIRMED}가 아니면 호출자가 {@code null}을 넘긴다(이 메서드는 검사하지 않고 그대로 저장한다)
+	 * @param confirmationMethod 확인 방법. {@code UNMAPPED}이면 호출자가 {@code null}을 넘긴다
+	 * @param confirmedAt 확인 시각. {@code UNMAPPED}이면 호출자가 {@code null}을 넘긴다
+	 * @param registeredAt 등록 시각
+	 * @return 저장 전 수동 등록 카드
+	 */
 	public static UserCardEntity manual(long userId, String displayName, MappingStatus mappingStatus,
 			String cardProductId, ConfirmationMethod confirmationMethod, LocalDateTime confirmedAt,
 			LocalDateTime registeredAt) {
@@ -95,6 +105,10 @@ public class UserCardEntity {
 	/**
 	 * CODEF 보유카드 조회로 얻은 카드를 만든다(D-15, #129). 상품 후보를 정하지 않으므로 항상 {@code UNMAPPED}이고 상품 ID가 없다
 	 * (결정 20 R3).
+	 * @param userId 소유 사용자 ID
+	 * @param displayName 조회된 카드 이름
+	 * @param registeredAt 등록 시각
+	 * @return 저장 전 {@code UNMAPPED} 카드
 	 */
 	public static UserCardEntity codef(long userId, String displayName, LocalDateTime registeredAt) {
 		UserCardEntity entity = new UserCardEntity();
@@ -107,7 +121,13 @@ public class UserCardEntity {
 		return entity;
 	}
 
-	/** 매핑을 바꾼다. 상품 ID는 {@code USER_CONFIRMED}일 때만 둔다. */
+	/**
+	 * 매핑을 바꾼다. 상품 ID는 {@code USER_CONFIRMED}일 때만 둔다.
+	 * @param mappingStatus 새 매핑 상태
+	 * @param cardProductId 카드 상품 ID. {@code USER_CONFIRMED}가 아니면 호출자가 {@code null}을 넘긴다(이 메서드는 검사하지 않고 그대로 저장한다)
+	 * @param confirmationMethod 확인 방법. {@code UNMAPPED}이면 호출자가 {@code null}을 넘긴다
+	 * @param confirmedAt 확인 시각. {@code UNMAPPED}이면 호출자가 {@code null}을 넘긴다
+	 */
 	public void changeMapping(MappingStatus mappingStatus, String cardProductId,
 			ConfirmationMethod confirmationMethod, LocalDateTime confirmedAt) {
 		this.mappingStatus = mappingStatus;

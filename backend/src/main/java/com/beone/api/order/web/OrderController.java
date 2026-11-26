@@ -12,16 +12,20 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 주문 생성·상세 조회 API(docs/api/orders.md). 현재 사용자는 {@link CurrentUser} 인자로만 받는다(D-09).
+ * 주문 생성·목록 조회·상세 조회 API(docs/api/orders.md). 현재 사용자는 {@link CurrentUser} 인자로만 받는다(D-09).
  *
- * <p>{@code local}·{@code demo} 프로필에서만 등록한다. 그 밖의 환경에서는 경로가 없어 404 {@code NOT_FOUND}다(시연 사용자 API와 같음).
+ * <p>{@code local}·{@code demo}·{@code member} 프로필에서 등록한다. 그 밖의 환경에서는 경로가 없어 404 {@code NOT_FOUND}다.
+ * {@code member}에서는 회원 세션의 장부가 현재 사용자이고, 세션 401·쓰기 CSRF 403·캐시 금지는 {@code /api/v1/me/**} 공통
+ * 인터셉터·필터가 컨트롤러 전에 처리한다(결정 37). 목록 조회는 결정 38-5로 추가했고, 주문은 수정·삭제하지 않으므로
+ * {@code PUT}·{@code PATCH}·{@code DELETE /api/v1/me/orders}는 405다.
  */
 @RestController
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 @RequestMapping("/api/v1/me/orders")
 public class OrderController {
 
@@ -36,6 +40,15 @@ public class OrderController {
 	public ApiResponse<CreatedOrderResponse> createOrder(CurrentUser currentUser,
 			@Valid @RequestBody CreateOrderRequest request) {
 		return ApiResponse.of(CreatedOrderResponse.from(this.orderService.create(currentUser, request.toNewOrder())));
+	}
+
+	/** 현재 사용자의 주문을 최신순으로 한 페이지 돌려준다. {@code page}·{@code size}는 문자열로 받아 직접 검사한다(입력 원문 미기록). */
+	@GetMapping
+	public ApiResponse<OrderListResponse> listOrders(CurrentUser currentUser,
+			@RequestParam(name = OrderListParameters.PAGE, required = false) String page,
+			@RequestParam(name = OrderListParameters.SIZE, required = false) String size) {
+		return ApiResponse.of(OrderListResponse.from(this.orderService.list(currentUser,
+				OrderListParameters.page(page), OrderListParameters.size(size))));
 	}
 
 	@GetMapping("/{orderId}")
