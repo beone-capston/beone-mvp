@@ -2,16 +2,16 @@
 
 [배포 자동화(CD)](cd.md)는 저장소 변수가 꺼진 상태로 병합되어 있다. 이 문서는 승인 묶음이 내려온 뒤, 스테이징 자동 배포부터 운영 첫 승인 배포까지 **어떤 순서로 켜는지**를 적은 실행 순서표(런북)다.
 
-- **상태:** 운영 첫 배치(8-1)는 2026-11-25에 끝났다. 나머지 단계(스테이징 3~7, 운영 자동 배포 8-2)는 실행하지 않았다. 아래 [현재 상태](#현재-상태-2026-11-26-기준)를 본다.
+- **상태:** 운영 첫 배치(8-1)는 2026-11-25에, 스테이징 3~7단계와 8-2 설정은 2026-11-26에 끝났다. **운영 첫 자동 배포(main 승격 + 승인 1회)는 아직 실행하지 않았다.** 아래 [현재 상태](#현재-상태-2026-11-26-기준)를 본다.
 - **실행 주체:** 서버·AWS·GitHub 설정은 운영 담당(Aside)이 승인 뒤 실행한다. 비밀값 입력과 운영 승인은 사용자가 한다. 단계마다 담당을 적었다.
-- **자리표시:** `<…>`는 실제 값으로 바꿀 자리다. 계정 ID·도메인·비밀번호 같은 실값은 이 문서와 저장소에 적지 않는다.
+- **자리표시:** `<…>`는 실제 값으로 바꿀 자리다. 이미 공개된 서비스 도메인(`beonepay.site` 계열)은 적을 수 있다. 계정 ID·숫자 ID·역할 ARN·서버 IP·비밀번호 같은 실값은 이 문서와 저장소에 적지 않는다. 단계 본문의 `<스테이징 도메인>`·`<운영 도메인>`은 절차를 일반 형태로 두기 위한 자리표시다.
 - **제외 범위:** CODEF는 자동 배포 대상이 아니다(결정 40-7). 서버 `deploy.sh`는 env에 `CODEF_`·`BEONE_CODEF_` 키가 있으면 배포를 거부한다([서버 배포 스크립트](server-deploy.md#codef-가드)). 회원 전체 스모크도 이 런북에 넣지 않는다([공개 nginx 4절 P5-4](public-proxy.md#4-반영원복-절차-승인-⑧)).
 
 ## 현재 상태 (2026-11-26 기준)
 
 실행 결과는 운영 담당(Aside)의 보고를 관리자가 정리한 것이다. 실제 서버의 백업 이름·디렉터리 값·비밀값은 저장소에 적지 않는다.
 
-**실제 순서는 런북과 다르다.** 첫 운영 배포를 먼저 하기로 해서 스테이징 단계(3~7)를 건너뛰고 2단계(운영 서버 스크립트 설치) 뒤 바로 8-1을 했다. 그래서 4단계의 수동 배포·롤백 시험과 6단계의 첫 자동 배포 확인은 아직 한 번도 하지 않았다.
+**실제 순서는 런북과 다르다.** 첫 운영 배포를 먼저 하기로 해서 2단계(운영 서버 스크립트 설치) 뒤 바로 8-1을 했다(2026-11-25). 스테이징 3~7단계와 8-2 설정은 그다음 날(2026-11-26) 사용자 승인 아래 운영 담당이 했다. 런북과 달라진 점(htpasswd 생성 도구·권한, OIDC `sub` 형식)은 해당 단계 본문에 반영했다.
 
 | 항목 | 상태 | 근거·남은 일 |
 |---|---|---|
@@ -22,13 +22,16 @@
 | GHCR 가시성 | 완료: public | `beone-api`·`beone-web`를 public으로 바꿨다(사용자 결정). 서버에 GHCR 토큰이 필요 없다 |
 | 이미지 발행 경로 | 있음 | `GITHUB_TOKEN` 수동 실행([cd.md 첫 배포 이미지 발행](cd.md#첫-배포-이미지-발행), #253). 첫 운영 배포 이미지를 이 경로로 만들었다 |
 | 운영 메일 키 | 서버 `.env` 입력 완료 | 앱 비밀번호는 사용자가 직접 입력했다. **실발송 확인(운영 회원 스모크)은 아직 하지 않았다** |
-| 스테이징(3·4·7단계) | 미완료 | `/opt/beone/staging/` 구성, 기본 인증, 수동 배포·롤백 시험, DNS·인증서. 사용자 승인 묶음 |
-| AWS OIDC 공급자·역할 2개·SSM 문서 2개(5단계·8-2) | 미완료 | 하나도 만들지 않았다. 사용자 승인 묶음 |
-| Environment `production` 보호 규칙(8-2) | 미완료 | 만들지 않았다. 운영 스위치보다 먼저 만들어야 한다. 사용자 승인 묶음 |
-| 저장소 변수 5개(6단계·8-2) | 미완료 | 하나도 설정하지 않았다. 그래서 develop·main push는 `gate`에서 멈춘다. 사용자 승인 묶음 |
+| 스테이징 폴더(3단계) | 완료(2026-11-26) | `/opt/beone/staging`에 `compose.yaml`·`nginx.conf`(기준 `1a5b5dc`)를 두었다. `.env`는 서버 안에서 작성했다: DB 값은 무작위 hex, 메일 키는 운영 `.env`에서 서버 안에서 복사, 링크 기준 주소는 `https://staging.beonepay.site`. 값은 저장소·채팅에 적지 않았다 |
+| 기본 인증 파일(3단계) | 완료(2026-11-26) | 서버에 `htpasswd` 도구가 없어 `openssl passwd -6`(SHA-512 crypt)로 만들었다. 권한은 `640 root:101`이다. 런북의 원래 값 `640 root:root`로는 nginx 워커(uid/gid 101)가 읽지 못해 정정했다(3단계 본문) |
+| 수동 배포·롤백 시험(4단계) | 완료(2026-11-26) | `deploy.sh staging`을 `6974880` → `1a5b5dc`(Run #24 수동 발행 이미지) → `6974880` 순서로 실행해 세 번 모두 종료 0, 스모크 PASS. 운영 영향 없음 |
+| AWS OIDC·스테이징 역할·SSM 문서(5단계) | 완료(2026-11-26) | OIDC 공급자, 역할 `beone-deploy-staging`·`beone-deploy-production`, SSM 문서 `BeoneDeployStaging`·`BeoneDeployProduction`을 만들었다(운영 역할·문서도 이때 함께 만듦). 기존 `sub` 형식으로는 역할 위임이 거부되어 immutable subject 형식으로 바꿨다([cd.md OIDC `sub` 형식](cd.md#oidc-sub-형식immutable-subject)) |
+| 저장소 변수·첫 자동 배포(6단계) | 완료(2026-11-26) | 변수 `AWS_REGION`·`AWS_DEPLOY_ROLE_ARN_STAGING`·`BEONE_CD_ENABLED`를 설정했다(값은 적지 않음). Run #23을 다시 실행해 staging job의 SSM 배포가 성공했고, 서버 `staging.state`의 git이 `1a5b5dc`다 |
+| 스테이징 공개 접근(7단계) | 완료(2026-11-26) | DNS A 레코드 `staging` → 운영 서버. certbot webroot 방식으로 인증서 발급(만료 2027-02-24). `beone-certbot-renew.service`에서 `--cert-name`을 빼 서버의 모든 인증서를 갱신하게 했다(dry-run 2건 성공). 공개 nginx 연결은 [공개 nginx 2-1절](public-proxy.md#2-1-스테이징-server-블록-기본-인증은-스테이징-web이-함). 외부 확인: 인증 없이 401(`Basic realm`), robots 차단, http → https 301, 운영 200·401 그대로 |
+| 운영 자동 배포 설정(8-2) | 설정 완료, **첫 실행 전** | Environment `production`(필수 승인자 2명, 관리자 우회 끔, 배포 브랜치 `main`만), 변수 `AWS_DEPLOY_ROLE_ARN_PRODUCTION`·`BEONE_CD_PRODUCTION_ENABLED=true`. **운영 첫 자동 배포(main 승격 + 승인)는 아직 실행하지 않았다.** 8-2 확인 표의 배포 이후 항목은 그 실행 뒤에 확인한다 |
 
-- **이후 운영 배포:** `production.state`가 있으므로 운영은 정상 경로(`deploy.sh production <ApiDigest> <WebDigest> <GitSha>`)만 쓴다. bootstrap 하위 명령은 상태 파일이 있으면 거부하므로 다시 쓰지 않는다. 자동 배포(8-2)를 켜기 전에는 승인 창에서 운영 담당이 서버에서 같은 명령을 직접 실행한다.
-- **남은 단계를 진행할 때:** 1단계 사전 점검과 각 단계의 전제는 그대로 따른다. 2단계는 운영 서버에 이미 설치돼 있으므로, 기준 커밋의 스크립트와 체크섬이 같은지만 다시 대조한다.
+- **이후 운영 배포:** `production.state`가 있으므로 운영은 정상 경로(`deploy.sh production <ApiDigest> <WebDigest> <GitSha>`)만 쓴다. bootstrap 하위 명령은 상태 파일이 있으면 거부하므로 다시 쓰지 않는다. 운영 변수가 켜졌으므로 다음 main 승격이 Environment 승인을 거쳐 SSM으로 이 명령을 부른다.
+- **남은 일:** 8-2의 5·6번(main 승격, 승인 1회)과 그 뒤 확인 표. 각 단계의 전제와 확인값은 그대로 따른다.
 
 ## 선행 PR
 
@@ -205,14 +208,23 @@ sudo awk -F= '/^[A-Z_]+=/{ if ($2 == "") print "빈 값:", $1 }' $S/.env
 sudo grep -cE '^(BEONE_)?CODEF_' $S/.env
 ```
 
-**`htpasswd`(기본 인증):** 생성 명령만 적는다. 사용자 이름과 비밀번호는 실행하는 사람이 프롬프트로 입력하고 기록하지 않는다.
+**`htpasswd`(기본 인증):** 생성 명령만 적는다. 사용자 이름과 비밀번호는 실행하는 사람이 프롬프트로 입력하고 기록하지 않는다. 서버에 `htpasswd` 도구(apache2-utils 계열)가 없으므로 패키지를 설치하지 않고 `openssl passwd -6`(SHA-512 crypt, nginx `auth_basic`이 읽는 형식)으로 만든다.
 
 ```bash
-sudo htpasswd -B -c $S/htpasswd <기본 인증 사용자 이름>      # 비밀번호는 프롬프트 입력
-sudo chmod 640 $S/htpasswd
+# 해시가 만들어진 뒤에만 파일을 만들고 쓴다. 해시 생성이 실패하면(확인 입력 불일치·취소 등) 파일을 만들지도 바꾸지도 않는다
+if H=$(openssl passwd -6) && [ -n "$H" ]; then                # 비밀번호 프롬프트 입력(두 번), 화면에 나오지 않음
+	sudo install -m 640 -o root -g 101 /dev/null $S/htpasswd \
+		&& printf '%s:%s\n' '<기본 인증 사용자 이름>' "$H" | sudo tee $S/htpasswd > /dev/null \
+		&& echo HTPASSWD_OK || echo "파일 쓰기 실패: 권한·내용을 확인하고 다시 실행"
+else
+	echo "해시 생성 실패: 파일을 쓰지 않음"
+fi
+unset H
 ```
 
-서버에 `htpasswd`가 없으면 패키지 설치가 필요하다. 패키지 설치는 별도 승인 항목이므로 이때 멈추고 알린다.
+- `HTPASSWD_OK`가 나와야 성공이다. "해시 생성 실패"면 파일은 만들어지지 않았고(이미 있던 파일은 그대로), 같은 블록을 다시 실행한다.
+
+- **권한 `640 root:101`:** 스테이징 web 컨테이너는 이 파일을 읽기 전용으로 마운트하고(`/etc/nginx/htpasswd`), 요청을 처리하는 nginx 워커는 uid/gid 101로 돈다. 처음 런북의 `640 root:root`로는 워커가 파일을 읽지 못해 기본 인증이 동작하지 않는다. 그룹을 101로 두고 그룹 읽기만 연다.
 
 ```bash
 # 전체 점검(값이 풀려 나오지 않게 --quiet·--services만)
@@ -228,7 +240,7 @@ sudo ls -ld $S $S/.env $S/htpasswd $S/web $S/web/releases
 | CODEF 키 | `0` |
 | `config --quiet` | `config ok` |
 | 서비스 | `backend`, `mysql`, `web` 세 줄 |
-| 권한 | 폴더 750, `.env` 600, `htpasswd` 640, `web`·`releases` 755 |
+| 권한 | 폴더 750, `.env` 600, `htpasswd` 640(소유 `root`, 그룹 `101`), `web`·`releases` 755 |
 
 **실패하면:** 아직 컨테이너를 띄우지 않았으므로 `/opt/beone/staging`을 통째로 다른 이름으로 옮겨(`sudo mv $S $S.failed-<UTC>`) 다시 시작한다. 지우는 것은 사용자가 정한다. 운영(`/opt/beone/app`)에는 영향이 없다.
 
@@ -305,7 +317,7 @@ sudo /opt/beone/deploy/smoke-public.sh http://127.0.0.1:18081; echo "exit=$?"
 |---|---|---|
 | 관리형 인스턴스 | `aws ssm describe-instance-information --query 'InstanceInformationList[].PingStatus'` | `Online` |
 | 문서 | `aws ssm describe-document --name BeoneDeployStaging --query 'Document.Status'` | `Active` |
-| 역할 신뢰 | `aws iam get-role --role-name <스테이징 역할 이름> --query 'Role.AssumeRolePolicyDocument'` | `sub`가 `repo:beone-capston/beone-mvp:ref:refs/heads/develop` 하나 |
+| 역할 신뢰 | `aws iam get-role --role-name <스테이징 역할 이름> --query 'Role.AssumeRolePolicyDocument'` | `sub`가 `repo:beone-capston@<owner_id>/beone-mvp@<repo_id>:ref:refs/heads/develop` 하나(숫자 ID는 [cd.md OIDC `sub` 형식](cd.md#oidc-sub-형식immutable-subject)의 확인 방법으로 대조). 기존 형식 `repo:beone-capston/beone-mvp:…`이면 역할 위임이 거부된다 |
 | 문서 수동 실행(선택) | 콘솔 Run Command에서 `BeoneDeployStaging`을 4단계의 `<ApiDigest1>`·`<WebDigest1>`·`<GitSha1>`로 실행 | 명령 상태 `Success`, 상태 파일 digest는 그대로(같은 digest 재배포), 이력에 성공 한 줄 추가 |
 
 **실패하면:** 만든 IAM 역할·SSM 문서를 지운다. 아직 GitHub 변수가 없으므로 워크플로는 이 역할을 쓰지 않는다.
@@ -317,7 +329,7 @@ sudo /opt/beone/deploy/smoke-public.sh http://127.0.0.1:18081; echo "exit=$?"
 | 실행 | 운영 담당(승인 뒤 변수 설정), 사용자 또는 관리자(develop 병합) |
 | 전제 | 5단계 통과 |
 
-[GitHub 설정](cd.md#github-설정운영-담당이-승인-뒤-설정)의 2번이다. 저장소 변수(Settings → Secrets and variables → Actions → Variables)를 넣는다. 비밀값(Secrets)에는 아무것도 넣지 않는다.
+[GitHub 설정](cd.md#github-설정2026-11-26-설정-완료)의 2번이다. 저장소 변수(Settings → Secrets and variables → Actions → Variables)를 넣는다. 비밀값(Secrets)에는 아무것도 넣지 않는다.
 
 | 변수 | 값 |
 |---|---|
@@ -352,7 +364,7 @@ sudo /opt/beone/deploy/smoke-public.sh http://127.0.0.1:18081; echo "exit=$?"
 설정은 [공개 nginx 초안 2-1절](public-proxy.md#2-1-스테이징-server-블록-기본-인증은-스테이징-web이-함)과 [3절](public-proxy.md#3-두-compose-프로젝트-연결)을 따른다. 반영·원복은 같은 문서 [4절](public-proxy.md#4-반영원복-절차-승인-⑧)의 P3(설정 백업)·P5-1(`nginx -t`)·P5-2(reload) 형식과 같다.
 
 1. DNS: `<스테이징 도메인>` → 서버 공인 IP.
-2. 인증서: `<스테이징 도메인>` 발급(certbot). 갱신 타이머 유지 확인.
+2. 인증서: `<스테이징 도메인>` 발급(certbot webroot 방식). 갱신 타이머 유지 확인. 갱신 서비스가 `--cert-name`으로 운영 인증서 하나에 묶여 있으면 새 인증서는 갱신되지 않는다. 2026-11-26에는 `beone-certbot-renew.service`에서 `--cert-name`을 빼고 `certbot renew --dry-run`으로 두 인증서 모두 성공을 확인했다.
 3. 공개 nginx에 2-1절 server 블록 추가, 스테이징 web 기본 인증 리스너 주소를 3절 방식으로 채움.
 4. 스테이징 `.env`의 `BEONE_MAIL_LINK_BASE_URL`을 `https://<스테이징 도메인>`으로 사용자가 입력. 다음 배포부터 반영.
 
@@ -444,8 +456,8 @@ DB는 어느 단계에서도 되돌리지 않는다. prepare가 새 마이그레
 
 순서가 중요하다. **Environment 보호 규칙을 먼저 만들고, 운영 스위치는 마지막에 켠다.** 보호 규칙 없이 운영 job이 돌면 GitHub이 Environment를 보호 규칙 없이 자동으로 만들어 승인 없이 배포된다([cd.md 게이트](cd.md#게이트꺼진-상태로-병합)).
 
-1. AWS: [운영 역할](cd.md#3-운영-역할)과 [SSM 문서](cd.md#4-ssm-문서-2개) `BeoneDeployProduction`을 만든다. 신뢰 `sub`는 `environment:production` 하나다.
-2. GitHub Environment `production`: 필수 승인자는 사용자, 배포 브랜치는 `main`만([GitHub 설정 1번](cd.md#github-설정운영-담당이-승인-뒤-설정)).
+1. AWS: [운영 역할](cd.md#3-운영-역할)과 [SSM 문서](cd.md#4-ssm-문서-2개) `BeoneDeployProduction`을 만든다. 신뢰 `sub`는 `…:environment:production` 하나다(immutable subject 형식).
+2. GitHub Environment `production`: 필수 승인자(현재 2명), 관리자 우회 끔, 배포 브랜치는 `main`만([GitHub 설정 1번](cd.md#github-설정2026-11-26-설정-완료)).
 3. 저장소 변수 `AWS_DEPLOY_ROLE_ARN_PRODUCTION=<운영 역할 ARN>`.
 4. 저장소 변수 `BEONE_CD_PRODUCTION_ENABLED=true`.
 5. develop → main 승격 PR을 만들고 병합한다(관리자, [CONTRIBUTING](../../CONTRIBUTING.md)).
@@ -453,9 +465,9 @@ DB는 어느 단계에서도 되돌리지 않는다. prepare가 새 마이그레
 
 | 확인 | 어디서 | 기대 |
 |---|---|---|
-| 보호 규칙 | Settings → Environments → production | 필수 승인자 사용자, 배포 브랜치 `main` 하나 |
+| 보호 규칙 | Settings → Environments → production | 필수 승인자 2명, 관리자 우회 끔, 배포 브랜치 `main` 하나 |
 | 승인 대기 | Actions 실행 화면 | `production` job이 `Waiting`(승인 전 SSM 호출 없음) |
-| 운영 역할 신뢰 | `aws iam get-role --role-name <운영 역할 이름> --query 'Role.AssumeRolePolicyDocument'` | `sub`가 `repo:beone-capston/beone-mvp:environment:production` 하나 |
+| 운영 역할 신뢰 | `aws iam get-role --role-name <운영 역할 이름> --query 'Role.AssumeRolePolicyDocument'` | `sub`가 `repo:beone-capston@<owner_id>/beone-mvp@<repo_id>:environment:production` 하나 |
 | 배포 | job 로그 | SSM 명령 상태 `Success`, job 성공 |
 | 배포 직전 백업 | `sudo grep -E '^backup_id=' /opt/beone/deploy/state/production.state`, `sudo ls /opt/beone/app/backups/<backup_id>/` | `app.sql`, `app.sql.flyway`, `app.sql.record` 세 파일 |
 | 짝 기록 | `sudo grep -E '^deploy_(prev_api\|new_api\|new_web)_digest=\|^deploy_git_sha=' /opt/beone/app/backups/<backup_id>/app.sql.record` | 새 digest가 job 요약과 같고, `deploy_prev_api_digest`가 8-1에서 남은 digest |
@@ -518,11 +530,11 @@ aws ssm get-command-invocation --command-id <SSM 명령 ID> --instance-id <인�
 | 단계 | 승인 항목([cd.md](cd.md#실행-승인-항목)) | 상태(2026-11-26) |
 |---|---|---|
 | 2 | 서버 스크립트 설치 | 운영 서버 설치 완료 |
-| 3 | 스테이징 `/opt/beone/staging/` 구성, 기본 인증 값, GHCR 가시성(사용자 결정) | 스테이징 미완료. GHCR은 public으로 결정·적용 |
-| 4 | GHCR 수동 푸시(가시성 결정 뒤) | 스테이징 시험 미완료. 운영 이미지는 #253 수동 실행으로 발행 |
-| 5 | OIDC·IAM(스테이징), SSM 문서 `BeoneDeployStaging` | 미완료 |
-| 6 | 저장소 변수(스테이징 3개) | 미완료 |
-| 7 | DNS, 인증서, 공개 nginx 변경 | 스테이징 미완료. 운영 공개 nginx는 8-1에서 반영 |
+| 3 | 스테이징 `/opt/beone/staging/` 구성, 기본 인증 값, GHCR 가시성(사용자 결정) | 완료(2026-11-26). GHCR은 public |
+| 4 | GHCR 수동 푸시(가시성 결정 뒤) | 완료(2026-11-26). 이미지는 #253 수동 실행(Run #24)으로 발행 |
+| 5 | OIDC·IAM(스테이징), SSM 문서 `BeoneDeployStaging` | 완료(2026-11-26). 운영 역할·문서도 함께 만듦 |
+| 6 | 저장소 변수(스테이징 3개) | 완료(2026-11-26) |
+| 7 | DNS, 인증서, 공개 nginx 변경 | 완료(2026-11-26). 운영 공개 nginx는 8-1에서 반영 |
 | 8-1 | 운영 첫 배치(main 승격, Flyway, 공개 nginx, 서버 root 직접 실행 bootstrap prepare·confirm·abort). 선행 #242·#229 | 완료(2026-11-25) |
-| 8-2 | OIDC·IAM(운영), `BeoneDeployProduction`, Environment 보호 규칙, 저장소 변수(운영 2개), 실메일 | 미완료. 메일 앱 비밀번호는 서버 `.env`에 입력했으나 실발송 확인 전 |
+| 8-2 | OIDC·IAM(운영), `BeoneDeployProduction`, Environment 보호 규칙, 저장소 변수(운영 2개), 실메일 | 설정 완료(2026-11-26). **운영 첫 자동 배포(main 승격 + 승인)는 미실행.** 메일 앱 비밀번호는 서버 `.env`에 입력했으나 실발송 확인 전 |
 | 9 | 진행 중인 run 취소, SSM 명령 취소 | 해당 없음 |
