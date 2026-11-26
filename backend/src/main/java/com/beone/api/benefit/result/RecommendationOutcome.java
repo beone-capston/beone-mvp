@@ -16,6 +16,7 @@ public sealed interface RecommendationOutcome {
 	/**
 	 * 카드를 선택한 결과.
 	 *
+	 * @param card 선택한 카드
 	 * @param basis 선택을 결정한 D-12 단계. 비교한 카드가 한 장이면 비어 있다
 	 * @param tiedCards 모든 혜택 단계에서 같은 카드들. 임의 규칙 단계로 정해졌을 때만 적는다(D-12)
 	 * @param marginOverRunnerUp 차선 카드와의 월간 혜택 차이. 확정된 경우에만 있다
@@ -53,6 +54,8 @@ public sealed interface RecommendationOutcome {
 
 	/**
 	 * 추천할 카드를 정하지 못한 결과(예: 쓸 수 있는 규칙이 없는 평가 C02).
+	 *
+	 * @param reason 카드를 정하지 못한 사유
 	 */
 	record NotDetermined(String reason) implements RecommendationOutcome {
 

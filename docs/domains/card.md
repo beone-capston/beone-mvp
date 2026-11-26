@@ -45,8 +45,8 @@ com.beone.api.card
 │   ├── InvalidAsOfException          asOf 형식 오류(입력값을 담지 않음)
 │   ├── CardProductErrorCode          CARD_PRODUCT_NOT_FOUND
 │   ├── CardProductExceptionHandler   형식 오류 → 400, 없는 상품 → 404 (@Order 최우선)
-│   ├── CurrentUserController         GET /api/v1/me (local·demo)
-│   ├── UserCardController            /api/v1/me/cards 5개 (local·demo)
+│   ├── CurrentUserController         GET /api/v1/me (local·demo·member)
+│   ├── UserCardController            /api/v1/me/cards 5개 (local·demo·member)
 │   ├── RegisterUserCardRequest·ChangeMappingRequest·UpdateUserCardRequest  요청 본문과 필드 사이 규칙
 │   ├── UnknownFieldRejecting         알 수 없는 필드(카드번호 등) → 400
 │   ├── CardDisplayName·CrossFieldChecked·StrictBooleanDeserializer  표시 이름·필드 사이·참거짓 검증
@@ -116,7 +116,9 @@ GET /api/v1/card-products/09174?asOf=2026-11-03
 
 ## 보유 카드
 
-현재 사용자(`X-BeONE-Demo-User` 헤더로 정함, [user 안내](user.md))의 보유 카드를 다룹니다. 컨트롤러는 `CurrentUser` 인자만 받고 헤더를 직접 읽지 않으며, `local`·`demo` 프로필에서만 등록됩니다(그 밖은 404). `GET /api/v1/me`는 보유 카드 수가 필요해 이 패키지에 두었고 `user` 패키지의 `DemoUserService.listDemoUsers()`로 표시 정보를 읽습니다(`user` 코드는 바꾸지 않음).
+현재 사용자의 보유 카드를 다룹니다. 현재 사용자는 `local`·`demo`에서 `X-BeONE-Demo-User` 헤더로, 로컬 회원 프로필 `member`에서 회원 세션으로 정합니다([user 안내](user.md), 결정 37). 컨트롤러는 `CurrentUser` 인자만 받고 헤더·쿠키를 직접 읽지 않으며, `local`·`demo`·`member` 프로필에서만 등록됩니다(그 밖은 404). `GET /api/v1/me`는 보유 카드 수가 필요해 이 패키지에 두었고 `user` 패키지의 `UserProfileService.profileOf`로 `users` 행의 표시 정보를 읽습니다. 회원이면 `demoUser`가 `null`입니다(결정 37 D7).
+
+쓰기 가능 여부는 `CurrentUser.readOnly()`로 판단합니다(가상 포트폴리오만 `true`). `member` 프로필에서는 이 검사 앞에 auth의 세션·CSRF 검사가 있어 순서가 401 → CSRF 403 → 본문 400 → 404입니다([공통 규약](../api.md#회원-세션member-프로필)). 회원 장부는 쓰기 가능이므로 409 `PORTFOLIO_READ_ONLY`는 나지 않습니다.
 
 ### 처리 흐름
 
@@ -207,3 +209,25 @@ if (detail.ruleStatus() != RuleStatus.VERIFIED) {
 - 4종 규칙은 `VERIFIED`이지만 실제 보유 카드와 공식 SKU·약관 버전의 일치는 D-01 미결입니다.
 - 상품 표시 정보는 코드의 표에 있으므로 규칙 카드를 추가하면 표도 함께 고쳐야 합니다. 둘이 다르면 서버가 뜨지 않습니다. 가상 포트폴리오 시드(`V4`)의 카드 구성도 함께 봐야 합니다.
 - 보유 카드의 한계(추천 무효화·CODEF)는 [보유 카드](#보유-카드)의 "아직 하지 않는 것"에 있습니다.
+
+### 빠른결제의 가상 포트폴리오 부가서비스
+
+가상 카드의 명시적 상품 ID로 상세 화면을 연다. 현재 빠른결제에는 공용 조회월
+상태가 없어 화면 진입일의 서울 기준 월을 사용한다. 상품 목록 GET은 카드 등록이나
+상품 탐색에 쓰이며, 선택한 카드의 상품 ID를 이미 아는 이 화면은 상세 GET만 호출한다.
+내 카드의 디자인 샘플은 종전 안내를 유지한다.
+
+- 카탈로그는 `frontend/src/card-services/rules.json`에 보관한 검증 원본 투영과
+  `catalog.ts`의 대조 문서 설명으로 구성한다. 테스트가 백엔드 규칙과 전체 목록을 비교한다.
+  규칙이 바뀌면 상품 ID별 투영과 `docs/rules/`에 연결된 보충 설명을 함께 검토한다.
+- `VITE_API_BASE_URL`은 API 원점이다. 비워 둔 개발 서버에서는 상품설명서 카탈로그를 열고
+  월 사용액은 확인 필요로 표시한다. 빌드된 앱은 상품 상세 API를 조회해 규칙 상태와
+  버전 및 서비스·한도 구성을 확인한 후 설명을 표시한다.
+- 로컬·데모 프로필에서 `VITE_CARD_SERVICES_CONTEXT=demo`를 명시하면
+  `GET /me` → `GET /me/cards` → `GET /me/cards/{userCardId}/monthly-states/{month}`
+  순으로 조회한다(경로 공통 접두사는 `/api/v1`). 데모 사용자 헤더는 이 모드의
+  사용자 리소스 조회에만 붙인다. 현재 브랜치의 백엔드는 이 API에 회원용 가상
+  포트폴리오 월 상태 계약을 제공하지 않는다.
+- 월 사용액은 기간이 일치하는 버킷의 조회값이다. 잔여액은 실적과 적용 구간이 확정되고
+  유예·선택의 영향이 없으며 스냅샷 이후 승인·취소가 없을 때 해당 버킷에 한해 표시한다.
+  모의 승인 총액 및 기타 버킷 집계는 혜택 사용액으로 환산하지 않는다.

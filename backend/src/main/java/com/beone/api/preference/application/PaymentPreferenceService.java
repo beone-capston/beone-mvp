@@ -56,7 +56,11 @@ public class PaymentPreferenceService {
 		this.clock = Objects.requireNonNull(clock, "clock").withZone(SEOUL);
 	}
 
-	/** 저장된 설정. 설정한 적이 없으면 {@link PaymentPreferenceView#NOT_SET}이다. */
+	/**
+	 * 저장된 설정. 설정한 적이 없으면 {@link PaymentPreferenceView#NOT_SET}이다.
+	 * @param user 현재 사용자
+	 * @return 저장된 설정
+	 */
 	@Transactional(readOnly = true)
 	public PaymentPreferenceView get(CurrentUser user) {
 		return this.paymentPreferenceRepository.findById(user.userId())
@@ -66,6 +70,9 @@ public class PaymentPreferenceService {
 
 	/**
 	 * 설정을 저장한다. 대표 카드 {@code null}은 대표 카드를 지운다.
+	 * @param user 현재 사용자
+	 * @param change 설정 변경 입력
+	 * @return 저장한 설정
 	 * @throws UserCardNotFoundException 대표 카드가 없거나 다른 사용자·해제한 카드, 또는 ID 형식이 틀림
 	 * @throws RepresentativeCardNotEligibleException 대표 카드가 추천 비교 대상이 아님
 	 */

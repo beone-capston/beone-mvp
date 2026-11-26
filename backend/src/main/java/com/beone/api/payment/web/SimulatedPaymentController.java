@@ -8,6 +8,7 @@ import com.beone.api.payment.application.SimulatedPaymentService;
 import com.beone.api.user.application.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,11 +22,15 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 모의 승인·상세 조회·취소 API 3개(docs/api/mock-payments.md). 현재 사용자는 {@link CurrentUser} 인자로만 받는다(D-09).
  *
- * <p>{@code local}·{@code demo} 프로필에서만 등록한다(다른 사용자 자원 API와 같음). 그래서 계약의 "{@code local}·{@code demo} 밖의
- * {@code simulateFailure}는 400"은 경로 자체가 없어 404 {@code NOT_FOUND}로 나타난다. 승인 결과 {@code FAILED}도 201이다(D-23-4).
+ * <p>{@code local}·{@code demo}·{@code member} 프로필에서 등록한다. 그 밖의 환경에서는 경로가 없어 404 {@code NOT_FOUND}다.
+ * {@code member}에서는 회원 세션의 장부가 현재 사용자이고, 세션 401·쓰기 CSRF 403·캐시 금지는 {@code /api/v1/me/**} 공통
+ * 인터셉터·필터가 컨트롤러 전에 처리한다(결정 37).
+ *
+ * <p>{@code simulateFailure=true}는 {@code local}·{@code demo}에서만 받아 201 {@code FAILED}로 기록한다(D-23-4). 그 밖에서는
+ * {@link SimulateFailurePolicy}가 서비스 호출 전에 400 {@code INVALID_REQUEST}로 거절하므로 결제·멱등 키를 저장하지 않는다.
  */
 @RestController
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 @RequestMapping("/api/v1/me")
 public class SimulatedPaymentController {
 
@@ -34,8 +39,11 @@ public class SimulatedPaymentController {
 
 	private final SimulatedPaymentService simulatedPaymentService;
 
-	public SimulatedPaymentController(SimulatedPaymentService simulatedPaymentService) {
+	private final SimulateFailurePolicy simulateFailurePolicy;
+
+	public SimulatedPaymentController(SimulatedPaymentService simulatedPaymentService, Environment environment) {
 		this.simulatedPaymentService = simulatedPaymentService;
+		this.simulateFailurePolicy = SimulateFailurePolicy.of(environment);
 	}
 
 	@PostMapping("/orders/{orderId}/simulated-payments")
@@ -44,6 +52,7 @@ public class SimulatedPaymentController {
 			@RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody(required = false) ApprovalRequest request) {
 		ApprovalRequest body = (request == null) ? ApprovalRequest.EMPTY : request;
+		this.simulateFailurePolicy.check(body);
 		return ApiResponse.of(this.simulatedPaymentService.approve(currentUser, orderId, body.toCommand(),
 				requireKey(idempotencyKey)));
 	}

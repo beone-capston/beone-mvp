@@ -36,8 +36,8 @@ class SimulatedPaymentExceptionHandler {
 
 	private static final Logger log = LoggerFactory.getLogger(SimulatedPaymentExceptionHandler.class);
 
-	@ExceptionHandler(InvalidIdempotencyKeyException.class)
-	ResponseEntity<ApiErrorResponse> handleInvalidIdempotencyKey(InvalidIdempotencyKeyException ex) {
+	@ExceptionHandler({ InvalidIdempotencyKeyException.class, SimulateFailureNotAllowedException.class })
+	ResponseEntity<ApiErrorResponse> handleInvalidRequest(RuntimeException ex) {
 		return respond(CommonApiErrorCode.INVALID_REQUEST, ex);
 	}
 

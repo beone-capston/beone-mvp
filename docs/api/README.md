@@ -2,13 +2,13 @@
 
 BeONE 업무 API의 구현 기준 명세입니다. 공통 규약은 [`docs/api.md`](../api.md#업무-api-공통-규약)에 있고, 이 폴더에는 기능 묶음별 개별 API를 적습니다.
 
-- **상태:** 설계 확정 전 명세이며 **모두 구현 전**입니다. 동작하는 업무 API는 아직 없습니다. OpenAPI 문서는 구현할 때 코드에서 만듭니다.
+- **상태:** 아래 29개는 `develop`에 로컬·테스트 범위로 구현돼 있습니다(#103~#135, `local`·`demo` 프로필 전용. 카드 상품 2개만 모든 프로필). 로컬 회원 프로필 `member`에서는 이 중 `GET /api/v1/me`와 보유 카드 5개(#157), 월간 상태 3개·결제 전 설정 2개(G3a #159), 주문 2개·예정 소비 2개·추천 2개(G3b #160), 원장 조회 1개(#165), 모의 결제 3개(G3c #161, 결정 38), 주문 목록 조회 1개(#178, 결정 38-5)를 회원 세션으로 등록합니다(결정 37, [공통 규약](../api.md#회원-세션member-프로필)). `member`에 등록하지 않은 것은 시연 사용자 목록 1개와 CODEF 4개입니다. 카드 상품 2개는 `/api/v1/me/**` 밖이라 회원 세션 검사 대상이 아니고, `member`를 포함한 모든 프로필에서 세션 없이 호출합니다. 배포·서버 DB 적용 전입니다. CODEF 게이트웨이는 가짜 구현입니다(실호출 없음). 출처 충돌 계산 기준 선택(`source-selections`)은 제한 구현입니다. 지금은 충돌이 생기는 경로가 없어(D-16) 요청 검증 400·카드 404 뒤 항상 409 `SOURCE_CONFLICT_NOT_FOUND`로 끝나고, 선택을 저장하지 않습니다(#135). OpenAPI 문서는 아직 만들지 않았습니다.
 - **기준:** [결정 기록](../decisions.md)의 D-09·D-12~D-19·D-22·D-23과 `backend`의 `benefit` 도메인 모델입니다. 문서와 코드가 다르면 이 폴더를 임의로 맞추지 말고 충돌을 알립니다.
 - **예시 JSON:** 합성 값입니다. 실제 API 실행, 약관 검증, CODEF 응답 관측의 결과가 아닙니다.
 - **규칙 데이터:** 4종 규칙은 `backend/src/main/resources/rules/`에 `VERIFIED` 상태로 있고 서버 시작 때 `RuleCatalog`로 읽습니다. 공식 SKU·약관 버전 일치는 D-01 미결입니다.
-- **엔진 입구:** 업무 코드는 `com.beone.api.benefit.engine`만 씁니다(D-22). 입구 타입(#71)과 계산 연결(#81)이 `develop`에 구현돼 있습니다. 이 엔진을 부르는 업무 API는 구현 전입니다. 업무 API가 엔진에 넘기는 값 중 HTTP 요청으로 받지 않는 `policyEvidence`는 [추천](recommendations.md#엔진-입력-중-요청으로-받지-않는-값)에 적었습니다.
+- **엔진 입구:** 업무 코드는 `com.beone.api.benefit.engine`만 씁니다(D-22). 입구 타입(#71)과 계산 연결(#81)이 `develop`에 구현돼 있습니다. 추천 계산(#115)과 모의 승인(#117)이 이 입구를 부릅니다. 업무 API가 엔진에 넘기는 값 중 HTTP 요청으로 받지 않는 `policyEvidence`는 [추천](recommendations.md#엔진-입력-중-요청으로-받지-않는-값)에 적었습니다.
 
-## API 목록 (28개: 1차 23개, 2차 초안 5개)
+## API 목록 (29개: 1차 24개, 2차 초안 5개)
 
 순서는 D-14의 1차 명세 순서를 따릅니다. 일정이 밀리면 뒤쪽 조회부터 줄이고 설정 → 주문 → 추천 → 모의 승인·취소 흐름은 지킵니다.
 
@@ -28,6 +28,7 @@ BeONE 업무 API의 구현 기준 명세입니다. 공통 규약은 [`docs/api.m
 | 1차 | GET | `/api/v1/me/payment-preference` | 결제 전 설정 조회 | [preferences](preferences.md) |
 | 1차 | PUT | `/api/v1/me/payment-preference` | 결제 전 설정 변경 | [preferences](preferences.md) |
 | 1차 | POST | `/api/v1/me/orders` | 주문 생성 | [orders](orders.md) |
+| 1차 | GET | `/api/v1/me/orders` | 내 주문 목록(결정 38-5, #178) | [orders](orders.md) |
 | 1차 | GET | `/api/v1/me/orders/{orderId}` | 주문 상세 | [orders](orders.md) |
 | 1차 | GET | `/api/v1/me/planned-spends` | 예정 소비 조회 | [orders](orders.md) |
 | 1차 | PUT | `/api/v1/me/planned-spends` | 예정 소비 일괄 설정(저장만) | [orders](orders.md) |
@@ -43,7 +44,7 @@ BeONE 업무 API의 구현 기준 명세입니다. 공통 규약은 [`docs/api.m
 | 2차 | POST | `/api/v1/me/codef/syncs` | CODEF 조회·동기화 | [codef](codef.md) |
 | 2차 | PUT | `/api/v1/me/cards/{userCardId}/monthly-states/{month}/source-selections` | 출처 충돌 계산 기준 선택 | [monthly-states](monthly-states.md) |
 
-회원 인증 API 9개(`/api/v1/auth/*`, D-24)는 [auth](auth.md)에 있습니다. 출처는 저장소 밖 Notion 인증 명세의 고정 사본이며, `GET /api/v1/auth/csrf`만 구현됐습니다(#124, `local`·`demo` 전용).
+회원 인증 API 9개(`/api/v1/auth/*`, D-24)는 [auth](auth.md)에 있습니다. 출처는 저장소 밖 Notion 인증 명세의 고정 사본이며, 9개 모두 로컬·테스트 범위로 구현됐습니다(#125·#130·#133·#140, `local`·`demo`·`member` 전용). 메일은 메모리 가짜 발송기이며 실제로 보내지 않습니다. 회원 세션은 로컬 회원 프로필 `member`에서만 `GET /api/v1/me`·보유 카드 API(#157)와 월간 상태·결제 전 설정 API(G3a #159), 주문·예정 소비·추천 API(G3b #160), 원장 조회 API(#165), 모의 결제 API(G3c #161, 결정 38)의 현재 사용자로 연결됩니다(결정 37). `local`·`demo`에서는 연결하지 않습니다.
 
 ## 확인 상태 값
 

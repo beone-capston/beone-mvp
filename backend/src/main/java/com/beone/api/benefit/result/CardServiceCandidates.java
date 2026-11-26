@@ -20,6 +20,10 @@ public sealed interface CardServiceCandidates {
 
 	/**
 	 * 쓸 수 있는 규칙이 없어 서비스 목록을 알 수 없는 경우. 0원이나 빈 취합 결과가 아니다.
+	 *
+	 * @param cardId 카드 상품 식별자
+	 * @param status 카드 단위 적용 상태
+	 * @param reason 규칙을 쓸 수 없는 사유
 	 */
 	record Unavailable(CardId cardId, ApplicationStatus status, String reason) implements CardServiceCandidates {
 

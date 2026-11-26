@@ -14,11 +14,12 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 결제 전 설정 API 2개(docs/api/preferences.md). 현재 사용자는 {@link CurrentUser} 인자로만 받는다(D-09).
  *
- * <p>{@code local}·{@code demo} 프로필에서만 등록한다. 그 밖의 환경에서는 경로가 없어 404 {@code NOT_FOUND}다. 가상 포트폴리오
- * 사용자도 설정을 바꿀 수 있다(docs/api.md 업무 오류 코드).
+ * <p>{@code local}·{@code demo}·{@code member} 프로필에서 등록한다. 그 밖의 환경에서는 경로가 없어 404 {@code NOT_FOUND}다.
+ * {@code member}에서는 회원 세션의 장부가 현재 사용자이고, 세션 401·쓰기 CSRF 403·캐시 금지는 {@code /api/v1/me/**} 공통
+ * 인터셉터·필터가 컨트롤러 전에 처리한다(결정 37). 가상 포트폴리오 사용자도 설정을 바꿀 수 있다(docs/api.md 업무 오류 코드).
  */
 @RestController
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 @RequestMapping("/api/v1/me/payment-preference")
 public class PaymentPreferenceController {
 

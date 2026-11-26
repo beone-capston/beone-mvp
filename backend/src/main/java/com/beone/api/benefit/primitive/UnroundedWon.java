@@ -37,6 +37,7 @@ public record UnroundedWon(Won wholeWon, int tenThousandths) {
 
 	/**
 	 * 원 미만 금액이 생겼으면 참. 참이면 카드의 원 미만 처리 조건(D-03)이 결과에 영향을 준다.
+	 * @return 원 미만 금액이 있으면 {@code true}
 	 */
 	public boolean hasFractionalWon() {
 		return tenThousandths != 0;
@@ -44,6 +45,8 @@ public record UnroundedWon(Won wholeWon, int tenThousandths) {
 
 	/**
 	 * 확정된 원 미만 처리 방식으로 원 단위 금액을 만든다. 미확정 정책을 기본값으로 대신하지 않도록 정책을 반드시 받는다.
+	 * @param policy 확정된 원 미만 처리 방식
+	 * @return 원 단위 금액
 	 */
 	public Won round(FractionalWonPolicy policy) {
 		Objects.requireNonNull(policy, "policy");

@@ -13,11 +13,21 @@ import org.springframework.data.repository.query.Param;
  */
 public interface PlannedSpendRepository extends JpaRepository<PlannedSpendEntity, Long> {
 
-	/** 이 사용자의 기간 안 예정 소비를 저장 순서(ID 오름차순, 곧 요청 items 순서)로 돌려준다. */
+	/**
+	 * 이 사용자의 기간 안 예정 소비를 저장 순서(ID 오름차순, 곧 요청 items 순서)로 돌려준다.
+	 * @param userId 사용자 ID
+	 * @param from 시작일(포함)
+	 * @param to 종료일(포함)
+	 * @return 예정 소비 목록
+	 */
 	List<PlannedSpendEntity> findByUserIdAndPlannedDateBetweenOrderByPlannedSpendIdAsc(Long userId, LocalDate from,
 			LocalDate to);
 
-	/** 이 사용자의 예정 소비를 날짜와 관계없이 모두 지운다. */
+	/**
+	 * 이 사용자의 예정 소비를 날짜와 관계없이 모두 지운다.
+	 * @param userId 사용자 ID
+	 * @return 지운 행 수
+	 */
 	@Modifying(flushAutomatically = true, clearAutomatically = true)
 	@Query("DELETE FROM PlannedSpendEntity p WHERE p.userId = :userId")
 	int deleteAllOfUser(@Param("userId") Long userId);

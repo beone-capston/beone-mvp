@@ -10,11 +10,12 @@ type FormProblem = { text: string; code?: string }
 const passwordHint = '11~32자, 영문, 숫자, 특수문자 포함, 공백 제외'
 const invalidCredentials = '이메일 또는 비밀번호를 확인해 주세요.'
 
-export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin }: {
+export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessionChecking = false }: {
   onLogin: () => void
   onRetrySession?: () => void
   resetToken: string | null
   mockLogin: boolean
+  sessionChecking?: boolean
 }) {
   const [screen, setScreen] = useState<Screen>(resetToken === null ? 'login' : 'reset-complete')
   const [email, setEmail] = useState('')
@@ -103,7 +104,7 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin }: {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (submitting.current || (completing && !validToken)) return
+    if (sessionChecking || submitting.current || (completing && !validToken)) return
 
     const normalizedEmail = email.trim().toLowerCase()
     const previewLogin = import.meta.env.DEV && mockLogin && login
@@ -224,7 +225,7 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin }: {
         </div>
       )}
 
-      <form className="auth-form" onSubmit={submit} noValidate aria-busy={loading}>
+      <form className="auth-form" onSubmit={submit} noValidate aria-busy={loading || sessionChecking}>
         <h1 ref={heading} tabIndex={-1}>{title}</h1>
         <fieldset className="auth-fields" disabled={loading}>
           {!completing && field('email', '이메일', '이메일 주소를 입력해 주세요', email, setEmail)}
@@ -242,9 +243,10 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin }: {
           )}
         </fieldset>
         <div className="auth-actions">
+          {sessionChecking && <p className="auth-session-notice" role="status">로그인 상태를 확인하고 있어요.</p>}
           {onRetrySession && (
             <div className="auth-session-notice">
-              <p role="status">로그인 상태를 확인할 수 없어요.</p>
+              <p role="status">로그인 상태를 확인하지 못했어요.</p>
               <button type="button" onClick={onRetrySession} disabled={loading}>다시 시도</button>
             </div>
           )}
@@ -263,7 +265,7 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin }: {
               재설정 메일 다시 요청
             </button>
           ) : (
-            <button className="auth-primary" type="submit" disabled={loading}>
+            <button className="auth-primary" type="submit" disabled={loading || sessionChecking}>
               {loading ? '요청 중…' : submitLabel}
             </button>
           )}

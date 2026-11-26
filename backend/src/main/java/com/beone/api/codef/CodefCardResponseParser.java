@@ -56,6 +56,17 @@ public final class CodefCardResponseParser {
 		return parse(body, CodefCardPerformance::read);
 	}
 
+	/**
+	 * 계정 등록·삭제 응답을 해석한다. {@code data}가 객체 하나이면 항목 1개로 본다.
+	 *
+	 * @param body 응답 본문
+	 * @return 결과 코드 분류와 계정 응답 항목
+	 * @throws NullPointerException 본문이 null인 경우
+	 */
+	public static CodefResponse<CodefAccount> parseAccount(String body) {
+		return parse(body, CodefAccount::read);
+	}
+
 	private static <T> CodefResponse<T> parse(String body, Function<JsonNode, T> reader) {
 		Objects.requireNonNull(body, "body");
 		JsonNode root;

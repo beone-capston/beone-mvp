@@ -50,7 +50,7 @@ benefit/
 경계 규칙:
 
 - 업무 코드는 `benefit.engine`만 import합니다. 카드 상품 조회의 `RuleCatalog` 읽기만 예외입니다. 자동 검사는 없고 문서 규칙과 리뷰로 지킵니다.
-- 기준 기간은 엔진이 판단합니다. `usable=false`·`reason`은 업무 API만 아는 사유(`SOURCE_CONFLICT` 등)에만 씁니다. 두 판단은 겹치지 않으며 `PERIOD_MISMATCH`는 입력으로 받지 않습니다.
+- 기준 기간은 엔진이 판단합니다. `usable=false`·`reason`은 업무 API만 아는 사유(`SOURCE_CONFLICT` 등)에만 씁니다. `UNKNOWN` 값의 사유는 `NOT_ENTERED`(입력하지 않음)·`SOURCE_CONFLICT`·`POST_SNAPSHOT_ACTIVITY_UNRESOLVED`(입력한 스냅샷 값에 스냅샷 뒤 승인·취소의 영향을 정하지 못함, #151)입니다. 엔진은 세 사유를 같은 모름으로 계산하고 결과에 사유를 내보내지 않습니다. 두 판단은 겹치지 않으며 `PERIOD_MISMATCH`는 입력으로 받지 않습니다.
 - 스냅샷과 스냅샷 뒤 승인의 합산, 표시 이름, 저장, 시각은 업무 API가 맡습니다. 금액, 상태, 사유, 비교, 남은 한도, 차감액은 엔진이 맡습니다.
 - 원장 기반 산출(`INFERRED`), 예정 소비, 원장은 입력에 없습니다.
 

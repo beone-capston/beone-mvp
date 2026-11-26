@@ -1,0 +1,29 @@
+# 공개 프로필 prod 전용 설정(결정 38-6·7). member 부품은 application.yml의 프로필 그룹으로 함께 켜진다.
+# 비밀값을 두지 않는다. DB 접속 정보는 application.yml의 DB_URL·DB_USERNAME·DB_PASSWORD 환경 변수로 주입한다.
+# 메일 발송(N1, 결정 39-6)의 호스트·포트·계정·앱 비밀번호·발신 주소·링크 기준 주소도 환경 변수로만 넣는다
+# (SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD, BEONE_MAIL_FROM, BEONE_MAIL_LINK_BASE_URL).
+# 하나라도 없으면 기동하지 않는다(SmtpMailConfiguration).
+server:
+  # 웹과 /api를 같은 HTTPS 주소로 두고 앱은 X-Forwarded-* 헤더를 해석하지 않는다(결정 38-7)
+  forward-headers-strategy: none
+
+spring:
+  flyway:
+    # 운영 DB에서 flyway clean으로 스키마를 지우지 못하게 명시한다
+    clean-disabled: true
+  mail:
+    properties:
+      # 인증 필수, STARTTLS 필수(평문 전송 금지). 포트는 STARTTLS용(예: 587)을 환경 변수로 준다
+      "[mail.smtp.auth]": true
+      "[mail.smtp.starttls.enable]": true
+      "[mail.smtp.starttls.required]": true
+      # 메일은 요청 스레드에서 커밋 뒤 보내므로 오래 붙잡지 않게 연결·읽기·쓰기 시간 제한(밀리초)을 둔다. 제안값
+      "[mail.smtp.connectiontimeout]": 10000
+      "[mail.smtp.timeout]": 10000
+      "[mail.smtp.writetimeout]": 10000
+
+management:
+  health:
+    mail:
+      # 상태 확인마다 SMTP에 로그인하지 않게 메일 상태 확인을 끈다. actuator 노출은 application.yml의 health·show-details never 그대로다
+      enabled: false

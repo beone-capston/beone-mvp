@@ -45,6 +45,10 @@ public sealed interface RuleSelection {
 
 	/**
 	 * 쓸 수 있는 규칙이 없는 경우. 혜택을 계산하지 않으며 금액은 0원이 아닌 미확정이다.
+	 *
+	 * @param cardId 카드 상품 식별자
+	 * @param status 카드 단위 적용 상태
+	 * @param reason 규칙을 쓸 수 없는 사유
 	 */
 	record Unavailable(CardId cardId, ApplicationStatus status, String reason) implements RuleSelection {
 

@@ -1,6 +1,8 @@
 package com.beone.app.auth
 
+import com.beone.app.bridge.BridgeState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -179,5 +181,49 @@ class VirtualCardActivationTest {
 
         assertEquals(inactive(InactiveReason.NO_RESPONSE), activation.state)
         assertEquals(0L, activation.remainingMillis())
+    }
+
+    // 만료 경계(MVP Android 갭 AG-01, U5). 기대값은 계약에서 정했다: 활성 시간은 인증 성공 시점부터 60초이고(PRD §4.3, D-21 C3),
+    // 웹은 remainingMs가 끝나면 state.get으로 만료(EXPIRED)를 받는다(브리지 v1 B5). 따라서 남은 시간이 0이면 활성일 수 없고,
+    // 활성이면 남은 시간이 0보다 커야 한다. 시계는 고정값이며, 상태와 남은 시간 읽기 사이에 시계가 움직이는 경우는 다루지 않는다.
+    // 요청 단계는 Idle만 쓴다. 활성이면서 인증 중인 조합의 기대값은 정하지 않는다(AG-03 결정 대기).
+
+    @Test
+    fun oneMillisecondLeftIsActiveWithPositiveRemaining() {
+        authenticate()
+        now += 59_999L
+
+        val bridge = BridgeState.of(activation.state, AuthRequestPhase.Idle, activation.remainingMillis())
+
+        assertTrue(bridge.active)
+        assertEquals(1L, bridge.remainingMs)
+        assertEquals("ACTIVE", bridge.reason)
+    }
+
+    @Test
+    fun zeroMillisecondsLeftIsExpiredNotActiveWithZero() {
+        authenticate()
+        now += 60_000L
+
+        val bridge = BridgeState.of(activation.state, AuthRequestPhase.Idle, activation.remainingMillis())
+
+        assertFalse(bridge.active)
+        assertEquals(0L, bridge.remainingMs)
+        assertEquals("EXPIRED", bridge.reason)
+    }
+
+    @Test
+    fun neverActiveWithZeroRemainingAroundExpiry() {
+        authenticate()
+        val start = now
+
+        (59_990L..60_010L).forEach { elapsed ->
+            now = start + elapsed
+            val state = activation.state
+            val remaining = activation.remainingMillis()
+
+            assertEquals("elapsed=$elapsed", elapsed < 60_000L, state is ActivationState.Active)
+            assertEquals("elapsed=$elapsed", state is ActivationState.Active, remaining > 0L)
+        }
     }
 }

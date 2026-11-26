@@ -21,6 +21,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	// prod 인증 메일 SMTP 발송(결정 39-6). 버전은 Spring Boot 플러그인이 관리한다.
+	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.flywaydb:flyway-mysql'
@@ -69,6 +71,8 @@ def integrationTest = tasks.register('integrationTest', Test) {
 		includeTags 'integration'
 	}
 	shouldRunAfter tasks.named('test')
+	// 캐시된 컨텍스트마다 MySQL 컨테이너가 남아 Docker VM 메모리를 고갈시키므로 동시에 유지하는 컨텍스트 수를 제한한다(S1B).
+	systemProperty 'spring.test.context.cache.maxSize', '4'
 }
 
 // 웹 슬라이스 테스트: @WebSliceTest(@WebMvcTest + MockMvc). DB·Docker 없이 실행한다.

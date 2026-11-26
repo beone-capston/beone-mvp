@@ -16,8 +16,7 @@
 ## 아직 안 되는 것
 
 - 실기기: #22의 `정리 중` 경로(R5·R10)·앱 취소 뒤 최종 결과·창이 사라진 정지·최종 결과가 아직 오지 않은 정지 상태의 재실행 복구, 7·16·17번. #25의 W3·W3a·W3b·W4·W5(release), W6의 안내 문구 확인과 콘솔 절차, 실제 프런트 화면 기준 확인. 다음 시험 절차는 [#22 확인 목록](../../android/device-checklist.md#다음-시험-준비-설치본-확인과-남은-항목-2026-10-31-미실행)과 [`docs/android/webview-shell.md`](../../android/webview-shell.md)에 있습니다.
-- WebView로 실제 React 화면과 서버를 통합 확인(지금 React 화면은 제목 하나뿐), #88 로컬 브리지의 실제 프런트엔드·실기기 검증
-- `가상 주문서 결제` 버튼과 모의 승인 흐름
+- WebView로 실제 React 화면과 서버를 통합 확인, #88 로컬 브리지의 실제 프런트엔드·실기기 검증. 프런트에는 주문·`가상 주문서 결제`·모의 승인 흐름과 브리지 호출이 있습니다(#163·#167, 2026-11-24 확인). 남은 것은 실기기 통합 확인([BR1~BR16](../../android/device-checklist.md#브리지-v1-실기기-확인-순서표), 미실행)입니다
 
 ## 현재 작업과 PR
 
@@ -26,6 +25,9 @@
 - [#86](https://github.com/beone-capston/beone-mvp/issues/86) 브리지 v1 계약 확정(문서) — 2026-11-16 사용자 결정 반영, [PR #87](https://github.com/beone-capston/beone-mvp/pull/87)로 `develop`에 병합(`73d7f045b5166594d7851944353e5ecde0eab37e`). 공개 계약 v1은 문서로 확정됐고, 구현 상태는 아래 #88을 따릅니다 ([단계 기록](86-bridge-contract-v1.md))
 - [#88](https://github.com/beone-capston/beone-mvp/issues/88) 브리지 v1 로컬 구현 — [PR #89](https://github.com/beone-capston/beone-mvp/pull/89)로 `develop`에 squash 병합(`77fe2e3d17fc9a97ff1cc84e13f86b371e2975bb`). release 시작 주소 `https://beonepay.site/`, 신뢰 origin 1개에만 `window.BeoneBridge` 노출, 기기 인증 상태와 연결(대기 시간 120초·10초는 근거 없는 잠정값). 로컬 단위 테스트 166건만 실행했고 실기기·설치·실제 프런트엔드 통합은 미확인입니다 ([단계 기록](88-android-bridge-local.md))
 - [#101](https://github.com/beone-capston/beone-mvp/issues/101) 브리지 실기기 시험 페이지(T)와 서버 적용 절차 — frontend 밖 정적 페이지 [`tools/bridge-test/`](../../../tools/bridge-test/README.md)(시험 전용·제거 가능)와 release용 [서버 적용 절차](../../deployment/bridge-test-page.md)(사용자 실행, 미검증). 페이지 동작은 코드 리뷰로만 확인했고 설치·adb·서버 적용은 하지 않았습니다 ([단계 기록](101-bridge-test-page.md))
+- [#171](https://github.com/beone-capston/beone-mvp/issues/171) release 보호 조건과 60초 만료 경계 단위 테스트 보강(U1·U2·U3·U5·U6, 테스트만 추가) — PR 대기. 로컬 단위 테스트 debug 174건·release 178건, 실기기 미확인 ([단계 기록](171-android-release-guards.md))
+- [#180](https://github.com/beone-capston/beone-mvp/issues/180) 60초 활성 상태 브리지 응답의 단일 시점 스냅샷(#171 발견, 결정 38 관리자 기술 판단) — draft PR. 상태와 남은 시간을 한 시점으로 계산해 `active=true`·`remainingMs=0` 조합을 없앴고 공개 계약은 그대로입니다. 로컬 단위 테스트 debug 175건·release 179건, 실기기 미확인 ([단계 기록](180-activation-state-snapshot.md))
+- [#182](https://github.com/beone-capston/beone-mvp/issues/182) release 서명 환경 변수 주입 골격(결정 38-9) — draft PR. 값이 없으면 서명 없는 release, `-Pbeone.release.requireSigning=true`일 때만 누락 실패. 키·서명 빌드·설치·실기기는 하지 않았고, 키 생성·보관·백업·versionCode 규칙은 N8 결정·승인 대기 ([단계 기록](182-android-release-signing-env.md))
 - [#27](https://github.com/yim0327/beone-mvp/issues/27) 브리지 계약 초안(후보) — [PR #72](https://github.com/beone-capston/beone-mvp/pull/72)로 병합(PR #28을 대체). 당시 공개 계약은 후보였습니다. 현재 공개 계약 v1은 #86에, Android 로컬 구현 상태는 #88에 기록합니다
 
 ## 사용자 확인 사항

@@ -1,0 +1,77 @@
+아래는 추출 결과입니다.
+```json
+{
+  "draft": {
+    "cardId": "99999",
+    "ruleVersion": "99999-A-20260101-0000-00001-01",
+    "status": "VERIFIED",
+    "evaluationOnly": true,
+    "validity": { "from": "2026-01-01", "to": null },
+    "sources": [
+      { "uri": "https://example.invalid/99999.pdf", "locator": "합성 시험 문서, 전체 2쪽" }
+    ],
+    "policy": {
+      "performanceWindow": { "value": "PREVIOUS_CALENDAR_MONTH", "evidence": "E1" },
+      "performanceDateBasis": { "value": "USAGE", "evidence": "E1" },
+      "cancellationAttribution": { "unresolved": "취소 귀속월 표기 없음" },
+      "performanceExcludedNatures": [],
+      "performanceExcludedClasses": ["OVERSEAS_USE"],
+      "performanceExcludedClassesEvidence": "E1",
+      "excludesBenefitedSales": { "unresolved": "할인받은 매출의 실적 제외 표기 없음" },
+      "limitPeriod": { "value": "CALENDAR_MONTH", "evidence": "E2" },
+      "limitDeductionOrder": { "unresolved": "승인·매입 순서 표기 없음" },
+      "newCardGrace": {
+        "value": {
+          "span": "DAYS_FROM_REGISTRATION",
+          "days": 60,
+          "deemedPerformance": 200000,
+          "services": ["CGV"],
+          "partialPerformance": "NEEDS_CONFIRMATION"
+        },
+        "evidence": "E3"
+      },
+      "inclusionUnconfirmed": []
+    },
+    "limitBuckets": [
+      {
+        "id": "COMMON",
+        "tiers": [ { "minimumPerformance": 300000, "monthlyCap": 10000 } ],
+        "parent": null,
+        "evidence": "E2"
+      }
+    ],
+    "services": [
+      {
+        "id": "CGV",
+        "kind": "BILLING_DISCOUNT",
+        "target": { "type": "SPECIFIC_CLASSES", "classes": ["CGV_THEATER"] },
+        "paymentMethods": ["DIRECT"],
+        "excludedClasses": [],
+        "unevaluatedExclusions": [],
+        "minimumAmount": 10000,
+        "maximumTargetAmount": 20000,
+        "tiers": [
+          {
+            "minimumPerformance": 300000,
+            "calculation": { "value": { "type": "RATE", "basisPoints": 3500 }, "evidence": "E2" }
+          }
+        ],
+        "limitBuckets": ["COMMON"],
+        "requiresSelection": false,
+        "stackableWith": { "unresolved": "중복 표기 없음" },
+        "fractionalWon": { "unresolved": "원 미만 처리 표기 없음" },
+        "evidence": ["E2"]
+      }
+    ]
+  },
+  "evidence": {
+    "/cardId": { "page": 1, "quote": "카드 코드 99999" },
+    "/ruleVersion": { "page": 1, "quote": "문서번호 A-20260101-0000-00001-01" },
+    "/validity": { "page": 1, "quote": "2026년 1월 1일부터 적용합니다." },
+    "/policy": { "page": 1, "quote": "이용실적은 전월 1일부터 말일까지 이용실적을 기준으로 합니다." },
+    "/policy/newCardGrace": { "page": 2, "quote": "등록일로부터 60일간 전월 실적 20만원으로 간주" },
+    "/limitBuckets": { "page": 2, "quote": "전월 이용실적 30만원 이상 시 통합 월 할인한도 1만원" },
+    "/services/0": { "page": 2, "quote": "영화관 35% 청구할인(1만원 이상 결제 시, 결제금액 2만원까지)" }
+  }
+}
+```

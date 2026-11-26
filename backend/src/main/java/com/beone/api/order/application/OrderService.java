@@ -4,6 +4,9 @@ import com.beone.api.order.persistence.OrderEntity;
 import com.beone.api.order.persistence.OrderRepository;
 import com.beone.api.user.application.CurrentUser;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class OrderService {
+
+	/** 목록 정렬: 생성 시각 내림차순, 같은 시각이면 주문 번호 내림차순(결정 38-5). 같은 데이터면 항상 같은 순서다. */
+	static final Sort LIST_ORDER = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("orderId"));
 
 	private final OrderRepository orderRepository;
 
@@ -34,7 +40,12 @@ public class OrderService {
 		this.latestRecommendationLookup = latestRecommendationLookup;
 	}
 
-	/** 현재 사용자의 주문을 {@link OrderStatus#CREATED} 상태로 만든다. */
+	/**
+	 * 현재 사용자의 주문을 {@link OrderStatus#CREATED} 상태로 만든다.
+	 * @param user 현재 사용자
+	 * @param order 주문 입력
+	 * @return 만든 주문
+	 */
 	@Transactional
 	public OrderDetail create(CurrentUser user, NewOrder order) {
 		OrderEntity saved = this.orderRepository.save(new OrderEntity(user.userId(), order.amountWon(),
@@ -45,6 +56,9 @@ public class OrderService {
 
 	/**
 	 * 현재 사용자의 주문 하나를 돌려준다.
+	 * @param user 현재 사용자
+	 * @param orderId 외부 주문 ID
+	 * @return 주문
 	 * @throws OrderNotFoundException 형식이 틀렸거나, 없거나, 다른 사용자의 주문일 때
 	 */
 	@Transactional(readOnly = true)
@@ -56,7 +70,27 @@ public class OrderService {
 	}
 
 	/**
+	 * 현재 사용자의 주문을 최신순으로 한 페이지 돌려준다(결정 38-5). 모든 상태를 담고 다른 사용자의 주문은 담지 않는다.
+	 * @param user 현재 사용자
+	 * @param page 페이지 번호(0부터, {@link OrderPage#MAX_PAGE} 이하)
+	 * @param size 페이지 크기(1~{@link OrderPage#MAX_SIZE})
+	 * @return 주문 한 페이지. 주문이 없거나 마지막 페이지를 지나면 빈 목록
+	 * @throws IllegalArgumentException 범위 밖의 값일 때. 웹 계층이 먼저 400으로 거른다
+	 */
+	@Transactional(readOnly = true)
+	public OrderPage list(CurrentUser user, int page, int size) {
+		if (!OrderPage.isAllowed(page, size)) {
+			throw new IllegalArgumentException("page or size out of range");
+		}
+		Slice<OrderEntity> slice = this.orderRepository.findByUserId(user.userId(),
+				PageRequest.of(page, size, LIST_ORDER));
+		return new OrderPage(slice.map(OrderService::toDetail).getContent(), page, size, slice.hasNext());
+	}
+
+	/**
 	 * 이 주문으로 마지막에 계산한 추천 ID(docs/api/orders.md {@code latestRecommendationId}, #120). 주문 소유 확인은 {@link #get}이 한다.
+	 * @param user 현재 사용자
+	 * @param orderId 외부 주문 ID
 	 * @return 추천 외부 ID 또는 계산한 추천이 없으면 {@code null}
 	 */
 	@Transactional(readOnly = true)
@@ -69,6 +103,9 @@ public class OrderService {
 	/**
 	 * 모의 승인 전에 현재 사용자의 주문 행을 쓰기 잠금하고 돌려준다. 같은 주문의 승인 요청은 앞 요청이 커밋할 때까지 기다린다.
 	 * 호출자의 트랜잭션 안에서만 부른다.
+	 * @param user 현재 사용자
+	 * @param orderId 외부 주문 ID
+	 * @return 잠근 주문
 	 * @throws OrderNotFoundException 형식이 틀렸거나, 없거나, 다른 사용자의 주문일 때
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
@@ -78,6 +115,8 @@ public class OrderService {
 
 	/**
 	 * 잠근 주문을 {@code PAID}로 바꾸고 결제 ID를 연결한다. {@link #lockForPayment}와 같은 트랜잭션에서 부른다.
+	 * @param user 현재 사용자
+	 * @param orderId 외부 주문 ID
 	 * @param simulatedPaymentId 승인한 결제의 외부 ID
 	 * @throws IllegalStateException 주문이 {@code CREATED}가 아닐 때
 	 */
@@ -88,6 +127,8 @@ public class OrderService {
 
 	/**
 	 * 모의 승인을 전액 취소한 주문을 {@code CANCELLED}로 바꾼다. 호출자의 트랜잭션 안에서만 부른다.
+	 * @param user 현재 사용자
+	 * @param orderId 외부 주문 ID
 	 * @throws IllegalStateException 주문이 {@code PAID}가 아닐 때
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)

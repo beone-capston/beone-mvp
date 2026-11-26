@@ -14,7 +14,13 @@ import org.springframework.data.jpa.repository.Query;
  */
 public interface MonthlyStateRepository extends JpaRepository<MonthlyStateEntity, Long> {
 
-	/** 이 사용자의 이 카드·이 달 상태를 찾는다. */
+	/**
+	 * 이 사용자의 이 카드·이 달 상태를 찾는다.
+	 * @param userId 사용자 ID
+	 * @param userCardId 보유 카드 ID
+	 * @param stateMonth 대상 달({@code yyyy-MM})
+	 * @return 월간 상태, 없으면 빈 값
+	 */
 	Optional<MonthlyStateEntity> findByUserIdAndUserCardIdAndStateMonth(Long userId, Long userCardId,
 			String stateMonth);
 
@@ -24,6 +30,10 @@ public interface MonthlyStateRepository extends JpaRepository<MonthlyStateEntity
 	 * <p>행이 아직 없을 때도 쓰기 잠금이 걸릴 행을 먼저 만들어, 같은 달의 첫 교체 요청 두 개가 유니크 제약
 	 * {@code uk_monthly_states_card_month} 위반으로 실패하지 않고 차례로 처리되게 한다. 넣은 빈 행은 같은 트랜잭션의 교체가 덮어쓰므로
 	 * 다른 요청에 보이지 않는다.
+	 * @param userId 사용자 ID
+	 * @param userCardId 보유 카드 ID
+	 * @param stateMonth 대상 달({@code yyyy-MM})
+	 * @param snapshotAt 빈 행에 넣을 저장 시각
 	 * @return 넣었으면 1, 이미 있었으면 0(MySQL 영향 행 수)
 	 */
 	@Modifying(flushAutomatically = true)
@@ -35,6 +45,10 @@ public interface MonthlyStateRepository extends JpaRepository<MonthlyStateEntity
 
 	/**
 	 * 위와 같되 교체용으로 행에 쓰기 잠금을 건다. 같은 달을 바꾸는 요청을 차례로 처리한다. 트랜잭션 안에서만 부른다.
+	 * @param userId 사용자 ID
+	 * @param userCardId 보유 카드 ID
+	 * @param stateMonth 대상 달({@code yyyy-MM})
+	 * @return 잠근 월간 상태, 없으면 빈 값
 	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<MonthlyStateEntity> findForUpdateByUserIdAndUserCardIdAndStateMonth(Long userId, Long userCardId,

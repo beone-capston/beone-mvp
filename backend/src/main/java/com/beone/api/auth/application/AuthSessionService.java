@@ -23,13 +23,13 @@ import org.springframework.transaction.annotation.Transactional;
  * 서버 세션의 발급·조회(D-24, docs/api/auth.md). 세션은 MySQL {@code auth_sessions}에 해시로 저장한다.
  *
  * <p>세션은 미사용 만료에 끝나고, 절대 만료가 있으면 그 시각에도 끝난다. 익명 세션은 절대 만료가 없다(2026-11-18 사용자 직접 결정).
- * 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료가 있으면 넘기지 않는다. 만료한 세션은 찾을 때 지운다. {@code local}·{@code demo} 프로필 전용이다(관리자 승인, 결정 30).
+ * 유효한 세션을 쓸 때마다 미사용 만료를 늘리되 절대 만료가 있으면 넘기지 않는다. 만료한 세션은 찾을 때 지운다. {@code local}·{@code demo}와 로컬 회원 프로필 {@code member}에서 등록한다(관리자 승인, 결정 30·37).
  *
  * <p>회원 로그인 세션(U3)은 미사용 7일, 로그인 뒤 최대 30일이고 회원당 동시 5개다(D-24). 로그인하면 요청의 이전 세션(익명이든 회원이든)을
  * 지우고 새 세션 ID를 발급해 세션 고정을 막는다. 6번째 세션을 만들면 가장 오래 쓰지 않은 세션을 지운다(docs/api/auth.md).
  */
 @Service
-@Profile({ "local", "demo" })
+@Profile({ "local", "demo", "member" })
 public class AuthSessionService {
 
 	/** 업무 API 기준 시간대(docs/api.md 값 형식). */
@@ -138,6 +138,41 @@ public class AuthSessionService {
 		session.touch(now, idleExpiry(now, session));
 		return Optional.of(new MemberSession(session.getMemberId(), session.getCreatedAt(), session.getIdleExpiresAt(),
 				session.getAbsoluteExpiresAt()));
+	}
+
+	/**
+	 * 회원 프로필 업무 요청용 검사(결정 37 D3·D5·D6). 유효한 회원 세션이 아니면 {@link MemberRequestCheck.Unauthenticated}다. 쓰기
+	 * 요청이고 CSRF 토큰이 다르면 만료를 늘리지 않고 {@link MemberRequestCheck.CsrfInvalid}다. 통과하면 인증 API와 같은 규칙으로 미사용
+	 * 만료(7일)를 늘리되 절대 만료(30일)를 넘기지 않는다. 조회·검사·갱신을 한 트랜잭션에서 한다.
+	 * @param sessionId 요청 쿠키의 세션 ID, {@code null} 가능
+	 * @param presentedToken 요청 헤더의 CSRF 토큰, {@code null} 가능. {@code checkCsrf}가 거짓이면 보지 않는다
+	 * @param checkCsrf 쓰기 요청이면 참
+	 * @return 검사 결과
+	 */
+	@Transactional
+	public MemberRequestCheck checkMemberRequest(String sessionId, String presentedToken, boolean checkCsrf) {
+		if (!SessionTokens.isWellFormed(sessionId)) {
+			return new MemberRequestCheck.Unauthenticated();
+		}
+		Optional<AuthSessionEntity> found = this.repository.findBySessionHash(SessionTokens.hash(sessionId));
+		if (found.isEmpty()) {
+			return new MemberRequestCheck.Unauthenticated();
+		}
+		AuthSessionEntity session = found.get();
+		LocalDateTime now = now();
+		if (isExpired(session, now)) {
+			this.repository.delete(session);
+			return new MemberRequestCheck.Unauthenticated();
+		}
+		if (!session.isMemberSession()) {
+			return new MemberRequestCheck.Unauthenticated();
+		}
+		if (checkCsrf && !SessionTokens.csrfMatches(sessionId, presentedToken)) {
+			return new MemberRequestCheck.CsrfInvalid();
+		}
+		LocalDateTime idleExpiry = idleExpiry(now, session);
+		session.touch(now, idleExpiry);
+		return new MemberRequestCheck.Authenticated(session.getMemberId(), sessionId, Duration.between(now, idleExpiry));
 	}
 
 	/**

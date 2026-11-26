@@ -13,7 +13,12 @@ import com.beone.api.codef.CodefProductResponse;
  */
 public sealed interface CodefCallResult<T> {
 
-	/** 상품 API가 HTTP 응답을 돌려줬다. 401과 서버 오류도 여기에 든다. */
+	/**
+	 * 상품 API가 HTTP 응답을 돌려줬다. 401과 서버 오류도 여기에 든다.
+	 *
+	 * @param <T> 상품 응답 데이터 형식
+	 * @param response 받은 상품 응답
+	 */
 	record Answered<T>(CodefProductResponse<T> response) implements CodefCallResult<T> {
 
 		public Answered {
@@ -22,7 +27,14 @@ public sealed interface CodefCallResult<T> {
 
 	}
 
-	/** 상품 응답을 받지 못했다. 자동으로 다시 보내지 않는다. */
+	/**
+	 * 상품 응답을 받지 못했다. 자동으로 다시 보내지 않는다.
+	 *
+	 * @param <T> 상품 응답 데이터 형식
+	 * @param stage 실패한 단계
+	 * @param reason 실패 사유
+	 * @param httpStatus 받은 HTTP 상태, 없으면 빈 값
+	 */
 	record Failed<T>(Stage stage, Reason reason, OptionalInt httpStatus) implements CodefCallResult<T> {
 
 		public Failed {
@@ -48,6 +60,8 @@ public sealed interface CodefCallResult<T> {
 
 		/** 관측 1회의 호출 상한을 넘어 호출하지 않았다. */
 		CALL_LIMIT_REACHED,
+		/** 프로세스를 넘는 호출 총량(검증 기간 창)이 없거나 다 써서 호출하지 않았다(LP-2). */
+		BUDGET_EXHAUSTED,
 
 		/** 시간 안에 응답을 다 받지 못했다. 상대가 처리했는지 알 수 없다. */
 		TIMEOUT,
