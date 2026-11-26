@@ -5,7 +5,7 @@
 - **상태:** 초안입니다. 서버에 반영하지 않았습니다. 실제 반영은 승인 ⑧(공개 배포)에 속하고, 메일(N1)·main 승격·운영 DB 백업과 함께 다시 확인합니다(결정 39 "다시 확인할 것").
 - **배포 자동화와의 관계(결정 40):** 웹 파일은 자동 배포가 릴리스 폴더에 풀고 `current` 심볼릭 링크를 바꿔 반영합니다([배포 자동화](cd.md)). 그래서 공개 nginx의 정적 루트는 이 링크로 고정하고, 배포마다 nginx 설정을 바꾸지 않습니다. 스테이징은 별도 도메인에 기본 인증을 걸어 같은 구조로 냅니다(2-1절).
 - **근거:** 결정 38-7(웹과 `/api`를 같은 HTTPS 주소에 두고, 앱은 `X-Forwarded-*`를 해석하지 않음. [`application-prod.yml`](../../backend/src/main/resources/application-prod.yml)의 `forward-headers-strategy: none`), ROADMAP-next-20261125 P3~P5.
-- **결정 필요:** 보안 헤더 값, 요청 제한, 본문 크기는 **N4** 결정 전이라 `<N4: …>` 자리표시로 둡니다. 0이나 임의 값으로 채우지 않습니다.
+- **N4(보안 헤더·요청 제한):** 표준안 조각과 반영 절차를 [공개 nginx 보안 헤더·요청 제한](public-nginx-security.md)에 두었습니다(2026-11-27 사용자 결정, T6, 서버 미반영). 아래 초안의 보안 헤더·`limit_req` 자리는 그 조각의 include로 바꿉니다. 본문 크기는 검증·스테이징과 같은 64k를 씁니다.
 - **하지 않는 것:** 인증서·certbot 설정 변경, DNS·보안 그룹 변경, 운영 DB 조작. 이 문서에는 실행 명령이 있지만 승인 전에는 실행하지 않습니다.
 
 ## 1. 현재 구성과 확인할 것
@@ -53,12 +53,10 @@ server {
     # current는 releases/<sha12>-<무작위>를 가리키는 상대 링크이고 deploy.sh가 원자적으로 바꾼다.
     root /srv/beone/web/current;
 
-    # 보안 헤더(N4 결정 전 자리표시. 값이 정해지기 전에는 넣지 않는다)
-    # add_header Strict-Transport-Security "<N4: max-age 등>" always;
-    # add_header Content-Security-Policy-Report-Only "<N4: 정책>" always;
-    # add_header X-Content-Type-Options "nosniff" always;            # 후보
-    # add_header Referrer-Policy "<N4: 예 same-origin>" always;
-    # add_header X-Frame-Options "<N4: 예 DENY>" always;
+    # 보안 헤더·429 응답(N4 표준안, public-nginx-security.md). 조각은 deploy/public-nginx/conf.d/에 있다
+    include /etc/nginx/conf.d/beone/security-headers.conf;
+    include /etc/nginx/conf.d/beone/referrer-policy.conf;
+    include /etc/nginx/conf.d/beone/rate-limited.conf;
 
     location / {
         try_files $uri $uri/ /index.html;   # SPA. 화면 경로(/email-verification 등)를 index.html로
@@ -70,11 +68,13 @@ server {
 
     # 이메일 인증·비밀번호 재설정 링크(?token=). N2 조건(관리 판단: query 방식 유지)이라 N4와 별개로 넣는다
     location = /email-verification {
+        include /etc/nginx/conf.d/beone/security-headers.conf;   # add_header가 있는 location은 다시 include(상속 끊김)
         add_header Referrer-Policy "no-referrer" always;
         access_log /var/log/nginx/access.log beone_noquery;   # 로그 경로는 1절 대조 결과의 기존 값
         try_files /index.html =404;
     }
     location = /password-reset {
+        include /etc/nginx/conf.d/beone/security-headers.conf;
         add_header Referrer-Policy "no-referrer" always;
         access_log /var/log/nginx/access.log beone_noquery;
         try_files /index.html =404;
@@ -88,9 +88,9 @@ server {
         proxy_set_header X-Forwarded-For   $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Forwarded         "";
-        client_max_body_size <N4: 본문 크기, 검증 환경은 64k>;
+        client_max_body_size 64k;
         proxy_read_timeout 30s;
-        # limit_req zone=<N4: 인증 경로 요청 제한> ...;   # N4 권장안: 인증 경로만 제한
+        include /etc/nginx/conf.d/beone/limit-api.conf;   # 일반 /api 10r/s. 인증·가입·메일 요청 경로는 별도 정규식 location(10r/m, public-nginx-security.md 4절)
     }
 
     location /actuator/ { return 404; }   # 상태 확인 경로는 외부에 내지 않는다
@@ -138,7 +138,7 @@ server {
     # backend로 넘기지 않는 것은 스테이징 web이 한다.
 
     access_log /var/log/nginx/access.log beone_noquery;   # 인증 링크 query를 남기지 않는다(N2)
-    add_header X-Robots-Tag "noindex, nofollow" always;   # 검색 노출 방지. 보안 헤더는 운영과 같은 N4 결정을 따른다
+    add_header X-Robots-Tag "noindex, nofollow" always;   # 검색 노출 방지. 보안 헤더·요청 제한은 public-nginx-security.md 3절(미반영)
 
     location / {
         # 업스트림 이름을 기동·reload 때가 아니라 요청 때 찾는다(변수 proxy_pass + resolver)
@@ -212,7 +212,7 @@ server {
 | B1 | **백업·복귀 기준 확보.** 설정 백업 `sudo tar -czf /opt/beone-backup/pre-mvp-<UTC>.tgz /opt/beone/compose.yaml /opt/beone/nginx/conf.d <기존 정적 루트>`(지금의 안내 화면 위치, 1절 대조값). 이어서 기존 이미지 식별자를 `/opt/beone-backup/pre-mvp-<UTC>.ids`에 적습니다: 공개 nginx 컨테이너의 이미지 이름·ID(`$PUB ps -q nginx`와 `docker inspect --format '{{.Config.Image}} {{.Image}}'`), `beone-app`의 backend·mysql 컨테이너 유무(`docker compose … -p beone-app ps -a`, 값 출력 없음) | tgz 존재·크기 > 0, ids 파일에 nginx 이미지 이름·ID와 `beone-app` 상태 | 진행 안 함 |
 | B2 | **비공개 준비·검증.** `sudo $DEPLOY bootstrap-prepare production <ApiDigest> <WebDigest> <GitSha>`. 스크립트가 복귀 기준(실행 중 backend 이미지, 없으면 `none`)을 판정하고, mysql이 있으면 덤프·짝 기록을 남깁니다(mysql 컨테이너·볼륨이 모두 없으면 `backup=none`). 이어서 backend 기동·health, 웹 릴리스·`current` 링크를 만들고 비공개 검증을 합니다. 공개 스모크는 하지 않습니다 | 종료 0, 출력 "준비 완료(미확정)", `production.bootstrap` 있음·`production.state` 없음, 출력의 복귀 기준·백업 id(운영 backend·mysql이 아직 없으면 둘 다 `none`이 정상), `/opt/beone/web/current/index.html` 있음, 공개 화면은 아직 안내 화면 | 종료 3: 변경 없음. 원인을 고쳐 다시 하거나 창 종료. 종료 4: 스크립트가 복귀 기준으로 되돌림(기준 none이면 새 backend 정지). 창 종료. 종료 1: 즉시 확인([백엔드 배포 기반](backend-compose.md)). nginx 단계로 가지 않음 |
 | B3 | **네트워크·마운트.** 3절의 연결 방식(A 또는 B)과 웹 마운트(`/opt/beone/web:/srv/beone/web:ro`)를 `/opt/beone/compose.yaml`에 넣고 `$PUB up -d nginx`(재생성, 짧은 중단) | nginx 실행 중, 공개 화면은 아직 안내 화면(설정은 그대로) | 원복 A → 원복 B |
-| B4 | **설정 적용과 `nginx -t`.** 2절 server 블록(N4 자리표시는 결정값으로)을 `conf.d`에 둔 뒤 `$PUB exec nginx nginx -t` | `syntax is ok`, `test is successful` | reload하지 않음. 원복 A → 원복 B |
+| B4 | **설정 적용과 `nginx -t`.** 2절 server 블록(보안 헤더·요청 제한 조각 포함)을 `conf.d`에 둔 뒤 `$PUB exec nginx nginx -t` | `syntax is ok`, `test is successful` | reload하지 않음. 원복 A → 원복 B |
 | B5 | `$PUB exec nginx nginx -s reload` | 오류 없음 | 원복 A → 원복 B |
 | B6 | **공개 확인(스모크가 보지 않는 항목).** `http://` 301, certbot 갱신 타이머 유지, `curl -sI 'https://beonepay.site/email-verification?token=x'`에 `Referrer-Policy: no-referrer`, 접근 로그의 해당 줄에 `token=` 없음, 위조 `X-Forwarded-*` 헤더를 보내도 CSRF Set-Cookie 속성이 같음(S17 재확인) | 모두 기대값 | 원복 A → 원복 B |
 | B7 | **공개 스모크와 상태 확정.** `sudo $DEPLOY bootstrap-confirm production`. 웹 링크·backend health를 확인하고 `smoke-public.sh https://beonepay.site`(`/` 200 HTML, `/api/v1/me` 401, `/actuator/health` 404, CSRF 쿠키)를 통과해야만 상태 파일을 씁니다 | 종료 0, `production.state` 생성(준비한 digest·`backup_id`), 대기 파일이 `production.bootstrap.confirmed-<UTC>`로 바뀜, 이력에 `ok bootstrap` 줄 | 종료 1: 상태 파일 없음·대기 파일 유지. nginx 설정 원인이면 원복 A 뒤 B3·B4부터 다시 하고 confirm을 다시 실행. 아니면 원복 A → 원복 B |
@@ -253,7 +253,7 @@ sudo /opt/beone/deploy/deploy.sh bootstrap-abort production
 
 | 항목 | 상태 |
 |---|---|
-| N4 보안 헤더·요청 제한·본문 크기 | 결정 대기. 권장안은 인증 경로만 제한, HSTS를 짧게 시작, CSP는 Report-Only로 먼저(ROADMAP 8절) |
+| N4 보안 헤더·요청 제한·본문 크기 | 표준안 결정(2026-11-27, T6): HSTS 1년, nosniff, X-Frame-Options·CSP `frame-ancestors`, Referrer-Policy, 인증 경로 10r/m·일반 `/api` 10r/s, 본문 64k. CSP 본체는 넣지 않음. 남은 결정(`includeSubDomains`·burst)과 반영 절차는 [공개 nginx 보안 헤더·요청 제한](public-nginx-security.md) |
 | 프로젝트 연결 방식(3절 A·B) | 승인 ⑧에서 결정 |
 | 공개 환경 스모크의 회원 인증 | TODO. 실메일(N1, 결정 39-6) 구현 뒤 공개용 실메일 인증 스모크를 별도로 구현·검증한다. 운영 DB에는 T-a를 쓰지 않음 |
 | 검증 환경 근거(#206·#199) | #199(`smoke-member.sh`)는 병합됨. #206(`deploy/verify/`)은 미병합이며, 병합되면 이 문서의 참조를 병합된 경로로 확정 |
