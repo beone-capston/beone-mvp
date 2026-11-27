@@ -137,14 +137,15 @@ it('서버 주문을 목록에 추가하고 단건의 상태를 확인한 뒤 �
   expect(accordion).toHaveAttribute('aria-expanded', 'false')
   fireEvent.click(accordion)
   click('빠른결제로 이동')
-  expect(await screen.findByLabelText('선택한 가상 주문')).toHaveTextContent('10,000원')
+  expect(await screen.findByRole('heading', { name: 'B:ONE 빠른결제' })).toBeInTheDocument()
+  expect(screen.queryByLabelText('선택한 가상 주문')).not.toBeInTheDocument()
   expect(get).toHaveBeenCalledWith('MY_CARDS', 'ord-5001')
   expect(postMessage).not.toHaveBeenCalled()
 
   fireEvent.click(screen.getByRole('tab', { name: '가상 포트폴리오' }))
   expect(screen.queryByLabelText('선택한 가상 주문')).not.toBeInTheDocument()
   click('모의결제')
-  expect(screen.getByText('이번 실행에서 생성한 주문이 없어요.')).toBeVisible()
+  expect(screen.getByText('생성한 주문이 없어요.')).toBeVisible()
 })
 
 it('중복 제출과 자동 재시도를 막고 실패한 입력을 유지한다', async () => {
@@ -176,7 +177,7 @@ it('모드를 바꾼 뒤 도착한 생성 응답을 요청 당시 목록에만 �
   fireEvent.click(screen.getByRole('tab', { name: '가상 포트폴리오' }))
   click('모의결제')
   await act(async () => resolve(response(validateOrder(draft).input!)))
-  expect(screen.getByText('이번 실행에서 생성한 주문이 없어요.')).toBeVisible()
+  expect(screen.getByText('생성한 주문이 없어요.')).toBeVisible()
 
   click('빠른결제')
   fireEvent.click(screen.getByRole('tab', { name: '내 카드' }))

@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PreferenceCard } from '../preferences/preferenceApi'
 import { formatWon, orderName } from '../orders/order'
+import { Sheet } from '../components/Sheet'
+import { PaymentError } from './contract'
 import { Icon } from '../components/Icon'
 import type { Amount, Approval, Attempt, PaymentGateway, Recommendation, Rule } from './contract'
 
@@ -46,11 +48,37 @@ const differenceFields: Record<string, string> = {
 
 export function PaymentResult({ approval, attempt, gateway, cards, onReturn, onRestart }: {
   approval: Approval; attempt: Attempt; gateway: PaymentGateway; cards: readonly PreferenceCard[]
-  onReturn: () => void; onRestart: () => void
+  onReturn: (cancelled?: boolean) => void; onRestart: () => void
 }) {
   const [comparison, setComparison] = useState<Recommendation>()
   const [comparisonError, setComparisonError] = useState(false)
   const [request, setRequest] = useState(0)
+  const [confirming, setConfirming] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState('')
+  const [cancelled, setCancelled] = useState(false)
+  const cancelRequest = useRef<{ key: string; inFlight: boolean; uncertain: boolean } | null>(null)
+
+  async function cancelPayment() {
+    if (!gateway.cancel || cancelled || approval.cancellableAmountWon <= 0 || cancelRequest.current?.inFlight) return
+    const attemptRequest = cancelRequest.current ??= { key: crypto.randomUUID(), inFlight: false, uncertain: false }
+    attemptRequest.inFlight = true
+    setCancelling(true)
+    setCancelError('')
+    try {
+      await gateway.cancel(attempt.mode, approval.simulatedPaymentId, approval.cancellableAmountWon, attemptRequest.key)
+      setCancelled(true)
+      setConfirming(false)
+    } catch (error) {
+      attemptRequest.uncertain = !(error instanceof PaymentError) || error.uncertain
+      if (!attemptRequest.uncertain) cancelRequest.current = null
+      setCancelError(attemptRequest.uncertain ? '취소 결과를 확인하지 못했어요. 다시 확인해 주세요.' : '결제를 취소하지 못했어요. 다시 시도해 주세요.')
+    } finally {
+      attemptRequest.inFlight = false
+      setCancelling(false)
+    }
+  }
+
   const success = approval.status === 'APPROVED'
   const reference = approval.recalculation.recommendationId
   const fixed = approval.selectionMode === 'FIXED_REPRESENTATIVE'
@@ -85,7 +113,7 @@ export function PaymentResult({ approval, attempt, gateway, cards, onReturn, onR
       <h1>모의 결제 결과</h1>
       <div className="virtual-payment-panel payment-result-card">
         <h2 role="status">{success && <span className="payment-check"><Icon name="check" /></span>}
-          {success ? '모의 승인 완료' : '모의 승인 실패'}
+          {cancelled ? '모의 결제 취소 완료' : success ? '모의 승인 완료' : '모의 승인 실패'}
         </h2>
         <p className="payment-result-merchant">{orderName(attempt.selection.order)}</p>
         <p className="payment-result-price">{formatWon(approval.amountWon)}<small>원</small></p>
@@ -146,11 +174,21 @@ export function PaymentResult({ approval, attempt, gateway, cards, onReturn, onR
           </ul>
         </Section>
       </div>}
-      {success && <button className="payment-cancel" disabled title="결제 취소는 준비 중이에요.">결제 취소</button>}
+      {success && !cancelled && approval.cancellableAmountWon > 0 &&
+        <button className="payment-cancel" disabled={!gateway.cancel} onClick={() => setConfirming(true)}>결제 취소</button>}
+      {confirming && <Sheet title="결제 취소" onClose={() => {
+        if (!cancelling) setConfirming(false)
+      }}>
+        <p className="sheet-description">{formatWon(approval.cancellableAmountWon)}원을 전액 취소할까요?</p>
+        {cancelError && <p className="sheet-description" role="alert">{cancelError}</p>}
+        <button type="button" className="primary-button" disabled={cancelling} onClick={() => void cancelPayment()}>
+          {cancelling ? '취소 중' : '결제 취소 확인'}
+        </button>
+      </Sheet>}
       <div className="payment-footer">
         <p className="payment-disclaimer">실제 금융거래는 발생하지 않습니다.</p>
         {!success && <button className="payment-secondary" onClick={onRestart}>새 승인 시도</button>}
-        <button className="payment-primary" onClick={onReturn}>주문 목록으로</button>
+        <button className="payment-primary" onClick={() => onReturn(cancelled)}>주문 목록으로</button>
       </div>
     </section>
   )

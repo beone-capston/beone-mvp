@@ -1,18 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { ManualCardForm } from './ManualCardForm'
+import { AuthApiError } from '../auth/api'
 import { Icon } from '../components/Icon'
 import { cardDesigns } from '../data/portfolio'
 import type { CardImportAdapter, SyncResponse } from './contract'
 import type { ImportedCardRepository } from './repository'
 import './card-import.css'
 
-export type CardImport = { adapter: CardImportAdapter; repository: ImportedCardRepository }
+export type CardImport = { adapter: CardImportAdapter; repository?: ImportedCardRepository }
 type Phase = 'editing' | 'connecting' | 'querying' | 'failed' | 'results' | 'registering'
 
 const steps = ['카드사 계정 연결', '보유 카드·이용정보 조회', '내 카드 목록 반영']
 
 export function CardImportPage({ importer, onClose }: { importer: CardImport; onClose: () => void }) {
   const { adapter, repository } = importer
+  const [manual, setManual] = useState(false)
   const [phase, setPhase] = useState<Phase>('editing')
   const [loginId, setLoginId] = useState('')
   const [password, setPassword] = useState('')
@@ -21,7 +24,8 @@ export function CardImportPage({ importer, onClose }: { importer: CardImport; on
   const [result, setResult] = useState<SyncResponse>()
   const [selected, setSelected] = useState<string[]>([])
   const [failed, setFailed] = useState<string[]>([])
-  const [registered, setRegistered] = useState(() => repository.list())
+  const [registered, setRegistered] = useState(() => repository?.list().flatMap(card => card.cardProductId ?? []) ?? [])
+  const [failureText, setFailureText] = useState('')
   const operation = useRef<AbortController | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const screen = phase === 'connecting' || phase === 'querying' ? 'loading'
@@ -61,7 +65,10 @@ export function CardImportPage({ importer, onClose }: { importer: CardImport; on
       setPhase('results')
     } catch (error) {
       if (!signal.aborted) {
-        if (error instanceof Error && error.message === 'RECONNECT_REQUIRED') setConnected(false)
+        const code = error instanceof AuthApiError ? error.code : ''
+        if (['CODEF_LOGIN_FAILED', 'CODEF_RECONNECT_REQUIRED', 'CODEF_NOT_CONNECTED'].includes(code) ||
+          (error instanceof Error && error.message === 'RECONNECT_REQUIRED')) setConnected(false)
+        setFailureText(code === 'NOT_FOUND' ? '이 환경에서는 카드사 연결을 사용할 수 없어요.' : '')
         setPhase('failed')
       }
     } finally {
@@ -74,7 +81,7 @@ export function CardImportPage({ importer, onClose }: { importer: CardImport; on
     const product = candidate.mappingStatus === 'CANDIDATE'
       ? cardDesigns.find(card => card.cardProductId === candidate.candidateCardProductId)
       : undefined
-    return { candidate, product, alreadyRegistered: Boolean(product && registered.some(card => card.cardProductId === product.cardProductId)) }
+    return { candidate, product, alreadyRegistered: Boolean(product && registered.includes(product.cardProductId)) }
   })
   const selectable = rows.filter(row => row.product && !row.alreadyRegistered)
 
@@ -100,8 +107,8 @@ export function CardImportPage({ importer, onClose }: { importer: CardImport; on
           if (confirmed.userCardId !== userCardId || confirmed.mapping.cardProductId !== productId) {
             throw new Error('MAPPING_RESPONSE_MISMATCH')
           }
-          repository.add(confirmed)
-          setRegistered(repository.list())
+          repository?.add(confirmed)
+          setRegistered(current => [...current, productId])
         } catch {
           if (signal.aborted) return
           incomplete.push(userCardId)
@@ -119,6 +126,8 @@ export function CardImportPage({ importer, onClose }: { importer: CardImport; on
     }
   }
 
+  if (manual) return <ManualCardForm adapter={adapter} onBack={() => setManual(false)} onComplete={onClose} />
+
   if (screen === 'editing') return (
     <form className="card-import card-import--editing" onSubmit={query} autoComplete="off">
       <h1 ref={heading} tabIndex={-1}>
@@ -130,16 +139,16 @@ export function CardImportPage({ importer, onClose }: { importer: CardImport; on
         <label>카드사 홈페이지 아이디
           <input autoComplete="off" autoCapitalize="none" spellCheck={false} value={loginId}
             onChange={event => setLoginId(event.target.value)} placeholder="아이디를 입력해 주세요"
-            aria-invalid={invalidId || undefined} aria-describedby={invalidId ? 'card-import-id-error' : 'card-import-test'} />
+            aria-invalid={invalidId || undefined} aria-describedby={invalidId ? 'card-import-id-error' : repository ? 'card-import-test' : undefined} />
         </label>
         {invalidId && <p id="card-import-id-error" className="card-import-error" role="alert">아이디의 앞뒤 공백과 사용할 수 없는 문자를 확인해 주세요.</p>}
         <label>카드사 홈페이지 비밀번호
           <input type="password" autoComplete="off" value={password} onChange={event => setPassword(event.target.value)}
             placeholder="비밀번호를 입력해 주세요" aria-invalid={invalidPassword || undefined}
-            aria-describedby={invalidPassword ? 'card-import-password-error' : 'card-import-test'} />
+            aria-describedby={invalidPassword ? 'card-import-password-error' : repository ? 'card-import-test' : undefined} />
         </label>
         {invalidPassword && <p id="card-import-password-error" className="card-import-error" role="alert">비밀번호에 사용할 수 없는 문자가 있어요.</p>}
-        <p id="card-import-test" className="card-import-test">테스트용 아이디와 비밀번호를 입력해 주세요.</p>
+        {repository && <p id="card-import-test" className="card-import-test">테스트용 아이디와 비밀번호를 입력해 주세요.</p>}
       </section>
       <section className="card-import-disclosure">
         <h2>연결 후 조회하는 정보</h2>
@@ -155,6 +164,12 @@ export function CardImportPage({ importer, onClose }: { importer: CardImport; on
       </section>
       <div className="card-import-actions">
         <button type="submit" className="primary-button" disabled={!valid}>연결하고 카드 가져오기</button>
+        {adapter.registerManual && <button type="button" className="card-import-secondary" onClick={() => {
+          setLoginId('')
+          setPassword('')
+          setConsent(false)
+          setManual(true)
+        }}>카드 직접 등록</button>}
       </div>
     </form>
   )
@@ -180,7 +195,7 @@ export function CardImportPage({ importer, onClose }: { importer: CardImport; on
       <span className="card-import-warning" aria-hidden="true">!</span>
       <h1 id="card-failed-title" ref={heading} tabIndex={-1}>카드를<br />가져오지 못했어요</h1>
       <p className="card-import-failure-note" role="alert">
-        {connected ? '잠시 후 카드 가져오기를 다시 시도해주세요' : '연결 정보를 확인한 뒤 다시 시도해주세요'}
+        {failureText || (connected ? '잠시 후 카드 가져오기를 다시 시도해주세요' : '연결 정보를 확인한 뒤 다시 시도해주세요')}
       </p>
       <div className="card-import-actions">
         <button className="primary-button" onClick={() => {
@@ -190,6 +205,11 @@ export function CardImportPage({ importer, onClose }: { importer: CardImport; on
             setPhase('editing')
           }
         }}>다시 가져오기</button>
+        {adapter.registerManual && <button type="button" className="card-import-secondary" onClick={() => {
+          setPhase('editing')
+          setConsent(false)
+          setManual(true)
+        }}>카드 직접 등록</button>}
         <button className="card-import-secondary" onClick={onClose}>메인으로 돌아가기</button>
       </div>
     </section>

@@ -225,25 +225,34 @@ function BenefitsContent({ api, mode, scope, month, tab, selectedId, onCard }: {
   selectedId?: string; onCard: (id: string) => void
 }) {
   const cards = useRead(scope, signal => api.cards(mode, signal))
+  if (tab === 1) return <History key={month} api={api} mode={mode} scope={scope} month={month} cards={cards.value ?? []} />
   if (!cards.value) return <Feedback error={cards.error} retry={cards.retry} />
   const selected = cards.value.find(card => card.userCardId === selectedId) ?? cards.value[0]
-  if (tab === 1) return <History key={month} api={api} mode={mode} scope={scope} month={month} cards={cards.value} />
   if (!selected) return <p className="benefit-feedback">조회할 보유 카드가 없어요.</p>
   return <Overview key={month + ':' + selected.userCardId} api={api} mode={mode} scope={scope} month={month}
     cards={cards.value} card={selected} onCard={onCard} />
 }
 
-export function BenefitsPage({ mode, active, api }: { mode: PortfolioMode; active: boolean; api: BenefitsApi }) {
-  const [months, setMonths] = useState<Partial<Record<PortfolioMode, string>>>({})
-  const [selected, setSelected] = useState<Partial<Record<PortfolioMode, string>>>({})
+export type BenefitSelection = { month: string; cardId: string }
+
+export function BenefitsPage({ mode, active, api, recentPayment }: {
+  mode: PortfolioMode; active: boolean; api: BenefitsApi; recentPayment?: BenefitSelection
+}) {
+  const [months, setMonths] = useState<Partial<Record<PortfolioMode, { value: string; payment?: BenefitSelection }>>>({})
+  const [selected, setSelected] = useState<Partial<Record<PortfolioMode, { value: string; payment?: BenefitSelection }>>>({})
   const [tab, setTab] = useState(0)
-  const month = months[mode] ?? seoulDate().slice(0, 7)
+  const month = (months[mode]?.payment === recentPayment ? months[mode]?.value : undefined)
+    ?? recentPayment?.month ?? seoulDate().slice(0, 7)
+  const selectedId = (selected[mode]?.payment === recentPayment ? selected[mode]?.value : undefined)
+    ?? recentPayment?.cardId
   const [year, monthNumber] = month.split('-')
   const scope = api.context + ':' + mode
   if (!active) return null
 
   function changeMonth(value: string) {
-    if (/^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(value)) setMonths(previous => ({ ...previous, [mode]: value }))
+    if (/^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
+      setMonths(previous => ({ ...previous, [mode]: { value, payment: recentPayment } }))
+    }
   }
 
   return (
@@ -276,7 +285,9 @@ export function BenefitsPage({ mode, active, api }: { mode: PortfolioMode; activ
       </div>
       <div id="benefit-panel" role="tabpanel" aria-labelledby={'benefit-tab-' + tab}>
         <BenefitsContent key={scope} api={api} mode={mode} scope={scope} month={month} tab={tab}
-          selectedId={selected[mode]} onCard={value => setSelected(previous => ({ ...previous, [mode]: value }))} />
+          selectedId={selectedId} onCard={value => setSelected(previous => ({
+            ...previous, [mode]: { value, payment: recentPayment },
+          }))} />
       </div>
     </section>
   )

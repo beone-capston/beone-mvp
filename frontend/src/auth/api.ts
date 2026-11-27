@@ -69,7 +69,7 @@ export function getCsrf() {
   return pendingCsrf
 }
 
-async function post<T>(path: string, body: PostBody, expectedStatus?: number): Promise<T> {
+async function post<T>(path: string, body: PostBody | undefined, expectedStatus?: number): Promise<T> {
   // Get a token for the current cookie before each explicit attempt. Never replay a POST.
   const csrf = await getCsrf()
   if (typeof csrf.headerName !== 'string' || !csrf.headerName || typeof csrf.token !== 'string' || !csrf.token) {
@@ -77,7 +77,7 @@ async function post<T>(path: string, body: PostBody, expectedStatus?: number): P
   }
   return request<T>(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
+    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), [csrf.headerName]: csrf.token },
     body: JSON.stringify(body),
   }, expectedStatus)
 }
@@ -106,6 +106,9 @@ export const authApi = {
     const member = await post<Member>('login', credentials, 200)
     checkMember(member)
     return member
+  },
+  async logout() {
+    await post<void>('logout', undefined, 204)
   },
   async signUp(credentials: Credentials) {
     return checkAcceptance(await post<MailAcceptance>('sign-up', credentials, 202))
