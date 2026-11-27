@@ -31,3 +31,4 @@ fixtures/private/
 tools/*/build/
 tools/*/.gradle/
 out/
+tools/*/bin/

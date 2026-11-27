@@ -187,10 +187,12 @@ type Result = {
   monthError?: string
 }
 
-export function CardServicesPage({ card, onClose, mode = 'MY_CARDS' }: { card: WalletCard; mode?: PortfolioMode; onClose: () => void }) {
+export function CardServicesPage({ card, onClose, mode = 'MY_CARDS', staticCatalog = false }: {
+  card: WalletCard; mode?: PortfolioMode; staticCatalog?: boolean; onClose: () => void
+}) {
   const preview = useContext(LocalPreview)
   const serverCard = card.source === 'SERVER'
-  const catalogOnly = preview || card.source === 'MOCK_IMPORTED' || (!serverCard && offlineCatalog)
+  const catalogOnly = staticCatalog || preview || card.source === 'MOCK_IMPORTED' || (!serverCard && offlineCatalog)
   const canReadMonth = !preview && (serverCard || demoMode)
   const [asOf] = useState(seoulToday)
   const month = asOf.slice(0, 7)

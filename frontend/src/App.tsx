@@ -35,8 +35,8 @@ interface ModeState {
 
 const mockDevice = import.meta.env.DEV && import.meta.env.VITE_DEVICE_AUTH_MODE === 'mock'
 
-function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, mockAuth = mockDevice, benefits = benefitsApi, preferenceApi, cardImporter, mockOrders = false }: {
-  cardSource?: CardSource; orders?: OrderApi; paymentGateway?: PaymentGateway; mockAuth?: boolean; benefits?: BenefitsApi; preferenceApi?: PreferenceApi; cardImporter?: CardImport; mockOrders?: boolean
+function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, mockAuth = mockDevice, benefits = benefitsApi, virtualBenefits, preferenceApi, cardImporter, mockOrders = false }: {
+  cardSource?: CardSource; orders?: OrderApi; paymentGateway?: PaymentGateway; mockAuth?: boolean; benefits?: BenefitsApi; virtualBenefits?: BenefitsApi; preferenceApi?: PreferenceApi; cardImporter?: CardImport; mockOrders?: boolean
 }) {
   const [menu, setMenu] = useState<Menu>('빠른결제')
   const [mode, setMode] = useState<PortfolioMode>('MY_CARDS')
@@ -223,7 +223,8 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
       {!authOpen && !importOpen && !servicePage && menu === '빠른결제' && <PortfolioModeTabs mode={mode} onChange={selectMode} />}
       <main id="main">
         {importOpen && cardImporter && <CardImportPage importer={cardImporter} onClose={closeCardImport} />}
-        {servicePage && <CardServicesPage key={servicePage.id} card={servicePage} mode={mode} onClose={closeServices} />}
+        {servicePage && <CardServicesPage key={servicePage.id} card={servicePage} mode={mode}
+          staticCatalog={!myMode && Boolean(virtualBenefits)} onClose={closeServices} />}
         <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode} hidden={authOpen || importOpen || Boolean(servicePage) || menu !== '빠른결제'}>
           {menu === '빠른결제' ? (
             <section className="quick-payment" key={mode}>
@@ -280,7 +281,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
             </section>
           ) : null}
         </div>
-        <BenefitsPage mode={mode} api={benefits} recentPayment={benefitSelection[mode]}
+        <BenefitsPage mode={mode} api={myMode ? benefits : virtualBenefits ?? benefits} recentPayment={benefitSelection[mode]}
           active={!authOpen && !importOpen && menu === '혜택'} />
         {(['MY_CARDS', 'VIRTUAL_PORTFOLIO'] as const).map(orderMode => (
           <OrderWorkspace key={orderMode} mode={orderMode} api={orders}
