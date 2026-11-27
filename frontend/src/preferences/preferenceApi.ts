@@ -1,4 +1,4 @@
-import { readHeldCards, toWalletCard } from '../data/heldCards'
+import { isRegisteredCard, readHeldCards, toWalletCard } from '../data/heldCards'
 import type { WalletCard } from '../data/portfolio'
 import { AuthApiError } from '../auth/api'
 import type { PaymentPreference, PortfolioMode } from '../data/portfolio'
@@ -58,7 +58,7 @@ export function createPreferenceApi(context: WorkspaceContext): PreferenceApi {
     async cards(mode, signal) {
       const held = await readHeldCards(context, mode, signal)
       // CODEF sync persists candidates before selection. Only confirmed CODEF cards enter the wallet.
-      return held.filter(card => card.holdingSource !== 'CODEF' || card.mapping?.status === 'USER_CONFIRMED')
+      return held.filter(isRegisteredCard)
         .map(toWalletCard).map(wallet => ({ id: wallet.id, name: wallet.name,
           canBeRepresentative: wallet.canBeRepresentative, wallet }))
     },

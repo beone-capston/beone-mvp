@@ -1,9 +1,10 @@
-import { useEffect, useEffectEvent, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { PortfolioMode } from '../data/portfolio'
 import { Icon } from '../components/Icon'
 import { Sheet } from '../components/Sheet'
 import { merchantLabel } from '../orders/merchantClasses'
 import { formatWon, paymentMethods } from '../orders/order'
+import { BenefitsError } from './api'
 import { bucketRows, monthPeriod, productId, seoulDate, shiftMonth } from './model'
 import type { BenefitsApi, HeldCard, LedgerRow, Period, StateValue } from './model'
 import './benefits.css'
@@ -78,10 +79,37 @@ function Overview({ api, mode, scope, month, card, cards, onCard }: {
     return { product, summary: summary.find(item => item.cardProductId === id) }
   })
   const [detail, setDetail] = useState<string>()
+  const refresh = useRef<AbortController | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMessage, setRefreshMessage] = useState('')
+  useEffect(() => () => refresh.current?.abort(), [])
   const value = monthly.value
+  const performance = value?.previousMonthPerformanceWon
+  const reference = performance?.codefReference
+  const showsReference = performance?.value == null && reference?.currentUseWon != null
+  const performanceAmount = performance?.value ?? reference?.currentUseWon
   const product = rules.value?.product
   const rows = product && value ? bucketRows(product, value, month) : []
   const active = rows.find(row => row.id === detail)
+
+  async function refreshPerformance() {
+    if (refresh.current || !api.refreshCodefPerformance) return
+    const controller = new AbortController()
+    refresh.current = controller
+    setRefreshing(true)
+    setRefreshMessage('')
+    try {
+      await api.refreshCodefPerformance(controller.signal)
+      if (!controller.signal.aborted) monthly.retry()
+    } catch (error) {
+      if (!controller.signal.aborted) setRefreshMessage(
+        error instanceof BenefitsError ? error.message : '카드사 실적을 가져오지 못했어요. 잠시 후 다시 시도해 주세요.',
+      )
+    } finally {
+      refresh.current = null
+      if (!controller.signal.aborted) setRefreshing(false)
+    }
+  }
   return (
     <div className="benefit-overview">
       <label className="benefit-card-picker">
@@ -94,13 +122,20 @@ function Overview({ api, mode, scope, month, card, cards, onCard }: {
       {!value ? <Feedback error={monthly.error} retry={monthly.retry} /> : (
         <>
           <button className="benefit-performance" type="button" onClick={event => { event.currentTarget.focus({ preventScroll: true }); setDetail('performance') }}>
-            <span>전월 인정 실적</span>
-            <strong>{value.previousMonthPerformanceWon.value == null ? '확인 필요' : <>
-              {formatWon(value.previousMonthPerformanceWon.value)} <small>원</small>
+            <span>{showsReference ? '카드사 조회 실적(참고)' : '전월 인정 실적'}</span>
+            <strong>{performanceAmount == null ? '확인 필요' : <>
+              {formatWon(performanceAmount)} <small>원</small>
             </>}</strong>
-            <small>{formatPeriod(value.previousMonthPerformanceWon.period)}</small>
+            <small>{formatPeriod(showsReference ? reference.period : value.previousMonthPerformanceWon.period)}</small>
           </button>
-          {!value.snapshotAt && value.previousMonthPerformanceWon.value === null && value.limitBucketUsages.length === 0 &&
+          {mode === 'MY_CARDS' && card.holdingSource === 'CODEF' && api.refreshCodefPerformance &&
+            <div className="benefit-feedback">
+              <button type="button" disabled={refreshing} onClick={refreshPerformance}>
+                {refreshing ? '카드사 실적 조회 중…' : '카드사 실적 다시 조회'}
+              </button>
+              {refreshMessage && <p role="alert">{refreshMessage}</p>}
+            </div>}
+          {!showsReference && !value.snapshotAt && value.previousMonthPerformanceWon.value === null && value.limitBucketUsages.length === 0 &&
             <p className="benefit-feedback">이 달에 확인된 월간 상태값이 없어요.</p>}
           <h2>한도별 사용 현황</h2>
           {!id ? <p className="benefit-feedback">카드 상품 매핑이 확인되지 않았어요.</p>
@@ -118,9 +153,14 @@ function Overview({ api, mode, scope, month, card, cards, onCard }: {
                       </button>
                     ))}
                   </div>}
-          {detail && <Sheet title={active?.title ?? '전월 인정 실적'} onClose={() => setDetail(undefined)}>
+          {detail && <Sheet title={active?.title ?? (showsReference ? '카드사 조회 실적(참고)' : '전월 인정 실적')} onClose={() => setDetail(undefined)}>
             <div className="benefit-sheet">
               <Provenance state={active ? active.usage : value.previousMonthPerformanceWon} />
+              {detail === 'performance' && reference?.currentUseWon != null && <>
+                <p>카드사 조회 실적(참고) · {won(reference.currentUseWon)}</p>
+                <p>카드사 조회 기간 · {formatPeriod(reference.period)}</p>
+                {reference.fetchedAt && <p>카드사 조회 시점 · {reference.fetchedAt}</p>}
+              </>}
               <p>입력 시점 · {value.snapshotAt ?? '확인 필요'}</p>
               <p>카드 사용 등록일 · {value.registeredOn?.value ?? '확인 필요'}</p>
               <p>스냅샷 이후 · {value.afterSnapshot

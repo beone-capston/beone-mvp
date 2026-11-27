@@ -3,6 +3,7 @@ import type { PaymentDetail } from '../payment/contract'
 
 export type Period = { from: string; to: string }
 export type StateValue<T> = { value: T | null; source: string; period: Period | null; updatedAt: string | null; usable: boolean; reason: string | null }
+export type CodefPerformanceReference = { currentUseWon: number | null; period: Period; fetchedAt: string | null }
 export type HeldCard = { userCardId: string; displayName: string; holdingSource: string; cardProductId?: string | null;
   mapping: { status: string; cardProductId: string | null } | null }
 export type ProductSummary = { cardProductId: string; cardName: string; ruleStatus: string }
@@ -16,7 +17,7 @@ export type Product = ProductSummary & {
 }
 export type Monthly = {
   userCardId: string; month: string; snapshotAt: string | null
-  previousMonthPerformanceWon: StateValue<number>
+  previousMonthPerformanceWon: StateValue<number> & { codefReference?: CodefPerformanceReference | null }
   limitBucketUsages: (StateValue<number> & { limitBucketId: string })[]
   otherBucketsUsedWon: StateValue<number>; registeredOn: StateValue<string>
   selectedServices: { serviceId: string; effectiveFrom: string; usable: boolean }[]
@@ -39,6 +40,7 @@ export interface BenefitsApi {
   products(asOf: string, signal: AbortSignal): Promise<ProductSummary[]>
   product(id: string, asOf: string, signal: AbortSignal): Promise<Product>
   monthly(mode: PortfolioMode, card: string, month: string, signal: AbortSignal): Promise<Monthly>
+  refreshCodefPerformance?(signal: AbortSignal): Promise<void>
   ledger(mode: PortfolioMode, month: string, signal: AbortSignal, card?: string): Promise<Ledger>
   payment(mode: PortfolioMode, id: string, signal: AbortSignal): Promise<PaymentDetail>
 }
