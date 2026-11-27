@@ -14,6 +14,10 @@ export type HeldCard = {
   excludedFromRecommendation: boolean
 }
 
+export function isRegisteredCard(card: { holdingSource: string; mapping?: { status: string } | null }) {
+  return card.holdingSource !== 'CODEF' || card.mapping?.status === 'USER_CONFIRMED'
+}
+
 export async function readHeldCards(context: WorkspaceContext, mode: PortfolioMode, signal?: AbortSignal) {
   const response = await workspaceRequest(context, mode, 'cards', { signal })
   const payload = await response.json().catch(() => null)

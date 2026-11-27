@@ -1,4 +1,5 @@
 import { authBaseUrl } from '../auth/api'
+import { isRegisteredCard } from '../data/heldCards'
 import type { PortfolioMode } from '../data/portfolio'
 import { parsePaymentDetail } from '../payment/paymentApi'
 import type { BenefitsApi, HeldCard, Ledger, Monthly, Product, ProductSummary, StateValue } from './model'
@@ -9,6 +10,9 @@ export class BenefitsError extends Error {
 }
 const isWon = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value)
 const nullableWon = (value: unknown) => value === null || isWon(value)
+const validReference = (reference: Monthly['previousMonthPerformanceWon']['codefReference']) =>
+  reference == null || (nullableWon(reference.currentUseWon) && typeof reference.period?.from === 'string' &&
+    typeof reference.period?.to === 'string' && (reference.fetchedAt === null || typeof reference.fetchedAt === 'string'))
 const validAmount = (value: StateValue<number>) => value && nullableWon(value.value) &&
   typeof value.usable === 'boolean' && typeof value.source === 'string' &&
   (value.period === null || (typeof value.period?.from === 'string' && typeof value.period?.to === 'string'))
@@ -44,7 +48,7 @@ export function createBenefitsApi(context: Context): BenefitsApi {
       const data = await get<{ items: HeldCard[] }>('me/cards', signal, mode)
       if (!Array.isArray(data.items) || !data.items.every(card => /^uc-\d+$/.test(card?.userCardId ?? '') &&
         typeof card.displayName === 'string')) throw invalid()
-      return data.items
+      return data.items.filter(isRegisteredCard)
     },
     async products(asOf, signal) {
       const data = await get<{ items: ProductSummary[] }>('card-products?asOf=' + encodeURIComponent(asOf), signal)
@@ -65,6 +69,7 @@ export function createBenefitsApi(context: Context): BenefitsApi {
       if (!/^uc-\d+$/.test(card)) throw invalid()
       const data = await get<Monthly>('me/cards/' + encodeURIComponent(card) + '/monthly-states/' + month, signal, mode)
       if (data.userCardId !== card || data.month !== month || !validAmount(data.previousMonthPerformanceWon) ||
+        !validReference(data.previousMonthPerformanceWon.codefReference) ||
         !Array.isArray(data.limitBucketUsages) || !data.limitBucketUsages.every(usage => validAmount(usage) &&
           typeof usage.limitBucketId === 'string') || !validAmount(data.otherBucketsUsedWon) ||
         !Array.isArray(data.selectedServices) || !(data.afterSnapshot === null ||

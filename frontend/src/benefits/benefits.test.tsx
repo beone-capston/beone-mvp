@@ -15,6 +15,48 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+it('이미 등록된 CODEF 카드의 참고 실적을 다시 조회한다', async () => {
+  const listed = await mockBenefitsApi.cards('MY_CARDS', signal)
+  const snapshot = await mockBenefitsApi.monthly('MY_CARDS', 'uc-2001', '2026-11', signal)
+  const performance = { ...snapshot.previousMonthPerformanceWon, value: null, usable: false }
+  const monthly = vi.fn()
+    .mockResolvedValueOnce({ ...snapshot, previousMonthPerformanceWon: performance })
+    .mockResolvedValueOnce({ ...snapshot, previousMonthPerformanceWon: { ...performance, codefReference: {
+      currentUseWon: 523000, period: { from: '2026-10-01', to: '2026-10-31' }, fetchedAt: null,
+    } } })
+  const refreshCodefPerformance = vi.fn().mockResolvedValue(undefined)
+  render(<App benefits={{ ...mockBenefitsApi, monthly, refreshCodefPerformance,
+    cards: async () => listed.map(card => ({ ...card, holdingSource: 'CODEF' })) }} />)
+  click('혜택')
+  fireEvent.click(await screen.findByRole('button', { name: '카드사 실적 다시 조회' }))
+  expect(refreshCodefPerformance).toHaveBeenCalledOnce()
+  expect(await screen.findByText('523,000')).toBeVisible()
+  expect(monthly).toHaveBeenCalledTimes(2)
+})
+
+it.each([
+  [null, 0, '카드사 조회 실적(참고)', '0'],
+  [null, 523000, '카드사 조회 실적(참고)', '523,000'],
+  [300000, 523000, '전월 인정 실적', '300,000'],
+] as const)('저장 실적 %s와 카드사 참고 실적 %s를 구분한다', async (stored, queried, label, amount) => {
+  const snapshot = await mockBenefitsApi.monthly('MY_CARDS', 'uc-2001', '2026-11', signal)
+  const data = { ...snapshot, previousMonthPerformanceWon: {
+    ...snapshot.previousMonthPerformanceWon, value: stored, usable: stored !== null,
+    codefReference: { currentUseWon: queried, period: { from: '2026-10-01', to: '2026-10-31' },
+      fetchedAt: '2026-11-25T10:00:00+09:00', usedInCalculation: false },
+  } }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ data })))
+  const member = createBenefitsApi('member')
+  render(<App benefits={{ ...mockBenefitsApi, monthly: member.monthly }} />)
+  click('혜택')
+  const summary = await screen.findByRole('button', { name: new RegExp(label.replace(/[()]/g, '\\$&')) })
+  expect(summary).toHaveTextContent(amount)
+  expect(summary).toHaveTextContent('2026.10.01 ~ 2026.10.31')
+  fireEvent.click(summary)
+  expect(within(screen.getByRole('dialog')).getByText(/카드사 조회 실적\(참고\) ·/)).toHaveTextContent(queried.toLocaleString('ko-KR'))
+  if (stored === null) expect(screen.getByRole('button', { name: /스타벅스/ })).toHaveTextContent('월 한도 확인 필요')
+})
+
 it('빠른결제 모드를 사용하고 월과 선택 카드가 해당 범위에 맞게 바뀐다', async () => {
   const monthly = vi.fn(mockBenefitsApi.monthly)
   const product = vi.fn(mockBenefitsApi.product)
@@ -63,6 +105,17 @@ it('서버 상품 ID를 보존하며 미확인 매핑을 조회하지 않는다'
     mapping: { status: 'USER_CONFIRMED', cardProductId: '09174' } }
   expect(productId(card)).toBe('09174')
   expect(productId({ ...card, mapping: { ...card.mapping, status: 'UNMAPPED' } })).toBeNull()
+})
+
+it('회원 혜택 카드 목록에서 등록하지 않은 CODEF 후보를 제외한다', async () => {
+  const candidate = { userCardId: 'uc-1', displayName: '조회 후보', holdingSource: 'CODEF',
+    mapping: { status: 'CANDIDATE', cardProductId: null } }
+  const registered = { userCardId: 'uc-2', displayName: '등록한 카드', holdingSource: 'CODEF',
+    mapping: { status: 'USER_CONFIRMED', cardProductId: '09174' } }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ data: { items: [candidate, registered] } })))
+  const cards = await createBenefitsApi('member').cards('MY_CARDS', signal)
+  expect(cards).toEqual([registered])
+  expect(productId(cards[0])).toBe('09174')
 })
 
 it('부모와 하위 한도를 각각 표시하고 합산하지 않으며 기간이 불명확하면 참고 한도를 숨긴다', async () => {
