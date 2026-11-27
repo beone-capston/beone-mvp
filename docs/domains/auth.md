@@ -77,11 +77,15 @@ com.beone.api.auth
 │   ├── MemberApiInterceptor      member 업무 API 세션·CSRF 검사, 쿠키 재발급(컨트롤러가 있는 경로만)
 │   ├── MemberApiWebConfiguration 위 인터셉터를 /api/v1/me, /api/v1/me/**에 등록, member
 │   ├── MemberApiExceptionHandler member 업무 API의 401·403을 인증 API와 같은 응답으로(전역, member)
+│   ├── MemberWithdrawalController 회원 탈퇴 DELETE /api/v1/me, member(T5)
+│   ├── AccountDeletionRequest·PasswordConfirmationFailedException 탈퇴 요청 본문, 비밀번호 불일치(400 password 필드 오류)
 │   └── AuthenticatedMember       검사를 통과한 요청의 회원 ID(요청 속성), user 패키지가 읽음
 ├── application/
 │   ├── AuthSessionService        세션 발급·조회·만료 판정, 회원 세션 발급(동시 5개)·종료, member 업무 요청 검사(checkMemberRequest), local·demo·member
 │   ├── MemberRequestCheck        member 업무 요청 검사 결과(Authenticated·Unauthenticated·CsrfInvalid)
 │   ├── MemberEmailVerifiedEvent  이메일 인증 완료 이벤트(장부 생성용)
+│   ├── MemberWithdrawalService·WithdrawalResult 회원 탈퇴 판정·삭제와 결과 타입, member(T5)
+│   ├── MemberWithdrawnEvent      회원 탈퇴 이벤트(장부 삭제용, 로그용 참조값 ref 포함)
 │   ├── SessionTokens             세션 ID·CSRF 토큰 생성, SHA-256 해시, 상수 시간 비교
 │   ├── AnonymousSessionProperties 익명 세션 수명 설정값(미사용 2시간, 절대 상한 없음)
 │   ├── AuthConfiguration         설정값 등록, local·demo·member
@@ -96,7 +100,7 @@ com.beone.api.auth
 │   ├── SmtpAuthMailSender·SmtpMailConfiguration prod SMTP 발송기와 필수 설정 검사(#207)
 │   ├── MailRateLimitedException·AuthTokenInvalidException 429·400 예외
 │   ├── MemberLoginService        로그인 판정·로그아웃·현재 세션, local·demo·member
-│   ├── LoginAttemptThrottle      같은 이메일 15분 5회 실패 잠금
+│   ├── LoginAttemptThrottle      같은 이메일 15분 5회 실패 잠금(탈퇴 비밀번호 불일치도 합산), 탈퇴 때 기록 삭제(forget)
 │   └── LoginResult·MemberSession·CurrentMemberSession 결과 타입
 └── persistence/
     ├── AuthSessionEntity         auth_sessions 한 행(회원 ID가 있으면 회원 세션)
@@ -116,6 +120,8 @@ com.beone.api.auth
 - 같은 서비스가 회원 세션도 다룹니다. `issueMember`는 요청의 이전 세션(익명이든 회원이든)을 지우고, 그 회원의 만료 세션을 지우고, 유효한 세션이 이미 5개면 가장 오래 쓰지 않은 것(마지막 사용 시각, 같으면 먼저 발급한 것)부터 지운 뒤 새 세션을 만듭니다. 로그인 응답 쿠키 `Max-Age`는 사본대로 30일(2592000초)이고, 이후 CSRF를 통과한 POST·`GET /api/v1/auth/csrf`가 서버 미사용 만료까지(최대 7일)로 다시 심습니다. `useMember`는 회원 세션만 찾아 사용 시각을 갱신하며, 익명 세션은 갱신하지 않고 빈 값입니다. `end`는 쿠키의 세션을 지웁니다.
 - [`MemberLoginService`](../../backend/src/main/java/com/beone/api/auth/application/MemberLoginService.java)는 로그인 판정 순서를 맡습니다: [`LoginAttemptThrottle`](../../backend/src/main/java/com/beone/api/auth/application/LoginAttemptThrottle.java) 잠금(429, 비밀번호를 보지 않음) → 비밀번호 확인(계정 없음도 시작 때 만든 더미 해시와 Argon2id 비교, 불일치와 같은 401, 둘 다 실패로 셈) → 이메일 인증(403, 비밀번호가 맞은 뒤에만, 실패로 세지 않음) → 실패 기록 삭제 → `issueMember`. 실패 기록이 커밋되도록 실패도 예외가 아니라 [`LoginResult`](../../backend/src/main/java/com/beone/api/auth/application/LoginResult.java) 값으로 돌려주고, 컨트롤러가 오류 응답으로 바꿉니다. 잠금 순서는 로그인 잠금 행 → 회원 행 → 세션 행이고, 로그인 트랜잭션은 READ COMMITTED입니다. MySQL 기본 격리(REPEATABLE READ)에서는 회원별 세션 잠금 조회가 인덱스 간격까지 잠가 세션이 없던 서로 다른 회원의 동시 로그인이 교착했기 때문입니다(동시 시험에서 재현 뒤 수정). 같은 회원의 동시 로그인은 회원 행 잠금으로 차례로 처리돼 상한을 넘지 않습니다. 서로 다른 두 계정의 세션으로 상대 계정에 동시에 로그인하면(계정 전환) 이전 세션 행과 대상 회원의 세션 행을 엇갈려 잠가 MySQL이 한쪽을 교착으로 되돌리므로, 진 로그인은 `TransactionTemplate`으로 새 트랜잭션을 열어 처음부터 다시 판정합니다(최대 3번, 실패 기록도 롤백돼 두 번 세지 않음). 현재 시각은 잠금 상태 행을 잡은 뒤에, 실패 시각은 비밀번호 비교 뒤에 읽어 잠금 대기·Argon2id 계산 시간만큼 판정이 늦거나 잠금이 짧아지지 않게 합니다.
 - [`LoginAttemptThrottle`](../../backend/src/main/java/com/beone/api/auth/application/LoginAttemptThrottle.java)은 이메일 SHA-256 해시로 `auth_login_throttles` 행을 만들거나 배타 잠금한 뒤(메일 요청 제한과 같은 방식) 잠금 시각을 봅니다. 실패하면 15분보다 오래된 실패 기록을 지우고 이번 실패를 더해, 15분 안 실패가 5번이면 지금부터 15분 동안 잠그고 실패 기록을 비웁니다. 잠긴 동안의 시도는 세지 않고 잠금을 늘리지 않습니다. 성공하면 실패 기록을 지웁니다.
+- [`MemberWithdrawalService`](../../backend/src/main/java/com/beone/api/auth/application/MemberWithdrawalService.java)는 회원 탈퇴(`DELETE /api/v1/me`, T5)를 한 READ COMMITTED 트랜잭션으로 처리합니다. 순서는 로그인 잠금 행 잠금 → 잠겨 있으면 429 → 회원 행 잠금 → 비밀번호 비교(불일치는 로그인 실패 1회로 기록하고 [`WithdrawalResult`](../../backend/src/main/java/com/beone/api/auth/application/WithdrawalResult.java) 값으로 돌려줘 커밋) → [`MemberWithdrawnEvent`](../../backend/src/main/java/com/beone/api/auth/application/MemberWithdrawnEvent.java) 동기 발행(user 패키지가 장부와 업무 행 삭제) → 로그인 실패·잠금 기록 삭제 → 회원 행 삭제입니다. 세션·인증 토큰은 외래 키 연쇄 삭제로 함께 지워지고, 메일 요청 제한 기록은 남깁니다. 잠금 순서를 로그인과 같게(로그인 잠금 행 → 회원 행) 하려고 이메일은 잠금 없이 먼저 읽습니다. 이벤트를 받는 쪽이 실패하면 탈퇴 전체가 롤백됩니다. 감사 기록은 커밋 뒤 로그 한 줄(`member withdrawn ref=…`)이며 `ref`는 회원 ID SHA-256 앞 12자입니다. auth는 이벤트만 발행하고 user·codef를 알지 않습니다.
+- [`MemberWithdrawalController`](../../backend/src/main/java/com/beone/api/auth/web/MemberWithdrawalController.java)는 `member` 업무 경로라 `MemberApiInterceptor`의 401·403을 먼저 거칩니다. 비밀번호 불일치는 세션이 유효하므로 401이 아니라 400 `INVALID_REQUEST`와 `password` 필드 오류로 답하고, 성공하면 갱신 쿠키를 지우는 쿠키(`Max-Age=0`) 하나로 덮어씁니다.
 - [`MemberSessionController`](../../backend/src/main/java/com/beone/api/auth/web/MemberSessionController.java)는 로그인 성공·로그아웃 응답에서 인터셉터가 심은 갱신 쿠키를 `HttpServletResponse.setHeader`로 덮어써 `Set-Cookie`를 하나만 보냅니다. 세션 조회는 쿠키를 다시 심지 않습니다(사본의 응답 헤더 예시대로).
 - [`SessionTokens`](../../backend/src/main/java/com/beone/api/auth/application/SessionTokens.java)는 상태가 없는 부품입니다.
   - 세션 ID: `SecureRandom` 32바이트를 패딩 없는 Base64URL로 쓴 43자입니다. DB에는 SHA-256 해시(16진수 64자)만 저장합니다.
@@ -135,7 +141,7 @@ com.beone.api.auth
   - 본문: 제목과 짧은 한국어 안내, 유효 시간(인증 30분·재설정 15분), 링크 한 줄의 평문입니다. 링크는 frontend의 기존 화면 계약(query 방식)을 따라 `<기준 주소>/email-verification?token=<토큰>`, `<기준 주소>/password-reset?token=<토큰>`입니다(재설정 화면은 frontend `AuthEntry`, 인증 화면은 frontend `EmailVerification`). 기준 주소는 요청의 Host 헤더가 아니라 설정값입니다(N2 권장안). **결정 필요(결정 28·N2 후속):** 토큰을 URL 조각(`#token=`)에 두면 서버·프록시 로그와 Referer에 실리지 않지만 frontend와 함께 바꿔야 합니다. 그 전까지 query 토큰은 공개 nginx 접근 로그에 남을 수 있으므로 LP-6 문서(`docs/deployment/public-proxy.md`)의 로그 형식에서 query를 빼는 것(`$request_uri` 대신 `$uri`)을 권장합니다.
   - 실패: 발송 예외를 밖으로 던지지 않고 다시 보내지 않습니다. 메일은 토큰 커밋 뒤에 보내므로 응답은 기존 계약대로 같은 202이고 202는 도착을 보장하지 않습니다. 실패 로그는 목적, 마스킹한 수신자(`m***@example.com`), 예외 클래스 이름만 남기고 토큰·링크·예외 문구·앱 비밀번호는 남기지 않습니다. 발송은 요청 스레드에서 커밋 뒤 동기로 하므로 SMTP가 느리면 응답이 최대 시간 제한만큼 늦어질 수 있습니다.
 - 요청 본문은 [`MemberEmail`](../../backend/src/main/java/com/beone/api/auth/web/MemberEmail.java)(정규화 뒤 형식·254자)과 [`NewPassword`](../../backend/src/main/java/com/beone/api/auth/web/NewPassword.java)(11~32자, 영문·숫자·ASCII 특수기호 각 1개 이상, 그 밖의 문자 불가)로 검사하고, 정의하지 않은 필드는 [`UnknownFieldRejecting`](../../backend/src/main/java/com/beone/api/auth/web/UnknownFieldRejecting.java)이 400으로 만듭니다. 오류 응답과 `toString`에 비밀번호·토큰 값을 담지 않습니다.
-- 인증 부품은 `X-BeONE-Demo-User` 헤더와 `CurrentUserResolver`를 쓰지 않습니다. `user` 패키지와 의존 관계가 없습니다.
+- 인증 부품은 `X-BeONE-Demo-User` 헤더와 `CurrentUserResolver`를 쓰지 않습니다. `user` 패키지에 의존하지 않습니다(user가 auth의 이벤트·`AuthenticatedMember`를 읽는 한 방향).
 
 ## 처리 흐름
 
@@ -251,13 +257,14 @@ curl -i -X POST http://localhost:8080/api/v1/auth/password-resets \
 - `local`·`demo` CORS는 자격 증명을 허용하지 않아, 지금은 `localhost:5173` 화면에서 인증 API로 쿠키를 보낼 수 없습니다. API와 테스트는 동작합니다. 화면 연결 때 CORS를 따로 결정합니다.
 - `local`·`demo`에서는 회원 세션을 업무 API의 현재 사용자 결정(`CurrentUserResolver`·시연 헤더)에 연결하지 않습니다. `member`에서는 `MemberApiInterceptor`와 `user.web.MemberCurrentUserResolver`가 회원 세션으로 정합니다(결정 37). 로컬 브라우저 요청은 Vite 프록시를 통해 같은 주소에서 처리한다.
 - 만료 세션은 조회할 때와 그 회원이 다시 로그인할 때만 지웁니다. 주기적 정리는 없습니다.
+- 회원 탈퇴(T5)는 `member`에서만 등록합니다. Notion 명세 사본에 없는 API이고, 경로·비밀번호 불일치 상태 코드·남기는 표·DB 감사 표 여부·Notion 반영은 PR의 「결정 필요」에 권장안과 함께 적었습니다. 탈퇴한 회원의 데이터는 복구할 수 없고 보존 기간을 두지 않습니다(D10 변경 이력).
 - 로그인 실패 제한은 이메일 기준이며 IP 기준은 없습니다. 없는 이메일의 잠금 상태 행(이메일 해시)도 남고, 정리 기한은 메일 제한 기록과 함께 미정입니다. 15분보다 오래된 실패 기록은 같은 이메일의 다음 실패 때 지웁니다.
 - 세션 조회는 서버 미사용 만료를 늘리지만 쿠키를 다시 심지 않습니다(사본 응답 헤더대로). 쿠키 `Max-Age`는 로그인 30일이나 마지막 POST·CSRF 조회의 값을 따릅니다.
 - 미인증 계정·만료 토큰·메일 제한 기록의 정리 기한은 미정이라 지우지 않습니다. 쓴 토큰과 재발급으로 무효가 된 토큰은 바로 지웁니다.
 - 가짜 발송기는 서버 메모리에만 메일을 두므로 로컬에서 실제로 인증을 끝까지 해 보려면 테스트를 써야 합니다. `prod` SMTP 발송기의 링크는 frontend의 query 방식 경로를 따릅니다(조각 방식 전환은 결정 필요).
 - 재설정 요청 쿠키가 그 회원의 세션이면 그 세션도 지워집니다. 응답에는 다른 인증 POST처럼 갱신 쿠키가 붙지만 서버 세션은 없으므로 다음 요청 전에 `GET /api/v1/auth/csrf`로 새 세션을 받아야 합니다.
 - `V11`·`V13`은 임시 번호입니다. `develop`에 CODEF C3의 `V12__codef_syncs.sql`(#129)이 먼저 병합돼 지금 순서는 V9 → V10 → V11 → V12 → V13입니다. 최종 번호는 관리자가 병합 직전에 확인합니다.
-- 테스트: `SessionTokensTest`·`AnonymousSessionPropertiesTest`·`AuthSessionServiceTest`·`SessionCookieTest`(단위), `AuthCsrfApiWebTest`·`AuthCsrfProfileOffWebTest`(웹 슬라이스, 테스트 전용 POST 경로로 CSRF 검사), `AuthSessionIntegrationTest`(실제 HTTP·MySQL, V9 적용·해시 저장·만료). U2: `PasswordHasherTest`(Argon2 참조 구현 시험 벡터)·`EmailAddressesTest`·`MemberIdsTest`·`MailRequestThrottleTest`·`NewPasswordTest`(단위), `MemberRegistrationApiWebTest`(웹 슬라이스), `MemberRegistrationIntegrationTest`(실제 HTTP·MySQL, V11 적용·해시만 저장·계정 존재 비공개·토큰 30분·1회용·재발급 무효·60초 합산·동시 가입·인증과 재발급 경합·악센트 주소 구분·로그에 원문 없음). U3: `MemberLoginServiceTest`·`LoginAttemptThrottleTest`와 `AuthSessionServiceTest`·`SessionCookieTest` 추가분(단위), `MemberSessionApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `MemberSessionIntegrationTest`(실제 HTTP·MySQL, V13 적용·로그인 때 세션 ID·CSRF 교체와 이전 세션 폐기(병합 조건 ④)·7일·30일·동시 5개·로그아웃은 현재 세션만·계정 존재 비공개·15분 5회 잠금과 경계·동시 실패·서로 다른 회원 동시 로그인·계정 전환 동시 로그인·로그에 원문 없음). U4: `PasswordResetApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `PasswordResetIntegrationTest`(실제 HTTP·MySQL, 해시만 저장·계정 존재 비공개(미인증 계정에도 발송)·완료 시 그 회원의 모든 세션 종료와 다른 회원 세션 유지·미인증 유지·토큰 15분·1회용(같은 토큰 동시 사용 포함)·재발급 무효·다른 목적 토큰 상호 거부(U2 이월)·60초 합산·로그인 잠금 유지·이전 비밀번호 로그인과의 동시 경합·로그에 원문 없음). G2(#157): `AuthSessionServiceTest` 추가분(업무 요청 검사: 7일 연장·30일 상한·CSRF 실패 시 갱신 없음·401이 403보다 먼저), `MemberRegistrationIntegrationTest` 추가분(인증 완료 때 장부 생성), `MemberApiNoStoreWebTest`(`member` 프로필 웹 슬라이스: 업무 경로 401·403·쿠키 재발급 200·미등록 404의 no-store), `MemberProfileIntegrationTest`(`member` 프로필 실제 HTTP·MySQL: 가입→인증→로그인→`/me`, 회원 A·B 카드 격리와 남의 카드 404, 시연 헤더 무시·시연 포트폴리오 접근 불가, 미인증·익명·만료·로그아웃 401, 업무 요청의 7일 연장·30일 상한·쿠키 재발급, CSRF 403·미저장과 401→403→400→404 순서, 동시 6번째 로그인, 미등록 업무 경로 404, 업무 응답 no-store, 남의 카드와 없는 카드의 404 본문 동일).
+- 테스트: `SessionTokensTest`·`AnonymousSessionPropertiesTest`·`AuthSessionServiceTest`·`SessionCookieTest`(단위), `AuthCsrfApiWebTest`·`AuthCsrfProfileOffWebTest`(웹 슬라이스, 테스트 전용 POST 경로로 CSRF 검사), `AuthSessionIntegrationTest`(실제 HTTP·MySQL, V9 적용·해시 저장·만료). U2: `PasswordHasherTest`(Argon2 참조 구현 시험 벡터)·`EmailAddressesTest`·`MemberIdsTest`·`MailRequestThrottleTest`·`NewPasswordTest`(단위), `MemberRegistrationApiWebTest`(웹 슬라이스), `MemberRegistrationIntegrationTest`(실제 HTTP·MySQL, V11 적용·해시만 저장·계정 존재 비공개·토큰 30분·1회용·재발급 무효·60초 합산·동시 가입·인증과 재발급 경합·악센트 주소 구분·로그에 원문 없음). U3: `MemberLoginServiceTest`·`LoginAttemptThrottleTest`와 `AuthSessionServiceTest`·`SessionCookieTest` 추가분(단위), `MemberSessionApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `MemberSessionIntegrationTest`(실제 HTTP·MySQL, V13 적용·로그인 때 세션 ID·CSRF 교체와 이전 세션 폐기(병합 조건 ④)·7일·30일·동시 5개·로그아웃은 현재 세션만·계정 존재 비공개·15분 5회 잠금과 경계·동시 실패·서로 다른 회원 동시 로그인·계정 전환 동시 로그인·로그에 원문 없음). U4: `PasswordResetApiWebTest`와 `AuthCsrfProfileOffWebTest` 추가분(웹 슬라이스), `PasswordResetIntegrationTest`(실제 HTTP·MySQL, 해시만 저장·계정 존재 비공개(미인증 계정에도 발송)·완료 시 그 회원의 모든 세션 종료와 다른 회원 세션 유지·미인증 유지·토큰 15분·1회용(같은 토큰 동시 사용 포함)·재발급 무효·다른 목적 토큰 상호 거부(U2 이월)·60초 합산·로그인 잠금 유지·이전 비밀번호 로그인과의 동시 경합·로그에 원문 없음). G2(#157): `AuthSessionServiceTest` 추가분(업무 요청 검사: 7일 연장·30일 상한·CSRF 실패 시 갱신 없음·401이 403보다 먼저), `MemberRegistrationIntegrationTest` 추가분(인증 완료 때 장부 생성), `MemberApiNoStoreWebTest`(`member` 프로필 웹 슬라이스: 업무 경로 401·403·쿠키 재발급 200·미등록 404의 no-store), `MemberProfileIntegrationTest`(`member` 프로필 실제 HTTP·MySQL: 가입→인증→로그인→`/me`, 회원 A·B 카드 격리와 남의 카드 404, 시연 헤더 무시·시연 포트폴리오 접근 불가, 미인증·익명·만료·로그아웃 401, 업무 요청의 7일 연장·30일 상한·쿠키 재발급, CSRF 403·미저장과 401→403→400→404 순서, 동시 6번째 로그인, 미등록 업무 경로 404, 업무 응답 no-store, 남의 카드와 없는 카드의 404 본문 동일). T5(탈퇴): `MemberWithdrawalServiceTest`(단위, 잠금·삭제 순서·불일치 기록·잠김·참조값), `MemberWithdrawalApiWebTest`(웹 슬라이스, 401→403→400→429→불일치 400 순서·204 쿠키 삭제·no-store), `MemberWithdrawalIntegrationTest`(실제 HTTP·MySQL, 회원 데이터 전부 삭제와 다른 회원 유지·같은 쿠키와 다른 기기 세션 401·같은 이메일 재가입과 메일 제한 60초 유지·불일치 5회 뒤 로그인과 탈퇴 429·CODEF 해제는 커밋 뒤 스텁으로만 확인·해제 실패해도 탈퇴 성공).
 
 
 ### 프런트엔드 이메일 인증 화면
