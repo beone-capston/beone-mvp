@@ -16,11 +16,10 @@ const meetsPasswordRules = (value: string) =>
 
 const invalidCredentials = '이메일 또는 비밀번호를 확인해 주세요.'
 
-export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessionChecking = false, mailDeadlines }: {
-  onLogin: (userId?: string) => void
+export function AuthForm({ onLogin, onRetrySession, resetToken, sessionChecking = false, mailDeadlines }: {
+  onLogin: (userId: string) => void
   onRetrySession?: () => void
   resetToken: string | null
-  mockLogin: boolean
   sessionChecking?: boolean
   mailDeadlines?: MailDeadlines
 }) {
@@ -43,7 +42,6 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
   const focusHeading = useRef(false)
   const login = screen === 'login'
   const signUp = screen === 'signup'
-  const previewSignUp = import.meta.env.DEV && mockLogin && !import.meta.env.VITE_AUTH_API_BASE_URL
   const passwordValid = sent || meetsPasswordRules(password)
   const completing = screen === 'reset-complete'
   const validToken = resetToken !== null && /^[A-Za-z0-9_-]{43}$/.test(resetToken)
@@ -123,16 +121,15 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
     if (sent || sessionChecking || submitting.current || (completing && !validToken)) return
 
     const normalizedEmail = normalizeEmail(email)
-    const previewLogin = import.meta.env.DEV && mockLogin && login
     const errors: FieldErrors = {}
     if (!completing && !normalizedEmail) errors.email = '이메일을 입력해 주세요.'
-    else if (!previewLogin && !completing && !isValidEmail(normalizedEmail)) {
+    else if (!completing && !isValidEmail(normalizedEmail)) {
       errors.email = '이메일 주소를 확인해 주세요.'
     }
 
     if (!password) errors.password = '비밀번호를 입력해 주세요.'
     else if (!login && !passwordValid) errors.password = passwordHint
-    else if (!previewLogin && password.length > 32) errors.password = '비밀번호는 32자 이하여야 합니다.'
+    else if (password.length > 32) errors.password = '비밀번호는 32자 이하여야 합니다.'
 
     if (!login && !confirmation) errors.confirmation = '비밀번호를 한 번 더 입력해 주세요.'
     else if (!login && confirmation !== password) errors.confirmation = '비밀번호가 일치하지 않아요.'
@@ -143,20 +140,6 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
     const firstError = Object.keys(errors)[0]
     if (firstError) {
       event.currentTarget.querySelector<HTMLInputElement>(`#auth-${firstError}`)?.focus()
-      return
-    }
-
-    if (previewLogin) {
-      setPassword('')
-      onLogin()
-      return
-    }
-
-    if (signUp && previewSignUp) {
-      setSignupEmail(normalizedEmail)
-      setEmail(normalizedEmail)
-      setPassword('')
-      setConfirmation('')
       return
     }
 
@@ -289,7 +272,7 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, mockLogin, sessi
           </div>
           {sent && (
             <div className="auth-mail-resend">
-              <button type="button" disabled={previewSignUp || resend.busy || resend.seconds > 0} onClick={resend.resend}>
+              <button type="button" disabled={resend.busy || resend.seconds > 0} onClick={resend.resend}>
                 {resend.busy ? '요청 중…' : '이메일 인증 재전송'}
                 {resend.seconds > 0 && ` · ${resend.seconds}초`}
                 <span aria-hidden="true"> ↻</span>

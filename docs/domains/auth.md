@@ -271,12 +271,10 @@ curl -i -X POST http://localhost:8080/api/v1/auth/password-resets \
 검증은 인증 API 클라이언트로 한 번 요청하며 연결 또는 CSRF 오류 시 명시적으로만
 재시도한다. 204 응답을 받으면 성공 화면에서 로그인 버튼을 제공한다.
 
-기존 5173 개발용 로그인 모드에서 API 주소가 비어 있으면, 유효한 회원가입 입력으로
-메일 발송 없이 인증 대기 화면을 미리 볼 수 있다.
+카드 추가·결제 목 모드에서도 로그인과 회원가입은 실제 인증 API를 사용한다.
 
 Vite 개발 서버는 같은 주소의 `/api/`를 `http://127.0.0.1:8080`으로 전달한다.
-백엔드를 `local`·`demo`·`member` 프로필로 실행하고, 회원 세션을 확인할 때는
-프런트에 `VITE_WORKSPACE_CONTEXT=member`를 지정한다.
+회원 장부의 세션과 권한을 검증할 때는 백엔드를 `member` 프로필로 실행한다.
 루프백 이외의 주소에서는 세션 쿠키 사용에 브라우저가 신뢰하는 HTTPS가 필요하다.
 `VITE_AUTH_API_BASE_URL`로 별도 origin을 설정하면 백엔드의 자격 증명 허용 CORS
 (구체적인 origin, CSRF 헤더 허용, `Retry-After` 노출)와 브라우저의 Secure·SameSite

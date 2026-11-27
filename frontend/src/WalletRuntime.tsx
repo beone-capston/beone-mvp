@@ -5,7 +5,7 @@ import { createImportedCardRepository } from './card-import/repository'
 import { MemberIdentity } from './auth/memberIdentity'
 import { mockCardSource } from './data/portfolio'
 import type { CardSource } from './data/portfolio'
-import { workspaceContext } from './data/workspaceRequest'
+import { mockWorkspace, workspaceContext } from './data/workspaceRequest'
 import { createMockOrderApi } from './orders/mockOrderApi'
 import { createOrderApi } from './orders/orderApi'
 import { createMockPaymentGateway } from './payment/mockPayment'
@@ -14,7 +14,6 @@ import { createMockPreferenceApi, preferenceMockCardSource } from './preferences
 import { createPreferenceApi } from './preferences/preferenceApi'
 
 const preview = import.meta.env.DEV && (import.meta.env.VITE_PAYMENT_PREFERENCE_MODE === 'mock' || import.meta.env.VITE_ADD_CARD_MODE === 'mock')
-const mock = preview || (import.meta.env.DEV && import.meta.env.VITE_PAYMENT_API_MODE === 'mock')
 
 const walletCardSource: CardSource = {
   getCards: mode => mode === 'MY_CARDS' ? [] : mockCardSource.getCards(mode),
@@ -22,7 +21,7 @@ const walletCardSource: CardSource = {
 
 function Wallet() {
   const [adapters] = useState(() => {
-    if (!mock) return {
+    if (!mockWorkspace) return {
       cardSource: walletCardSource,
       orders: createOrderApi(workspaceContext), paymentGateway: createPaymentGateway(workspaceContext),
       preferenceApi: createPreferenceApi(workspaceContext),

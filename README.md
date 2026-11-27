@@ -108,22 +108,22 @@ debug 앱은 개발 서버 `http://localhost:5173/`을 엽니다. 실기기에�
 VITE_DEVICE_AUTH_MODE=mock VITE_PAYMENT_API_MODE=mock npm run dev
 ```
 
-`http://localhost:5173`에서 개발용 로그인 후 카드 이미지를 탭하면 바로 60초 사용 준비 화면이 열립니다. **모의결제** 탭의 내 카드 목록에 있는 목 주문을 열고 **빠른결제로 이동**을 누르면 해당 주문을 선택할 수 있습니다. **가상 주문서 결제**를 눌러 결과를 확인합니다. 응답 지연은 `VITE_PAYMENT_MOCK_DELAY_MS`로 조정합니다(기본 800ms).
+`http://localhost:5173`에서 이메일 인증을 마친 로컬 테스트 계정으로 로그인한 후 카드 이미지를 탭하면 바로 60초 사용 준비 화면이 열립니다. **모의결제** 탭의 내 카드 목록에 있는 목 주문을 열고 **빠른결제로 이동**을 누르면 해당 주문을 선택할 수 있습니다. **가상 주문서 결제**를 눌러 결과를 확인합니다. 응답 지연은 `VITE_PAYMENT_MOCK_DELAY_MS`로 조정합니다(기본 800ms).
 
 인증과 결제 전송 모드는 각각 `native`·`mock`, `api`·`mock`으로 선택합니다. 개발 플래그가 없거나 배포 빌드일 때는 네이티브 인증과 기존 백엔드 계약을 사용합니다. 서버 승인에는 시연 프로필과 실제로 생성한 주문이 필요하며, 서버의 결제 전 설정을 사용합니다. 구조는 [가상카드 및 모의 승인 안내](docs/domains/frontend-payment.md)를 참고합니다.
 
 결제 설정 저장·새로고침·주문 생성·모의 승인까지 백엔드 없이 확인하려면
 `frontend/`에서 `VITE_PAYMENT_PREFERENCE_MODE=mock npm run dev`를 실행합니다.
-로컬 5173의 개발용 로그인으로 진입한 뒤 **결제 선택 방식**에서 대표 카드를
+로컬 5173에서 이메일 인증을 마친 테스트 계정으로 로그인한 뒤 **결제 선택 방식**에서 대표 카드를
 설정하고 새로고침해 확인합니다. 새 설정으로 테스트하려면
 `VITE_PAYMENT_MOCK_PROFILE`에 사용한 적 없는 합성 프로필 이름을 지정합니다. `VITE_PAYMENT_PREFERENCE_MOCK_FAILURE=read` 또는 `save`로 오류를 검수할 수 있습니다.
 
 Vite 개발 서버는 같은 주소의 `/api/`를 `http://127.0.0.1:8080`으로 전달합니다.
 백엔드 기동 후 `http://localhost:5173/api/v1/card-products`에서 응답을 확인할 수 있습니다.
 같은 주소로 테스트할 때는 `VITE_API_BASE_URL`과 `VITE_AUTH_API_BASE_URL`을 비웁니다.
-개발 기본 업무 문맥은 `demo`입니다. 회원 로그인·세션·CSRF를 확인하려면 백엔드를
-`member` 프로필로 실행하고 프런트 개발 서버를
-`VITE_WORKSPACE_CONTEXT=member VITE_BENEFITS_CONTEXT=member npm run dev`로 시작합니다.
+프런트는 기본으로 회원 로그인과 세션 조회에 실제 인증 API를 사용합니다.
+회원 장부까지 확인하려면 백엔드를 `SPRING_PROFILES_ACTIVE=member ./gradlew bootRun`으로 실행합니다.
+`VITE_WORKSPACE_CONTEXT=demo`는 시연 백엔드에서만 지정합니다. 카드 추가·결제 목 모드에서도 로그인은 실제 인증 API를 사용합니다.
 배포 빌드의 기본은 `member`이며 목 설정은 개발 서버에서만 활성화됩니다.
 
 ### 카드 추가 목 흐름

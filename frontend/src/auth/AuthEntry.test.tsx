@@ -60,19 +60,6 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('회원 인증 진입', () => {
-  it('개발용 로그인에서 입력값이 있으면 서버 호출 없이 메인 진입을 요청한다', () => {
-    const onLogin = vi.fn()
-    render(<AuthForm resetToken={null} mockLogin onLogin={onLogin} />)
-    submit()
-    expect(onLogin).not.toHaveBeenCalled()
-
-    fill('이메일', 'test')
-    fill('비밀번호', '1234')
-    submit()
-    expect(onLogin).toHaveBeenCalledOnce()
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-
   it('현재 서버 세션이 유효하면 메인화면으로 이동한다', async () => {
     fetchMock.mockReset().mockResolvedValueOnce(success({
       ...member, authenticatedAt: date, expiresAt: date, absoluteExpiresAt: date,
@@ -423,8 +410,9 @@ describe('회원가입 인증 메일과 이메일 인증 결과', () => {
   })
 })
 
-it('로컬 가입 미리보기는 비밀번호 조건과 확인 값이 맞을 때만 대기 상태로 전환한다', () => {
-  render(<AuthForm resetToken={null} mockLogin onLogin={vi.fn()} />)
+it('비밀번호 조건과 확인 값이 맞고 서버가 접수한 뒤 대기 상태로 전환한다', async () => {
+  fetchMock.mockReset().mockResolvedValueOnce(csrf()).mockResolvedValueOnce(success({ message: accepted }, 202))
+  render(<AuthForm resetToken={null} onLogin={vi.fn()} />)
   submit('회원가입')
   const hint = screen.getByText(/11~32자/)
   expect(hint).toHaveAttribute('data-password-valid', 'false')
@@ -440,7 +428,6 @@ it('로컬 가입 미리보기는 비밀번호 조건과 확인 값이 맞을 �
   expect(screen.getByText('비밀번호가 일치하지 않아요.')).toBeInTheDocument()
   fill('비밀번호 확인', 'a1!abcdefgh')
   submit('이메일 인증하고 가입하기')
-  expect(screen.getByRole('button', { name: '이메일 인증 재전송' })).toBeDisabled()
-  expect(screen.getByRole('button', { name: '이메일 인증 대기 중' })).toBeDisabled()
-  expect(fetchMock).not.toHaveBeenCalled()
+  expect(await screen.findByRole('button', { name: '이메일 인증 대기 중' })).toBeDisabled()
+  expect(fetchMock).toHaveBeenCalledTimes(2)
 })
