@@ -1,0 +1,13 @@
+# 시연 시간 동안 스테이징 도메인을 빌릴 때만 붙이는 오버레이(런북 3절).
+# 공개 nginx(beone)는 이미 외부 네트워크 beone-staging_staging에 붙어 있다. 시연 web을 그 네트워크에도 붙여 공개 nginx가
+# beone-demo-web-1:8080에 닿게 한다. 공개 nginx의 compose·네트워크는 바꾸지 않는다.
+# 스테이징은 down이 아니라 stop으로 멈추므로 이 네트워크는 남아 있다. 네트워크가 없으면 up이 실패한다(조용히 넘어가지 않음).
+# 실행: docker compose -f compose.yaml -f compose.staging-domain.yaml -p beone-demo --env-file .env up -d
+services:
+  web:
+    networks: [demo, staging-public]
+
+networks:
+  staging-public:
+    external: true
+    name: beone-staging_staging

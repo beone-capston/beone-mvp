@@ -1,0 +1,45 @@
+{
+  "previousMonthPerformanceWon": {
+    "value": 600000,
+    "period": {
+      "from": "{{PREV_FROM}}",
+      "to": "{{PREV_TO}}"
+    }
+  },
+  "limitBucketUsages": [
+    {
+      "limitBucketId": "COMMON",
+      "value": 0,
+      "period": {
+        "from": "{{MONTH_FROM}}",
+        "to": "{{MONTH_TO}}"
+      }
+    },
+    {
+      "limitBucketId": "TRANSIT",
+      "value": 0,
+      "period": {
+        "from": "{{MONTH_FROM}}",
+        "to": "{{MONTH_TO}}"
+      }
+    },
+    {
+      "limitBucketId": "TELECOM",
+      "value": 0,
+      "period": {
+        "from": "{{MONTH_FROM}}",
+        "to": "{{MONTH_TO}}"
+      }
+    }
+  ],
+  "otherBucketsUsedWon": null,
+  "selectedServices": null,
+  "noServiceSelection": null,
+  "registeredOn": {
+    "value": "2026-01-01",
+    "period": {
+      "from": "2026-01-01",
+      "to": "2026-01-01"
+    }
+  }
+}
