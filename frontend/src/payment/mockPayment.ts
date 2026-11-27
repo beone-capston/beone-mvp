@@ -1,5 +1,5 @@
 import { PaymentError, retryWindow } from './contract'
-import type { Approval, PaymentGateway, Recommendation, Scenario } from './contract'
+import type { Approval, Attempt, PaymentGateway, Recommendation, Scenario } from './contract'
 import { preferenceMockCardSource } from '../preferences/mockPreference'
 import type { CardSource } from '../data/portfolio'
 import { makeFixtures } from './fixtures'
@@ -14,7 +14,10 @@ const errors: Partial<Record<Scenario, [number, string]>> = {
   server: [500, 'INTERNAL_SERVER_ERROR'],
 }
 
-export function createMockPaymentGateway(delayMs = 800, now = Date.now, strictFixtures = false, cardSource?: CardSource): PaymentGateway {
+export function createMockPaymentGateway(
+  delayMs = 800, now = Date.now, strictFixtures = false, cardSource?: CardSource,
+  onApproval?: (attempt: Attempt, approval: Approval) => void,
+): PaymentGateway {
   const cache = new Map<string, { signature: string; until: number; approval: Approval }>()
   const recommendations = new Map<string, { data: Recommendation; fail: boolean }>()
   const payments = new Map<string, Approval>()
@@ -57,7 +60,10 @@ export function createMockPaymentGateway(delayMs = 800, now = Date.now, strictFi
       recommendations.set(mode + ':' + recommendation.recommendationId,
         { data: recommendation, fail: scenario === 'comparisonError' })
       payments.set(mode + ':' + approval.simulatedPaymentId, approval)
-      if (approval.status === 'APPROVED') approvedOrders.add(orderKey)
+      if (approval.status === 'APPROVED') {
+        approvedOrders.add(orderKey)
+        onApproval?.(attempt, approval)
+      }
       if (scenario === 'lost') throw new PaymentError('NETWORK', 0, true)
       return structuredClone(approval)
     },

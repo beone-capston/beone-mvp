@@ -93,6 +93,15 @@ export function createPaymentGateway(context: WorkspaceContext): PaymentGateway 
       }
       return result
     },
+    async cancel(mode, id, amountWon, key) {
+      const result = await read(context, mode, 'simulated-payments/' + encodeURIComponent(id) + '/cancellations', {
+        key, body: { amountWon },
+      })
+      if (!record(result) || result.simulatedPaymentId !== id || result.amountWon !== amountWon ||
+        result.paymentStatus !== 'CANCELLED' || result.cancellableAmountWon !== 0 || !string(result.cancellationId)) {
+        throw new PaymentError('UNEXPECTED', 201, true)
+      }
+    },
     async recommendation(mode, id, orderId) {
       const data = await read(context, mode, 'recommendations/' + encodeURIComponent(id))
       if (!recommendation(data) || data.recommendationId !== id || data.orderId !== orderId) {

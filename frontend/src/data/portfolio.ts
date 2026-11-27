@@ -8,7 +8,7 @@ export interface WalletCard {
   type: string
   theme: string
   caption: string
-  source: 'DESIGN_SAMPLE' | 'VIRTUAL' | 'MOCK_IMPORTED'
+  source: 'DESIGN_SAMPLE' | 'VIRTUAL' | 'MOCK_IMPORTED' | 'SERVER'
   canBeRepresentative: boolean
 }
 

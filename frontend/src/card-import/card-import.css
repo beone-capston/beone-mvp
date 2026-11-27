@@ -34,7 +34,7 @@
 .card-import-connect h2 { margin-bottom: 23px; }
 .card-import-connect label { display: grid; gap: 7px; color: var(--import-blue); font-weight: 650; }
 .card-import-connect label + label, .card-import-connect .card-import-error + label { margin-top: 23px; }
-.card-import-connect input {
+.card-import-connect input, .card-import-connect select {
   box-sizing: border-box;
   width: 100%;
   min-height: 42px;

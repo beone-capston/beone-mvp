@@ -1,10 +1,10 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Icon } from '../components/Icon'
 import type { PortfolioMode } from '../data/portfolio'
 import { merchantLabel } from './merchantClasses'
 import { emptyDraft, formatWon, orderName, paymentMethods, validateOrder } from './order'
-import type { CreatedOrder, OrderDraft, OrderErrors } from './order'
+import type { CreatedOrder, OrderDraft, OrderErrors, OrderSummary } from './order'
 import { OrderForm } from './OrderForm'
 import { OrderRequestError } from './orderApi'
 import type { OrderApi } from './orderApi'
@@ -12,31 +12,32 @@ import './orders.css'
 
 const statusLabels = { PAID: '모의 승인됨', CANCELLED: '취소됨' } as const
 
-function OrderCard({ order, pending, onSelect }: {
-  order: CreatedOrder
+function OrderCard({ order, pending, onSelect, onExpand }: {
+  order: CreatedOrder | OrderSummary
   pending: boolean
   onSelect: () => void
+  onExpand?: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const id = useId()
   const date = order.orderDate.replaceAll('-', '.')
-  const method = paymentMethods[order.paymentMethod]
+  const method = 'paymentMethod' in order ? paymentMethods[order.paymentMethod] : undefined
   const fields = [
     ['가맹점명', orderName(order)],
     ['가맹점 업종', merchantLabel(order.merchantClass)],
     ['결제일', date],
-    ['결제 시간', order.orderTime ?? '입력 안 함'],
-    ['결제 방식', method],
+    ['결제 시간', 'orderTime' in order ? order.orderTime ?? '입력 안 함' : '–'],
+    ['결제 방식', method ?? '–'],
   ]
 
   return (
     <article className="order-card">
       <h2>
         <button type="button" className="order-toggle" aria-expanded={expanded} aria-controls={id}
-          onClick={() => setExpanded(value => !value)}>
+          onClick={() => { if (!expanded) onExpand?.(); setExpanded(!expanded) }}>
           <span className="order-card-label">
             <span className="order-card-name">{orderName(order)}</span>
-            <small>{date} · {method}</small>
+            <small>{date}{method ? ` · ${method}` : ''}</small>
           </span>
           <span className="order-card-price">{formatWon(order.amountWon)} <small>원</small></span>
           <Icon name="chevron" />
@@ -80,7 +81,12 @@ export function OrderWorkspace({ mode, api, active, onSelect, paidIds, sampleOrd
   paidIds?: readonly string[]
   sampleOrder?: CreatedOrder
 }) {
-  const [orders, setOrders] = useState<CreatedOrder[]>([])
+  const [orders, setOrders] = useState<(CreatedOrder | OrderSummary)[]>([])
+  const [page, setPage] = useState(0)
+  const [hasNext, setHasNext] = useState(false)
+  const [listing, setListing] = useState(false)
+  const [listError, setListError] = useState(false)
+  const [refresh, setRefresh] = useState(0)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(emptyDraft)
   const [errors, setErrors] = useState<OrderErrors>({})
@@ -91,6 +97,38 @@ export function OrderWorkspace({ mode, api, active, onSelect, paidIds, sampleOrd
   const checkingRef = useRef(false)
   const visible = useRef(active)
   useLayoutEffect(() => { visible.current = active }, [active])
+
+  useEffect(() => {
+    if (!active || editing || !api.list) return
+    const controller = new AbortController()
+    const { signal } = controller
+    queueMicrotask(async () => {
+      if (signal.aborted) return
+      setListing(true)
+      setListError(false)
+      try {
+        const result = await api.list?.(mode, page, signal)
+        if (!signal.aborted && result) {
+          setOrders(current => page === 0 ? result.items :
+            [...current, ...result.items.filter(item => !current.some(order => order.orderId === item.orderId))])
+          setHasNext(result.hasNext)
+        }
+      } catch {
+        if (!signal.aborted) setListError(true)
+      } finally {
+        if (!signal.aborted) setListing(false)
+      }
+    })
+    return () => controller.abort()
+  }, [active, api, editing, mode, page, refresh])
+
+  function readDetails(orderId: string) {
+    void api.detail(mode, orderId).then(order => {
+      setOrders(items => items.map(item => item.orderId === orderId ? order : item))
+    }, error => {
+      if (visible.current) setFeedback({ text: lookupMessage(error), error: true })
+    })
+  }
 
   function navigate(edit: boolean) {
     setEditing(edit)
@@ -118,6 +156,7 @@ export function OrderWorkspace({ mode, api, active, onSelect, paidIds, sampleOrd
       const order = await api.create(mode, input)
       setOrders(current => [order, ...current.filter(item => item.orderId !== order.orderId)])
       setDraft(emptyDraft)
+      setPage(0)
       setEditing(false)
       setFeedback({ text: '주문을 생성했어요.' })
       if (visible.current) window.scrollTo(0, 0)
@@ -182,15 +221,18 @@ export function OrderWorkspace({ mode, api, active, onSelect, paidIds, sampleOrd
             <span>총 {orders.length + Number(Boolean(sampleOrder))}건</span>
           </div>
           <div className="orders-list" aria-busy={checking !== undefined}>
-            {orders.length === 0 && !sampleOrder && <p className="order-empty">이번 실행에서 생성한 주문이 없어요.</p>}
+            {orders.length === 0 && !sampleOrder && !listing && !listError && <p className="order-empty">생성한 주문이 없어요.</p>}
             {sampleOrder && <div className="order-mock">
               <OrderCard order={sampleOrder} pending={false} onSelect={() => onSelect(mode, sampleOrder, 'mock')} />
             </div>}
             {updatedOrders.map(order => (
               <OrderCard key={order.orderId} order={order} pending={checking !== undefined}
-                onSelect={() => void choose(order.orderId)} />
+                onSelect={() => void choose(order.orderId)} onExpand={'paymentMethod' in order ? undefined : () => readDetails(order.orderId)} />
             ))}
           </div>
+          {listing && <p className="order-empty" role="status">주문 조회 중…</p>}
+          {listError && <button className="order-handoff" type="button" onClick={() => setRefresh(value => value + 1)}>주문 목록 다시 조회</button>}
+          {hasNext && !listError && <button className="order-handoff" type="button" disabled={listing} onClick={() => setPage(value => value + 1)}>주문 더 보기</button>}
           <button className="order-primary order-new" type="button" onClick={() => navigate(true)}>
             <Icon name="plus" /> 주문 생성
           </button>

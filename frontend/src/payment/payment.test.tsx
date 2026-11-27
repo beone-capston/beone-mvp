@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import App from '../App'
+import { mockBenefitsApi } from '../benefits/fixtures'
 import { defaultPreference } from '../data/portfolio'
 import { retryWindow } from './contract'
 import type { Approval, Attempt, Scenario } from './contract'
@@ -43,10 +44,30 @@ it('목 결제에서는 내 카드 목록의 예시 주문을 서버 요청 없�
   expect(screen.getByRole('button', { name: /스타벅스 송도점/ })).toBeVisible()
   click(/스타벅스 송도점/)
   click('빠른결제로 이동')
-  expect(screen.getByLabelText('선택한 가상 주문')).toHaveTextContent('10,000원')
+  expect(screen.queryByLabelText('선택한 가상 주문')).not.toBeInTheDocument()
   tapCard()
   expect(screen.getByRole('button', { name: '가상 주문서 결제' })).toBeEnabled()
   expect(fetchMock).not.toHaveBeenCalled()
+})
+
+it('결제 후 혜택에서 승인 카드와 주문 결제월로 조회한다', async () => {
+  const cards = vi.fn(async () => [{ userCardId: 'uc-1001', displayName: '올라운드 티타늄카드',
+    holdingSource: 'MANUAL', mapping: { status: 'USER_CONFIRMED', cardProductId: '09271' } }])
+  const monthly = vi.fn(mockBenefitsApi.monthly)
+  const ledger = vi.fn(mockBenefitsApi.ledger)
+  render(<App mockAuth paymentGateway={createMockPaymentGateway(0)}
+    benefits={{ ...mockBenefitsApi, cards, monthly, ledger }} />)
+  prepare()
+  click('가상 주문서 결제')
+  await screen.findByText('모의 승인 완료')
+  click('주문 목록으로')
+  click('혜택')
+  expect(screen.getByLabelText('조회 월')).toHaveValue('2026-03')
+  await screen.findByText('전월 인정 실적')
+  expect(monthly).toHaveBeenCalledWith('MY_CARDS', 'uc-1001', '2026-03', expect.any(AbortSignal))
+  fireEvent.click(screen.getByRole('tab', { name: '모의 결제 내역' }))
+  await screen.findByRole('button', { name: '전체 0' })
+  expect(ledger).toHaveBeenCalledWith('MY_CARDS', '2026-03', expect.any(AbortSignal), undefined)
 })
 
 it('주문과 인증이 없으면 차단하고 목 주문을 불러와도 실제 네트워크 요청을 보내지 않는다', () => {
@@ -116,7 +137,7 @@ it('StrictMode와 연속 클릭에서도 한 번 승인하고, 대기 중 만료
   fireEvent.click(screen.getByRole('tab', { name: '가상 포트폴리오' }))
   expect(screen.queryByLabelText('선택한 가상 주문')).not.toBeInTheDocument()
   click('모의결제')
-  expect(screen.getByText('이번 실행에서 생성한 주문이 없어요.')).toBeVisible()
+  expect(screen.getByText('생성한 주문이 없어요.')).toBeVisible()
 })
 
 it.each([

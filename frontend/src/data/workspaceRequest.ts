@@ -2,12 +2,8 @@ import { authBaseUrl, getCsrf } from '../auth/api'
 import type { PortfolioMode } from './portfolio'
 
 export type WorkspaceContext = 'demo' | 'member'
-const configuredContext = import.meta.env.VITE_WORKSPACE_CONTEXT
-export const mockWorkspace = import.meta.env.DEV && configuredContext !== 'member' &&
-  (import.meta.env.VITE_PAYMENT_PREFERENCE_MODE === 'mock' ||
-    import.meta.env.VITE_ADD_CARD_MODE === 'mock' || import.meta.env.VITE_PAYMENT_API_MODE === 'mock')
-
-export const workspaceContext: WorkspaceContext = configuredContext === 'demo' || mockWorkspace ? 'demo' : 'member'
+export const workspaceContext: WorkspaceContext =
+  import.meta.env.VITE_WORKSPACE_CONTEXT === 'demo' ? 'demo' : 'member'
 
 const demoBase = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')
 

@@ -1,3 +1,5 @@
+import { readHeldCards, toWalletCard } from '../data/heldCards'
+import type { WalletCard } from '../data/portfolio'
 import { AuthApiError } from '../auth/api'
 import type { PaymentPreference, PortfolioMode } from '../data/portfolio'
 import { workspaceRequest } from '../data/workspaceRequest'
@@ -9,7 +11,7 @@ export type PreferenceDto = {
   updatedAt: string | null
 }
 type PreferenceInput = Omit<PreferenceDto, 'updatedAt'>
-export type PreferenceCard = { id: string; name: string; canBeRepresentative: boolean }
+export type PreferenceCard = { id: string; name: string; canBeRepresentative: boolean; wallet?: WalletCard }
 
 export interface PreferenceApi {
   supports(mode: PortfolioMode): boolean
@@ -37,28 +39,6 @@ export function parsePreference(value: unknown): PreferenceDto {
   return { selectionMode: dto.selectionMode, representativeUserCardId: dto.representativeUserCardId, updatedAt: dto.updatedAt }
 }
 
-function parseCards(value: unknown): PreferenceCard[] {
-  const data = value as { items?: unknown[] } | null
-  if (!Array.isArray(data?.items)) throw new Error('INVALID_CARDS_RESPONSE')
-  return data.items.map(raw => {
-    const card = raw as {
-      userCardId?: string; displayName?: string; holdingSource?: string; cardProductId?: string
-      mapping?: { status?: string; cardProductId?: string } | null
-      recommendationEligibility?: { eligible?: boolean }; excludedFromRecommendation?: boolean
-    } | null
-    if (!card || !userCardId(card.userCardId) || typeof card.displayName !== 'string' ||
-      typeof card.recommendationEligibility?.eligible !== 'boolean' ||
-      typeof card.excludedFromRecommendation !== 'boolean') throw new Error('INVALID_CARDS_RESPONSE')
-    const mapped = card.holdingSource === 'SYNTHETIC'
-      ? Boolean(card.cardProductId)
-      : card.mapping?.status === 'USER_CONFIRMED' && Boolean(card.mapping.cardProductId)
-    return {
-      id: card.userCardId, name: card.displayName,
-      canBeRepresentative: mapped && card.recommendationEligibility.eligible && !card.excludedFromRecommendation,
-    }
-  })
-}
-
 async function request(context: WorkspaceContext, mode: PortfolioMode, path: string, signal?: AbortSignal, input?: PreferenceInput) {
   const response = await workspaceRequest(context, mode, path, {
     signal, method: input ? 'PUT' : 'GET',
@@ -75,7 +55,13 @@ export function createPreferenceApi(context: WorkspaceContext): PreferenceApi {
   return {
     supports: mode => context === 'demo' || mode === 'MY_CARDS',
     async read(mode, signal) { return parsePreference(await request(context, mode, 'payment-preference', signal)) },
-    async cards(mode, signal) { return parseCards(await request(context, mode, 'cards', signal)) },
+    async cards(mode, signal) {
+      const held = await readHeldCards(context, mode, signal)
+      // CODEF sync persists candidates before selection. Only confirmed CODEF cards enter the wallet.
+      return held.filter(card => card.holdingSource !== 'CODEF' || card.mapping?.status === 'USER_CONFIRMED')
+        .map(toWalletCard).map(wallet => ({ id: wallet.id, name: wallet.name,
+          canBeRepresentative: wallet.canBeRepresentative, wallet }))
+    },
     async save(mode, input) {
       const id = input.representativeUserCardId
       if (id === null ? input.selectionMode === 'FIXED_REPRESENTATIVE' : !userCardId(id)) {

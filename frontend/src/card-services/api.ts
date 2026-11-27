@@ -1,3 +1,6 @@
+import { workspaceRequest } from '../data/workspaceRequest'
+import type { WorkspaceContext } from '../data/workspaceRequest'
+import type { PortfolioMode } from '../data/portfolio'
 import type { Product } from './catalog'
 
 type Usage = {
@@ -119,6 +122,16 @@ export async function readMonth(id: string, month: string, signal: AbortSignal) 
   const userCardId = matched[0].userCardId
   const result = await read<MonthlyState>(`/me/cards/${encodeURIComponent(userCardId)}/monthly-states/${month}`, signal, true)
   if (result.userCardId !== userCardId || result.month !== month ||
+    !Array.isArray(result.limitBucketUsages) || !Array.isArray(result.selectedServices)) throw new Error('Invalid month')
+  return result
+}
+
+export async function readHeldCardMonth(context: WorkspaceContext, mode: PortfolioMode, userCardId: string, month: string, signal: AbortSignal) {
+  const response = await workspaceRequest(context, mode,
+    `cards/${encodeURIComponent(userCardId)}/monthly-states/${month}`, { signal })
+  if (!response.ok) throw new RequestFailure(response.status)
+  const result = (await response.json())?.data as MonthlyState | undefined
+  if (!result || result.userCardId !== userCardId || result.month !== month ||
     !Array.isArray(result.limitBucketUsages) || !Array.isArray(result.selectedServices)) throw new Error('Invalid month')
   return result
 }
