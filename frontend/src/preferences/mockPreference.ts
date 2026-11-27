@@ -1,6 +1,6 @@
 import { AuthApiError } from '../auth/api'
 import { mockCardSource } from '../data/portfolio'
-import type { PortfolioMode } from '../data/portfolio'
+import type { CardSource, PortfolioMode } from '../data/portfolio'
 import { defaultDto, parsePreference } from './preferenceApi'
 import type { PreferenceApi } from './preferenceApi'
 
@@ -16,7 +16,7 @@ export const preferenceMockCardSource = {
   },
 }
 
-export function createMockPreferenceApi(storage: Storage, fixtureUser = 'fixture', failure?: Failure): PreferenceApi {
+export function createMockPreferenceApi(storage: Storage, fixtureUser = 'fixture', failure?: Failure, cards: CardSource = preferenceMockCardSource): PreferenceApi {
   const key = (mode: PortfolioMode) => 'beone:dev:payment-preference:v1:' + fixtureUser + ':' + mode
   return {
     supports: () => true,
@@ -25,10 +25,10 @@ export function createMockPreferenceApi(storage: Storage, fixtureUser = 'fixture
       const value = storage.getItem(key(mode))
       return value === null ? defaultDto() : parsePreference(JSON.parse(value))
     },
-    async cards(mode) { return preferenceMockCardSource.getCards(mode) },
+    async cards(mode) { return [...cards.getCards(mode)] },
     async save(mode, input) {
       if (failure === 'save') throw new Error('MOCK_SAVE')
-      const card = preferenceMockCardSource.getCards(mode).find(candidate => candidate.id === input.representativeUserCardId)
+      const card = cards.getCards(mode).find(candidate => candidate.id === input.representativeUserCardId)
       if (input.representativeUserCardId && !card?.canBeRepresentative) {
         throw new AuthApiError(card ? 409 : 404, {
           code: card ? 'REPRESENTATIVE_CARD_NOT_ELIGIBLE' : 'USER_CARD_NOT_FOUND', message: '', errors: [],

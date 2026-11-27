@@ -255,7 +255,7 @@ curl -i -X POST http://localhost:8080/api/v1/auth/password-resets \
 
 - 인증 API는 `local`·`demo`·`member` 프로필 전용입니다. `member`는 로컬 개발·테스트용 회원 프로필이며 공개 배포 프로필이 아닙니다. 공개 프로필 구성은 미결입니다(결정 37 O1).
 - `local`·`demo` CORS는 자격 증명을 허용하지 않아, 지금은 `localhost:5173` 화면에서 인증 API로 쿠키를 보낼 수 없습니다. API와 테스트는 동작합니다. 화면 연결 때 CORS를 따로 결정합니다.
-- `local`·`demo`에서는 회원 세션을 업무 API의 현재 사용자 결정(`CurrentUserResolver`·시연 헤더)에 연결하지 않습니다. `member`에서는 `MemberApiInterceptor`와 `user.web.MemberCurrentUserResolver`가 회원 세션으로 정합니다(결정 37). 로컬 브라우저 연결은 Vite 프록시(같은 origin)로 하기로 했고 프런트 설정은 팀원 조율 대기입니다(N-FE-PROXY).
+- `local`·`demo`에서는 회원 세션을 업무 API의 현재 사용자 결정(`CurrentUserResolver`·시연 헤더)에 연결하지 않습니다. `member`에서는 `MemberApiInterceptor`와 `user.web.MemberCurrentUserResolver`가 회원 세션으로 정합니다(결정 37). 로컬 브라우저 요청은 Vite 프록시를 통해 같은 주소에서 처리한다.
 - 만료 세션은 조회할 때와 그 회원이 다시 로그인할 때만 지웁니다. 주기적 정리는 없습니다.
 - 회원 탈퇴(T5)는 `member`에서만 등록합니다. Notion 명세 사본에 없는 API이고, 경로·비밀번호 불일치 상태 코드·남기는 표·DB 감사 표 여부·Notion 반영은 PR의 「결정 필요」에 권장안과 함께 적었습니다. 탈퇴한 회원의 데이터는 복구할 수 없고 보존 기간을 두지 않습니다(D10 변경 이력).
 - 로그인 실패 제한은 이메일 기준이며 IP 기준은 없습니다. 없는 이메일의 잠금 상태 행(이메일 해시)도 남고, 정리 기한은 메일 제한 기록과 함께 미정입니다. 15분보다 오래된 실패 기록은 같은 이메일의 다음 실패 때 지웁니다.
@@ -278,12 +278,11 @@ curl -i -X POST http://localhost:8080/api/v1/auth/password-resets \
 검증은 인증 API 클라이언트로 한 번 요청하며 연결 또는 CSRF 오류 시 명시적으로만
 재시도한다. 204 응답을 받으면 성공 화면에서 로그인 버튼을 제공한다.
 
-기존 5173 개발용 로그인 모드에서 API 주소가 비어 있으면, 유효한 회원가입 입력으로
-메일 발송 없이 인증 대기 화면을 미리 볼 수 있다.
+로그인과 회원가입은 실제 인증 API를 사용한다. 마이페이지의 로그아웃은 현재 세션을 종료한다.
 
-Vite 개발 서버에는 인증 API 프록시가 기본으로 없다. 실제 API로 확인할 때는
-신뢰할 수 있는 HTTPS 개발 origin에서 SPA와 `/api/v1/auth/`를 같은 origin으로
-서빙하고, API 경로를 `local`·`demo`·`member` 프로필의 백엔드로 전달한다.
+Vite 개발 서버는 같은 주소의 `/api/`를 `http://127.0.0.1:8080`으로 전달한다.
+회원 장부의 세션과 권한을 검증할 때는 백엔드를 `member` 프로필로 실행한다.
+루프백 이외의 주소에서는 세션 쿠키 사용에 브라우저가 신뢰하는 HTTPS가 필요하다.
 `VITE_AUTH_API_BASE_URL`로 별도 origin을 설정하면 백엔드의 자격 증명 허용 CORS
 (구체적인 origin, CSRF 헤더 허용, `Retry-After` 노출)와 브라우저의 Secure·SameSite
 쿠키 조건을 함께 충족해야 한다. 로컬 프로필의 가짜 메일러는 실제 이메일을 보내지 않는다.

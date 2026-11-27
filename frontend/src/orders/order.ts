@@ -24,6 +24,8 @@ export interface CreatedOrder extends OrderInput {
   createdAt: string
 }
 
+export type OrderSummary = Omit<CreatedOrder, 'orderTime' | 'paymentMethod'>
+
 export interface OrderDetail extends CreatedOrder {
   simulatedPaymentId: string | null
   latestRecommendationId: string | null
@@ -73,4 +75,4 @@ export function validateOrder(draft: OrderDraft): { errors: OrderErrors; input?:
 
 const won = new Intl.NumberFormat('ko-KR')
 export const formatWon = (amount: number) => won.format(amount)
-export const orderName = (order: OrderInput) => order.merchantName || merchantLabel(order.merchantClass)
+export const orderName = (order: Pick<OrderInput, 'merchantName' | 'merchantClass'>) => order.merchantName || merchantLabel(order.merchantClass)

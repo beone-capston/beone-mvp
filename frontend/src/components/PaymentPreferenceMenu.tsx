@@ -86,7 +86,7 @@ export function PaymentPreferenceMenu({
           aria-label="결제 선택 방식"
           onKeyDown={(event) => {
             const items = [
-              ...(root.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"], [role="menuitem"]') ??
+              ...(root.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ??
                 []),
             ]
             const index = items.indexOf(document.activeElement as HTMLButtonElement)
@@ -111,8 +111,7 @@ export function PaymentPreferenceMenu({
             role="menuitemradio"
             aria-checked={!fixed}
             onClick={() => {
-              void onChange({ ...preference, selectionMode: 'AUTO_RECOMMEND',
-                representativeCardId: unavailable ? null : preference.representativeCardId })
+              void onChange({ selectionMode: 'AUTO_RECOMMEND', representativeCardId: null })
               close()
             }}
           >
@@ -129,10 +128,6 @@ export function PaymentPreferenceMenu({
           >
             대표 카드 고정{fixed && <Icon name="check" />}
           </button>
-          {preference.representativeCardId !== null && <button role="menuitem" onClick={() => {
-            void onChange({ selectionMode: 'AUTO_RECOMMEND', representativeCardId: null })
-            close()
-          }}>대표 카드 해제</button>}
         </div>
       )}
       {fixed && selectedCard && (

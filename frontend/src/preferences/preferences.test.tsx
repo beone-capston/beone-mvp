@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import App from '../App'
 import { createMockPaymentGateway } from '../payment/mockPayment'
@@ -150,23 +150,46 @@ it('조회 실패 시 자동 추천으로 진행하지 않고 재조회한 저�
   vi.stubGlobal('scrollTo', vi.fn())
   const mock = createMockPreferenceApi(localStorage)
   const readOwn = vi.fn().mockRejectedValueOnce(new Error('network')).mockResolvedValue(saved)
-  const save = vi.fn().mockResolvedValue({ ...saved, selectionMode: 'AUTO_RECOMMEND' })
+  const save = vi.fn().mockResolvedValue({ ...defaultDto(), updatedAt: saved.updatedAt })
   const api: PreferenceApi = {
     ...mock, read: (mode, abort) => mode === 'MY_CARDS' ? readOwn() : mock.read(mode, abort), save,
   }
   render(<App preferenceApi={api} cardSource={preferenceMockCardSource} />)
-  const retry = await screen.findByRole('button', { name: '다시 조회' })
+  await waitFor(() => expect(screen.queryByText('결제 설정 확인 중…')).not.toBeInTheDocument())
+  expect(readOwn).toHaveBeenCalledOnce()
+  expect(screen.queryByRole('button', { name: '다시 조회' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '결제 선택 방식' })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '올라운드 티타늄카드 가상카드 인증' }))
   expect(screen.queryByText('카드 사용')).toBeNull()
-  fireEvent.click(retry)
+  fireEvent.click(screen.getByRole('tab', { name: '내 카드' }))
   const menu = await screen.findByRole('button', { name: '결제 선택 방식' })
   expect(menu).toHaveTextContent('대표 카드 고정')
   fireEvent.click(menu)
+  expect(screen.queryByRole('menuitem', { name: '대표 카드 해제' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('menuitemradio', { name: '자동 추천' }))
-  expect(save).toHaveBeenCalledWith('MY_CARDS', { selectionMode: 'AUTO_RECOMMEND', representativeUserCardId: 'uc-1002' })
+  expect(save).toHaveBeenCalledWith('MY_CARDS', { selectionMode: 'AUTO_RECOMMEND', representativeUserCardId: null })
   await screen.findByText('자동 추천', { selector: '.preference-trigger' })
   fireEvent.click(menu)
   fireEvent.click(screen.getByRole('menuitemradio', { name: '자동 추천' }))
   expect(save).toHaveBeenCalledOnce()
+})
+
+it('회원 주문 목록과 전액 취소를 같은 세션으로 요청한다', async () => {
+  const fetcher = vi.fn().mockResolvedValueOnce(response({
+    items: [{ orderId: 'ord-1', amountWon: 500, orderDate: '2026-11-27', merchantName: null,
+      merchantClass: 'STARBUCKS_STORE', status: 'PAID', createdAt: '2026-11-27T00:00:00Z' }],
+    page: 0, size: 20, hasNext: false,
+  })).mockResolvedValueOnce(response({ headerName: 'X-CSRF-TOKEN', token: 'fixture-csrf' }))
+    .mockResolvedValueOnce(response({ simulatedPaymentId: 'pay-1', amountWon: 500,
+      paymentStatus: 'CANCELLED', cancellableAmountWon: 0, cancellationId: 'cn-1' }, 201))
+  vi.stubGlobal('fetch', fetcher)
+  const list = await createOrderApi('member').list?.('MY_CARDS', 0, signal)
+  expect(list?.items[0].orderId).toBe('ord-1')
+  await createPaymentGateway('member').cancel?.('MY_CARDS', 'pay-1', 500, 'fixture-key')
+  expect(fetcher).toHaveBeenNthCalledWith(1, '/api/v1/me/orders?page=0', expect.objectContaining({
+    credentials: 'include', headers: {},
+  }))
+  expect(fetcher).toHaveBeenNthCalledWith(3, '/api/v1/me/simulated-payments/pay-1/cancellations',
+    expect.objectContaining({ method: 'POST', credentials: 'include', body: JSON.stringify({ amountWon: 500 }),
+      headers: { 'X-CSRF-TOKEN': 'fixture-csrf', 'Idempotency-Key': 'fixture-key', 'Content-Type': 'application/json' } }))
 })

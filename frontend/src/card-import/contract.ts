@@ -1,7 +1,7 @@
 export type ConnectionRequest = {
   organization: '0301'; loginType: 'ID'; loginId: string; password: string
 }
-type ConnectionResponse = {
+export type ConnectionResponse = {
   organization: '0301'; status: 'CONNECTED' | 'NOT_CONNECTED' | 'RECONNECT_REQUIRED'
   connectedAt: string | null; lastSyncedAt: string | null; reconnectRequired: boolean
 }
@@ -37,7 +37,11 @@ export type ConfirmedCard = {
   invalidatedRecommendationIds: string[]
 }
 
+export type ManualCardInput = { displayName: string; cardProductId?: string; notSupported?: true }
+
 export interface CardImportAdapter {
+  products?(signal: AbortSignal): Promise<{ cardProductId: string; cardName: string }[]>
+  registerManual?(input: ManualCardInput, signal: AbortSignal): Promise<void>
   connect(input: ConnectionRequest, signal: AbortSignal): Promise<ConnectionResponse>
   sync(signal: AbortSignal): Promise<SyncResponse>
   confirm(userCardId: string, input: ConfirmationRequest, signal: AbortSignal): Promise<ConfirmedCard>

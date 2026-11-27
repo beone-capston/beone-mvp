@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
+import { LocalPreview } from '../auth/memberIdentity'
+import { workspaceContext } from '../data/workspaceRequest'
+import type { PortfolioMode } from '../data/portfolio'
+import { useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Icon } from '../components/Icon'
 import type { WalletCard } from '../data/portfolio'
-import { bucketAmounts, demoMode, matchesCatalog, offlineCatalog, readMonth, readProduct, requestMessage, seoulToday, staticRuleApplies } from './api'
+import { bucketAmounts, demoMode, matchesCatalog, offlineCatalog, readHeldCardMonth, readMonth, readProduct, requestMessage, seoulToday, staticRuleApplies } from './api'
 import type { MonthlyState } from './api'
 import { bucketName, catalog, details, otherServices } from './catalog'
 import type { Bucket, Product, ProductId, Service } from './catalog'
@@ -184,8 +187,11 @@ type Result = {
   monthError?: string
 }
 
-export function CardServicesPage({ card, onClose }: { card: WalletCard; onClose: () => void }) {
-  const catalogOnly = offlineCatalog || card.source === 'MOCK_IMPORTED'
+export function CardServicesPage({ card, onClose, mode = 'MY_CARDS' }: { card: WalletCard; mode?: PortfolioMode; onClose: () => void }) {
+  const preview = useContext(LocalPreview)
+  const serverCard = card.source === 'SERVER'
+  const catalogOnly = preview || card.source === 'MOCK_IMPORTED' || (!serverCard && offlineCatalog)
+  const canReadMonth = !preview && (serverCard || demoMode)
   const [asOf] = useState(seoulToday)
   const month = asOf.slice(0, 7)
   const [result, setResult] = useState<Result>({})
@@ -202,12 +208,14 @@ export function CardServicesPage({ card, onClose }: { card: WalletCard; onClose:
       value => { if (!signal.aborted) setResult(current => ({ ...current, product: value })) },
       error => { if (!signal.aborted) setResult(current => ({ ...current, productError: requestMessage(error) })) },
     )
-    if (demoMode) readMonth(product.cardId, month, signal).then(
+    if (canReadMonth) (serverCard
+      ? readHeldCardMonth(workspaceContext, mode, card.id, month, signal)
+      : readMonth(product.cardId, month, signal)).then(
       value => { if (!signal.aborted) setResult(current => ({ ...current, monthly: value })) },
       error => { if (!signal.aborted) setResult(current => ({ ...current, monthError: requestMessage(error) })) },
     )
     return () => controller.abort()
-  }, [asOf, attempt, catalogOnly, month, product])
+  }, [asOf, attempt, canReadMonth, card.id, catalogOnly, mode, month, product, serverCard])
 
   function retry() {
     setResult({})
@@ -259,7 +267,7 @@ export function CardServicesPage({ card, onClose }: { card: WalletCard; onClose:
       <div className="services-month-status">
         <p>사용액 조회 기준 · {month.replace('-', '년 ')}월</p>
         <p>{result.monthError ?? (catalogOnly ? '상품설명서 기준 · 월 사용액은 API 연결 후 조회할 수 있어요.' :
-          !demoMode ? '보유 카드의 월 사용액은 로컬·데모 API에서 조회할 수 있어요.' :
+          !canReadMonth ? '보유 카드의 월 사용액은 로컬·데모 API에서 조회할 수 있어요.' :
           !result.monthly ? '월 사용액을 불러오는 중이에요.' :
           '가상 포트폴리오 조회값이에요. 스냅샷 이후 승인·취소가 있으면 현재 잔액은 확인이 필요해요.')}</p>
         {result.monthError && <button onClick={retry}>다시 시도</button>}

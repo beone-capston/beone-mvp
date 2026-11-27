@@ -1,3 +1,4 @@
+import { authBaseUrl } from '../auth/api'
 import type { PortfolioMode } from '../data/portfolio'
 import { parsePaymentDetail } from '../payment/paymentApi'
 import type { BenefitsApi, HeldCard, Ledger, Monthly, Product, ProductSummary, StateValue } from './model'
@@ -15,8 +16,8 @@ const invalid = () => new BenefitsError('서버의 조회 응답을 확인할 �
 
 export function createBenefitsApi(context: Context): BenefitsApi {
   const base = context === 'demo'
-    ? (import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8080' : '')).replace(/\/+$/, '')
-    : ''
+    ? (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')
+    : authBaseUrl
   async function get<T>(path: string, signal: AbortSignal, mode?: PortfolioMode): Promise<T> {
     if (context === 'member' && mode === 'VIRTUAL_PORTFOLIO') {
       throw new BenefitsError('회원 환경에서는 가상 포트폴리오를 조회할 수 없어요.')

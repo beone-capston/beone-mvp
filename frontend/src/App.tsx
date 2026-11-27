@@ -1,7 +1,9 @@
-import { useMemo, useRef, useState } from 'react'
+import { MemberLogout } from './auth/memberIdentity'
+import { useContext, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { BenefitsPage } from './benefits/BenefitsPage'
 import { benefitsApi } from './benefits/config'
+import { seoulDate } from './benefits/model'
 import type { BenefitsApi } from './benefits/model'
 import { CardImportPage } from './card-import/CardImportPage'
 import type { CardImport } from './card-import/CardImportPage'
@@ -16,15 +18,14 @@ import type { CardSource, PortfolioMode, WalletCard } from './data/portfolio'
 import { OrderWorkspace } from './orders/OrderWorkspace'
 import { orderApi } from './orders/orderApi'
 import type { OrderApi } from './orders/orderApi'
-import { formatWon, orderName } from './orders/order'
 import type { CreatedOrder } from './orders/order'
 import type { PreferenceApi } from './preferences/preferenceApi'
 import { usePaymentPreference } from './preferences/usePaymentPreference'
 import { PaymentFlow } from './payment/PaymentFlow'
 import { apiPaymentGateway } from './payment/paymentApi'
-import { createMockPaymentGateway } from './payment/mockPayment'
 import { sampleOrder } from './payment/fixtures'
 import type { Approval, Attempt, OrderSelection, PaymentGateway } from './payment/contract'
+import type { BenefitSelection } from './benefits/BenefitsPage'
 
 const menus = ['혜택', '빠른결제', '모의결제'] as const
 type Menu = (typeof menus)[number]
@@ -33,10 +34,9 @@ interface ModeState {
 }
 
 const mockDevice = import.meta.env.DEV && import.meta.env.VITE_DEVICE_AUTH_MODE === 'mock'
-const mockPayments = import.meta.env.DEV && import.meta.env.VITE_PAYMENT_API_MODE === 'mock'
 
-function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, mockAuth = mockDevice, benefits = benefitsApi, preferenceApi, mockOrders = false, cardImporter }: {
-  cardSource?: CardSource; orders?: OrderApi; paymentGateway?: PaymentGateway; mockAuth?: boolean; benefits?: BenefitsApi; preferenceApi?: PreferenceApi; mockOrders?: boolean; cardImporter?: CardImport
+function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, mockAuth = mockDevice, benefits = benefitsApi, preferenceApi, cardImporter, mockOrders = false }: {
+  cardSource?: CardSource; orders?: OrderApi; paymentGateway?: PaymentGateway; mockAuth?: boolean; benefits?: BenefitsApi; preferenceApi?: PreferenceApi; cardImporter?: CardImport; mockOrders?: boolean
 }) {
   const [menu, setMenu] = useState<Menu>('빠른결제')
   const [mode, setMode] = useState<PortfolioMode>('MY_CARDS')
@@ -44,30 +44,38 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
     MY_CARDS: { activeIndex: 0 },
     VIRTUAL_PORTFOLIO: { activeIndex: 0 },
   })
-  const [gateway] = useState(() => paymentGateway ?? (mockPayments
-    ? createMockPaymentGateway(Number(import.meta.env.VITE_PAYMENT_MOCK_DELAY_MS || 800) || 0)
-    : apiPaymentGateway))
+  const gateway = paymentGateway ?? apiPaymentGateway
   const [selectedOrders, setSelectedOrders] = useState<Partial<Record<PortfolioMode, OrderSelection>>>({})
   const [sampleOrders, setSampleOrders] = useState<Partial<Record<PortfolioMode, CreatedOrder>>>(
-    () => gateway.kind === 'mock' ? { MY_CARDS: sampleOrder, ...(mockOrders ? { VIRTUAL_PORTFOLIO: { ...sampleOrder, orderId: 'mock-virtual-order' } } : {}) } : {},
+    () => {
+      if (gateway.kind !== 'mock') return {}
+      return { MY_CARDS: mockOrders ? { ...sampleOrder, orderDate: seoulDate() } : sampleOrder }
+    },
   )
   const [paidIds, setPaidIds] = useState<Partial<Record<PortfolioMode, string[]>>>({})
-  const selectedOrder = selectedOrders[mode]?.order
+  const [benefitSelection, setBenefitSelection] = useState<Partial<Record<PortfolioMode, BenefitSelection>>>({})
+  const logout = useContext(MemberLogout)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [logoutError, setLogoutError] = useState(false)
+  const logoutPending = useRef(false)
   const [notice, setNotice] = useState('')
   const [services, setServices] = useState<WalletCard | null>(null)
   const [importOpen, setImportOpen] = useState(false)
-  const [importedCards, setImportedCards] = useState(() => cardImporter?.repository.list() ?? [])
+  const [importedCards, setImportedCards] = useState(() => cardImporter?.repository?.list() ?? [])
   const importTrigger = useRef<HTMLElement | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
-  const cards = useMemo(() => {
-    const base = cardSource.getCards(mode)
-    if (mode !== 'MY_CARDS' || !cardImporter) return base
-    return [...importedCards, ...base.filter(card => card.source !== 'DESIGN_SAMPLE')]
-  }, [cardImporter, cardSource, importedCards, mode])
-  const activeIndex = Math.max(0, Math.min(modes[mode].activeIndex, cards.length - 1))
   const ownPreference = usePaymentPreference(preferenceApi, 'MY_CARDS')
   const virtualPreference = usePaymentPreference(preferenceApi, 'VIRTUAL_PORTFOLIO')
   const settings = mode === 'MY_CARDS' ? ownPreference : virtualPreference
+  const cards = useMemo(() => {
+    const base = cardSource.getCards(mode)
+    const fromServer = settings.cards?.flatMap(card => card.wallet ?? []) ?? []
+    if (settings.cards?.some(card => card.wallet)) return fromServer
+    if (mode !== 'MY_CARDS' || !cardImporter) return base
+    return [...importedCards, ...base.filter(card => card.source !== 'DESIGN_SAMPLE')]
+  }, [cardImporter, cardSource, importedCards, mode, settings.cards])
+  const activeIndex = Math.max(0, Math.min(modes[mode].activeIndex, cards.length - 1))
   const preference = settings.value
   const preferenceCards = settings.cards ?? cards
   const missingFixedCard = preference?.selectionMode === 'FIXED_REPRESENTATIVE' &&
@@ -88,10 +96,12 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
   }
 
   function closeCardImport() {
-    const next = cardImporter?.repository.list() ?? []
+    const next = cardImporter?.repository?.list() ?? []
     if (next.some(card => !importedCards.some(existing => existing.id === card.id))) {
       setModes(current => ({ ...current, MY_CARDS: { activeIndex: 0 } }))
+      ownPreference.reload()
     }
+    if (cardImporter && !cardImporter.repository) ownPreference.reload()
     setImportedCards(next)
     setMode('MY_CARDS')
     setImportOpen(false)
@@ -120,6 +130,8 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
   }
 
   function selectMode(value: PortfolioMode) {
+    const nextSettings = value === 'MY_CARDS' ? ownPreference : virtualPreference
+    if (!nextSettings.value && nextSettings.error) nextSettings.reload()
     setMode(value)
     setNotice('')
     setServices(null)
@@ -147,13 +159,16 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
     window.scrollTo(0, 0)
   }
 
-  function returnToOrders(attempt?: Attempt, approval?: Approval) {
+  function returnToOrders(attempt?: Attempt, approval?: Approval, cancelled = false) {
     if (attempt && approval?.status === 'APPROVED') {
       const { selection, mode: orderMode } = attempt
-      const order = { ...selection.order, status: 'PAID' as const }
+      setBenefitSelection(current => ({ ...current, [orderMode]: {
+        month: selection.order.orderDate.slice(0, 7), cardId: approval.userCardId,
+      } }))
+      const order = { ...selection.order, status: cancelled ? 'CANCELLED' as const : 'PAID' as const }
       setSelectedOrders(current => ({ ...current, [orderMode]: { ...selection, order } }))
       if (selection.source === 'mock' && sampleOrders[orderMode]?.orderId === order.orderId) setSampleOrders(current => ({ ...current, [orderMode]: order }))
-      else setPaidIds(current => ({ ...current, [orderMode]: [...(current[orderMode] ?? []), order.orderId] }))
+      else if (!cancelled) setPaidIds(current => ({ ...current, [orderMode]: [...(current[orderMode] ?? []), order.orderId] }))
     }
     setAuthOpen(false)
     selectMenu('모의결제')
@@ -197,7 +212,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
             </button>
             <button
               aria-label="마이페이지"
-              onClick={() => setNotice('마이페이지 기능은 준비 중이에요.')}
+              onClick={() => setAccountOpen(true)}
             >
               <Icon name="more" />
             </button>
@@ -208,7 +223,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
       {!authOpen && !importOpen && !servicePage && menu === '빠른결제' && <PortfolioModeTabs mode={mode} onChange={selectMode} />}
       <main id="main">
         {importOpen && cardImporter && <CardImportPage importer={cardImporter} onClose={closeCardImport} />}
-        {servicePage && <CardServicesPage key={servicePage.id} card={servicePage} onClose={closeServices} />}
+        {servicePage && <CardServicesPage key={servicePage.id} card={servicePage} mode={mode} onClose={closeServices} />}
         <div id="portfolio-panel" role="tabpanel" aria-labelledby={'mode-' + mode} hidden={authOpen || importOpen || Boolean(servicePage) || menu !== '빠른결제'}>
           {menu === '빠른결제' ? (
             <section className="quick-payment" key={mode}>
@@ -218,12 +233,6 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
                   ? cardImporter ? '등록한 내 카드 목록입니다.' : '디자인 확인용 샘플 카드입니다. 실제 등록 카드가 아닙니다.'
                   : '가상 포트폴리오 시연용 카드입니다.'}
               </p>
-              {selectedOrder && (
-                <div className="quick-selected-order" aria-label="선택한 가상 주문">
-                  <strong>{orderName(selectedOrder)}</strong>
-                  <span>{formatWon(selectedOrder.amountWon)}원</span>
-                </div>
-              )}
               <div className="card-section-heading">
                 <h2>
                   나의 카드 <span>{cards.length}</span>
@@ -236,10 +245,9 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
                   saving={settings.saving}
                   error={settings.error}
                   refresh={settings.reload}
-                /> : <div className="preference-status" role="status">
+                /> : !settings.error && <div className="preference-status" role="status">
                   {!settings.supported ? '이 포트폴리오의 결제 설정은 지원하지 않아요.'
-                    : settings.error ?? '결제 설정 확인 중…'}
-                  {settings.error && <button type="button" className="preference-retry" onClick={settings.reload}>다시 조회</button>}
+                    : '결제 설정 확인 중…'}
                 </div>}
               </div>
               {cards.length > 0 ? (
@@ -259,7 +267,6 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
                 <div className="empty-state">
                   <Icon name="card" />
                   <h3>등록된 카드가 없어요</h3>
-                  <p>카드를 추가하거나 가상 포트폴리오를 체험해보세요.</p>
                   {myMode && (
                     <button
                       className="primary-button"
@@ -270,15 +277,15 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
                   )}
                 </div>
               )}
-              <p className="simulation-disclaimer">실제 결제 및 금융거래는 발생하지 않습니다.</p>
             </section>
           ) : null}
         </div>
-        <BenefitsPage mode={mode} api={benefits} active={!authOpen && !importOpen && menu === '혜택'} />
+        <BenefitsPage mode={mode} api={benefits} recentPayment={benefitSelection[mode]}
+          active={!authOpen && !importOpen && menu === '혜택'} />
         {(['MY_CARDS', 'VIRTUAL_PORTFOLIO'] as const).map(orderMode => (
           <OrderWorkspace key={orderMode} mode={orderMode} api={orders}
             active={!authOpen && !importOpen && menu === '모의결제' && mode === orderMode && settings.supported} onSelect={openSelectedOrder}
-            paidIds={paidIds[orderMode]} sampleOrder={sampleOrders[orderMode]} mockApproval={gateway.kind === 'mock'} />
+            paidIds={paidIds[orderMode]} sampleOrder={sampleOrders[orderMode]} />
         ))}
         {menu === '모의결제' && !settings.supported && <p className="preference-status">이 포트폴리오의 모의결제는 지원하지 않아요.</p>}
         {authOpen && preference && <PaymentFlow mode={mode} preference={preference} selection={selectedOrders[mode]}
@@ -312,6 +319,20 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
           </button>
         </div>
       )}
+      {accountOpen && <Sheet title="마이페이지" onClose={() => {
+        if (!loggingOut) { setAccountOpen(false); setLogoutError(false) }
+      }}>
+        {logoutError && <p className="sheet-description" role="alert">로그아웃하지 못했어요. 다시 시도해 주세요.</p>}
+        <button className="primary-button" type="button" disabled={!logout || loggingOut} onClick={async () => {
+          if (!logout || logoutPending.current) return
+          logoutPending.current = true
+          setLoggingOut(true)
+          setLogoutError(false)
+          try { await logout() }
+          catch { setLogoutError(true) }
+          finally { logoutPending.current = false; setLoggingOut(false) }
+        }}>{loggingOut ? '로그아웃 중' : '로그아웃'}</button>
+      </Sheet>}
       {services && !servicePage && (
         <Sheet title={services.name + ' 부가서비스'} onClose={() => setServices(null)}>
           <p className="sheet-description">

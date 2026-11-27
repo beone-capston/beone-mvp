@@ -40,7 +40,7 @@ export function PaymentFlow({ mode, preference, selection, cards, gateway, mockA
   gateway: PaymentGateway
   mockAuth: boolean
   onBack: () => void
-  onReturn: (attempt?: Attempt, approval?: Approval) => void
+  onReturn: (attempt?: Attempt, approval?: Approval, cancelled?: boolean) => void
 }) {
   const auth = usePaymentAuth(mockAuth)
   const { request: requestAuth, reset: resetAuth, clearCheck, active, paymentReady } = auth
@@ -139,7 +139,7 @@ export function PaymentFlow({ mode, preference, selection, cards, gateway, mockA
 
   if (stage.kind === 'result') return (
     <PaymentResult attempt={stage.attempt} approval={stage.approval} cards={cards}
-      gateway={gateway} onReturn={() => onReturn(stage.attempt, stage.approval)} onRestart={restart} />
+      gateway={gateway} onReturn={cancelled => onReturn(stage.attempt, stage.approval, cancelled)} onRestart={restart} />
   )
 
   if (stage.kind === 'processing' || stage.kind === 'uncertain') {

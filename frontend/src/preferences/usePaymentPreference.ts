@@ -25,10 +25,15 @@ export function usePaymentPreference(api: PreferenceApi | undefined, mode: Portf
     const { signal } = controller
     queueMicrotask(() => {
       if (signal.aborted) return
-      Promise.all([api.read(mode, signal), api.cards(mode, signal)]).then(
-        ([dto, cards]) => { if (!signal.aborted) setState({ value: toPreference(dto), cards }) },
-        error => { if (!signal.aborted) setState({ error: preferenceError(error) }) },
-      )
+      void Promise.allSettled([api.read(mode, signal), api.cards(mode, signal)]).then(([dto, cards]) => {
+        if (signal.aborted) return
+        if (dto.status === 'fulfilled' && cards.status === 'fulfilled') {
+          setState({ value: toPreference(dto.value), cards: cards.value })
+        } else {
+          const problem = dto.status === 'rejected' ? dto.reason : cards.status === 'rejected' ? cards.reason : undefined
+          setState({ error: preferenceError(problem), cards: cards.status === 'fulfilled' ? cards.value : undefined })
+        }
+      })
     })
     return () => controller.abort()
   }, [api, mode, revision, supported])
