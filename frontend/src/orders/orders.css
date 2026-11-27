@@ -242,20 +242,6 @@
 .order-methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
 .order-methods button { padding-inline: 3px; color: var(--order-muted); font-size: 10px; }
 .order-methods button[aria-pressed='true'] { border-color: var(--order-primary); color: var(--order-accent); background: var(--order-pale); }
-.quick-selected-order {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 0 auto 12px;
-  width: calc(100% - 48px);
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--brand-secondary);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-.quick-selected-order span { flex: 0 0 auto; }
 
 .merchant-sheet {
   position: fixed;

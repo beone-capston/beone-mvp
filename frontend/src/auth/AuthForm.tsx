@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { tryLocalPreview } from './localPreview'
 import { AuthApiError, authApi } from './api'
 import { applyMailRetry, isValidEmail, normalizeEmail, rememberMailRequest, useMailResend } from './mailRequests'
 import type { MailDeadlines } from './mailRequests'
@@ -17,7 +18,7 @@ const meetsPasswordRules = (value: string) =>
 const invalidCredentials = '이메일 또는 비밀번호를 확인해 주세요.'
 
 export function AuthForm({ onLogin, onRetrySession, resetToken, sessionChecking = false, mailDeadlines }: {
-  onLogin: (userId: string) => void
+  onLogin: (userId: string, preview?: boolean) => void
   onRetrySession?: () => void
   resetToken: string | null
   sessionChecking?: boolean
@@ -165,6 +166,11 @@ export function AuthForm({ onLogin, onRetrySession, resetToken, sessionChecking 
         changeScreen('login')
         setResetComplete(true)
       } else {
+        if (await tryLocalPreview(credentials)) {
+          setPassword('')
+          onLogin('local-preview', true)
+          return
+        }
         const member = await authApi.login(credentials)
         setPassword('')
         onLogin(member.userId)

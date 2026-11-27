@@ -78,15 +78,21 @@ p {
 
 /* 866px 디자인 좌표를 모바일 논리 너비로 축소 */
 .wallet-app {
+  --wallet-bottom-inset: calc(14px + env(safe-area-inset-bottom));
+  --wallet-nav-height: 55px;
   width: 100%;
   max-width: 480px;
   min-height: 100dvh;
   margin: auto;
   padding-top: env(safe-area-inset-top);
-  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  padding-bottom: var(--wallet-bottom-inset);
   display: flex;
   flex-direction: column;
   background: var(--app-bg);
+}
+
+.wallet-app:has(> .bottom-nav) {
+  padding-bottom: calc(var(--wallet-bottom-inset) + var(--wallet-nav-height) + 18px);
 }
 
 .wallet-header {
@@ -543,13 +549,15 @@ p {
 
 /* 하단 메뉴: 선택 타원이 이동 */
 .bottom-nav {
-  position: relative;
+  position: fixed;
+  inset-inline: 0;
+  bottom: var(--wallet-bottom-inset);
   z-index: 3;
-  flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  width: calc(100% - 40px);
-  margin: 18px auto 0;
+  width: min(calc(100% - 40px), 440px);
+  min-height: var(--wallet-nav-height);
+  margin-inline: auto;
   padding: 3px;
   border-radius: 50px;
   background: var(--surface);

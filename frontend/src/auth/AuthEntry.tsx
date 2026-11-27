@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AuthApiError, authApi } from './api'
-import { MemberIdentity } from './memberIdentity'
+import { LocalPreview, MemberIdentity, MemberLogout } from './memberIdentity'
 import { AuthForm } from './AuthForm'
 import { EmailVerification, emailVerificationPath } from './EmailVerification'
 import type { MailDeadlines } from './mailRequests'
@@ -17,6 +17,7 @@ export function AuthEntry({ children }: { children: ReactNode }) {
     ? new URLSearchParams(window.location.search).get('token') ?? ''
     : null)
   const [state, setState] = useState<EntryState>(!enteredVerification && resetToken === null ? 'checking' : 'signed-out')
+  const [preview, setPreview] = useState(false)
   const [memberId, setMemberId] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
 
@@ -57,7 +58,14 @@ export function AuthEntry({ children }: { children: ReactNode }) {
     </main>
   )
 
-  if (state === 'signed-in') return <MemberIdentity.Provider value={memberId}>{children}</MemberIdentity.Provider>
+  if (state === 'signed-in') return <MemberIdentity.Provider value={memberId}>
+    <MemberLogout.Provider value={async () => {
+      if (!preview) await authApi.logout()
+      setPreview(false)
+      setMemberId(null)
+      setState('signed-out')
+    }}><LocalPreview.Provider value={preview}>{children}</LocalPreview.Provider></MemberLogout.Provider>
+  </MemberIdentity.Provider>
 
   return (
     <main className="auth-shell">
@@ -65,7 +73,7 @@ export function AuthEntry({ children }: { children: ReactNode }) {
         mailDeadlines={deadlines}
         resetToken={resetToken}
         sessionChecking={state === 'checking'}
-        onLogin={userId => { setMemberId(userId); setState('signed-in') }}
+        onLogin={(userId, local = false) => { setPreview(local); setMemberId(userId); setState('signed-in') }}
         onRetrySession={state === 'unavailable' ? () => {
           setState('checking')
           setAttempt(value => value + 1)

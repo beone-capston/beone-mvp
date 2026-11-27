@@ -91,58 +91,23 @@ cd android
 
 debug 앱은 개발 서버 `http://localhost:5173/`을 엽니다. 실기기에서는 프런트엔드 개발 서버와 백엔드를 켜고 `adb reverse tcp:5173 tcp:5173`을 연결합니다. Vite가 같은 주소의 `/api/`를 맥의 `127.0.0.1:8080`으로 전달합니다. 업무 API를 별도의 기기 주소로 명시한 경우에는 그 주소로 따로 연결해야 합니다. 주소는 `./gradlew installDebug -Pbeone.devServerUrl=<주소>`로 바꿀 수 있습니다. debug에서 평문 HTTP는 `localhost`·`127.0.0.1`·`10.0.2.2`에만 허용되므로, 그 밖의 주소는 기기가 신뢰하는 시스템 인증서의 HTTPS여야 합니다. 실기기에서는 LAN 주소 대신 `adb reverse`를 쓸 수 있습니다. release 앱은 `https://beonepay.site/`를 열고, 탐색과 브리지(`window.BeoneBridge`)의 신뢰 origin은 `https://beonepay.site` 하나입니다. release 앱의 실기기 확인은 아직 하지 않았습니다([`docs/android/webview-shell.md`](docs/android/webview-shell.md)).
 
-## 프론트엔드 메인화면
-
-- 내 카드 모드는 등록 카드가 없는 초기 화면이며, 가상 포트폴리오 모드에서는 시연용 카드 4종을 예시로 표시합니다. 모드 선택은 현재 화면에서만 유지됩니다.
-- 카드 추가·마이페이지·혜택 메뉴는 준비 중 안내를 제공합니다.
-- **모의결제** 탭의 주문 생성(#163)과 빠른결제의 60초 사용 준비·가상 주문서 결제 흐름(#167)이 있습니다. 개발 플래그로 결제·인증을 목(mock)으로 바꾸지 않으면 백엔드의 `local`·`demo` 계약(`X-BeONE-Demo-User` 헤더, 쿠키 없음)으로 주문·추천·모의 승인 API(`/api/v1/me/...`)를 호출하고(`frontend/src/orders/orderApi.ts`, `frontend/src/payment/paymentApi.ts`), 혜택 계산은 서버 추천 결과를 표시합니다. 기기 인증은 Android 브리지 `window.BeoneBridge`를 호출합니다(`frontend/src/hooks/useNativeAuth.ts`).
-- 업무 API의 `member` 문맥은 세션 쿠키와 CSRF를 사용하며, 로컬에서는 Vite의 같은 주소 프록시를 사용합니다. 로그인·회원가입 화면(`frontend/src/auth/`)은 인증 API만 호출합니다. Android 실기기에서 실제 프런트 화면·브리지·API를 함께 확인하는 통합 확인은 아직 하지 않았습니다.
-- 네이비·민트 브랜드 색상과 제공된 로고 이미지(`frontend/public/beone-brand.png`)를 사용하며, 모든 화면에서 최대 480px 너비의 세로 앱 레이아웃과 하단 메뉴를 제공합니다. Android WebView의 안전 영역 여백을 반영합니다.
-- 실행은 `frontend/`에서 `npm run dev` 후 터미널에 표시된 주소로 접속합니다.
-
-## 개발용 가상카드 및 모의 승인
-
-백엔드와 Android 없이 세 화면을 확인하려면 기존 개발 서버를 종료한 뒤 `frontend/`에서 실행합니다.
-
-```bash
-VITE_DEVICE_AUTH_MODE=mock VITE_PAYMENT_API_MODE=mock npm run dev
-```
-
-`http://localhost:5173`에서 이메일 인증을 마친 로컬 테스트 계정으로 로그인한 후 카드 이미지를 탭하면 바로 60초 사용 준비 화면이 열립니다. **모의결제** 탭의 내 카드 목록에 있는 목 주문을 열고 **빠른결제로 이동**을 누르면 해당 주문을 선택할 수 있습니다. **가상 주문서 결제**를 눌러 결과를 확인합니다. 응답 지연은 `VITE_PAYMENT_MOCK_DELAY_MS`로 조정합니다(기본 800ms).
-
-인증과 결제 전송 모드는 각각 `native`·`mock`, `api`·`mock`으로 선택합니다. 개발 플래그가 없거나 배포 빌드일 때는 네이티브 인증과 기존 백엔드 계약을 사용합니다. 서버 승인에는 시연 프로필과 실제로 생성한 주문이 필요하며, 서버의 결제 전 설정을 사용합니다. 구조는 [가상카드 및 모의 승인 안내](docs/domains/frontend-payment.md)를 참고합니다.
-
-결제 설정 저장·새로고침·주문 생성·모의 승인까지 백엔드 없이 확인하려면
-`frontend/`에서 `VITE_PAYMENT_PREFERENCE_MODE=mock npm run dev`를 실행합니다.
-로컬 5173에서 이메일 인증을 마친 테스트 계정으로 로그인한 뒤 **결제 선택 방식**에서 대표 카드를
-설정하고 새로고침해 확인합니다. 새 설정으로 테스트하려면
-`VITE_PAYMENT_MOCK_PROFILE`에 사용한 적 없는 합성 프로필 이름을 지정합니다. `VITE_PAYMENT_PREFERENCE_MOCK_FAILURE=read` 또는 `save`로 오류를 검수할 수 있습니다.
+## 프론트엔드 API 연동
 
 Vite 개발 서버는 같은 주소의 `/api/`를 `http://127.0.0.1:8080`으로 전달합니다.
-백엔드 기동 후 `http://localhost:5173/api/v1/card-products`에서 응답을 확인할 수 있습니다.
 같은 주소로 테스트할 때는 `VITE_API_BASE_URL`과 `VITE_AUTH_API_BASE_URL`을 비웁니다.
-프런트는 기본으로 회원 로그인과 세션 조회에 실제 인증 API를 사용합니다.
-회원 장부까지 확인하려면 백엔드를 `SPRING_PROFILES_ACTIVE=member ./gradlew bootRun`으로 실행합니다.
-`VITE_WORKSPACE_CONTEXT=demo`는 시연 백엔드에서만 지정합니다. 카드 추가·결제 목 모드에서도 로그인은 실제 인증 API를 사용합니다.
-배포 빌드의 기본은 `member`이며 목 설정은 개발 서버에서만 활성화됩니다.
+프런트 기본 문맥은 `member`이며 회원 세션 쿠키와 쓰기 요청용 CSRF를 사용합니다.
+로컬 백엔드는 `SPRING_PROFILES_ACTIVE=member ./gradlew bootRun`으로 실행합니다.
+격리된 시연 백엔드에 연결할 때만 `VITE_WORKSPACE_CONTEXT=demo`를 지정합니다.
 
-### 카드 추가 목 흐름
-
-`frontend/`에서 `VITE_ADD_CARD_MODE=mock npm run dev`를 실행한 뒤
-로컬 5173의 **빠른결제 → 내 카드 → +**로 진입합니다. 카드사 입력란에는 테스트 문자열을 사용합니다.
-기존 결제 목 모드에서도 카드 추가를 시험할 수 있습니다.
-
-`VITE_ADD_CARD_SCENARIO`는 `success`(기본), `connection-failure`, `query-failure`,
-`empty`, `unsupported`, `partial-data`, `partial-registration` 중 하나를 지정합니다.
-이미 등록한 카드의 재조회는 기본 시나리오에서 확인합니다. 초기화하려면 개발자 도구의
-Local Storage에서 `beone:dev:imported-cards:v1:fixture` 키를 삭제하고 새로고침합니다.
-`VITE_PAYMENT_MOCK_PROFILE`을 사용한 경우 키의 마지막에 그 프로필 이름을 넣습니다.
-
-실제 연동 시 `CardImportAdapter`를 카드사 연결, 동기화, 후보 매핑 확인 API 구현으로 교체합니다.
-현재 서버는 동기화에서 후보와 미매핑 보유 카드를 이미 저장합니다. 동기화 후
-`GET /api/v1/me/cards`로 전체 목록을 읽어야 하며, 등록 버튼은 새 카드 생성이 아니라
-선택한 기존 후보의 매핑을 확인하는 동작입니다. 미확정 카드를 메인에 표시할 기준,
-부분 성공을 보고하고 재시도할 기준, 일괄 확인 API 필요 여부는 실연동 전에 합의해야 합니다.
+- **내 카드**는 서버의 보유 카드 목록을 표시합니다. 카드사 가져오기가 제공되지 않는
+  환경에서는 카드 직접 등록을 사용할 수 있습니다. CODEF 동기화가 저장한 후보는 상품을
+  확정한 뒤 내 카드에 표시됩니다.
+- **빠른결제·모의결제**는 서버에 주문과 설정을 저장하고 서버의 승인·취소 결과를 사용합니다.
+  웹에서 Android 없이 확인하는 경우 `VITE_DEVICE_AUTH_MODE=mock npm run dev`로
+  기기 인증 단계만 대신할 수 있습니다. 주문과 결제 요청은 로컬 백엔드로 보냅니다.
+- **혜택·부가서비스**는 서버 원장, 월간 상태, 상품 규칙을 조회합니다.
+- **로그인·회원가입·로그아웃**은 실제 인증 API를 사용합니다. `member` 로컬 프로필에서는
+  가짜 메일러를 사용하므로 메일 수신 검증은 실제 메일을 보낼 수 있는 테스트 환경에서 진행합니다.
 
 ## 빌드·테스트
 

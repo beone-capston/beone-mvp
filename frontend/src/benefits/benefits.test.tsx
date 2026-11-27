@@ -127,6 +127,17 @@ it('demo와 member는 조회 권한 경계를 지키고 GET만 요청한다', as
   expect(fetchMock).toHaveBeenCalledTimes(2)
 })
 
+it('카드 목록 조회가 실패해도 회원 원장의 결제 내역을 표시한다', async () => {
+  const sample = await mockBenefitsApi.ledger('VIRTUAL_PORTFOLIO', '2026-11', signal)
+  const cards = vi.fn().mockRejectedValue(new Error('카드 조회 실패'))
+  render(<App benefits={{ ...mockBenefitsApi, context: 'member', cards, ledger: async () => sample }} />)
+  click('혜택')
+  await screen.findByText('카드 조회 실패')
+  tab('모의 결제 내역')
+  expect(await screen.findByRole('button', { name: '전체 3' })).toBeVisible()
+  expect(screen.queryByText('카드 조회 실패')).not.toBeInTheDocument()
+})
+
 it.each([[401, 'UNAUTHENTICATED', '로그인 상태가 만료'], [403, 'FORBIDDEN', '권한'],
   [404, 'NOT_FOUND', '조회 API'], [500, 'INTERNAL_SERVER_ERROR', '다시 시도']] as const)(
   '조회 오류 %i %s를 빈 목록과 구분한다', async (status, code, message) => {

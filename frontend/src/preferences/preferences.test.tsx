@@ -173,3 +173,23 @@ it('조회 실패 시 자동 추천으로 진행하지 않고 재조회한 저�
   fireEvent.click(screen.getByRole('menuitemradio', { name: '자동 추천' }))
   expect(save).toHaveBeenCalledOnce()
 })
+
+it('회원 주문 목록과 전액 취소를 같은 세션으로 요청한다', async () => {
+  const fetcher = vi.fn().mockResolvedValueOnce(response({
+    items: [{ orderId: 'ord-1', amountWon: 500, orderDate: '2026-11-27', merchantName: null,
+      merchantClass: 'STARBUCKS_STORE', status: 'PAID', createdAt: '2026-11-27T00:00:00Z' }],
+    page: 0, size: 20, hasNext: false,
+  })).mockResolvedValueOnce(response({ headerName: 'X-CSRF-TOKEN', token: 'fixture-csrf' }))
+    .mockResolvedValueOnce(response({ simulatedPaymentId: 'pay-1', amountWon: 500,
+      paymentStatus: 'CANCELLED', cancellableAmountWon: 0, cancellationId: 'cn-1' }, 201))
+  vi.stubGlobal('fetch', fetcher)
+  const list = await createOrderApi('member').list?.('MY_CARDS', 0, signal)
+  expect(list?.items[0].orderId).toBe('ord-1')
+  await createPaymentGateway('member').cancel?.('MY_CARDS', 'pay-1', 500, 'fixture-key')
+  expect(fetcher).toHaveBeenNthCalledWith(1, '/api/v1/me/orders?page=0', expect.objectContaining({
+    credentials: 'include', headers: {},
+  }))
+  expect(fetcher).toHaveBeenNthCalledWith(3, '/api/v1/me/simulated-payments/pay-1/cancellations',
+    expect.objectContaining({ method: 'POST', credentials: 'include', body: JSON.stringify({ amountWon: 500 }),
+      headers: { 'X-CSRF-TOKEN': 'fixture-csrf', 'Idempotency-Key': 'fixture-key', 'Content-Type': 'application/json' } }))
+})

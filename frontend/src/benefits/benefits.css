@@ -8,9 +8,7 @@
   --benefit-blue: #355676;
   --benefit-tint: #EDF5F8;
   --benefit-neutral: #E3E8EA;
-  container-type: inline-size;
-  --benefit-unit: calc(100cqw / 510);
-  padding-bottom: calc(clamp(26px, 10.4vw, 50px) + env(safe-area-inset-bottom));
+  --benefit-unit: calc(min(100vw, 480px) / 510);
   background: var(--benefit-bg);
 }
 
@@ -34,25 +32,6 @@
   width: calc(76 * var(--benefit-unit));
   left: calc(-24.5 * var(--benefit-unit));
   top: calc(-8 * var(--benefit-unit));
-}
-
-.wallet-benefits .bottom-nav {
-  position: sticky;
-  bottom: calc(clamp(26px, 10.4vw, 50px) + env(safe-area-inset-bottom));
-  width: 87%;
-  margin: calc(10 * var(--benefit-unit)) auto 0 5%;
-  padding: calc(3 * var(--benefit-unit));
-}
-
-.wallet-benefits .bottom-nav button {
-  min-height: calc(56 * var(--benefit-unit));
-  gap: calc(7 * var(--benefit-unit));
-  font-size: max(9px, calc(11 * var(--benefit-unit)));
-}
-
-.wallet-benefits .bottom-nav svg {
-  width: calc(17 * var(--benefit-unit));
-  height: calc(17 * var(--benefit-unit));
 }
 
 .benefits-page {

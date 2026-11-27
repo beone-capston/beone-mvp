@@ -89,6 +89,7 @@ export class PaymentError extends Error {
 
 export interface PaymentGateway {
   readonly kind: 'mock' | 'api'
+  cancel?(mode: PortfolioMode, id: string, amountWon: number, key: string): Promise<void>
   approve(attempt: Attempt): Promise<Approval>
   recommendation(mode: PortfolioMode, id: string, orderId: string): Promise<Recommendation>
   detail(mode: PortfolioMode, id: string): Promise<PaymentDetail>
