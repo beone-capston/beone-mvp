@@ -70,7 +70,7 @@ describe('Figma 메인화면 · 포트폴리오 분리', () => {
     expect(screen.getAllByRole('article')).toHaveLength(4)
     expect(screen.getByText(/디자인 확인용 샘플 카드입니다/)).toBeInTheDocument()
     expect(screen.queryByText('나의 모든 카드, 한곳에.')).not.toBeInTheDocument()
-    expect(screen.getByText('실제 결제 및 금융거래는 발생하지 않습니다.')).toBeInTheDocument()
+    expect(screen.queryByText('실제 결제 및 금융거래는 발생하지 않습니다.')).not.toBeInTheDocument()
   })
 
   it('내 카드와 가상 데이터·상단 액션을 분리하고 하단 메뉴 이동 시 모드를 유지한다', () => {

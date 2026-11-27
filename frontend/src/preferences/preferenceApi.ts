@@ -97,5 +97,5 @@ export function preferenceError(error: unknown) {
       case 'NOT_FOUND': return '이 환경에서는 결제 설정 API를 사용할 수 없어요.'
     }
   }
-  return '결제 설정을 불러오거나 저장하지 못했어요. 다시 시도해 주세요.'
+  return '다시 시도해 주세요.'
 }

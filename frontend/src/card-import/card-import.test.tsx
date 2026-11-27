@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import App from '../App'
+import { createMockPreferenceApi } from '../preferences/mockPreference'
+import { createMockPaymentGateway } from '../payment/mockPayment'
+import { sampleOrder } from '../payment/fixtures'
+import { toPreference } from '../preferences/preferenceApi'
+import type { CardSource } from '../data/portfolio'
 import { CardImportPage } from './CardImportPage'
 import { createMockCardImport } from './mockAdapter'
 import { createImportedCardRepository } from './repository'
@@ -27,7 +32,9 @@ it('입력과 동의가 모두 맞을 때 조회하고, 선택한 카드만 저�
   const adapter = createMockCardImport('success', 0)
   const confirm = vi.spyOn(adapter, 'confirm')
   const connectAdapter = vi.spyOn(adapter, 'connect')
-  const app = render(<App cardImporter={{ adapter, repository }} />)
+  const cards: CardSource = { getCards: mode => mode === 'MY_CARDS' ? repository.list() : [] }
+  const preferenceApi = createMockPreferenceApi(localStorage, 'fixture-a', undefined, cards)
+  const app = render(<App cardImporter={{ adapter, repository }} preferenceApi={preferenceApi} />)
   expect(screen.getByText('등록된 카드가 없어요')).toBeInTheDocument()
   expect(screen.queryByRole('region', { name: '예시 카드 목록' })).not.toBeInTheDocument()
   fireEvent.click(screen.getAllByRole('button', { name: '카드 추가' })[0])
@@ -62,6 +69,18 @@ it('입력과 동의가 모두 맞을 때 조회하고, 선택한 카드만 저�
   expect(repository.list().map(card => card.cardProductId)).toEqual(['01664'])
   expect(JSON.stringify(localStorage)).not.toMatch(/test-password|test-id/)
   expect(createImportedCardRepository(localStorage, 'fixture-b').list()).toEqual([])
+  fireEvent.click(await screen.findByRole('button', { name: '결제 선택 방식' }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: '대표 카드 고정' }))
+  expect(screen.getAllByRole('radio')).toHaveLength(1)
+  fireEvent.click(screen.getByRole('radio', { name: '노리 체크카드' }))
+  fireEvent.click(screen.getByRole('button', { name: '대표 카드로 설정' }))
+  await screen.findByText('고정된 대표 카드: 노리 체크카드')
+  const preference = toPreference(await preferenceApi.read('MY_CARDS', new AbortController().signal))
+  const gateway = createMockPaymentGateway(0, Date.now, true, cards)
+  expect(await gateway.approve({
+    mode: 'MY_CARDS', selection: { order: sampleOrder, source: 'mock' }, body: {}, key: 'import-test',
+    startedAt: Date.now(), preference, scenario: 'approved',
+  })).toMatchObject({ userCardId: 'uc-93001', cardProductId: '01664', selectionMode: 'FIXED_REPRESENTATIVE' })
   app.unmount()
 
   render(<App cardImporter={{ adapter, repository: createImportedCardRepository(localStorage, 'fixture-a') }} />)

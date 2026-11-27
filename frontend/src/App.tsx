@@ -91,6 +91,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
     const next = cardImporter?.repository.list() ?? []
     if (next.some(card => !importedCards.some(existing => existing.id === card.id))) {
       setModes(current => ({ ...current, MY_CARDS: { activeIndex: 0 } }))
+      ownPreference.reload()
     }
     setImportedCards(next)
     setMode('MY_CARDS')
@@ -120,6 +121,8 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
   }
 
   function selectMode(value: PortfolioMode) {
+    const nextSettings = value === 'MY_CARDS' ? ownPreference : virtualPreference
+    if (!nextSettings.value && nextSettings.error) nextSettings.reload()
     setMode(value)
     setNotice('')
     setServices(null)
@@ -236,10 +239,9 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
                   saving={settings.saving}
                   error={settings.error}
                   refresh={settings.reload}
-                /> : <div className="preference-status" role="status">
+                /> : !settings.error && <div className="preference-status" role="status">
                   {!settings.supported ? '이 포트폴리오의 결제 설정은 지원하지 않아요.'
-                    : settings.error ?? '결제 설정 확인 중…'}
-                  {settings.error && <button type="button" className="preference-retry" onClick={settings.reload}>다시 조회</button>}
+                    : '결제 설정 확인 중…'}
                 </div>}
               </div>
               {cards.length > 0 ? (
@@ -259,7 +261,6 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
                 <div className="empty-state">
                   <Icon name="card" />
                   <h3>등록된 카드가 없어요</h3>
-                  <p>카드를 추가하거나 가상 포트폴리오를 체험해보세요.</p>
                   {myMode && (
                     <button
                       className="primary-button"
@@ -270,7 +271,6 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
                   )}
                 </div>
               )}
-              <p className="simulation-disclaimer">실제 결제 및 금융거래는 발생하지 않습니다.</p>
             </section>
           ) : null}
         </div>
@@ -278,7 +278,7 @@ function App({ cardSource = mockCardSource, orders = orderApi, paymentGateway, m
         {(['MY_CARDS', 'VIRTUAL_PORTFOLIO'] as const).map(orderMode => (
           <OrderWorkspace key={orderMode} mode={orderMode} api={orders}
             active={!authOpen && !importOpen && menu === '모의결제' && mode === orderMode && settings.supported} onSelect={openSelectedOrder}
-            paidIds={paidIds[orderMode]} sampleOrder={sampleOrders[orderMode]} mockApproval={gateway.kind === 'mock'} />
+            paidIds={paidIds[orderMode]} sampleOrder={sampleOrders[orderMode]} />
         ))}
         {menu === '모의결제' && !settings.supported && <p className="preference-status">이 포트폴리오의 모의결제는 지원하지 않아요.</p>}
         {authOpen && preference && <PaymentFlow mode={mode} preference={preference} selection={selectedOrders[mode]}

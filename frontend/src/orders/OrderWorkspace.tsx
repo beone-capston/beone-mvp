@@ -12,10 +12,9 @@ import './orders.css'
 
 const statusLabels = { PAID: '모의 승인됨', CANCELLED: '취소됨' } as const
 
-function OrderCard({ order, pending, onSelect, mockApproval }: {
+function OrderCard({ order, pending, onSelect }: {
   order: CreatedOrder
   pending: boolean
-  mockApproval?: boolean
   onSelect: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -55,7 +54,7 @@ function OrderCard({ order, pending, onSelect, mockApproval }: {
               <button className="order-handoff" type="button" disabled={pending} onClick={onSelect}>
                 {pending ? '주문 확인 중…' : '빠른결제로 이동'} <span aria-hidden="true">›</span>
               </button>
-            ) : <p className="order-status">{mockApproval ? '개발용 ' : ''}{statusLabels[order.status]}</p>}
+            ) : <p className="order-status">{statusLabels[order.status]}</p>}
           </div>
         </div>
       </div>
@@ -73,14 +72,13 @@ function lookupMessage(error: unknown) {
   }
 }
 
-export function OrderWorkspace({ mode, api, active, onSelect, paidIds, sampleOrder, mockApproval }: {
+export function OrderWorkspace({ mode, api, active, onSelect, paidIds, sampleOrder }: {
   mode: PortfolioMode
   api: OrderApi
   active: boolean
   onSelect: (mode: PortfolioMode, order: CreatedOrder, source?: 'server' | 'mock') => void
   paidIds?: readonly string[]
   sampleOrder?: CreatedOrder
-  mockApproval?: boolean
 }) {
   const [orders, setOrders] = useState<CreatedOrder[]>([])
   const [editing, setEditing] = useState(false)
@@ -186,12 +184,10 @@ export function OrderWorkspace({ mode, api, active, onSelect, paidIds, sampleOrd
           <div className="orders-list" aria-busy={checking !== undefined}>
             {orders.length === 0 && !sampleOrder && <p className="order-empty">이번 실행에서 생성한 주문이 없어요.</p>}
             {sampleOrder && <div className="order-mock">
-              <small>개발용 목 주문</small>
-              <OrderCard order={sampleOrder} pending={false} mockApproval onSelect={() => onSelect(mode, sampleOrder, 'mock')} />
+              <OrderCard order={sampleOrder} pending={false} onSelect={() => onSelect(mode, sampleOrder, 'mock')} />
             </div>}
             {updatedOrders.map(order => (
               <OrderCard key={order.orderId} order={order} pending={checking !== undefined}
-                mockApproval={mockApproval && paidIds?.includes(order.orderId)}
                 onSelect={() => void choose(order.orderId)} />
             ))}
           </div>

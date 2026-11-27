@@ -6,8 +6,7 @@ export const workspaceContext: WorkspaceContext =
   import.meta.env.VITE_WORKSPACE_CONTEXT === 'member' ||
   (!import.meta.env.DEV && import.meta.env.VITE_WORKSPACE_CONTEXT !== 'demo') ? 'member' : 'demo'
 
-const demoBase = (import.meta.env.VITE_API_BASE_URL ??
-  (import.meta.env.DEV ? 'http://localhost:8080' : '')).replace(/\/+$/, '')
+const demoBase = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')
 
 export async function workspaceRequest(context: WorkspaceContext, mode: PortfolioMode, path: string, options: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {}) {
   const headers = { ...options.headers }

@@ -471,13 +471,6 @@ p {
   letter-spacing: -0.5px;
 }
 
-.simulation-disclaimer {
-  margin: 16px 20px;
-  color: var(--text-muted);
-  font-size: 9px;
-  text-align: center;
-}
-
 /* 결제 방식 드롭다운 */
 .preference {
   position: relative;
@@ -797,9 +790,6 @@ p {
     --card-width: min(65vw, 270px);
   }
 
-  .simulation-disclaimer {
-    margin-block: 8px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -15,7 +15,7 @@ const invalid = () => new BenefitsError('서버의 조회 응답을 확인할 �
 
 export function createBenefitsApi(context: Context): BenefitsApi {
   const base = context === 'demo'
-    ? (import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8080' : '')).replace(/\/+$/, '')
+    ? (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')
     : ''
   async function get<T>(path: string, signal: AbortSignal, mode?: PortfolioMode): Promise<T> {
     if (context === 'member' && mode === 'VIRTUAL_PORTFOLIO') {

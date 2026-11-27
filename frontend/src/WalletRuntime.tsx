@@ -28,20 +28,24 @@ function Wallet() {
       preferenceApi: createPreferenceApi(workspaceContext),
     }
     const profile = import.meta.env.VITE_PAYMENT_MOCK_PROFILE || 'fixture'
+    const repository = createImportedCardRepository(window.localStorage, profile)
+    const registeredCardSource: CardSource = {
+      getCards: mode => mode === 'MY_CARDS' ? repository.list() : preferenceMockCardSource.getCards(mode),
+    }
     const failure = import.meta.env.VITE_PAYMENT_PREFERENCE_MOCK_FAILURE
     return {
       cardSource: preferenceMockCardSource,
       orders: createMockOrderApi(),
       paymentGateway: createMockPaymentGateway(
-        Number(import.meta.env.VITE_PAYMENT_MOCK_DELAY_MS ?? 800) || 0, Date.now, true,
+        Number(import.meta.env.VITE_PAYMENT_MOCK_DELAY_MS ?? 800) || 0, Date.now, true, registeredCardSource,
       ),
       preferenceApi: createMockPreferenceApi(
         window.localStorage, profile,
-        failure === 'read' || failure === 'save' ? failure : undefined,
+        failure === 'read' || failure === 'save' ? failure : undefined, registeredCardSource,
       ),
       cardImporter: {
         adapter: createMockCardImport(import.meta.env.VITE_ADD_CARD_SCENARIO),
-        repository: createImportedCardRepository(window.localStorage, profile),
+        repository,
       },
       mockOrders: true,
       mockAuth: preview ? true : undefined,

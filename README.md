@@ -89,14 +89,14 @@ cd android
 ./gradlew installDebug
 ```
 
-debug 앱은 개발 서버 `http://localhost:5173/`을 엽니다. 실기기에서는 프런트엔드 개발 서버와 백엔드를 켠 뒤 `adb reverse tcp:5173 tcp:5173`(화면)과 `adb reverse tcp:8080 tcp:8080`(API)을 둘 다 연결합니다. `local`·`demo` 경로는 화면(5173)과 API(8080)를 각각 쓰기 때문입니다(D-23 11항). `member` 경로는 Vite 프록시로 같은 origin을 쓰기로 정했지만(D-23 11항 2026-11-24 보충, 결정 37 O2-L) 프런트 설정이 아직 없어(N-FE-PROXY) 지금도 두 포트를 연결합니다. 주소는 `./gradlew installDebug -Pbeone.devServerUrl=<주소>`로 바꿀 수 있습니다. debug에서 평문 HTTP는 `localhost`·`127.0.0.1`·`10.0.2.2`에만 허용되므로, 그 밖의 주소는 기기가 신뢰하는 시스템 인증서의 HTTPS여야 합니다. 실기기에서는 LAN 주소 대신 `adb reverse`를 쓸 수 있습니다. release 앱은 `https://beonepay.site/`를 열고, 탐색과 브리지(`window.BeoneBridge`)의 신뢰 origin은 `https://beonepay.site` 하나입니다. release 앱의 실기기 확인은 아직 하지 않았습니다([`docs/android/webview-shell.md`](docs/android/webview-shell.md)).
+debug 앱은 개발 서버 `http://localhost:5173/`을 엽니다. 실기기에서는 프런트엔드 개발 서버와 백엔드를 켜고 `adb reverse tcp:5173 tcp:5173`을 연결합니다. Vite가 같은 주소의 `/api/`를 맥의 `127.0.0.1:8080`으로 전달합니다. 업무 API를 별도의 기기 주소로 명시한 경우에는 그 주소로 따로 연결해야 합니다. 주소는 `./gradlew installDebug -Pbeone.devServerUrl=<주소>`로 바꿀 수 있습니다. debug에서 평문 HTTP는 `localhost`·`127.0.0.1`·`10.0.2.2`에만 허용되므로, 그 밖의 주소는 기기가 신뢰하는 시스템 인증서의 HTTPS여야 합니다. 실기기에서는 LAN 주소 대신 `adb reverse`를 쓸 수 있습니다. release 앱은 `https://beonepay.site/`를 열고, 탐색과 브리지(`window.BeoneBridge`)의 신뢰 origin은 `https://beonepay.site` 하나입니다. release 앱의 실기기 확인은 아직 하지 않았습니다([`docs/android/webview-shell.md`](docs/android/webview-shell.md)).
 
 ## 프론트엔드 메인화면
 
 - 내 카드 모드는 등록 카드가 없는 초기 화면이며, 가상 포트폴리오 모드에서는 시연용 카드 4종을 예시로 표시합니다. 모드 선택은 현재 화면에서만 유지됩니다.
 - 카드 추가·마이페이지·혜택 메뉴는 준비 중 안내를 제공합니다.
 - **모의결제** 탭의 주문 생성(#163)과 빠른결제의 60초 사용 준비·가상 주문서 결제 흐름(#167)이 있습니다. 개발 플래그로 결제·인증을 목(mock)으로 바꾸지 않으면 백엔드의 `local`·`demo` 계약(`X-BeONE-Demo-User` 헤더, 쿠키 없음)으로 주문·추천·모의 승인 API(`/api/v1/me/...`)를 호출하고(`frontend/src/orders/orderApi.ts`, `frontend/src/payment/paymentApi.ts`), 혜택 계산은 서버 추천 결과를 표시합니다. 기기 인증은 Android 브리지 `window.BeoneBridge`를 호출합니다(`frontend/src/hooks/useNativeAuth.ts`).
-- 업무 API의 `member` 프로필 대응(세션 쿠키·CSRF·Vite 프록시)은 팀원 조율 대기입니다(N-FE-COORD·N-FE-PROXY). 로그인·회원가입 화면(`frontend/src/auth/`)은 인증 API만 호출합니다. Android 실기기에서 실제 프런트 화면·브리지·API를 함께 확인하는 통합 확인은 아직 하지 않았습니다.
+- 업무 API의 `member` 문맥은 세션 쿠키와 CSRF를 사용하며, 로컬에서는 Vite의 같은 주소 프록시를 사용합니다. 로그인·회원가입 화면(`frontend/src/auth/`)은 인증 API만 호출합니다. Android 실기기에서 실제 프런트 화면·브리지·API를 함께 확인하는 통합 확인은 아직 하지 않았습니다.
 - 네이비·민트 브랜드 색상과 제공된 로고 이미지(`frontend/public/beone-brand.png`)를 사용하며, 모든 화면에서 최대 480px 너비의 세로 앱 레이아웃과 하단 메뉴를 제공합니다. Android WebView의 안전 영역 여백을 반영합니다.
 - 실행은 `frontend/`에서 `npm run dev` 후 터미널에 표시된 주소로 접속합니다.
 
@@ -118,9 +118,12 @@ VITE_DEVICE_AUTH_MODE=mock VITE_PAYMENT_API_MODE=mock npm run dev
 설정하고 새로고침해 확인합니다. 새 설정으로 테스트하려면
 `VITE_PAYMENT_MOCK_PROFILE`에 사용한 적 없는 합성 프로필 이름을 지정합니다. `VITE_PAYMENT_PREFERENCE_MOCK_FAILURE=read` 또는 `save`로 오류를 검수할 수 있습니다.
 
-실제 API 모드는 개발 기본 `demo`이며 `VITE_API_BASE_URL`로 업무 API 주소를 지정합니다.
-`VITE_WORKSPACE_CONTEXT=member`는 회원 로그인·세션 쿠키·CSRF를 사용하므로
-로컬에서는 인증과 업무 API를 동일 origin으로 전달하는 프록시가 필요합니다.
+Vite 개발 서버는 같은 주소의 `/api/`를 `http://127.0.0.1:8080`으로 전달합니다.
+백엔드 기동 후 `http://localhost:5173/api/v1/card-products`에서 응답을 확인할 수 있습니다.
+같은 주소로 테스트할 때는 `VITE_API_BASE_URL`과 `VITE_AUTH_API_BASE_URL`을 비웁니다.
+개발 기본 업무 문맥은 `demo`입니다. 회원 로그인·세션·CSRF를 확인하려면 백엔드를
+`member` 프로필로 실행하고 프런트 개발 서버를
+`VITE_WORKSPACE_CONTEXT=member VITE_BENEFITS_CONTEXT=member npm run dev`로 시작합니다.
 배포 빌드의 기본은 `member`이며 목 설정은 개발 서버에서만 활성화됩니다.
 
 ### 카드 추가 목 흐름

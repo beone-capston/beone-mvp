@@ -8,7 +8,7 @@ function asWalletCard(item: StoredCard): WalletCard | undefined {
   const design = cardDesigns.find(card => card.cardProductId === item.cardProductId)
   if (!design) return
   return { ...design, id: item.userCardId, name: item.displayName, source: 'MOCK_IMPORTED',
-    canBeRepresentative: false }
+    canBeRepresentative: true }
 }
 
 export function createImportedCardRepository(storage: Storage, profile: string) {
