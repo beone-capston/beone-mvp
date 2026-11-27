@@ -5,7 +5,7 @@ import { createImportedCardRepository } from './card-import/repository'
 import { MemberIdentity } from './auth/memberIdentity'
 import { mockCardSource } from './data/portfolio'
 import type { CardSource } from './data/portfolio'
-import { workspaceContext } from './data/workspaceRequest'
+import { mockWorkspace, workspaceContext } from './data/workspaceRequest'
 import { createMockOrderApi } from './orders/mockOrderApi'
 import { createOrderApi } from './orders/orderApi'
 import { createMockPaymentGateway } from './payment/mockPayment'
@@ -14,7 +14,6 @@ import { createMockPreferenceApi, preferenceMockCardSource } from './preferences
 import { createPreferenceApi } from './preferences/preferenceApi'
 
 const preview = import.meta.env.DEV && (import.meta.env.VITE_PAYMENT_PREFERENCE_MODE === 'mock' || import.meta.env.VITE_ADD_CARD_MODE === 'mock')
-const mock = preview || (import.meta.env.DEV && import.meta.env.VITE_PAYMENT_API_MODE === 'mock')
 
 const walletCardSource: CardSource = {
   getCards: mode => mode === 'MY_CARDS' ? [] : mockCardSource.getCards(mode),
@@ -22,26 +21,30 @@ const walletCardSource: CardSource = {
 
 function Wallet() {
   const [adapters] = useState(() => {
-    if (!mock) return {
+    if (!mockWorkspace) return {
       cardSource: walletCardSource,
       orders: createOrderApi(workspaceContext), paymentGateway: createPaymentGateway(workspaceContext),
       preferenceApi: createPreferenceApi(workspaceContext),
     }
     const profile = import.meta.env.VITE_PAYMENT_MOCK_PROFILE || 'fixture'
+    const repository = createImportedCardRepository(window.localStorage, profile)
+    const registeredCardSource: CardSource = {
+      getCards: mode => mode === 'MY_CARDS' ? repository.list() : preferenceMockCardSource.getCards(mode),
+    }
     const failure = import.meta.env.VITE_PAYMENT_PREFERENCE_MOCK_FAILURE
     return {
       cardSource: preferenceMockCardSource,
       orders: createMockOrderApi(),
       paymentGateway: createMockPaymentGateway(
-        Number(import.meta.env.VITE_PAYMENT_MOCK_DELAY_MS ?? 800) || 0, Date.now, true,
+        Number(import.meta.env.VITE_PAYMENT_MOCK_DELAY_MS ?? 800) || 0, Date.now, true, registeredCardSource,
       ),
       preferenceApi: createMockPreferenceApi(
         window.localStorage, profile,
-        failure === 'read' || failure === 'save' ? failure : undefined,
+        failure === 'read' || failure === 'save' ? failure : undefined, registeredCardSource,
       ),
       cardImporter: {
         adapter: createMockCardImport(import.meta.env.VITE_ADD_CARD_SCENARIO),
-        repository: createImportedCardRepository(window.localStorage, profile),
+        repository,
       },
       mockOrders: true,
       mockAuth: preview ? true : undefined,

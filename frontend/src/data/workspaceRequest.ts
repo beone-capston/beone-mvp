@@ -2,12 +2,14 @@ import { authBaseUrl, getCsrf } from '../auth/api'
 import type { PortfolioMode } from './portfolio'
 
 export type WorkspaceContext = 'demo' | 'member'
-export const workspaceContext: WorkspaceContext =
-  import.meta.env.VITE_WORKSPACE_CONTEXT === 'member' ||
-  (!import.meta.env.DEV && import.meta.env.VITE_WORKSPACE_CONTEXT !== 'demo') ? 'member' : 'demo'
+const configuredContext = import.meta.env.VITE_WORKSPACE_CONTEXT
+export const mockWorkspace = import.meta.env.DEV && configuredContext !== 'member' &&
+  (import.meta.env.VITE_PAYMENT_PREFERENCE_MODE === 'mock' ||
+    import.meta.env.VITE_ADD_CARD_MODE === 'mock' || import.meta.env.VITE_PAYMENT_API_MODE === 'mock')
 
-const demoBase = (import.meta.env.VITE_API_BASE_URL ??
-  (import.meta.env.DEV ? 'http://localhost:8080' : '')).replace(/\/+$/, '')
+export const workspaceContext: WorkspaceContext = configuredContext === 'demo' || mockWorkspace ? 'demo' : 'member'
+
+const demoBase = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')
 
 export async function workspaceRequest(context: WorkspaceContext, mode: PortfolioMode, path: string, options: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {}) {
   const headers = { ...options.headers }

@@ -15,7 +15,7 @@
 `preferences/preferenceApi.ts`는 `GET /api/v1/me/payment-preference`로
 설정을 읽고 `PUT`으로 변경한다. 보유 카드 목록의 추천 적격 여부를 사용한다.
 저장 요청에는 `selectionMode`와 `representativeUserCardId`가 포함된다.
-자동 추천의 대표 카드는 동률 판단에 사용할 수 있으며 명시적 해제로 제거한다.
+메뉴에서 자동 추천을 선택하면 대표 카드 ID를 지워 함께 저장한다.
 `usePaymentPreference`는 포트폴리오별 조회·저장 상태를 관리한다.
 
 `data/workspaceRequest.ts`는 결제 설정·주문·모의 승인에 같은 사용자 결정 방식을

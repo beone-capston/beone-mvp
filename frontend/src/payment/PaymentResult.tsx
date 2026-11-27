@@ -148,7 +148,7 @@ export function PaymentResult({ approval, attempt, gateway, cards, onReturn, onR
       </div>}
       {success && <button className="payment-cancel" disabled title="결제 취소는 준비 중이에요.">결제 취소</button>}
       <div className="payment-footer">
-        <p className="payment-disclaimer">{gateway.kind === 'mock' ? '개발용 합성 결과 · ' : ''}실제 금융거래는 발생하지 않습니다.</p>
+        <p className="payment-disclaimer">실제 금융거래는 발생하지 않습니다.</p>
         {!success && <button className="payment-secondary" onClick={onRestart}>새 승인 시도</button>}
         <button className="payment-primary" onClick={onReturn}>주문 목록으로</button>
       </div>

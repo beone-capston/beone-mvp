@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import App from '../App'
 import { createMockPaymentGateway } from '../payment/mockPayment'
@@ -150,21 +150,24 @@ it('조회 실패 시 자동 추천으로 진행하지 않고 재조회한 저�
   vi.stubGlobal('scrollTo', vi.fn())
   const mock = createMockPreferenceApi(localStorage)
   const readOwn = vi.fn().mockRejectedValueOnce(new Error('network')).mockResolvedValue(saved)
-  const save = vi.fn().mockResolvedValue({ ...saved, selectionMode: 'AUTO_RECOMMEND' })
+  const save = vi.fn().mockResolvedValue({ ...defaultDto(), updatedAt: saved.updatedAt })
   const api: PreferenceApi = {
     ...mock, read: (mode, abort) => mode === 'MY_CARDS' ? readOwn() : mock.read(mode, abort), save,
   }
   render(<App preferenceApi={api} cardSource={preferenceMockCardSource} />)
-  const retry = await screen.findByRole('button', { name: '다시 조회' })
+  await waitFor(() => expect(screen.queryByText('결제 설정 확인 중…')).not.toBeInTheDocument())
+  expect(readOwn).toHaveBeenCalledOnce()
+  expect(screen.queryByRole('button', { name: '다시 조회' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '결제 선택 방식' })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '올라운드 티타늄카드 가상카드 인증' }))
   expect(screen.queryByText('카드 사용')).toBeNull()
-  fireEvent.click(retry)
+  fireEvent.click(screen.getByRole('tab', { name: '내 카드' }))
   const menu = await screen.findByRole('button', { name: '결제 선택 방식' })
   expect(menu).toHaveTextContent('대표 카드 고정')
   fireEvent.click(menu)
+  expect(screen.queryByRole('menuitem', { name: '대표 카드 해제' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('menuitemradio', { name: '자동 추천' }))
-  expect(save).toHaveBeenCalledWith('MY_CARDS', { selectionMode: 'AUTO_RECOMMEND', representativeUserCardId: 'uc-1002' })
+  expect(save).toHaveBeenCalledWith('MY_CARDS', { selectionMode: 'AUTO_RECOMMEND', representativeUserCardId: null })
   await screen.findByText('자동 추천', { selector: '.preference-trigger' })
   fireEvent.click(menu)
   fireEvent.click(screen.getByRole('menuitemradio', { name: '자동 추천' }))

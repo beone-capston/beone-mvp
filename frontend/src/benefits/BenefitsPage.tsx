@@ -252,7 +252,6 @@ export function BenefitsPage({ mode, active, api }: { mode: PortfolioMode; activ
         <h1>혜택</h1>
         <div className="benefit-context">
           <span>• {mode === 'MY_CARDS' ? '내 카드' : '가상 포트폴리오'}</span>
-          {api.context === 'mock' && <small>개발용 예시 데이터</small>}
         </div>
       </header>
       <div className="benefit-month">

@@ -103,7 +103,7 @@ export const authApi = {
     return session
   },
   async login(credentials: Credentials) {
-    const member = await post<Member>('login', credentials)
+    const member = await post<Member>('login', credentials, 200)
     checkMember(member)
     return member
   },

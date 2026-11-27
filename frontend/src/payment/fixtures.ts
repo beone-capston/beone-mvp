@@ -1,4 +1,5 @@
 import { mockCardId } from '../preferences/mockPreference'
+import type { WalletCard } from '../data/portfolio'
 import type { CreatedOrder } from '../orders/order'
 import type { Amount, Approval, Attempt, ComparedCard, Recommendation, Rule } from './contract'
 
@@ -22,15 +23,18 @@ const fixtureRule = {
 const confirmed = (amountWon: number): Amount => ({ amountWon, status: 'CONFIRMED' })
 const unknown = { amountWon: null, status: 'NEEDS_CONFIRMATION' } satisfies Amount
 
-export function makeFixtures(attempt: Attempt, sequence: number) {
+export function makeFixtures(attempt: Attempt, sequence: number, walletCards?: readonly WalletCard[]) {
   const { order } = attempt.selection
   const { scenario, preference } = attempt
   const status = scenario === 'failed' || attempt.body.simulateFailure ? 'FAILED' : 'APPROVED'
   const selectionMode = scenario === 'fixed' ? 'FIXED_REPRESENTATIVE' : preference.selectionMode
   const representative = /^(?:sample|virtual)-(\d+)$/.exec(preference.representativeCardId ?? '')
   const representativeId = representative ? mockCardId(Number(representative[1])) : preference.representativeCardId
-  const optimal = mockCards[0]
-  const fixedCard = mockCards.find(card => card.userCardId === representativeId) ?? mockCards[1]
+  const available = walletCards ? mockCards.flatMap(fixture => walletCards
+    .filter(card => card.cardProductId === fixture.cardProductId)
+    .map(card => ({ ...fixture, userCardId: card.id, displayName: card.name }))) : mockCards
+  const optimal = available[0]
+  const fixedCard = available.find(card => card.userCardId === representativeId) ?? available[1] ?? optimal
   const selected = selectionMode === 'FIXED_REPRESENTATIVE' ? fixedCard : optimal
   const fixtureAmount = (card: typeof optimal) => scenario === 'unknown' || card === mockCards[2] ? unknown
     : confirmed(scenario === 'zero' ? 0 : card === optimal ? 700 : 200)
@@ -85,7 +89,7 @@ export function makeFixtures(attempt: Attempt, sequence: number) {
     decisionDate: order.orderDate, selectionMode, outcome: 'SELECTED', conditional,
     selected: { userCardId: optimal.userCardId, cardProductId: optimal.cardProductId,
       basis: { ...decision, gapToRunnerUpWon: decision.decidedBy ? 500 : null } },
-    comparedCards: [...new Set([optimal, mockCards[1], selected])].map(card =>
+    comparedCards: [...new Set([optimal, ...(available[1] ? [available[1]] : []), selected])].map(card =>
       comparison(card, fixtureAmount(card), card === selected ? appliedRule : null)),
     excludedCards: conditional ? [{
       userCardId: 'uc-1099', cardProductId: null, reason: 'NEEDS_CONFIRMATION',
@@ -99,7 +103,7 @@ export function makeFixtures(attempt: Attempt, sequence: number) {
       merchantClass: order.merchantClass, paymentMethod: order.paymentMethod },
     representativeUserCardId: selectionMode === 'FIXED_REPRESENTATIVE' ? selected.userCardId : representativeId,
     monthlyStateSnapshotAt: {} },
-    notes: ['개발용 합성 혜택 예시입니다.'],
+    notes: [],
   } satisfies Recommendation
   return { approval, recommendation }
 }

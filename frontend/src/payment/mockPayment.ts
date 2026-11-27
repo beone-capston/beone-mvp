@@ -1,6 +1,7 @@
 import { PaymentError, retryWindow } from './contract'
 import type { Approval, PaymentGateway, Recommendation, Scenario } from './contract'
 import { preferenceMockCardSource } from '../preferences/mockPreference'
+import type { CardSource } from '../data/portfolio'
 import { makeFixtures } from './fixtures'
 
 const errors: Partial<Record<Scenario, [number, string]>> = {
@@ -13,7 +14,7 @@ const errors: Partial<Record<Scenario, [number, string]>> = {
   server: [500, 'INTERNAL_SERVER_ERROR'],
 }
 
-export function createMockPaymentGateway(delayMs = 800, now = Date.now, strictFixtures = false): PaymentGateway {
+export function createMockPaymentGateway(delayMs = 800, now = Date.now, strictFixtures = false, cardSource?: CardSource): PaymentGateway {
   const cache = new Map<string, { signature: string; until: number; approval: Approval }>()
   const recommendations = new Map<string, { data: Recommendation; fail: boolean }>()
   const payments = new Map<string, Approval>()
@@ -42,12 +43,16 @@ export function createMockPaymentGateway(delayMs = 800, now = Date.now, strictFi
       if (scenario === 'timeout') throw new PaymentError('TIMEOUT', 0, true)
 
       if (strictFixtures && selection.source !== 'mock') throw new PaymentError('INVALID_REQUEST', 400)
+      const eligible = (cardSource ?? preferenceMockCardSource).getCards(mode).filter(card => card.canBeRepresentative)
+      if (cardSource && !eligible.length && attempt.preference.selectionMode === 'AUTO_RECOMMEND') {
+        throw new PaymentError('RECOMMENDATION_NOT_DETERMINED', 409)
+      }
       if (strictFixtures && attempt.preference.selectionMode === 'FIXED_REPRESENTATIVE' &&
-        !preferenceMockCardSource.getCards(mode).some(card =>
+        !eligible.some(card =>
           card.id === attempt.preference.representativeCardId && card.canBeRepresentative)) {
         throw new PaymentError('REPRESENTATIVE_CARD_NOT_ELIGIBLE', 409)
       }
-      const { approval, recommendation } = makeFixtures(attempt, sequence++)
+      const { approval, recommendation } = makeFixtures(attempt, sequence++, cardSource ? eligible : undefined)
       cache.set(cacheKey, { signature, until: now() + retryWindow, approval })
       recommendations.set(mode + ':' + recommendation.recommendationId,
         { data: recommendation, fail: scenario === 'comparisonError' })
