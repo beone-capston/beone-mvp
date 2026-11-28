@@ -17,7 +17,7 @@
 
 - 상태값에 스냅샷 뒤 승인을 더하지 않습니다. 계약대로 `afterSnapshot`은 화면 표시용 요약이고 상태값을 덮어쓰지 않습니다. 버킷 사용액에 스냅샷 뒤 승인 차감액을 더하는 일은 추천 입력을 만들 때 recommendation이 합니다([D-16](../decisions.md#d-15d-16d-17-확정-정책), [recommendation 안내](recommendation.md)).
 - 출처 충돌의 계산 기준 선택(200 응답, 선택 저장, `SOURCE_CONFLICT_CHANGED`)과 CODEF 값의 자동 반영. 충돌은 PUT 재저장으로 해소하고(사용자 결정 2026-11-27 Q3), `source-selections`는 계속 409입니다. 월간 상태 값의 `source`는 `MANUAL`·`UNKNOWN`만 나옵니다. CODEF 참고값은 `codefReference`·`referencedCodef`·충돌 후보로만 보입니다.
-- 한도 묶음 사용액·나머지 사용액의 CODEF 기반 추정(`INFERRED`). 후속 작업(T4)입니다.
+- 한도 묶음 사용액·나머지 사용액의 CODEF 기반 추정. 승인 행에 가맹점 업종이 없어 하지 않습니다(사용자 결정 2026-11-27 T4 Q1). 전월 실적의 승인 합계 추정값만 보여 줍니다([아래 절](#codef-승인-합계-추정값-289)).
 - 기준 기간 판단. 받은 `period`가 카드의 실적·한도 기간과 맞는지는 저장할 때 보지 않습니다. 엔진이 판단합니다([D-22](../decisions.md#d-22-확정-정책)).
 - 추천 엔진 입력(`MonthlyStateInput` 등 `benefit` 쪽 타입)으로 바꾸는 변환. 추천 작업(B2)이 이 서비스 결과를 읽어 바꿉니다.
 
@@ -46,7 +46,7 @@ monthlystate
 - [`MonthlyStateInput`](../../backend/src/main/java/com/beone/api/monthlystate/application/MonthlyStateInput.java) / [`MonthlyStateView`](../../backend/src/main/java/com/beone/api/monthlystate/application/MonthlyStateView.java): 웹 계층과 서비스 사이의 입력·조회 모델입니다.
 - [`MonthlyStateEntity`](../../backend/src/main/java/com/beone/api/monthlystate/persistence/MonthlyStateEntity.java), `BucketUsageEntity`, `ServiceSelectionEntity`: 테이블 3개. 사용자·보유 카드는 ID 값으로만 참조하고 `card` 엔티티에 연관을 두지 않습니다.
 
-다른 패키지와의 관계: 보유 카드 존재·소유·매핑은 `card`의 공개 부품 `UserCardService.list`로, 버킷·서비스 ID는 `CardProductService.getProduct`로 확인합니다. 둘 다 읽기만 하고 `card`·`benefit` 코드는 바꾸지 않았습니다. CODEF 실적 참고값은 `codef`의 읽기 전용 창구 [`CodefPerformanceReferenceQuery`](../../backend/src/main/java/com/beone/api/codef/application/CodefPerformanceReferenceQuery.java)로만 읽습니다(monthlystate → codef 한 방향, codef는 monthlystate를 읽지 않음, #281).
+다른 패키지와의 관계: 보유 카드 존재·소유·매핑은 `card`의 공개 부품 `UserCardService.list`로, 버킷·서비스 ID는 `CardProductService.getProduct`로 확인합니다. 둘 다 읽기만 하고 `card`·`benefit` 코드는 바꾸지 않았습니다. CODEF 실적 참고값은 `codef`의 읽기 전용 창구 [`CodefPerformanceReferenceQuery`](../../backend/src/main/java/com/beone/api/codef/application/CodefPerformanceReferenceQuery.java)로만 읽습니다(monthlystate → codef 한 방향, codef는 monthlystate를 읽지 않음, #281). 전월 승인 합계 추정값은 같은 방향으로 [`CodefApprovalLedgerQuery`](../../backend/src/main/java/com/beone/api/codef/application/CodefApprovalLedgerQuery.java)로 읽습니다(#289).
 
 ## 처리 흐름
 
@@ -98,6 +98,21 @@ view.referencedCodef().currentUseWon();        // 518000 (참고한 값, 계산 
 view.conflicts();                              // [] (바로 그 참고값을 참고했으므로)
 ```
 
+## CODEF 승인 합계 추정값 (#289)
+
+[D-16 변경 이력 2026-11-27 T4](../decisions.md#d-15d-16d-17-확정-정책)에서 "원장 기반 산출(`INFERRED`)"을 다음처럼 정했습니다.
+
+- **미리 채우기(`inferredReference`)**: 대상 월 `M`의 전월 실적 칸에, 이 카드의 `M-1` CODEF 정상 승인 금액 합을 "카드사 승인내역 합계(추정)"로 보여 줍니다. T1의 `codefReference`(실적 API 값)와 나란히 나옵니다. CODEF로 만든 카드가 아니거나 `M-1`과 겹치는 승인 판정 동기화가 없으면 `null`입니다. 그 달이 불완전하거나(동기화가 덮지 않은 날, 저장하지 않은 불완전 행) 전액 취소·취소 행이 있으면 합계는 `null`이고 사유가 붙습니다. 0으로 바꾸지 않습니다. 완전성 규칙은 원장 조회와 같습니다([ledger 안내](ledger.md#조회-규칙)).
+- **계산 미사용·충돌 없음(Q2)**: 추정값은 보조 표시값입니다. 수동 값과 달라도 `usable`·`conflicts`를 바꾸지 않습니다. D-16 충돌은 CODEF 실적 참고값만 만듭니다.
+- **확인 저장(`referencedInferredSyncId` → `referencedInferred`)**: PUT 전월 실적에 추정값의 근거 동기화 ID(`sync-N`)를 보내면, 서비스가 지금 `M-1` 합계를 다시 내 완전하고 근거가 같고 `period`가 `M-1` 1일~말일인지 확인합니다(아니면 400, 필드 `previousMonthPerformanceWon.referencedInferredSyncId`). 값은 사용자가 보낸 그대로 `MANUAL`이고, 참고한 합계·근거 동기화·산출 시각(저장 시각)을 V18 열에 둡니다. 참고 없이 다시 저장하면 지웁니다.
+
+```java
+// 10월 합계 512,000원(근거 sync-41)을 보고 그대로 확인해 저장한다
+MonthlyStateView view = monthlyStateService.replace(currentUser, "uc-1001", YearMonth.of(2026, 11),
+        new MonthlyStateInput(new MonthlyStateInput.Amount(512_000, octoberPeriod, null, 41L), null, null, null, null, null));
+view.referencedInferred().totalWon();   // 512000 (참고한 추정값, 계산 미사용)
+```
+
 ## 출처 충돌 선택 (#134)
 
 계약([`source-selections`](../api/monthly-states.md#put-apiv1mecardsusercardidmonthly-statesmonthsource-selections--출처-충돌-계산-기준-선택))은 같은 카드·항목·기준 기간에 출처가 다른 값이 서로 다를 때 사용자가 계산 기준을 고르는 API입니다. 자동 우선순위는 없습니다([D-16](../decisions.md#d-15d-16d-17-확정-정책)). C0 관리자 판단 P10에 따라 다음처럼 구현했습니다.
@@ -116,6 +131,7 @@ view.conflicts();                              // [] (바로 그 참고값을 �
 - 웹 [`SourceSelectionApiWebTest`](../../backend/src/test/java/com/beone/api/monthlystate/web/SourceSelectionApiWebTest.java): 출처 충돌 선택의 계약 요청 409, 가상 포트폴리오 409, 카드 404, 서비스가 예외 없이 돌아오면 500, 항목·출처 값 전부, 필드 400, 본문 형식 400, `month` 400.
 - 통합 [`MonthlyStateIntegrationTest`](../../backend/src/test/java/com/beone/api/monthlystate/MonthlyStateIntegrationTest.java): Testcontainers MySQL에서 V5 적용, 저장·조회, 같은 달 첫 저장 동시 요청, 달별·사용자별 분리, 해제 카드 404, 출처 충돌 선택(수동 값이 있어도 409·저장 변화 없음, 가상 포트폴리오 409, 남의 카드·없는 카드 404)을 확인합니다. 보유 카드 테스트가 수동 카드 행을 지우므로 이 테스트는 자기가 만든 월간 상태 행을 앞뒤로 지웁니다.
 - 통합 [`MonthlyStateCodefReferenceIntegrationTest`](../../backend/src/test/java/com/beone/api/monthlystate/MonthlyStateCodefReferenceIntegrationTest.java)(#281): V17 적용 MySQL에서 참고값 미리 채우기(당월 조회분·카드 미연결 제외) → 참고 확인 저장과 DB 스냅샷 → 재조회로 다른 값이면 충돌·`source-selections` 409 → 최신 참고값으로 재저장해 해소 → 참고값 행 삭제 뒤 스냅샷 유지, 참고 없는 값의 충돌, 다른 카드·기간·없는 참고값 400.
+- 단위 `MonthlyStateServiceTest`(#289): 추정값 미리 채우기(입력 전에도), 수동 값과 달라도 차단 없음, 확인 저장 스냅샷과 참고 없는 재저장의 삭제, 근거 변경·불완전·다른 기간·추정값 없음 400과 미저장. 웹 `MonthlyStateApiWebTest`: `inferredReference`·`referencedInferred` JSON, 불완전 `null`·사유, `referencedInferredSyncId` 전달·형식 400. 통합 [`CodefApprovalLedgerIntegrationTest`](../../backend/src/test/java/com/beone/api/codef/CodefApprovalLedgerIntegrationTest.java): V18 MySQL에서 미리 채우기 → 확인 저장·DB 스냅샷 → 불완전 행이 생기면 `null`·400, 취소 행 사유, 수동 카드·V18 전 동기화는 `null`.
 - 통합 [`MemberMonthlyStatePreferenceIntegrationTest`](../../backend/src/test/java/com/beone/api/auth/web/MemberMonthlyStatePreferenceIntegrationTest.java)(`member`): 회원 장부 저장·조회, 회원 A·B 분리, 시연 카드 404와 시연 헤더 무시, 401, CSRF 403·미저장(403이 출처 충돌 409보다 먼저), 400이 404보다 먼저, 남의 카드와 없는 카드의 404 본문 동일, 출처 충돌 선택 409·미저장, 월간 상태 재입력이 그 회원의 추천만 `MONTHLY_STATE_CHANGED`로 무효화, no-store. 이 테스트는 G3a 당시 추천 API가 `member`에 없어 추천을 서비스로 직접 만듭니다. 결제 설정 변경 뒤 추천 유효(결정 32 Q3)는 G3b(#160)의 [`MemberOrderRecommendationIntegrationTest`](../../backend/src/test/java/com/beone/api/auth/web/MemberOrderRecommendationIntegrationTest.java)가 API로 다시 확인합니다.
 
 ## 제약과 남은 위험

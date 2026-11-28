@@ -55,6 +55,7 @@ class MonthlyStateCodefReferenceIntegrationTest {
 	void clearRows() {
 		this.jdbcTemplate.update("DELETE FROM monthly_states");
 		this.jdbcTemplate.update("DELETE FROM codef_performance_references");
+		this.jdbcTemplate.update("DELETE FROM codef_sync_incomplete_marks");
 		this.jdbcTemplate.update("DELETE FROM codef_syncs");
 		this.jdbcTemplate.update("DELETE FROM user_cards WHERE holding_source <> 'SYNTHETIC'");
 	}

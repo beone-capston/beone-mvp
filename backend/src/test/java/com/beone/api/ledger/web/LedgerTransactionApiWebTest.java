@@ -54,11 +54,13 @@ class LedgerTransactionApiWebTest {
 			 {"ledgerTransactionId":"lt-9001","userCardId":"uc-1001","source":"SIMULATION","entryType":"APPROVAL",
 			  "amountWon":10000,"transactionDate":"2026-11-03","transactionTime":null,"merchantClass":"STARBUCKS_STORE",
 			  "paymentMethod":"DIRECT","transactionNature":null,"merchantName":"스타벅스 송도점","originalTransactionId":null,
-			  "simulatedPaymentId":"pay-7001","attributionMonth":{"value":"2026-11","status":"CONFIRMED"}},
+			  "simulatedPaymentId":"pay-7001","attributionMonth":{"value":"2026-11","status":"CONFIRMED"},
+			  "syncId":null,"fullyCanceled":null},
 			 {"ledgerTransactionId":"lt-9002","userCardId":"uc-1001","source":"SIMULATION","entryType":"CANCELLATION",
 			  "amountWon":-4000,"transactionDate":"2026-11-03","transactionTime":null,"merchantClass":"STARBUCKS_STORE",
 			  "paymentMethod":"DIRECT","transactionNature":null,"merchantName":"스타벅스 송도점","originalTransactionId":"lt-9001",
-			  "simulatedPaymentId":"pay-7001","attributionMonth":{"value":"2026-11","status":"CONFIRMED"}}],
+			  "simulatedPaymentId":"pay-7001","attributionMonth":{"value":"2026-11","status":"CONFIRMED"},
+			  "syncId":null,"fullyCanceled":null}],
 			 "coverage":[{"userCardId":"uc-1001","source":"SIMULATION","period":{"from":"2026-11-01","to":"2026-11-30"},
 			  "complete":true,"incompleteReasons":[]}]}}
 			""";
@@ -101,6 +103,42 @@ class LedgerTransactionApiWebTest {
 				{"data":{"month":"2026-11","items":[],"coverage":[
 				 {"userCardId":"uc-1001","source":"SIMULATION","period":{"from":"2026-11-01","to":"2026-11-30"},"complete":true,"incompleteReasons":[]},
 				 {"userCardId":"uc-1001","source":"CODEF","period":{"from":"2026-11-01","to":"2026-11-30"},"complete":false,"incompleteReasons":[]}]}}
+				""", 200);
+	}
+
+	@Test
+	void codefRowsAndCoverageAreShownWithoutRawIdentifiers() throws Exception {
+		LedgerMonthView.Period october = new LedgerMonthView.Period("2026-10-01", "2026-10-31");
+		given(this.ledgerQueryService.find(MY_CARDS, YearMonth.of(2026, 10), null, LedgerSource.CODEF))
+			.willReturn(new LedgerMonthView("2026-10", List.of(
+					new LedgerMonthView.Item("car-31", "uc-1001", "CODEF", "APPROVAL", 12000, "2026-10-04", "12:30:05",
+							null, null, null, null, null, null,
+							new LedgerMonthView.AttributionMonth("2026-10", "CONFIRMED"), "sync-41", true),
+					new LedgerMonthView.Item("car-32", "uc-1001", "CODEF", "CANCELLATION", -5000, "2026-10-09",
+							"08:00:00", null, null, null, null, null, null,
+							new LedgerMonthView.AttributionMonth(null, "NEEDS_CONFIRMATION"), "sync-41", false)),
+					List.of(new LedgerMonthView.Coverage("uc-1001", "CODEF", october, false,
+							List.of("UNDETERMINED_ROW", "PERIOD_NOT_COVERED")),
+							new LedgerMonthView.Coverage(null, "CODEF", october, false, List.of("UNDETERMINED_ROW")))));
+
+		assertJson(perform(get(PATH).param("month", "2026-10").param("source", "CODEF").header(HEADER, "MY_CARDS")),
+				"""
+				{"data":{"month":"2026-10","items":[
+				 {"ledgerTransactionId":"car-31","userCardId":"uc-1001","source":"CODEF","entryType":"APPROVAL",
+				  "amountWon":12000,"transactionDate":"2026-10-04","transactionTime":"12:30:05","merchantClass":null,
+				  "paymentMethod":null,"transactionNature":null,"merchantName":null,"originalTransactionId":null,
+				  "simulatedPaymentId":null,"attributionMonth":{"value":"2026-10","status":"CONFIRMED"},
+				  "syncId":"sync-41","fullyCanceled":true},
+				 {"ledgerTransactionId":"car-32","userCardId":"uc-1001","source":"CODEF","entryType":"CANCELLATION",
+				  "amountWon":-5000,"transactionDate":"2026-10-09","transactionTime":"08:00:00","merchantClass":null,
+				  "paymentMethod":null,"transactionNature":null,"merchantName":null,"originalTransactionId":null,
+				  "simulatedPaymentId":null,"attributionMonth":{"value":null,"status":"NEEDS_CONFIRMATION"},
+				  "syncId":"sync-41","fullyCanceled":false}],
+				 "coverage":[
+				  {"userCardId":"uc-1001","source":"CODEF","period":{"from":"2026-10-01","to":"2026-10-31"},
+				   "complete":false,"incompleteReasons":["UNDETERMINED_ROW","PERIOD_NOT_COVERED"]},
+				  {"userCardId":null,"source":"CODEF","period":{"from":"2026-10-01","to":"2026-10-31"},
+				   "complete":false,"incompleteReasons":["UNDETERMINED_ROW"]}]}}
 				""", 200);
 	}
 

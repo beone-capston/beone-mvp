@@ -48,6 +48,7 @@ class CodefSyncWithoutHmacKeyIntegrationTest {
 		this.jdbcTemplate.update("DELETE FROM codef_approval_rows");
 		this.jdbcTemplate.update("DELETE FROM codef_performance_references");
 		this.jdbcTemplate.update("DELETE FROM codef_held_cards");
+		this.jdbcTemplate.update("DELETE FROM codef_sync_incomplete_marks");
 		this.jdbcTemplate.update("DELETE FROM codef_syncs");
 		this.jdbcTemplate.update("DELETE FROM user_cards WHERE holding_source = 'CODEF'");
 		this.jdbcTemplate.update("DELETE FROM codef_connections");
@@ -70,6 +71,10 @@ class CodefSyncWithoutHmacKeyIntegrationTest {
 				  "message":"CODEF 응답을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."}]}}
 				""", response.getBody());
 		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM codef_approval_rows", Integer.class)).isZero();
+		// 승인 조회 실패로 남겨 그 기간을 CODEF 원장 완전성·추정 합계 판단에 쓰지 않는다(V18, #289)
+		assertThat(this.jdbcTemplate.queryForObject("SELECT approvals_judged FROM codef_syncs", Boolean.class)).isFalse();
+		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM codef_sync_incomplete_marks", Integer.class))
+			.isZero();
 		assertThat(this.jdbcTemplate.queryForObject("SELECT COUNT(*) FROM user_cards WHERE holding_source = 'CODEF'",
 				Integer.class))
 			.isEqualTo(2);

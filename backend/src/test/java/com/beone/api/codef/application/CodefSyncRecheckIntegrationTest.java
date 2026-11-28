@@ -70,6 +70,7 @@ class CodefSyncRecheckIntegrationTest {
 		this.jdbcTemplate.update("DELETE FROM codef_approval_rows");
 		this.jdbcTemplate.update("DELETE FROM codef_performance_references");
 		this.jdbcTemplate.update("DELETE FROM codef_held_cards");
+		this.jdbcTemplate.update("DELETE FROM codef_sync_incomplete_marks");
 		this.jdbcTemplate.update("DELETE FROM codef_syncs");
 		this.jdbcTemplate.update("DELETE FROM user_cards WHERE holding_source = 'CODEF'");
 		this.jdbcTemplate.update("DELETE FROM codef_connections");

@@ -102,11 +102,11 @@ class LedgerTransactionIntegrationTest {
 				 {"ledgerTransactionId":"%1$s","userCardId":"%3$s","source":"SIMULATION","entryType":"APPROVAL",
 				  "amountWon":100000,"transactionDate":"2026-11-17","transactionTime":null,"merchantClass":"ORDINARY_DOMESTIC",
 				  "paymentMethod":"DIRECT","transactionNature":null,"merchantName":"동네 마트","originalTransactionId":null,
-				  "simulatedPaymentId":"%4$s","attributionMonth":{"value":"2026-11","status":"CONFIRMED"}},
+				  "simulatedPaymentId":"%4$s","attributionMonth":{"value":"2026-11","status":"CONFIRMED"},"syncId":null,"fullyCanceled":null},
 				 {"ledgerTransactionId":"%2$s","userCardId":"%3$s","source":"SIMULATION","entryType":"CANCELLATION",
 				  "amountWon":-40000,"transactionDate":"2026-11-17","transactionTime":null,"merchantClass":"ORDINARY_DOMESTIC",
 				  "paymentMethod":"DIRECT","transactionNature":null,"merchantName":"동네 마트","originalTransactionId":"%1$s",
-				  "simulatedPaymentId":"%4$s","attributionMonth":{"value":"2026-11","status":"CONFIRMED"}}],
+				  "simulatedPaymentId":"%4$s","attributionMonth":{"value":"2026-11","status":"CONFIRMED"},"syncId":null,"fullyCanceled":null}],
 				 "coverage":[{"userCardId":"%3$s","source":"SIMULATION","period":{"from":"2026-11-01","to":"2026-11-30"},
 				  "complete":true,"incompleteReasons":[]}]}}
 				""".formatted(approvalLedger, cancellationLedger, card, payment), response.getBody());

@@ -23,13 +23,31 @@ import java.util.Objects;
  * @param codefReference 전월 실적 칸에 미리 채워 보여 줄 카드사 조회 실적(참고). 계산에 쓰지 않는다. 없으면 {@code null}
  * @param referencedCodef 사용자가 전월 실적을 입력할 때 참고한 CODEF 값(입력 당시 스냅샷). 참고 없이 입력했으면 {@code null}
  * @param conflicts 출처 충돌. 없으면 빈 목록
+ * @param inferredReference 전월 실적 칸에 미리 채워 보여 줄 CODEF 승인 합계 추정값(INFERRED, #289). 계산에 쓰지 않는다. CODEF 카드가
+ *     아니거나 그 달과 겹치는 승인 판정 동기화가 없으면 {@code null}
+ * @param referencedInferred 사용자가 전월 실적을 입력할 때 참고한 승인 합계 추정값(입력 당시 스냅샷). 참고 없이 입력했으면 {@code null}
  */
 public record MonthlyStateView(String userCardId, YearMonth month, LocalDateTime snapshotAt,
 		StateValue<Long> previousMonthPerformanceWon, List<BucketUsage> limitBucketUsages,
 		StateValue<Long> otherBucketsUsedWon, List<Selection> selectedServices,
 		ServiceSelectionStatus serviceSelectionStatus, NoSelection noServiceSelection,
 		StateValue<LocalDate> registeredOn, AfterSnapshot afterSnapshot, CodefReference codefReference,
-		ReferencedCodef referencedCodef, List<Conflict> conflicts) {
+		ReferencedCodef referencedCodef, List<Conflict> conflicts, InferredReference inferredReference,
+		ReferencedInferred referencedInferred) {
+
+	/**
+	 * 승인 합계 추정값이 없는 상태.
+	 */
+	public MonthlyStateView(String userCardId, YearMonth month, LocalDateTime snapshotAt,
+			StateValue<Long> previousMonthPerformanceWon, List<BucketUsage> limitBucketUsages,
+			StateValue<Long> otherBucketsUsedWon, List<Selection> selectedServices,
+			ServiceSelectionStatus serviceSelectionStatus, NoSelection noServiceSelection,
+			StateValue<LocalDate> registeredOn, AfterSnapshot afterSnapshot, CodefReference codefReference,
+			ReferencedCodef referencedCodef, List<Conflict> conflicts) {
+		this(userCardId, month, snapshotAt, previousMonthPerformanceWon, limitBucketUsages, otherBucketsUsedWon,
+				selectedServices, serviceSelectionStatus, noServiceSelection, registeredOn, afterSnapshot,
+				codefReference, referencedCodef, conflicts, null, null);
+	}
 
 	/**
 	 * CODEF 참고값·충돌이 없는 상태.
@@ -153,6 +171,43 @@ public record MonthlyStateView(String userCardId, YearMonth month, LocalDateTime
 		public CodefReference {
 			Objects.requireNonNull(period, "period");
 			Objects.requireNonNull(fetchedAt, "fetchedAt");
+		}
+
+	}
+
+	/**
+	 * 전월 실적 칸에 미리 채워 보여 줄 CODEF 승인 합계 추정값(INFERRED, #289). 계산에 쓰지 않는다.
+	 *
+	 * @param month 합계를 낸 달(대상 월의 전월)
+	 * @param period 그 달 1일~말일
+	 * @param totalWon 정상 승인 금액 합. 불완전이면 {@code null}(0이 아님)
+	 * @param incompleteReasons 합계를 낼 수 없는 사유. 비면 완전
+	 * @param basisSyncId 판단에 쓴 가장 최근 동기화 ID
+	 * @param basisSyncedAt 그 동기화의 조회 시각(서울)
+	 */
+	public record InferredReference(YearMonth month, DatePeriod period, Long totalWon, List<String> incompleteReasons,
+			long basisSyncId, LocalDateTime basisSyncedAt) {
+
+		public InferredReference {
+			Objects.requireNonNull(month, "month");
+			Objects.requireNonNull(period, "period");
+			incompleteReasons = List.copyOf(incompleteReasons);
+			Objects.requireNonNull(basisSyncedAt, "basisSyncedAt");
+		}
+
+	}
+
+	/**
+	 * 사용자가 전월 실적을 입력할 때 참고한 승인 합계 추정값. 입력 당시 스냅샷이며 나중에 합계가 바뀌어도 그대로다(#289).
+	 *
+	 * @param basisSyncId 산출 근거 동기화 ID
+	 * @param totalWon 그때의 추정 합계
+	 * @param computedAt 산출(확인 저장) 시각(서울)
+	 */
+	public record ReferencedInferred(long basisSyncId, long totalWon, LocalDateTime computedAt) {
+
+		public ReferencedInferred {
+			Objects.requireNonNull(computedAt, "computedAt");
 		}
 
 	}

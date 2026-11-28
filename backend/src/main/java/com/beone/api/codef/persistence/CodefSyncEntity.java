@@ -34,6 +34,10 @@ public class CodefSyncEntity {
 	@Column(name = "synced_at", nullable = false)
 	private LocalDateTime syncedAt;
 
+	// 승인내역 판정을 마쳤는지(V18, #289). V18 전 동기화는 NULL(알 수 없음)
+	@Column(name = "approvals_judged")
+	private Boolean approvalsJudged;
+
 	protected CodefSyncEntity() {
 	}
 
@@ -69,6 +73,22 @@ public class CodefSyncEntity {
 
 	public LocalDateTime getSyncedAt() {
 		return this.syncedAt;
+	}
+
+	/**
+	 * 승인내역 판정을 마쳤는지.
+	 * @return 판정했으면 {@code true}, 승인 조회 실패면 {@code false}, V18 전 동기화면 {@code null}
+	 */
+	public Boolean getApprovalsJudged() {
+		return this.approvalsJudged;
+	}
+
+	/**
+	 * 이 동기화의 승인내역 판정 결과를 기록한다.
+	 * @param judged 승인 행을 판정했으면 {@code true}, 승인 조회가 실패했으면 {@code false}
+	 */
+	public void recordApprovalsJudged(boolean judged) {
+		this.approvalsJudged = judged;
 	}
 
 }

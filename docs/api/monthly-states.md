@@ -50,7 +50,9 @@ X-BeONE-Demo-User: MY_CARDS
       "usable": true,
       "reason": null,
       "referencedCodef": null,
-      "codefReference": null
+      "codefReference": null,
+      "inferredReference": null,
+      "referencedInferred": null
     },
     "limitBucketUsages": [
       {
@@ -122,6 +124,22 @@ X-BeONE-Demo-User: MY_CARDS
   - `currentUseWon` · Integer|null · 카드사 조회 금액(현재이용금액). 해석하지 못했으면 `null`(0이 아님)
   - `fetchedAt` · DateTime · 조회 시각
   - `usedInCalculation` · Boolean · 항상 `false`
+- `inferredReference` · Object|null · 전월 실적 칸에 미리 채워 보여 줄 "카드사 승인내역 합계(추정)"(INFERRED, 사용자 결정 2026-11-27 T4, #289). 대상 월 `M`의 전월 `M-1`에 사용일자가 있는 이 카드의 CODEF 정상 승인 금액 합이다. CODEF로 만든 카드가 아니거나 그 달과 겹치는 승인 판정 동기화가 없으면 `null`. **계산에 쓰지 않고, 수동 값과 달라도 충돌을 만들지 않는다.** `codefReference`와 함께 나올 수 있다
+  - `label` · String · 항상 `카드사 승인내역 합계(추정)`
+  - `source` · String · 항상 `INFERRED`
+  - `month` · String(YYYY-MM) · 합계를 낸 달(대상 월의 전월)
+  - `period` · Object · 그 달 1일~말일
+  - `totalWon` · Integer|null · 합계. 불완전이면 `null`(0이 아님)
+  - `complete` · Boolean · 합계를 낼 수 있으면 `true`
+  - `incompleteReasons` · Array · 원장 조회 CODEF 완전성 사유(`PERIOD_NOT_COVERED`, 동기화 판정 사유)와 `CANCELLATION_ATTRIBUTION_UNCONFIRMED`(그 달에 전액 취소·취소 행이 있어 접수월을 모름, D-17). 비면 완전
+  - `basisSyncId` · String · 판단에 쓴 가장 최근 동기화(`sync-` 형식). `PUT`의 `referencedInferredSyncId`로 보낸다
+  - `basisSyncedAt` · DateTime · 그 동기화의 조회 시각
+  - `usedInCalculation` · Boolean · 항상 `false`
+  - 포함·제외 기준: 완전한 달의 정상 승인만 더한다. 해외·원화 아님·금액 해석 불가·판단 불가 행은 저장되지 않고 불완전 사유로 남아 그 달을 불완전으로 만든다. 완전성 규칙은 [원장 조회](ledger.md)의 CODEF 완전성과 같다
+- `referencedInferred` · Object|null · 사용자가 승인 합계 추정값을 보고 전월 실적을 입력했을 때(`PUT`의 `referencedInferredSyncId`) 참고한 값의 스냅샷. 참고 없이 입력했으면 `null`(#289)
+  - `basisSyncId` · String · 산출 근거 동기화
+  - `totalWon` · Integer · 그때의 추정 합계
+  - `computedAt` · DateTime · 산출(확인 저장) 시각
 - `conflicts` · Array · 같은 항목·같은 기준 기간에 출처가 다른 값이 서로 다를 때만 담는다(D-16). 항목 형식: `item`, `period`, `conflictVersion`, `candidates[]`(`source`, `value`, `period`, `updatedAt`), `selection`(`selectedSource`, `selectedAt`, 없으면 `null`)
   - 지금 충돌이 생기는 항목은 `previousMonthPerformanceWon`뿐이다(#281, 사용자 결정 2026-11-27 Q1). 저장된 전월 실적과 같은 기준 기간의 최신 연결 CODEF 참고값 금액이 있고(미확인은 충돌 아님) 값이 다르며, 그 값이 바로 그 참고값을 참고해 저장된 것이 아니면 충돌이다. 참고 없이 입력한 값도 포함한다. 재조회로 새 참고값이 다른 금액이면 다시 충돌이다
   - 충돌 동안 그 값은 `usable=false`, `reason=SOURCE_CONFLICT`이고 계산에 쓰지 않는다(Q2). `candidates`는 `MANUAL`(저장 값·입력 시각)과 `CODEF`(참고값 금액·조회 시각) 두 개다. `selection`은 항상 `null`이다(계산 기준 선택을 저장하지 않음)
@@ -225,6 +243,7 @@ registeredOn
 - 금액 항목의 `value`는 정수이며 소수·문자열은 400이다. `previousMonthPerformanceWon.value`는 **음수를 받는다**(D-17). 0으로 바꾸지 않는다.
 - `source`·`updatedAt`은 서버가 정한다. 요청으로 받지 않는다. 이 입력은 CODEF 조회값을 덮어쓰지 않는다.
 - `previousMonthPerformanceWon.referencedCodefId` · String · 선택 · 사용자가 보고 확인한 카드사 조회 실적(참고)의 `referenceId`(조회 응답 `codefReference.referenceId`, `cpr-` 형식, #281). 보내면 값은 그대로 `MANUAL`로 저장하고 참고한 CODEF 값을 응답 `referencedCodef`로 남긴다. 참고값과 다른 값을 보내도 된다(사용자가 정한 값). 본인의 참고값이고 이 카드에 연결됐고 반영기간이 `period`와 같아야 한다. 생략하면 참고 기록 없이 저장하고 이전 참고 기록은 지운다. 다른 금액 항목에는 이 필드가 없다(알 수 없는 필드 400).
+- `previousMonthPerformanceWon.referencedInferredSyncId` · String · 선택 · 사용자가 보고 확인한 승인 합계 추정값의 `basisSyncId`(조회 응답 `inferredReference.basisSyncId`, `sync-` 형식, #289). 서버가 지금 다시 낸 전월 합계가 완전하고 근거 동기화가 이 값과 같고 `period`가 전월 1일~말일일 때만 받는다. 값은 그대로 `MANUAL`로 저장하고 참고한 합계·산출 시각을 응답 `referencedInferred`로 남긴다. 추정값과 다른 값을 보내도 된다. 그 사이 동기화로 근거가 바뀌었으면 400이므로 다시 조회해 새 추정값을 보여 준다. 생략하면 이전 추정값 참고 기록은 지운다. `referencedCodefId`와 함께 보낼 수 있다.
 - `limitBucketUsages[].value`는 0 이상 정수다. `0`은 "사용한 혜택 없음"을 직접 입력한 값이다.
 - 한도가 체인으로 묶인 서비스는 체인 안 버킷마다 사용액을 입력한다. 하나라도 `UNKNOWN`이면 그 서비스는 `확인 필요`다(D-16, D-18 K1).
 - 입력 사용액이 한도보다 커도 저장은 한다. 한도는 실적 구간에 따라 달라 추천 때 판정한다. 제외 업종(`NOT_APPLICABLE_EXCLUDED`)·대상 업종·결제 방식·최소 금액·실적 미충족이 확인되거나, 택1 선택형 서비스에서 다른 서비스를 골랐거나 선택 없음이면(`NOT_APPLICABLE_SELECTION`) 사용액과 무관하게 확정 0원이다. 그렇지 않으면 추천에서 그 서비스는 `확인 필요`(사유 `USAGE_EXCEEDS_LIMIT`)이고, 사용액이 한도와 같으면 남은 한도 0이다(D-18 K1).
@@ -259,7 +278,9 @@ registeredOn
       "usable": true,
       "reason": null,
       "referencedCodef": null,
-      "codefReference": null
+      "codefReference": null,
+      "inferredReference": null,
+      "referencedInferred": null
     },
     "limitBucketUsages": [
       {
@@ -321,6 +342,7 @@ registeredOn
   - `selectedServices` 항목과 `noServiceSelection`을 함께 보냄(제안)
   - 선택형 서비스가 없는 카드에 `noServiceSelection`을 보냄(제안)
   - `referencedCodefId` 형식 오류(`형식이 올바르지 않습니다.`), 또는 본인 참고값이 아니거나 이 카드에 연결되지 않았거나 반영기간이 `period`와 다름(`참고할 수 없는 카드사 조회 실적입니다.`). 필드는 `previousMonthPerformanceWon.referencedCodefId`
+  - `referencedInferredSyncId` 형식 오류(`형식이 올바르지 않습니다.`), 또는 그 근거의 추정값이 없거나 불완전하거나 근거 동기화가 바뀌었거나 `period`가 전월 1일~말일이 아님(`참고할 수 없는 승인 합계 추정값입니다.`). 필드는 `previousMonthPerformanceWon.referencedInferredSyncId`
 
 - **404 `USER_CARD_NOT_FOUND`**: 없거나 다른 사용자의 카드
 

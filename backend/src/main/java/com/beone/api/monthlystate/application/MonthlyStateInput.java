@@ -40,8 +40,9 @@ public record MonthlyStateInput(Amount previousMonthPerformanceWon, List<BucketU
 	 * @param valueWon 원 단위 정수
 	 * @param period 기준 기간
 	 * @param referencedCodefId 사용자가 보고 확인한 CODEF 실적 참고값 ID(전월 실적만, D-16). 없으면 {@code null}
+	 * @param referencedInferredSyncId 사용자가 보고 확인한 승인 합계 추정값의 근거 동기화 ID(전월 실적만, #289). 없으면 {@code null}
 	 */
-	public record Amount(long valueWon, DatePeriod period, Long referencedCodefId) {
+	public record Amount(long valueWon, DatePeriod period, Long referencedCodefId, Long referencedInferredSyncId) {
 
 		public Amount {
 			Objects.requireNonNull(period, "period");
@@ -53,7 +54,17 @@ public record MonthlyStateInput(Amount previousMonthPerformanceWon, List<BucketU
 		 * @param period 기준 기간
 		 */
 		public Amount(long valueWon, DatePeriod period) {
-			this(valueWon, period, null);
+			this(valueWon, period, null, null);
+		}
+
+		/**
+		 * 실적 참고값만 참고한 금액.
+		 * @param valueWon 원 단위 정수
+		 * @param period 기준 기간
+		 * @param referencedCodefId CODEF 실적 참고값 ID. 없으면 {@code null}
+		 */
+		public Amount(long valueWon, DatePeriod period, Long referencedCodefId) {
+			this(valueWon, period, referencedCodefId, null);
 		}
 
 	}

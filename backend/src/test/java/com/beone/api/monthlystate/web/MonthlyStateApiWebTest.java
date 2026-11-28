@@ -83,7 +83,7 @@ class MonthlyStateApiWebTest {
 			"previousMonthPerformanceWon": {
 			  "value": 523000, "source": "MANUAL", "period": {"from": "2026-10-01", "to": "2026-10-31"},
 			  "updatedAt": "2026-11-03T10:20:00+09:00", "usable": true, "reason": null, "referencedCodef": null,
-			  "codefReference": null
+			  "codefReference": null, "inferredReference": null, "referencedInferred": null
 			},
 			"limitBucketUsages": [
 			  {"limitBucketId": "LB-GREAT", "value": 4000, "source": "MANUAL",
@@ -137,7 +137,8 @@ class MonthlyStateApiWebTest {
 		assertJson(perform(get(PATH).header(HEADER, "MY_CARDS")), """
 				{"data":{"userCardId":"uc-1001","month":"2026-11","snapshotAt":null,
 				 "previousMonthPerformanceWon":{"value":null,"source":"UNKNOWN","period":null,"updatedAt":null,
-				   "usable":false,"reason":"NOT_ENTERED","referencedCodef":null,"codefReference":null},
+				   "usable":false,"reason":"NOT_ENTERED","referencedCodef":null,"codefReference":null,
+				   "inferredReference":null,"referencedInferred":null},
 				 "limitBucketUsages":[],"otherBucketsUsedWon":%s,"selectedServices":[],
 				 "serviceSelectionStatus":"UNKNOWN","noServiceSelection":null,"registeredOn":%s,
 				 "conflicts":[],"afterSnapshot":null}}
@@ -158,7 +159,8 @@ class MonthlyStateApiWebTest {
 				{"data":{"userCardId":"uc-1001","month":"2026-11","snapshotAt":"2026-11-03T10:20:00+09:00",
 				 "previousMonthPerformanceWon":{"value":-12000,"source":"MANUAL",
 				   "period":{"from":"2026-10-01","to":"2026-10-31"},"updatedAt":"2026-11-03T10:20:00+09:00",
-				   "usable":true,"reason":null,"referencedCodef":null,"codefReference":null},
+				   "usable":true,"reason":null,"referencedCodef":null,"codefReference":null,
+				   "inferredReference":null,"referencedInferred":null},
 				 "limitBucketUsages":[],
 				 "otherBucketsUsedWon":{"value":0,"source":"MANUAL","period":{"from":"2026-11-01","to":"2026-11-30"},
 				   "updatedAt":"2026-11-03T10:20:00+09:00","usable":true,"reason":null},
@@ -282,7 +284,8 @@ class MonthlyStateApiWebTest {
 				     "fetchedAt":"2026-11-04T09:01:00+09:00"},
 				   "codefReference":{"referenceId":"cpr-6","label":"카드사 조회 실적(참고)","inquiryMonth":"2026-10",
 				     "period":{"from":"2026-10-01","to":"2026-10-31"},"currentUseWon":530000,
-				     "fetchedAt":"2026-11-20T08:00:00+09:00","usedInCalculation":false}},
+				     "fetchedAt":"2026-11-20T08:00:00+09:00","usedInCalculation":false},
+				   "inferredReference":null,"referencedInferred":null},
 				 "limitBucketUsages":[],"otherBucketsUsedWon":%s,"selectedServices":[],
 				 "serviceSelectionStatus":"UNKNOWN","noServiceSelection":null,"registeredOn":%s,
 				 "conflicts":[{"item":"previousMonthPerformanceWon","period":{"from":"2026-10-01","to":"2026-10-31"},
@@ -337,6 +340,74 @@ class MonthlyStateApiWebTest {
 	void malformedReferencedCodefIdIsAFieldError(String id) throws Exception {
 		assertFieldError("{\"previousMonthPerformanceWon\":{\"value\":1,\"period\":{\"from\":\"2026-10-01\",\"to\":\"2026-10-31\"},"
 				+ "\"referencedCodefId\":\"" + id + "\"}}", "previousMonthPerformanceWon.referencedCodefId",
+				"형식이 올바르지 않습니다.");
+		verifyNoInteractions(this.monthlyStateService);
+	}
+
+	@Test
+	void getShowsTheInferredEstimateAndTheReferencedEstimate() throws Exception {
+		LocalDateTime synced = LocalDateTime.of(2026, 11, 5, 9, 0, 0);
+		given(this.monthlyStateService.get(MY_CARDS, "uc-1001", NOVEMBER)).willReturn(new MonthlyStateView("uc-1001",
+				NOVEMBER, SNAPSHOT, StateValue.manual(512000L, OCTOBER, SNAPSHOT), List.of(), StateValue.unknown(),
+				List.of(), ServiceSelectionStatus.UNKNOWN, null, StateValue.unknown(), null, null, null, List.of(),
+				new MonthlyStateView.InferredReference(YearMonth.of(2026, 10), OCTOBER, 512000L, List.of(), 41, synced),
+				new MonthlyStateView.ReferencedInferred(41, 512000, SNAPSHOT)));
+
+		String body = perform(get(PATH).header(HEADER, "MY_CARDS")).getResponse()
+			.getContentAsString(StandardCharsets.UTF_8);
+
+		assertThat(body).contains("""
+				"inferredReference":{"label":"카드사 승인내역 합계(추정)","source":"INFERRED","month":"2026-10",\
+				"period":{"from":"2026-10-01","to":"2026-10-31"},"totalWon":512000,"complete":true,\
+				"incompleteReasons":[],"basisSyncId":"sync-41","basisSyncedAt":"2026-11-05T09:00:00+09:00",\
+				"usedInCalculation":false}""")
+			.contains("""
+					"referencedInferred":{"basisSyncId":"sync-41","totalWon":512000,\
+					"computedAt":"2026-11-03T10:20:00+09:00"}""")
+			// 추정값은 충돌을 만들지 않는다(사용자 결정 2026-11-27 Q2)
+			.contains("\"conflicts\":[]");
+	}
+
+	@Test
+	void incompleteEstimateHasANullTotalAndReasons() throws Exception {
+		given(this.monthlyStateService.get(MY_CARDS, "uc-1001", NOVEMBER)).willReturn(new MonthlyStateView("uc-1001",
+				NOVEMBER, null, StateValue.unknown(), List.of(), StateValue.unknown(), List.of(),
+				ServiceSelectionStatus.UNKNOWN, null, StateValue.unknown(), null, null, null, List.of(),
+				new MonthlyStateView.InferredReference(YearMonth.of(2026, 10), OCTOBER, null,
+						List.of("UNDETERMINED_ROW", "CANCELLATION_ATTRIBUTION_UNCONFIRMED"), 41,
+						LocalDateTime.of(2026, 11, 5, 9, 0, 0)),
+				null));
+
+		String body = perform(get(PATH).header(HEADER, "MY_CARDS")).getResponse()
+			.getContentAsString(StandardCharsets.UTF_8);
+
+		assertThat(body).contains("\"totalWon\":null,\"complete\":false,"
+				+ "\"incompleteReasons\":[\"UNDETERMINED_ROW\",\"CANCELLATION_ATTRIBUTION_UNCONFIRMED\"]")
+			.doesNotContain("\"totalWon\":0")
+			.contains("\"referencedInferred\":null");
+	}
+
+	@Test
+	void putPassesTheReferencedInferredSyncId() throws Exception {
+		given(this.monthlyStateService.replace(eq(MY_CARDS), eq("uc-1001"), eq(NOVEMBER), any()))
+			.willReturn(contractView(null));
+
+		assertThat(perform(json(put(PATH), """
+				{"previousMonthPerformanceWon":{"value":512000,"period":{"from":"2026-10-01","to":"2026-10-31"},
+				 "referencedInferredSyncId":"sync-41"}}
+				""").header(HEADER, "MY_CARDS")).getResponse().getStatus()).isEqualTo(200);
+
+		ArgumentCaptor<MonthlyStateInput> captor = ArgumentCaptor.forClass(MonthlyStateInput.class);
+		verify(this.monthlyStateService).replace(eq(MY_CARDS), eq("uc-1001"), eq(NOVEMBER), captor.capture());
+		assertThat(captor.getValue().previousMonthPerformanceWon())
+			.isEqualTo(new MonthlyStateInput.Amount(512000, OCTOBER, null, 41L));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "41", "sync-0", "sync-041", "cpr-41", "", "sync-41 " })
+	void malformedReferencedInferredSyncIdIsAFieldError(String id) throws Exception {
+		assertFieldError("{\"previousMonthPerformanceWon\":{\"value\":1,\"period\":{\"from\":\"2026-10-01\",\"to\":\"2026-10-31\"},"
+				+ "\"referencedInferredSyncId\":\"" + id + "\"}}", "previousMonthPerformanceWon.referencedInferredSyncId",
 				"형식이 올바르지 않습니다.");
 		verifyNoInteractions(this.monthlyStateService);
 	}

@@ -30,6 +30,7 @@ import com.beone.api.card.application.RecommendationEligibility;
 import com.beone.api.card.application.UserCardMapping;
 import com.beone.api.card.application.UserCardService;
 import com.beone.api.card.application.UserCardView;
+import com.beone.api.codef.application.CodefApprovalLedgerQuery;
 import com.beone.api.codef.application.CodefPerformanceReferenceQuery;
 import com.beone.api.ledger.application.LedgerActivity;
 import com.beone.api.ledger.application.LedgerEntryType;
@@ -79,6 +80,8 @@ class MonthlyStateServiceTest {
 	// 기본은 참고값 없음(Mockito 기본 응답이 빈 Optional)
 	private final CodefPerformanceReferenceQuery codef = mock(CodefPerformanceReferenceQuery.class);
 
+	private final CodefApprovalLedgerQuery approvals = mock(CodefApprovalLedgerQuery.class);
+
 	private final List<BucketUsageEntity> savedUsages = new ArrayList<>();
 
 	private final List<ServiceSelectionEntity> savedSelections = new ArrayList<>();
@@ -91,7 +94,7 @@ class MonthlyStateServiceTest {
 		CardProductService products = new CardProductService(RuleCatalogLoader.load(),
 				new StaticListableBeanFactory().getBeanProvider(Clock.class));
 		this.service = new MonthlyStateService(this.states, this.usages, this.selections, this.userCards, products,
-				this.ledger, this.codef, clock);
+				this.ledger, this.codef, this.approvals, clock);
 		given(this.states.saveAndFlush(any())).willAnswer(invocation -> {
 			MonthlyStateEntity entity = invocation.getArgument(0);
 			if (entity.getMonthlyStateId() == null) {
@@ -232,7 +235,7 @@ class MonthlyStateServiceTest {
 		MonthlyStateService service = new MonthlyStateService(this.states, this.usages, this.selections,
 				this.userCards, new CardProductService(RuleCatalogLoader.load(),
 						new StaticListableBeanFactory().getBeanProvider(Clock.class)),
-				this.ledger, this.codef, ticking);
+				this.ledger, this.codef, this.approvals, ticking);
 		holds(confirmed("uc-11", "09271"));
 		AtomicInteger readsWhenLocking = new AtomicInteger(-1);
 		given(this.states.findForUpdateByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11")).willAnswer(invocation -> {
@@ -618,6 +621,87 @@ class MonthlyStateServiceTest {
 		}
 		verify(this.states, never()).insertIfAbsent(any(), any(), any(), any());
 		verify(this.states, never()).saveAndFlush(any());
+	}
+
+	private static final LocalDateTime SYNCED = LocalDateTime.of(2026, 11, 5, 9, 0);
+
+	private static CodefApprovalLedgerQuery.Estimate complete(long total, long syncId) {
+		return new CodefApprovalLedgerQuery.Estimate(YearMonth.of(2026, 10), total, List.of(), syncId, SYNCED);
+	}
+
+	@Test
+	void previousMonthEstimateIsShownForPrefillButNotUsed() {
+		holds(confirmed("uc-11", "09271"));
+		given(this.states.findByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11")).willReturn(Optional.empty());
+		given(this.approvals.estimate(1L, 11L, YearMonth.of(2026, 10))).willReturn(Optional.of(complete(512_000, 41)));
+
+		MonthlyStateView view = this.service.get(ME, "uc-11", NOVEMBER);
+
+		// 전월(10월) 합계를 보여 주되 전월 실적은 여전히 미입력이고 충돌도 없다(Q1·Q2)
+		assertThat(view.inferredReference()).isEqualTo(new MonthlyStateView.InferredReference(YearMonth.of(2026, 10),
+				OCTOBER, 512_000L, List.of(), 41, SYNCED));
+		assertThat(view.previousMonthPerformanceWon()).isEqualTo(StateValue.unknown());
+		assertThat(view.referencedInferred()).isNull();
+	}
+
+	@Test
+	void manualValueDifferentFromTheEstimateIsNotBlocked() {
+		holds(confirmed("uc-11", "09271"));
+		storedPrevious(500_000, null);
+		given(this.approvals.estimate(1L, 11L, YearMonth.of(2026, 10))).willReturn(Optional.of(complete(512_000, 41)));
+
+		MonthlyStateView view = this.service.get(ME, "uc-11", NOVEMBER);
+
+		assertThat(view.previousMonthPerformanceWon().usable()).isTrue();
+		assertThat(view.conflicts()).isEmpty();
+	}
+
+	@Test
+	void replaceWithTheEstimateStoresManualValueAndTheEstimateSnapshot() {
+		holds(confirmed("uc-11", "09271"));
+		given(this.approvals.estimate(1L, 11L, YearMonth.of(2026, 10))).willReturn(Optional.of(complete(512_000, 41)));
+
+		MonthlyStateView view = this.service.replace(ME, "uc-11", NOVEMBER, new MonthlyStateInput(
+				new MonthlyStateInput.Amount(512_000, OCTOBER, null, 41L), null, null, null, null, null));
+
+		assertThat(view.previousMonthPerformanceWon()).isEqualTo(StateValue.manual(512_000L, OCTOBER, NOW));
+		assertThat(view.referencedInferred()).isEqualTo(new MonthlyStateView.ReferencedInferred(41, 512_000, NOW));
+
+		// 참고 없이 다시 저장하면 추정값 참고 기록도 지운다
+		MonthlyStateEntity locked = new MonthlyStateEntity(1L, 11L, "2026-11");
+		locked.replace("09271", NOW, 1L, OCTOBER.from(), OCTOBER.to(), null, null, null, null, false, null);
+		locked.referPreviousMonthToInferred(512_000, 41, NOW);
+		given(this.states.findForUpdateByUserIdAndUserCardIdAndStateMonth(1L, 11L, "2026-11"))
+			.willReturn(Optional.of(locked));
+		assertThat(this.service.replace(ME, "uc-11", NOVEMBER, previousOnly(2000)).referencedInferred()).isNull();
+		assertThat(locked.getPreviousMonthInferredComputedAt()).isNull();
+	}
+
+	@Test
+	void staleIncompleteOrOtherPeriodEstimatesAreRejectedBeforeSaving() {
+		holds(confirmed("uc-11", "09271"));
+		YearMonth october = YearMonth.of(2026, 10);
+		// 근거 동기화가 바뀜(41 → 42)
+		given(this.approvals.estimate(1L, 11L, october)).willReturn(Optional.of(complete(512_000, 42)));
+		assertInferredRejected(new MonthlyStateInput.Amount(512_000, OCTOBER, null, 41L));
+		// 기준 기간이 전월 1일~말일이 아님
+		assertInferredRejected(new MonthlyStateInput.Amount(512_000, NOVEMBER_PERIOD, null, 42L));
+		// 불완전한 달
+		given(this.approvals.estimate(1L, 11L, october)).willReturn(Optional.of(new CodefApprovalLedgerQuery.Estimate(
+				october, null, List.of("PERIOD_NOT_COVERED"), 42, SYNCED)));
+		assertInferredRejected(new MonthlyStateInput.Amount(512_000, OCTOBER, null, 42L));
+		// 추정값이 없음(수동 카드 등)
+		given(this.approvals.estimate(1L, 11L, october)).willReturn(Optional.empty());
+		assertInferredRejected(new MonthlyStateInput.Amount(512_000, OCTOBER, null, 42L));
+		verify(this.states, never()).saveAndFlush(any());
+	}
+
+	private void assertInferredRejected(MonthlyStateInput.Amount amount) {
+		assertThatThrownBy(() -> this.service.replace(ME, "uc-11", NOVEMBER,
+				new MonthlyStateInput(amount, null, null, null, null, null)))
+			.isInstanceOfSatisfying(RuleMismatchException.class, ex -> assertThat(ex.violations())
+				.extracting(RuleMismatchException.Violation::field)
+				.containsExactly("previousMonthPerformanceWon.referencedInferredSyncId"));
 	}
 
 	private void holds(UserCardView... cards) {

@@ -2,6 +2,8 @@ package com.beone.api.ledger.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
@@ -10,6 +12,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
 
 import com.beone.api.card.application.ConfirmationMethod;
 import com.beone.api.card.application.HoldingSource;
@@ -18,6 +21,8 @@ import com.beone.api.card.application.RecommendationEligibility;
 import com.beone.api.card.application.UserCardMapping;
 import com.beone.api.card.application.UserCardService;
 import com.beone.api.card.application.UserCardView;
+import com.beone.api.codef.application.CodefApprovalLedgerQuery;
+import com.beone.api.codef.sync.CodefLedgerRowKind;
 import com.beone.api.ledger.persistence.LedgerTransactionEntity;
 import com.beone.api.ledger.persistence.LedgerTransactionRepository;
 import com.beone.api.ledger.persistence.LedgerUsageEffectEntity;
@@ -46,7 +51,10 @@ class LedgerQueryServiceTest {
 
 	private final LedgerUsageEffectRepository effects = mock(LedgerUsageEffectRepository.class);
 
-	private final LedgerQueryService service = new LedgerQueryService(this.repository, this.effects, this.cards);
+	private final CodefApprovalLedgerQuery codef = mock(CodefApprovalLedgerQuery.class);
+
+	private final LedgerQueryService service = new LedgerQueryService(this.repository, this.effects, this.cards,
+			this.codef);
 
 	@BeforeEach
 	void setUp() {
@@ -54,6 +62,9 @@ class LedgerQueryServiceTest {
 		given(this.repository.findByUserIdAndTransactionDateBetweenOrderByTransactionDateAscLedgerIdAsc(1L,
 				LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30)))
 			.willReturn(List.of(approval(9001L, 1001L), cancellation(9002L, 1001L, 9001L), approval(9003L, 1003L)));
+		// CODEF 카드가 없는 장부: CODEF 행·완전성 판단 대상이 없다
+		given(this.codef.coverage(anyLong(), any(), any()))
+			.willReturn(new CodefApprovalLedgerQuery.MonthCoverage(Map.of(), List.of()));
 	}
 
 	@Test
@@ -84,7 +95,51 @@ class LedgerQueryServiceTest {
 	}
 
 	@Test
-	void codefSourceHasNoRowsInPhaseOne() {
+	void codefRowsAreMergedAfterSimulationRowsOfTheSameDayWithTheirCoverage() {
+		given(this.codef.rows(1L, List.of(1001L, 1003L), NOV)).willReturn(List.of(
+				new CodefApprovalLedgerQuery.ApprovalRow(31, 1001, 41, CodefLedgerRowKind.APPROVAL_FULLY_CANCELED,
+						LocalDate.of(2026, 11, 2), LocalTime.of(12, 30, 5), 12000),
+				new CodefApprovalLedgerQuery.ApprovalRow(32, 1001, 41, CodefLedgerRowKind.CANCELLATION,
+						LocalDate.of(2026, 11, 3), LocalTime.of(8, 0), -5000)));
+		given(this.codef.coverage(1L, List.of(1001L, 1003L), NOV)).willReturn(new CodefApprovalLedgerQuery.MonthCoverage(
+				Map.of(1001L, new CodefApprovalLedgerQuery.Coverage(List.of("PERIOD_NOT_COVERED"), 41L, AT)),
+				List.of("UNDETERMINED_ROW")));
+
+		LedgerMonthView view = this.service.find(ME, NOV, null, null);
+
+		assertThat(view.items()).extracting(LedgerMonthView.Item::ledgerTransactionId)
+			.containsExactly("car-31", "lt-9001", "lt-9002", "lt-9003", "car-32");
+		assertThat(view.items().get(0)).isEqualTo(new LedgerMonthView.Item("car-31", "uc-1001", "CODEF", "APPROVAL",
+				12000, "2026-11-02", "12:30:05", null, null, null, null, null, null,
+				new LedgerMonthView.AttributionMonth("2026-11", "CONFIRMED"), "sync-41", true));
+		// 취소는 접수일을 몰라 귀속월을 정하지 않는다(D-17)
+		assertThat(view.items().get(4).attributionMonth())
+			.isEqualTo(new LedgerMonthView.AttributionMonth(null, "NEEDS_CONFIRMATION"));
+		assertThat(view.items().get(4).fullyCanceled()).isFalse();
+		assertThat(view.items().get(1).syncId()).isNull();
+		assertThat(view.coverage()).extracting(c -> c.userCardId() + ":" + c.source() + ":" + c.incompleteReasons())
+			.containsExactly("uc-1001:SIMULATION:[]", "uc-1001:CODEF:[PERIOD_NOT_COVERED]", "uc-1003:SIMULATION:[]",
+					"uc-1003:CODEF:[]", "null:CODEF:[UNDETERMINED_ROW]");
+	}
+
+	@Test
+	void unlinkedCodefCoverageIsShownOnlyWithoutACardFilter() {
+		given(this.codef.coverage(1L, List.of(1003L), NOV))
+			.willReturn(new CodefApprovalLedgerQuery.MonthCoverage(Map.of(), List.of("UNDETERMINED_ROW")));
+
+		assertThat(this.service.find(ME, NOV, "uc-1003", null).coverage())
+			.extracting(LedgerMonthView.Coverage::userCardId)
+			.containsExactly("uc-1003", "uc-1003");
+	}
+
+	@Test
+	void simulationOnlyQueriesDoNotReadCodef() {
+		this.service.find(ME, NOV, null, LedgerSource.SIMULATION);
+		org.mockito.Mockito.verifyNoInteractions(this.codef);
+	}
+
+	@Test
+	void manualCardHasNoCodefRowsOrReasons() {
 		LedgerMonthView view = this.service.find(ME, NOV, "uc-1003", LedgerSource.CODEF);
 
 		assertThat(view.items()).isEmpty();

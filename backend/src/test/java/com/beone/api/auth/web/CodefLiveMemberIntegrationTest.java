@@ -114,8 +114,8 @@ class CodefLiveMemberIntegrationTest {
 
 	@AfterEach
 	void clearTables() {
-		for (String table : new String[] { "codef_approval_rows", "codef_performance_references", "codef_held_cards",
-				"codef_syncs" }) {
+		for (String table : new String[] { "codef_approval_rows", "codef_performance_references",
+				"codef_sync_incomplete_marks", "codef_held_cards", "codef_syncs" }) {
 			this.jdbcTemplate.update("DELETE FROM " + table);
 		}
 		this.jdbcTemplate.update("DELETE FROM user_cards WHERE holding_source = 'CODEF'");

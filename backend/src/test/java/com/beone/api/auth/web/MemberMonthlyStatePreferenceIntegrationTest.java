@@ -128,7 +128,7 @@ class MemberMonthlyStatePreferenceIntegrationTest {
 		assertBody(empty, 200, """
 				{"data":{"userCardId":"%s","month":"2026-11","snapshotAt":null,
 				 "previousMonthPerformanceWon":{"value":null,"source":"UNKNOWN","period":null,"updatedAt":null,
-				   "usable":false,"reason":"NOT_ENTERED","referencedCodef":null,"codefReference":null},
+				   "usable":false,"reason":"NOT_ENTERED","referencedCodef":null,"codefReference":null,"inferredReference":null,"referencedInferred":null},
 				 "limitBucketUsages":[],"otherBucketsUsedWon":%s,"selectedServices":[],
 				 "serviceSelectionStatus":"UNKNOWN","noServiceSelection":null,"registeredOn":%s,
 				 "conflicts":[],"afterSnapshot":null}}
@@ -143,7 +143,7 @@ class MemberMonthlyStatePreferenceIntegrationTest {
 				"userCardId":"%1$s","month":"2026-11","snapshotAt":"%2$s",
 				"previousMonthPerformanceWon":{"value":-12000,"source":"MANUAL",
 				  "period":{"from":"2026-10-01","to":"2026-10-31"},"updatedAt":"%2$s","usable":true,"reason":null,
-				  "referencedCodef":null,"codefReference":null},
+				  "referencedCodef":null,"codefReference":null,"inferredReference":null,"referencedInferred":null},
 				"limitBucketUsages":[
 				  {"limitBucketId":"FUEL","value":4000,"source":"MANUAL","period":{"from":"2026-11-01","to":"2026-11-30"},
 				   "updatedAt":"%2$s","usable":true,"reason":null}],
